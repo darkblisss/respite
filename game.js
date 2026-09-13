@@ -401,7 +401,7 @@ function freshState() {
   EQUIP_SLOTS.forEach((s) => { equipment[s] = null; });
   return {
     schema: SCHEMA,
-    meta: { createdAt: Date.now(), lastSeen: Date.now(), playtimeMs: 0, account: null },
+    meta: { createdAt: Date.now(), lastSeen: Date.now(), playtimeMs: 0, account: null, userId: null },
     player: { gold: 0, hp: 20 },
     skills,
     inv: { slots: PACK_SLOTS, items: {}, order: [] },
@@ -1045,6 +1045,21 @@ function useChest(key) {
 }
 
 /* ================= 21. SAVE / ACCOUNTS ================= */
+/* Two tiers, so the game works before and after you paste in your anon key:
+   - No key set: accounts are per-browser, exactly as before.
+   - Key set: accounts live in Supabase (auth.users + a `saves` table with
+     row-level security), and localStorage becomes a write-through cache
+     so a dropped connection never loses progress mid-session. */
+
+const sb = (window.supabase && window.RESPITE_SUPABASE_URL && window.RESPITE_SUPABASE_ANON_KEY
+  && window.RESPITE_SUPABASE_ANON_KEY !== "PASTE_YOUR_ANON_KEY_HERE")
+  ? window.supabase.createClient(window.RESPITE_SUPABASE_URL, window.RESPITE_SUPABASE_ANON_KEY)
+  : null;
+
+// Supabase auth wants an email. Usernames are mapped to one under a fake
+// domain so the login UI can stay "username + password".
+function emailFor(user) { return `${user}@players.respite`; }
+function validUsername(u) { return /^[a-z0-9_]{3,20}$/.test(u || ""); }
 
 function hashPass(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0; return String(h); }
 function readAccounts() { try { return JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || "{}"); } catch (e) { return {}; } }
@@ -1053,43 +1068,104 @@ function saveKey() { return state.meta.account ? `${SAVE_PREFIX}_${state.meta.ac
 
 function save() {
   state.meta.lastSeen = Date.now();
-  try { localStorage.setItem(saveKey(), JSON.stringify(state)); return true; }
-  catch (e) { const n = el("saveNote"); if (n) n.textContent = "Storage is blocked here."; return false; }
+  let ok = true;
+  try { localStorage.setItem(saveKey(), JSON.stringify(state)); }
+  catch (e) { const n = el("saveNote"); if (n) n.textContent = "Local storage is blocked here."; ok = false; }
+
+  // Cloud write is fire-and-forget — the local write above already
+  // protects this session; this just carries it to other devices.
+  if (sb && state.meta.userId) {
+    sb.from("saves")
+      .update({ data: state, updated_at: new Date().toISOString() })
+      .eq("user_id", state.meta.userId)
+      .then(({ error }) => { if (error) console.error("Cloud save failed:", error.message); });
+  }
+  return ok;
 }
 
-function createAccount(user, pass) {
+async function createAccount(user, pass) {
   user = (user || "").trim().toLowerCase();
-  if (user.length < 3) return "Username needs at least 3 characters.";
+  if (!validUsername(user)) return "Username: 3–20 characters, lowercase letters, numbers, underscore only.";
   if ((pass || "").length < 4) return "Password needs at least 4 characters.";
-  const accts = readAccounts();
-  if (accts[user]) return "That name is taken on this browser.";
-  accts[user] = { hash: hashPass(pass), created: Date.now() };
-  writeAccounts(accts);
+
+  if (!sb) {
+    const accts = readAccounts();
+    if (accts[user]) return "That name is taken on this browser.";
+    accts[user] = { hash: hashPass(pass), created: Date.now() };
+    writeAccounts(accts);
+    state.meta.account = user;
+    save();
+    return null;
+  }
+
+  const { data, error } = await sb.auth.signUp({ email: emailFor(user), password: pass });
+  if (error) return error.message.includes("already") ? "That username is taken." : error.message;
+  if (!data.session) {
+    return "Created, but Supabase wants email confirmation first. In the dashboard: " +
+      "Authentication → Providers → Email → turn off \"Confirm email\", then log in.";
+  }
+
+  const userId = data.session.user.id;
+  const { error: insErr } = await sb.from("saves").insert({ user_id: userId, username: user, data: state });
+  if (insErr) return insErr.code === "23505" ? "That username is taken." : insErr.message;
+
   state.meta.account = user;
+  state.meta.userId = userId;
   save();
   return null;
 }
 
-function loginAccount(user, pass) {
+async function loginAccount(user, pass) {
   user = (user || "").trim().toLowerCase();
-  const accts = readAccounts();
-  if (!accts[user]) return "No account by that name on this browser.";
-  if (accts[user].hash !== hashPass(pass)) return "Wrong password.";
-  const raw = localStorage.getItem(`${SAVE_PREFIX}_${user}`);
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw);
-      const last = (parsed.meta && parsed.meta.lastSeen) || Date.now();
-      state = migrate(parsed);
-      state.meta.account = user;
-      const gone = Date.now() - last;
-      if (gone > 30000) catchUp({ ms: Math.min(gone, IDLE_CAP_MS), overCap: gone > IDLE_CAP_MS });
-    } catch (e) { return "That account's save is corrupted."; }
-  } else { state = freshState(); state.meta.account = user; }
+
+  if (!sb) {
+    const accts = readAccounts();
+    if (!accts[user]) return "No account by that name on this browser.";
+    if (accts[user].hash !== hashPass(pass)) return "Wrong password.";
+    const raw = localStorage.getItem(`${SAVE_PREFIX}_${user}`);
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        const last = (parsed.meta && parsed.meta.lastSeen) || Date.now();
+        state = migrate(parsed);
+        state.meta.account = user;
+        const gone = Date.now() - last;
+        if (gone > 30000) catchUp({ ms: Math.min(gone, IDLE_CAP_MS), overCap: gone > IDLE_CAP_MS });
+      } catch (e) { return "That account's save is corrupted."; }
+    } else { state = freshState(); state.meta.account = user; }
+    selected = null;
+    refreshBounty();
+    render();
+    return null;
+  }
+
+  const { data, error } = await sb.auth.signInWithPassword({ email: emailFor(user), password: pass });
+  if (error) return "Wrong username or password.";
+
+  const userId = data.session.user.id;
+  const { data: row, error: selErr } = await sb.from("saves").select("data, updated_at").eq("user_id", userId).single();
+  if (selErr) return "Signed in, but couldn't load your save: " + selErr.message;
+
+  const last = (row.data && row.data.meta && row.data.meta.lastSeen) || Date.parse(row.updated_at) || Date.now();
+  state = migrate(row.data);
+  state.meta.account = user;
+  state.meta.userId = userId;
+  const gone = Date.now() - last;
+  if (gone > 30000) catchUp({ ms: Math.min(gone, IDLE_CAP_MS), overCap: gone > IDLE_CAP_MS });
+
   selected = null;
   refreshBounty();
+  save();
   render();
   return null;
+}
+
+async function logoutAccount() {
+  save();
+  if (sb) { try { await sb.auth.signOut(); } catch (e) {} }
+  state = freshState();
+  selected = null;
+  render();
 }
 
 function migrate(loaded) {
@@ -1120,6 +1196,9 @@ function migrate(loaded) {
   return m;
 }
 
+// Synchronous local boot, so the page paints instantly. If a Supabase
+// session already exists (cookie/localStorage token from supabase-js),
+// resumeCloudSession() below takes over a moment later and reconciles.
 function bootLoad() {
   const accts = readAccounts();
   let newest = null;
@@ -1141,6 +1220,27 @@ function bootLoad() {
   const gone = Date.now() - last;
   if (gone <= 30000) return null;
   return { ms: Math.min(gone, IDLE_CAP_MS), overCap: gone > IDLE_CAP_MS };
+}
+
+// Picks up an existing Supabase session on page refresh, so a signed-in
+// player doesn't get dropped back to guest every reload.
+async function resumeCloudSession() {
+  if (!sb) return;
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) return;
+
+  const userId = session.user.id;
+  const { data: row, error } = await sb.from("saves").select("data, username, updated_at").eq("user_id", userId).single();
+  if (error || !row) return;
+
+  const last = (row.data && row.data.meta && row.data.meta.lastSeen) || Date.parse(row.updated_at) || Date.now();
+  state = migrate(row.data);
+  state.meta.account = row.username;
+  state.meta.userId = userId;
+  const gone = Date.now() - last;
+  if (gone > 30000) catchUp({ ms: Math.min(gone, IDLE_CAP_MS), overCap: gone > IDLE_CAP_MS });
+  refreshBounty();
+  render();
 }
 
 function catchUp(result) {
@@ -1181,9 +1281,10 @@ function importSave(str) {
   let parsed;
   try { parsed = JSON.parse(json); } catch (e) { return "Save string is corrupted."; }
   if (!parsed.skills) return "No character in that save.";
-  const acct = state.meta.account;
+  const acct = state.meta.account, uid = state.meta.userId;
   state = migrate(parsed);
   state.meta.account = acct;
+  state.meta.userId = uid;
   save();
   selected = null;
   render();
@@ -1986,26 +2087,38 @@ el("settingsClose").onclick = () => { el("settingsModal").hidden = true; };
 
 function refreshAccountUi() {
   const a = state.meta.account;
-  el("acctStatus").textContent = a ? `Signed in as ${a}. Autosaving to this account.`
-    : "Playing as a guest. Make an account to keep this character apart from others.";
+  const cloud = !!sb;
+  el("acctStatus").textContent = a
+    ? `Signed in as ${a}${cloud ? " (cloud)" : " (this browser only)"}. Autosaving.`
+    : cloud
+      ? "Playing as a guest. Create an account to play from any device."
+      : "Playing as a guest, this browser only. Paste a Supabase anon key into index.html to enable cloud accounts.";
   el("acctFields").hidden = !!a;
   el("acctCreate").hidden = !!a;
   el("acctLogin").hidden = !!a;
   el("acctLogout").hidden = !a;
-  el("acctNote").textContent = "Accounts live in this browser only. Move between devices with the save string until there's a server.";
+  el("acctNote").textContent = cloud
+    ? "Accounts sync through Supabase — sign in from any device to keep playing the same character."
+    : "Local-only mode. Move between devices with the save string below until cloud accounts are set up.";
 }
 
-el("acctCreate").onclick = () => {
-  const err = createAccount(el("acctUser").value, el("acctPass").value);
+el("acctCreate").onclick = async () => {
+  el("acctCreate").disabled = true;
+  el("acctNote").textContent = "Working...";
+  const err = await createAccount(el("acctUser").value, el("acctPass").value);
+  el("acctCreate").disabled = false;
   el("acctNote").textContent = err || `Account made. Signed in as ${state.meta.account}.`;
   if (!err) { el("acctPass").value = ""; refreshAccountUi(); render(); }
 };
-el("acctLogin").onclick = () => {
-  const err = loginAccount(el("acctUser").value, el("acctPass").value);
+el("acctLogin").onclick = async () => {
+  el("acctLogin").disabled = true;
+  el("acctNote").textContent = "Working...";
+  const err = await loginAccount(el("acctUser").value, el("acctPass").value);
+  el("acctLogin").disabled = false;
   el("acctNote").textContent = err || `Signed in as ${state.meta.account}.`;
   if (!err) { el("acctPass").value = ""; refreshAccountUi(); }
 };
-el("acctLogout").onclick = () => { save(); state = freshState(); selected = null; refreshAccountUi(); render(); };
+el("acctLogout").onclick = async () => { await logoutAccount(); refreshAccountUi(); };
 
 el("shareCopy").onclick = () => {
   const box = el("shareBox");
@@ -2031,6 +2144,7 @@ refreshBounty();
 if (state.log.length === 0) say("You put your pack down on dead ground and start clearing a place to work.");
 
 render();
+resumeCloudSession();
 
 let lastTick = Date.now();
 
