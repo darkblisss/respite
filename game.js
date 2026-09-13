@@ -28,18 +28,58 @@ const ITEMS = {
   trout:       { name: "Trout",        icon: "\u{1F35B}", value: 20, heal: 9 },
   salmon:      { name: "Salmon",       icon: "\u{1F35B}", value: 44, heal: 16 },
 
-  // combat drops
+  // combat drops (crafting/accessory ingredients, not equippable themselves)
   bones:       { name: "Bones",        icon: "\u{1F9B4}", value: 4 },
   pelt:        { name: "Wolf pelt",    icon: "\u{1F43A}", value: 30 },
   troll_tooth: { name: "Troll tooth",  icon: "\u{1F9B7}", value: 120 },
 
-  // equipment
+  // weapons — one-handed
   bronze_sword: { name: "Bronze sword", icon: "\u{1F5E1}", value: 90,  slot: "weapon", attack: 4 },
   iron_sword:   { name: "Iron sword",   icon: "\u{1F5E1}", value: 220, slot: "weapon", attack: 9 },
   steel_sword:  { name: "Steel sword",  icon: "\u{1F5E1}", value: 520, slot: "weapon", attack: 17 },
-  bronze_armour:{ name: "Bronze armour",icon: "\u{1F6E1}", value: 120, slot: "armour", defence: 4 },
-  iron_armour:  { name: "Iron armour",  icon: "\u{1F6E1}", value: 300, slot: "armour", defence: 9 },
-  steel_armour: { name: "Steel armour", icon: "\u{1F6E1}", value: 700, slot: "armour", defence: 17 },
+
+  // weapons — two-handed (bigger hit, no offhand — equipping one clears it)
+  steel_greatsword: { name: "Steel greatsword", icon: "\u{2694}", value: 900, slot: "weapon", attack: 27, twoHanded: true },
+
+  // offhand — shields (defence) or tomes (attack), mutually exclusive with 2H weapons
+  wooden_shield: { name: "Wooden shield", icon: "\u{1F6E1}", value: 70,  slot: "offhand", defence: 3 },
+  iron_shield:   { name: "Iron shield",   icon: "\u{1F6E1}", value: 260, slot: "offhand", defence: 8 },
+  ember_tome:    { name: "Tome of embers", icon: "\u{1F4D5}", value: 300, slot: "offhand", attack: 6 },
+
+  // head
+  leather_cap: { name: "Leather cap",  icon: "\u{1F393}", value: 40,  slot: "head", defence: 2 },
+  iron_helm:   { name: "Iron helm",    icon: "\u{1FA96}", value: 180, slot: "head", defence: 5 },
+  steel_helm:  { name: "Steel helm",   icon: "\u{1FA96}", value: 420, slot: "head", defence: 9 },
+
+  // chest
+  bronze_chest:{ name: "Bronze armour",icon: "\u{1F6E1}", value: 120, slot: "chest", defence: 4 },
+  iron_chest:  { name: "Iron armour",  icon: "\u{1F6E1}", value: 300, slot: "chest", defence: 9 },
+  steel_chest: { name: "Steel armour", icon: "\u{1F6E1}", value: 700, slot: "chest", defence: 17 },
+
+  // legs
+  leather_legs: { name: "Leather leggings", icon: "\u{1F456}", value: 60,  slot: "legs", defence: 3 },
+  iron_legs:    { name: "Iron greaves",     icon: "\u{1F456}", value: 240, slot: "legs", defence: 7 },
+  steel_legs:   { name: "Steel greaves",    icon: "\u{1F456}", value: 560, slot: "legs", defence: 13 },
+
+  // boots
+  leather_boots: { name: "Leather boots", icon: "\u{1F462}", value: 25,  slot: "boots", defence: 1 },
+  iron_boots:    { name: "Iron boots",    icon: "\u{1F462}", value: 100, slot: "boots", defence: 3 },
+  steel_boots:   { name: "Steel boots",   icon: "\u{1F462}", value: 230, slot: "boots", defence: 6 },
+
+  // gloves
+  leather_gloves: { name: "Leather gloves", icon: "\u{1F9E4}", value: 25,  slot: "gloves", defence: 1 },
+  iron_gauntlets: { name: "Iron gauntlets", icon: "\u{1F9E4}", value: 100, slot: "gloves", defence: 3 },
+  steel_gauntlets:{ name: "Steel gauntlets",icon: "\u{1F9E4}", value: 230, slot: "gloves", defence: 6 },
+
+  // rings — pure attack, dropped not crafted
+  copper_ring: { name: "Copper ring", icon: "\u{1F48D}", value: 80,  slot: "ring", attack: 2 },
+  silver_ring: { name: "Silver ring", icon: "\u{1F48D}", value: 260, slot: "ring", attack: 5 },
+  gold_ring:   { name: "Gold ring",   icon: "\u{1F48D}", value: 600, slot: "ring", attack: 9 },
+
+  // amulets — pure max health, dropped not crafted, thematically tied to combat drops
+  bone_amulet:  { name: "Bone amulet",  icon: "\u{1F4FF}", value: 60,  slot: "amulet", health: 8 },
+  pelt_amulet:  { name: "Pelt amulet",  icon: "\u{1F4FF}", value: 220, slot: "amulet", health: 18 },
+  troll_amulet: { name: "Troll-tooth amulet", icon: "\u{1F4FF}", value: 600, slot: "amulet", health: 35 },
 };
 
 /* ---------------- 2. SKILLS + ACTIONS ---------------- */
@@ -81,22 +121,39 @@ const ACTIONS = {
     { id: "ck_salmon", name: "Cook salmon", icon: "\u{1F35B}", level: 30, time: 6000, xp: 55, cost: { raw_salmon: 1 }, out: { salmon: 1 } },
   ],
   smithing: [
-    { id: "sm_bronze_bar", name: "Bronze bar",   icon: "\u{1F7EB}", level: 1,  time: 6000, xp: 15, cost: { copper_ore: 2 },            out: { bronze_bar: 1 } },
-    { id: "sm_bronze_sw",  name: "Bronze sword", icon: "\u{1F5E1}", level: 5,  time: 8000, xp: 30, cost: { bronze_bar: 2 },            out: { bronze_sword: 1 } },
-    { id: "sm_bronze_ar",  name: "Bronze armour",icon: "\u{1F6E1}", level: 8,  time: 9000, xp: 40, cost: { bronze_bar: 3 },            out: { bronze_armour: 1 } },
-    { id: "sm_iron_bar",   name: "Iron bar",     icon: "\u{2B1C}",  level: 15, time: 7000, xp: 35, cost: { iron_ore: 1, coal: 1 },     out: { iron_bar: 1 } },
-    { id: "sm_iron_sw",    name: "Iron sword",   icon: "\u{1F5E1}", level: 20, time: 10000, xp: 70, cost: { iron_bar: 2 },              out: { iron_sword: 1 } },
-    { id: "sm_iron_ar",    name: "Iron armour",  icon: "\u{1F6E1}", level: 23, time: 11000, xp: 90, cost: { iron_bar: 3 },              out: { iron_armour: 1 } },
-    { id: "sm_steel_bar",  name: "Steel bar",    icon: "\u{1F535}", level: 30, time: 8000, xp: 60, cost: { iron_ore: 1, coal: 2 },     out: { steel_bar: 1 } },
-    { id: "sm_steel_sw",   name: "Steel sword",  icon: "\u{1F5E1}", level: 35, time: 12000, xp: 130, cost: { steel_bar: 2 },            out: { steel_sword: 1 } },
-    { id: "sm_steel_ar",   name: "Steel armour", icon: "\u{1F6E1}", level: 38, time: 13000, xp: 160, cost: { steel_bar: 3 },            out: { steel_armour: 1 } },
+    { id: "sm_bronze_bar", name: "Bronze bar",   icon: "\u{1F7EB}", level: 1,  time: 6000, xp: 15, cost: { copper_ore: 2 },        out: { bronze_bar: 1 } },
+    { id: "sm_bronze_sw",  name: "Bronze sword", icon: "\u{1F5E1}", level: 5,  time: 8000, xp: 30, cost: { bronze_bar: 2 },        out: { bronze_sword: 1 } },
+    { id: "sm_bronze_ch",  name: "Bronze armour",icon: "\u{1F6E1}", level: 8,  time: 9000, xp: 40, cost: { bronze_bar: 3 },        out: { bronze_chest: 1 } },
+    { id: "sm_bronze_hd",  name: "Leather cap",  icon: "\u{1F393}", level: 3,  time: 5000, xp: 18, cost: { bronze_bar: 1 },        out: { leather_cap: 1 } },
+    { id: "sm_bronze_lg",  name: "Leather leggings", icon: "\u{1F456}", level: 6, time: 7000, xp: 28, cost: { bronze_bar: 2 },     out: { leather_legs: 1 } },
+    { id: "sm_bronze_bt",  name: "Leather boots", icon: "\u{1F462}", level: 2,  time: 4000, xp: 12, cost: { bronze_bar: 1 },       out: { leather_boots: 1 } },
+    { id: "sm_bronze_gl",  name: "Leather gloves", icon: "\u{1F9E4}", level: 2, time: 4000, xp: 12, cost: { bronze_bar: 1 },       out: { leather_gloves: 1 } },
+    { id: "sm_bronze_sh",  name: "Wooden shield", icon: "\u{1F6E1}", level: 4,  time: 6000, xp: 22, cost: { bronze_bar: 2 },       out: { wooden_shield: 1 } },
+
+    { id: "sm_iron_bar",   name: "Iron bar",     icon: "\u{2B1C}",  level: 15, time: 7000, xp: 35, cost: { iron_ore: 1, coal: 1 }, out: { iron_bar: 1 } },
+    { id: "sm_iron_sw",    name: "Iron sword",   icon: "\u{1F5E1}", level: 20, time: 10000, xp: 70,  cost: { iron_bar: 2 },        out: { iron_sword: 1 } },
+    { id: "sm_iron_ch",    name: "Iron armour",  icon: "\u{1F6E1}", level: 23, time: 11000, xp: 90,  cost: { iron_bar: 3 },        out: { iron_chest: 1 } },
+    { id: "sm_iron_hd",    name: "Iron helm",    icon: "\u{1FA96}", level: 18, time: 8000, xp: 55,  cost: { iron_bar: 2 },         out: { iron_helm: 1 } },
+    { id: "sm_iron_lg",    name: "Iron greaves", icon: "\u{1F456}", level: 21, time: 9500, xp: 75,  cost: { iron_bar: 2 },         out: { iron_legs: 1 } },
+    { id: "sm_iron_bt",    name: "Iron boots",   icon: "\u{1F462}", level: 16, time: 7000, xp: 42,  cost: { iron_bar: 1 },         out: { iron_boots: 1 } },
+    { id: "sm_iron_gl",    name: "Iron gauntlets", icon: "\u{1F9E4}", level: 16, time: 7000, xp: 42, cost: { iron_bar: 1 },        out: { iron_gauntlets: 1 } },
+    { id: "sm_iron_sh",    name: "Iron shield",  icon: "\u{1F6E1}", level: 19, time: 9000, xp: 60,  cost: { iron_bar: 2 },         out: { iron_shield: 1 } },
+
+    { id: "sm_steel_bar",  name: "Steel bar",    icon: "\u{1F535}", level: 30, time: 8000, xp: 60, cost: { iron_ore: 1, coal: 2 }, out: { steel_bar: 1 } },
+    { id: "sm_steel_sw",   name: "Steel sword",  icon: "\u{1F5E1}", level: 35, time: 12000, xp: 130, cost: { steel_bar: 2 },       out: { steel_sword: 1 } },
+    { id: "sm_steel_2h",   name: "Steel greatsword", icon: "\u{2694}", level: 45, time: 18000, xp: 220, cost: { steel_bar: 4 },    out: { steel_greatsword: 1 } },
+    { id: "sm_steel_ch",   name: "Steel armour", icon: "\u{1F6E1}", level: 38, time: 13000, xp: 160, cost: { steel_bar: 3 },       out: { steel_chest: 1 } },
+    { id: "sm_steel_hd",   name: "Steel helm",   icon: "\u{1FA96}", level: 33, time: 10000, xp: 100, cost: { steel_bar: 2 },       out: { steel_helm: 1 } },
+    { id: "sm_steel_lg",   name: "Steel greaves",icon: "\u{1F456}", level: 36, time: 11500, xp: 140, cost: { steel_bar: 2 },       out: { steel_legs: 1 } },
+    { id: "sm_steel_bt",   name: "Steel boots",  icon: "\u{1F462}", level: 31, time: 9000, xp: 80,  cost: { steel_bar: 1 },        out: { steel_boots: 1 } },
+    { id: "sm_steel_gl",   name: "Steel gauntlets", icon: "\u{1F9E4}", level: 31, time: 9000, xp: 80, cost: { steel_bar: 1 },      out: { steel_gauntlets: 1 } },
   ],
   combat: [
-    { id: "mo_rat",    name: "Sewer rat",   icon: "\u{1F400}", level: 1,  hp: 10,  attack: 3,  defence: 0,  speed: 3000, xp: 12,  gold: [1, 3],     drops: [["bones", 1, 1.0]] },
-    { id: "mo_goblin", name: "Goblin",      icon: "\u{1F47A}", level: 5,  hp: 26,  attack: 7,  defence: 2,  speed: 2800, xp: 30,  gold: [3, 10],    drops: [["bones", 1, 1.0], ["copper_ore", 2, 0.4]] },
-    { id: "mo_wolf",   name: "Grey wolf",   icon: "\u{1F43A}", level: 15, hp: 60,  attack: 14, defence: 6,  speed: 2400, xp: 70,  gold: [8, 22],    drops: [["bones", 1, 1.0], ["pelt", 1, 0.35]] },
-    { id: "mo_bandit", name: "Bandit",      icon: "\u{1F977}", level: 28, hp: 130, attack: 26, defence: 14, speed: 2600, xp: 150, gold: [25, 60],   drops: [["iron_ore", 2, 0.5], ["coal", 1, 0.3]] },
-    { id: "mo_troll",  name: "Forest troll",icon: "\u{1F9CC}", level: 42, hp: 300, attack: 44, defence: 26, speed: 3200, xp: 340, gold: [70, 160],  drops: [["willow_log", 2, 0.6], ["troll_tooth", 1, 0.2]] },
+    { id: "mo_rat",    name: "Sewer rat",   icon: "\u{1F400}", level: 1,  hp: 10,  attack: 3,  defence: 0,  speed: 3000, xp: 12,  gold: [1, 3],     drops: [["bones", 1, 1.0], ["copper_ring", 1, 0.05]] },
+    { id: "mo_goblin", name: "Goblin",      icon: "\u{1F47A}", level: 5,  hp: 26,  attack: 7,  defence: 2,  speed: 2800, xp: 30,  gold: [3, 10],    drops: [["bones", 1, 1.0], ["copper_ore", 2, 0.4], ["bone_amulet", 1, 0.08]] },
+    { id: "mo_wolf",   name: "Grey wolf",   icon: "\u{1F43A}", level: 15, hp: 60,  attack: 14, defence: 6,  speed: 2400, xp: 70,  gold: [8, 22],    drops: [["bones", 1, 1.0], ["pelt", 1, 0.35], ["pelt_amulet", 1, 0.06], ["silver_ring", 1, 0.04]] },
+    { id: "mo_bandit", name: "Bandit",      icon: "\u{1F977}", level: 28, hp: 130, attack: 26, defence: 14, speed: 2600, xp: 150, gold: [25, 60],   drops: [["iron_ore", 2, 0.5], ["coal", 1, 0.3], ["silver_ring", 1, 0.07], ["ember_tome", 1, 0.05]] },
+    { id: "mo_troll",  name: "Forest troll",icon: "\u{1F9CC}", level: 42, hp: 300, attack: 44, defence: 26, speed: 3200, xp: 340, gold: [70, 160],  drops: [["willow_log", 2, 0.6], ["troll_tooth", 1, 0.2], ["troll_amulet", 1, 0.05], ["gold_ring", 1, 0.04]] },
   ],
 };
 
@@ -104,11 +161,12 @@ const ACTIONS = {
 
 const MAX_LEVEL = 99;
 const XP_TABLE = (() => {
-  // Gentle polynomial curve instead of an exponential one, so totals stay
-  // small (level 99 needs ~62k total xp, not millions) even after long play.
+  // Exponential curve: 100 * (2^(lvl/7) - 1). Cheap early (lvl15 ≈ 340,
+  // lvl30 ≈ 1.9K, lvl50 ≈ 14K), expensive late (lvl99 ≈ 1.8M) — built for
+  // the long-haul, check-in-for-months pacing rather than a fast climb.
   const table = [0, 0];
   for (let lvl = 2; lvl <= MAX_LEVEL; lvl++) {
-    table[lvl] = Math.floor(50 * Math.pow(lvl, 1.55));
+    table[lvl] = Math.floor(100 * (Math.pow(2, lvl / 7) - 1));
   }
   return table;
 })();
@@ -122,22 +180,24 @@ function levelFromXp(xp) {
 /* ---------------- 4. STATE ---------------- */
 
 const SAVE_KEY = "respite_save_v1";
-const CATCHUP_CAP_MS = 24 * 60 * 60 * 1000; // 24 hours — bounds the silent catch-up loop
-const BANK_CAP = 999; // materials never stack past this; overflow auto-sells for gold
+const CATCHUP_CAP_MS = 12 * 60 * 60 * 1000; // 12 hours — past this, the task needs retasking
+const EQUIP_SLOTS = ["weapon", "offhand", "head", "chest", "legs", "boots", "gloves", "ring", "amulet"];
 
 let state = freshState();
 
 function freshState() {
   const skills = {};
   SKILLS.forEach((s) => { skills[s.id] = 0; });
+  const equipment = {};
+  EQUIP_SLOTS.forEach((slot) => { equipment[slot] = null; });
   return {
-    version: 1,
+    version: 2,
     lastSeen: Date.now(),
     gold: 0,
     hp: 10,
     skills,                 // skillId -> xp
-    bank: {},               // itemId -> qty
-    equipment: { weapon: null, armour: null },
+    bank: {},               // itemId -> qty (no cap — stacks as high as you gather)
+    equipment,
     current: null,          // { skill, actionId }
     progress: 0,            // ms into the current action
     combat: { mobHp: 0, mobMax: 0, playerTimer: 0, mobTimer: 0, respawn: 0 },
@@ -155,12 +215,7 @@ function totalLevel() { return SKILLS.reduce((n, s) => n + skillLevel(s.id), 0);
 function bankQty(id) { return state.bank[id] || 0; }
 
 function addItem(id, qty) {
-  let total = bankQty(id) + qty;
-  if (total > BANK_CAP) {
-    const overflow = total - BANK_CAP;
-    state.gold += overflow * (ITEMS[id].value || 0); // auto-sold quietly, no popup
-    total = BANK_CAP;
-  }
+  const total = bankQty(id) + qty;
   if (total > 0) state.bank[id] = total;
   else delete state.bank[id];
 }
@@ -181,16 +236,24 @@ function payCost(cost) {
   Object.keys(cost).forEach((id) => removeItem(id, cost[id]));
 }
 
-function maxHp() { return 10 + skillLevel("combat") * 3; }
+// Sums a bonus stat (attack/defence/health) across every equipped item.
+function equipStat(stat) {
+  let total = 0;
+  EQUIP_SLOTS.forEach((slot) => {
+    const id = state.equipment[slot];
+    if (id && typeof ITEMS[id][stat] === "number") total += ITEMS[id][stat];
+  });
+  return total;
+}
+
+function maxHp() { return 10 + skillLevel("combat") * 3 + equipStat("health"); }
 
 function attackPower() {
-  const w = state.equipment.weapon;
-  return 3 + skillLevel("combat") * 1.4 + (w ? ITEMS[w].attack : 0);
+  return 3 + skillLevel("combat") * 1.4 + equipStat("attack");
 }
 
 function defencePower() {
-  const a = state.equipment.armour;
-  return skillLevel("combat") * 0.7 + (a ? ITEMS[a].defence : 0);
+  return skillLevel("combat") * 0.7 + equipStat("defence");
 }
 
 function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
@@ -206,6 +269,19 @@ function fmt(n) {
 function say(msg) {
   state.log.push(msg);
   if (state.log.length > 40) state.log.shift();
+}
+
+// Floating dismissable notification — separate from the log, for moments
+// worth interrupting the player for (unlocks, milestones).
+function toast(msg) {
+  const stack = document.getElementById("toastStack");
+  if (!stack) return;
+  const t = document.createElement("div");
+  t.className = "toast";
+  t.textContent = msg;
+  t.onclick = () => t.remove();
+  stack.appendChild(t);
+  setTimeout(() => t.remove(), 6000);
 }
 
 function getAction(skillId, actionId) {
@@ -234,16 +310,16 @@ function checkUnlocks() {
   const has = (ids) => ids.some((id) => bankQty(id) > 0);
 
   if (!u.firemaking && has(["log", "oak_log", "willow_log"])) {
-    u.firemaking = true; say("Firemaking unlocked. Logs burn well.");
+    u.firemaking = true; say("Firemaking unlocked. Logs burn well."); toast("Firemaking unlocked");
   }
   if (!u.cooking && has(["raw_shrimp", "raw_trout", "raw_salmon"])) {
-    u.cooking = true; say("Cooking unlocked. Raw fish is not food yet.");
+    u.cooking = true; say("Cooking unlocked. Raw fish is not food yet."); toast("Cooking unlocked");
   }
   if (!u.smithing && has(["copper_ore", "iron_ore", "coal"])) {
-    u.smithing = true; say("Smithing unlocked. Ore wants a furnace.");
+    u.smithing = true; say("Smithing unlocked. Ore wants a furnace."); toast("Smithing unlocked");
   }
   if (!u.combat && totalLevel() >= 9) {
-    u.combat = true; say("Combat unlocked. Something is moving in the trees.");
+    u.combat = true; say("Combat unlocked. Something is moving in the trees."); toast("Combat unlocked — a new tab has appeared");
   }
 }
 
@@ -386,20 +462,27 @@ function load() {
   state.equipment = Object.assign(base.equipment, loaded.equipment || {});
   state.combat = Object.assign(base.combat, loaded.combat || {});
 
-  const away = Math.min(Date.now() - (loaded.lastSeen || Date.now()), CATCHUP_CAP_MS);
-  return away > 30000 ? away : null;
+  const raw_away = Date.now() - (loaded.lastSeen || Date.now());
+  if (raw_away <= 30000) return null;
+  return { ms: Math.min(raw_away, CATCHUP_CAP_MS), overCap: raw_away > CATCHUP_CAP_MS };
 }
 
 // Quietly fast-forwards whatever action was running when the tab closed.
 // No modal, no gains list — the game is meant to feel like it never stopped.
-function catchUpSilently(ms) {
+// Past 12 hours the task runs out and needs retasking, same as if you'd
+// left it running in front of you the whole time.
+function catchUpSilently(result) {
   const step = 250;
-  let left = ms;
+  let left = result.ms;
   while (left > 0 && state.current) {
     tick(Math.min(step, left));
     left -= step;
   }
-  if (ms > 5 * 60 * 1000) {
+  if (result.overCap && state.current) {
+    state.current = null;
+    state.progress = 0;
+    say("Your task ran its course while you were away. Pick something to start again.");
+  } else if (result.ms > 5 * 60 * 1000) {
     say("Time passed quietly while you were away.");
   }
 }
@@ -431,6 +514,19 @@ function selectAction(skillId, actionId) {
 function equip(itemId) {
   const item = ITEMS[itemId];
   if (!item || !item.slot) return;
+
+  if (item.slot === "weapon" && item.twoHanded && state.equipment.offhand) {
+    addItem(state.equipment.offhand, 1);
+    state.equipment.offhand = null;
+  }
+  if (item.slot === "offhand") {
+    const w = state.equipment.weapon;
+    if (w && ITEMS[w].twoHanded) {
+      say(`Can't equip an offhand with a two-handed ${ITEMS[w].name.toLowerCase()} out.`);
+      return;
+    }
+  }
+
   const old = state.equipment[item.slot];
   if (old) addItem(old, 1);
   removeItem(itemId, 1);
@@ -626,17 +722,23 @@ function updateStage() {
   });
 }
 
+const SLOT_LABELS = {
+  weapon: "Weapon", offhand: "Offhand", head: "Head", chest: "Chest",
+  legs: "Legs", boots: "Boots", gloves: "Gloves", ring: "Ring", amulet: "Amulet",
+};
+
 function renderEquip() {
   const box = el("equipList");
   box.innerHTML = "";
-  ["weapon", "armour"].forEach((slot) => {
+
+  EQUIP_SLOTS.forEach((slot) => {
     const id = state.equipment[slot];
     const row = document.createElement("div");
     row.className = "equip-row";
 
     const slotLabel = document.createElement("span");
     slotLabel.className = "equip-slot";
-    slotLabel.textContent = slot === "weapon" ? "Weapon" : "Armour";
+    slotLabel.textContent = SLOT_LABELS[slot];
 
     const name = document.createElement("span");
     name.className = "equip-name";
@@ -647,9 +749,14 @@ function renderEquip() {
     row.appendChild(name);
 
     if (id) {
+      const item = ITEMS[id];
       const bonus = document.createElement("span");
       bonus.className = "equip-bonus";
-      bonus.textContent = slot === "weapon" ? `+${ITEMS[id].attack}` : `+${ITEMS[id].defence}`;
+      const parts = [];
+      if (item.attack) parts.push(`+${item.attack} atk`);
+      if (item.defence) parts.push(`+${item.defence} def`);
+      if (item.health) parts.push(`+${item.health} hp`);
+      bonus.textContent = parts.join(" ");
       row.appendChild(bonus);
 
       const off = document.createElement("button");
@@ -660,6 +767,11 @@ function renderEquip() {
     }
     box.appendChild(row);
   });
+
+  const stats = el("combatStats");
+  if (stats) {
+    stats.textContent = `${Math.round(attackPower())} attack \u00B7 ${Math.round(defencePower())} defence \u00B7 ${maxHp()} max hp`;
+  }
 }
 
 function renderBank() {

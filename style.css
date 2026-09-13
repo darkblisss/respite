@@ -348,7 +348,43 @@ button { font: inherit; color: inherit; }
 
 .equip-slot { color: var(--muted); width: 56px; }
 .equip-name { flex: 1; }
-.equip-bonus { color: var(--sap); font-variant-numeric: tabular-nums; }
+.equip-bonus { color: var(--sap); font-variant-numeric: tabular-nums; font-size: 12px; }
+
+.combat-stats {
+  margin: 10px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--edge);
+}
+
+/* ---------- toasts ---------- */
+
+.toast-stack {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 280px;
+}
+
+.toast {
+  background: var(--panel-2);
+  border: 1px solid var(--sap);
+  border-left: 3px solid var(--sap);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13.5px;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  animation: toast-in 180ms ease-out;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
 .bank {
   display: flex;
