@@ -11,164 +11,186 @@
 </head>
 <body>
 
-<!-- ============ TASKBAR ============ -->
+<!-- ================= TASKBAR ================= -->
 <header class="taskbar">
   <div class="tb-brand">
     <span class="tb-mark">&#127769;</span>
     <span class="tb-name">Respite</span>
   </div>
 
-  <div class="tb-slot" id="tbSkilling">
+  <div class="tb-slot">
     <div class="tb-slot-head">
       <span class="tb-slot-label">Skilling</span>
-      <span class="tb-slot-title" id="tbSkillingTitle">Nothing tasked</span>
-      <button class="tb-clear" id="tbSkillingClear" title="Clear this task">Retask</button>
+      <span class="tb-slot-title" id="tbSkillTitle">Idle</span>
+      <button class="tb-clear" id="tbSkillClear" title="Finish the current action, then stop">&#8635;</button>
     </div>
-    <div class="tb-bar"><div class="tb-bar-fill" id="tbSkillingBar"></div></div>
-    <div class="tb-proj" id="tbSkillingProj">Pick a skill to begin.</div>
+    <div class="tb-bar"><div class="tb-bar-fill" id="tbSkillBar"></div></div>
+    <div class="tb-proj" id="tbSkillProj">Nothing tasked.</div>
   </div>
 
-  <div class="tb-slot" id="tbCombat">
+  <div class="tb-slot">
     <div class="tb-slot-head">
       <span class="tb-slot-label">Combat</span>
-      <span class="tb-slot-title" id="tbCombatTitle">Nothing tasked</span>
-      <button class="tb-clear" id="tbCombatClear" title="Clear this task">Retask</button>
+      <span class="tb-slot-title" id="tbCombatTitle">Idle</span>
+      <button class="tb-clear" id="tbCombatClear" title="Finish the current fight, then stop">&#8635;</button>
     </div>
     <div class="tb-bar"><div class="tb-bar-fill combat" id="tbCombatBar"></div></div>
-    <div class="tb-proj" id="tbCombatProj">Locked until total level 30.</div>
+    <div class="tb-proj" id="tbCombatProj">Nothing tasked.</div>
   </div>
 
-  <div class="tb-vitals">
+  <div class="tb-right">
     <div class="tb-vital">
-      <span class="tb-vital-label">Health</span>
+      <span class="tb-vital-label">HP</span>
       <div class="hpbar"><div class="hpbar-fill" id="hpFill"></div></div>
-      <span class="tb-vital-num" id="hpText">10 / 10</span>
+      <span class="tb-vital-num" id="hpText">10/10</span>
     </div>
     <div class="tb-vital">
-      <span class="tb-vital-label">Gold</span>
       <span class="tb-vital-num gold" id="goldText">0</span>
+      <span class="tb-vital-label">gold</span>
     </div>
-    <div class="tb-vital">
-      <span class="tb-vital-label">Total level</span>
-      <span class="tb-vital-num" id="totalLevelText">7</span>
-    </div>
+    <button class="iconbtn" id="settingsBtn" title="Settings and account">&#9881;</button>
   </div>
 </header>
 
 <div class="shell">
 
-  <!-- ============ SIDEBAR ============ -->
+  <!-- ================= SIDEBAR ================= -->
   <nav class="sidebar">
-    <button class="tabbtn on" data-tab="skills">
-      <span class="tabbtn-icon">&#9935;</span><span>Skills</span>
-    </button>
-    <button class="tabbtn" data-tab="combat">
-      <span class="tabbtn-icon">&#9876;</span><span>Combat</span>
-    </button>
-    <button class="tabbtn" data-tab="inventory">
-      <span class="tabbtn-icon">&#127890;</span><span>Inventory</span>
-    </button>
+    <div class="navgroup">
+      <button class="tabbtn" data-tab="regions"><span class="tabbtn-icon">&#128506;</span><span>Regions</span></button>
+      <div class="navsub" id="regionNav"></div>
+    </div>
 
-    <div class="sidebar-sub" id="skillSubnav"></div>
+    <div class="navgroup">
+      <button class="tabbtn" data-tab="camp"><span class="tabbtn-icon">&#128296;</span><span>Camp</span></button>
+      <div class="navsub" id="campNav"></div>
+    </div>
+
+    <div class="navgroup">
+      <button class="tabbtn" data-tab="inventory"><span class="tabbtn-icon">&#127890;</span><span>Inventory</span></button>
+    </div>
+
+    <div class="navgroup">
+      <button class="tabbtn" data-tab="skills"><span class="tabbtn-icon">&#128202;</span><span>Skills</span></button>
+    </div>
   </nav>
 
-  <!-- ============ MAIN ============ -->
+  <!-- ================= MAIN ================= -->
   <main class="main">
 
-    <!-- ---- SKILLS VIEW ---- -->
-    <section class="view" id="viewSkills">
-      <div class="view-head">
-        <h1 class="view-title" id="skillTitle">Woodcutting</h1>
-        <div class="view-xp">
-          <span id="skillLevel">Level 1</span>
-          <div class="xpbar"><div class="xpbar-fill" id="skillXpFill"></div></div>
-          <span class="muted" id="skillXpText">0 / 110 xp</span>
+    <!-- ---- REGIONS ---- -->
+    <section class="view" id="viewRegions" hidden>
+      <div class="hero">
+        <img class="hero-img" id="regionImg" alt="" referrerpolicy="no-referrer">
+        <div class="hero-body">
+          <h1 class="hero-title" id="regionName"></h1>
+          <p class="hero-note" id="regionNote"></p>
+          <p class="muted tiny" id="regionMeta"></p>
         </div>
       </div>
-      <p class="view-note" id="skillNote"></p>
-      <div class="cards" id="skillActions"></div>
+
+      <h2 class="section-title">Gathering</h2>
+      <div class="cards" id="regionNodes"></div>
+
+      <h2 class="section-title">Prowling here</h2>
+      <div class="cards" id="regionMonster"></div>
     </section>
 
-    <!-- ---- COMBAT VIEW ---- -->
-    <section class="view" id="viewCombat" hidden>
+    <!-- ---- CAMP ---- -->
+    <section class="view" id="viewCamp" hidden>
       <div class="view-head">
-        <h1 class="view-title">Combat</h1>
+        <h1 class="view-title" id="profTitle"></h1>
         <div class="view-xp">
-          <span id="combatLevel">Level 1</span>
-          <div class="xpbar"><div class="xpbar-fill" id="combatXpFill"></div></div>
-          <span class="muted" id="combatXpText">0 / 110 xp</span>
+          <span id="profLevel">Level 1</span>
+          <div class="xpbar"><div class="xpbar-fill" id="profXpFill"></div></div>
+          <span class="muted" id="profXpText"></span>
         </div>
       </div>
-      <p class="view-note" id="combatNote"></p>
-
-      <div class="arealist" id="areaList"></div>
-      <div class="cards" id="monsterList"></div>
+      <p class="view-note" id="profNote"></p>
+      <div class="cards" id="profActions"></div>
     </section>
 
-    <!-- ---- INVENTORY VIEW ---- -->
+    <!-- ---- INVENTORY ---- -->
     <section class="view" id="viewInventory" hidden>
-      <div class="view-head">
-        <h1 class="view-title">Inventory</h1>
-        <span class="muted" id="bankCount">0 / 20 slots</span>
-      </div>
-
-      <div class="inv-layout">
-
-        <div class="inv-left">
-          <div class="box">
-            <h2 class="box-title">Bank <span class="muted tiny">drag to reorder</span></h2>
-            <div class="invgrid" id="invGrid"></div>
-            <div class="inv-detail" id="invDetail">Select an item to equip or sell it.</div>
-          </div>
-
-          <div class="box">
-            <h2 class="box-title">Bank capacity</h2>
-            <p class="muted tiny" id="bankUpgradeNote"></p>
-            <button class="btn" id="bankUpgradeBtn">Buy 5 slots</button>
-          </div>
+      <div class="inv-shell">
+        <div class="storage-tabs">
+          <button class="stab on" data-store="inv" title="Bag">Bag</button>
+          <button class="stab" data-store="bank" title="Vault">Vault</button>
         </div>
 
-        <div class="inv-right">
+        <div class="inv-main">
+          <div class="view-head">
+            <h1 class="view-title" id="storeTitle">Bag</h1>
+            <span class="muted nums" id="storeCount"></span>
+          </div>
+          <p class="view-note" id="storeNote"></p>
+          <div class="invgrid" id="invGrid"></div>
+          <div class="inv-detail" id="invDetail">Select an item.</div>
+        </div>
+
+        <aside class="inv-side">
           <div class="box">
             <h2 class="box-title">Equipped</h2>
             <div class="equip" id="equipList"></div>
           </div>
-
           <div class="box">
             <h2 class="box-title">Character</h2>
             <div class="statlist" id="statList"></div>
           </div>
-
-          <div class="box">
-            <h2 class="box-title">Save</h2>
-            <div class="btnrow">
-              <button class="btn" id="saveBtn">Save now</button>
-              <button class="btn" id="shareBtn">Export / Import</button>
-            </div>
-            <button class="btn btn-quiet wide" id="wipeBtn">Delete save</button>
-            <p class="muted tiny" id="saveNote">Saves automatically every 15 seconds.</p>
-          </div>
-        </div>
-
+        </aside>
       </div>
+    </section>
+
+    <!-- ---- SKILLS ---- -->
+    <section class="view" id="viewSkills" hidden>
+      <div class="view-head">
+        <h1 class="view-title">Skills</h1>
+        <span class="muted" id="totalLevelText"></span>
+      </div>
+      <div class="skilltable" id="skillTable"></div>
     </section>
 
     <div class="eventlog" id="eventLog"></div>
   </main>
 </div>
 
-<!-- ============ SHARE MODAL ============ -->
-<div class="modal-wrap" id="shareModal" hidden>
+<!-- ================= SETTINGS ================= -->
+<div class="modal-wrap" id="settingsModal" hidden>
   <div class="modal">
-    <h2 class="modal-title">Export / Import save</h2>
-    <p class="modal-sub">Copy this string to back up or share your character. Paste someone else's in and load it to overwrite your own.</p>
-    <textarea class="sharebox" id="shareBox" spellcheck="false"></textarea>
-    <div class="btnrow">
-      <button class="btn" id="shareCopy">Copy</button>
-      <button class="btn" id="shareLoad">Load pasted save</button>
-      <button class="btn btn-quiet" id="shareClose">Close</button>
+    <h2 class="modal-title">Settings</h2>
+
+    <div class="modal-section">
+      <h3 class="modal-h3">Account</h3>
+      <p class="muted tiny" id="acctStatus"></p>
+      <div class="fieldrow" id="acctFields">
+        <input class="field" id="acctUser" placeholder="Username" autocomplete="username">
+        <input class="field" id="acctPass" type="password" placeholder="Password" autocomplete="current-password">
+      </div>
+      <div class="btnrow">
+        <button class="btn" id="acctCreate">Create</button>
+        <button class="btn" id="acctLogin">Log in</button>
+        <button class="btn btn-quiet" id="acctLogout" hidden>Log out</button>
+      </div>
+      <p class="muted tiny" id="acctNote"></p>
     </div>
-    <p class="muted tiny" id="shareNote"></p>
+
+    <div class="modal-section">
+      <h3 class="modal-h3">Save string</h3>
+      <textarea class="sharebox" id="shareBox" spellcheck="false"></textarea>
+      <div class="btnrow">
+        <button class="btn" id="shareCopy">Copy</button>
+        <button class="btn" id="shareLoad">Load pasted save</button>
+      </div>
+    </div>
+
+    <div class="modal-section">
+      <div class="btnrow">
+        <button class="btn" id="saveBtn">Save now</button>
+        <button class="btn btn-danger" id="wipeBtn">Delete this save</button>
+        <button class="btn btn-quiet" id="settingsClose">Close</button>
+      </div>
+      <p class="muted tiny" id="saveNote">Autosaves every 10 seconds.</p>
+    </div>
   </div>
 </div>
 
