@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Respite</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">&#127769;</span>
+    <span class="brand-name">Respite</span>
+  </div>
+
+  <div class="vitals">
+    <div class="vital">
+      <span class="vital-label">Health</span>
+      <div class="hpbar"><div class="hpbar-fill" id="hpFill"></div></div>
+      <span class="vital-num" id="hpText">10 / 10</span>
+    </div>
+    <div class="vital">
+      <span class="vital-label">Gold</span>
+      <span class="vital-num gold" id="goldText">0</span>
+    </div>
+    <div class="vital">
+      <span class="vital-label">Total level</span>
+      <span class="vital-num" id="totalLevelText">6</span>
+    </div>
+  </div>
+</header>
+
+<main class="layout">
+
+  <nav class="skillnav" id="skillNav"></nav>
+
+  <section class="stage">
+    <div class="stage-head">
+      <h1 class="stage-title" id="stageTitle">Woodcutting</h1>
+      <div class="stage-xp">
+        <span id="stageLevel">Level 1</span>
+        <div class="xpbar"><div class="xpbar-fill" id="stageXpFill"></div></div>
+        <span class="muted" id="stageXpText">0 / 83 xp</span>
+      </div>
+    </div>
+
+    <p class="stage-note" id="stageNote"></p>
+
+    <div class="actions" id="actionList"></div>
+
+    <div class="eventlog" id="eventLog"></div>
+  </section>
+
+  <aside class="side">
+    <div class="panel">
+      <h2 class="panel-title">Equipped</h2>
+      <div class="equip" id="equipList"></div>
+    </div>
+
+    <div class="panel">
+      <h2 class="panel-title">Bank <span class="muted" id="bankCount"></span></h2>
+      <div class="bank" id="bankList"></div>
+    </div>
+
+    <div class="panel">
+      <h2 class="panel-title">Save</h2>
+      <div class="savebtns">
+        <button class="btn" id="saveBtn">Save now</button>
+        <button class="btn btn-quiet" id="wipeBtn">Delete save</button>
+      </div>
+      <p class="muted tiny" id="saveNote">Saves automatically every 15 seconds. Keeps going while you're away — no need to check in.</p>
+    </div>
+  </aside>
+
+</main>
+
+<script src="game.js"></script>
+</body>
+</html>
