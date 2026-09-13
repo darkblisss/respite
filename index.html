@@ -6,7 +6,7 @@
 <title>Respite</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -14,13 +14,13 @@
 <!-- ================= TASKBAR ================= -->
 <header class="taskbar">
   <div class="tb-brand">
-    <span class="tb-mark">&#127769;</span>
+    <span class="tb-mark" id="brandMark"></span>
     <span class="tb-name">Respite</span>
   </div>
 
   <div class="tb-slot">
     <div class="tb-slot-head">
-      <span class="tb-slot-label">Skilling</span>
+      <span class="tb-slot-label">Labour</span>
       <span class="tb-slot-title" id="tbSkillTitle">Idle</span>
       <button class="tb-clear" id="tbSkillClear" title="Finish the current action, then stop">&#8635;</button>
     </div>
@@ -30,7 +30,7 @@
 
   <div class="tb-slot">
     <div class="tb-slot-head">
-      <span class="tb-slot-label">Combat</span>
+      <span class="tb-slot-label">Warfare</span>
       <span class="tb-slot-title" id="tbCombatTitle">Idle</span>
       <button class="tb-clear" id="tbCombatClear" title="Finish the current fight, then stop">&#8635;</button>
     </div>
@@ -42,112 +42,151 @@
     <div class="tb-vital">
       <span class="tb-vital-label">HP</span>
       <div class="hpbar"><div class="hpbar-fill" id="hpFill"></div></div>
-      <span class="tb-vital-num" id="hpText">10/10</span>
+      <span class="tb-vital-num" id="hpText">20/20</span>
     </div>
     <div class="tb-vital">
+      <span class="tb-coin" id="coinIcon"></span>
       <span class="tb-vital-num gold" id="goldText">0</span>
-      <span class="tb-vital-label">gold</span>
     </div>
     <button class="iconbtn" id="settingsBtn" title="Settings and account">&#9881;</button>
   </div>
 </header>
 
+<!-- ================= WORLD STRIP ================= -->
+<div class="worldstrip">
+  <div class="ws-item" id="wsWeather"></div>
+  <div class="ws-item" id="wsBounty"></div>
+  <div class="ws-item" id="wsBuff"></div>
+</div>
+
 <div class="shell">
 
   <!-- ================= SIDEBAR ================= -->
   <nav class="sidebar">
-    <div class="navgroup">
-      <button class="tabbtn" data-tab="regions"><span class="tabbtn-icon">&#128506;</span><span>Regions</span></button>
-      <div class="navsub" id="regionNav"></div>
+    <div class="icontabs">
+      <button class="itab" data-tab="atlas"><span class="itab-ico" id="icoAtlas"></span><span>Atlas</span></button>
+      <button class="itab" data-tab="shop"><span class="itab-ico" id="icoShop"></span><span>Shop</span></button>
+      <button class="itab" data-tab="bounty"><span class="itab-ico" id="icoBounty"></span><span>Bounty</span></button>
     </div>
 
-    <div class="navgroup">
-      <button class="tabbtn" data-tab="camp"><span class="tabbtn-icon">&#128296;</span><span>Camp</span></button>
-      <div class="navsub" id="campNav"></div>
-    </div>
+    <div class="navlabel">You</div>
+    <button class="tabbtn" data-tab="inventory"><span class="tabbtn-ico" id="icoInv"></span><span>Inventory</span></button>
+    <button class="tabbtn" data-tab="character"><span class="tabbtn-ico" id="icoChar"></span><span>Character</span></button>
+    <button class="tabbtn" data-tab="kennel"><span class="tabbtn-ico" id="icoKennel"></span><span>Kennel</span></button>
 
-    <div class="navgroup">
-      <button class="tabbtn" data-tab="inventory"><span class="tabbtn-icon">&#127890;</span><span>Inventory</span></button>
-    </div>
+    <div class="navlabel">Gathering</div>
+    <div class="navsub" id="gatherNav"></div>
 
-    <div class="navgroup">
-      <button class="tabbtn" data-tab="skills"><span class="tabbtn-icon">&#128202;</span><span>Skills</span></button>
-    </div>
+    <div class="navlabel">Crafting</div>
+    <div class="navsub" id="craftNav"></div>
+
+    <div class="navlabel">War</div>
+    <div class="navsub" id="warNav"></div>
   </nav>
 
   <!-- ================= MAIN ================= -->
   <main class="main">
 
-    <!-- ---- REGIONS ---- -->
-    <section class="view" id="viewRegions" hidden>
-      <div class="hero">
-        <img class="hero-img" id="regionImg" alt="" referrerpolicy="no-referrer">
+    <!-- ---- SKILL / WARFARE VIEW ---- -->
+    <section class="view" id="viewSkill" hidden>
+      <div class="hero" id="skillHero">
+        <div class="hero-art" id="heroArt"></div>
         <div class="hero-body">
-          <h1 class="hero-title" id="regionName"></h1>
-          <p class="hero-note" id="regionNote"></p>
-          <p class="muted tiny" id="regionMeta"></p>
+          <span class="hero-kicker" id="heroKicker"></span>
+          <h1 class="hero-title" id="heroTitle"></h1>
+          <p class="hero-note" id="heroNote"></p>
+        </div>
+        <div class="hero-lvl">
+          <span id="skillLvl">Lv. 1</span>
+          <div class="xpbar"><div class="xpbar-fill" id="skillXpFill"></div></div>
+          <span class="muted tiny" id="skillXpText"></span>
         </div>
       </div>
-
-      <h2 class="section-title">Gathering</h2>
-      <div class="cards" id="regionNodes"></div>
-
-      <h2 class="section-title">Prowling here</h2>
-      <div class="cards" id="regionMonster"></div>
+      <div class="cards" id="skillCards"></div>
     </section>
 
-    <!-- ---- CAMP ---- -->
-    <section class="view" id="viewCamp" hidden>
+    <!-- ---- ATLAS ---- -->
+    <section class="view" id="viewAtlas" hidden>
       <div class="view-head">
-        <h1 class="view-title" id="profTitle"></h1>
-        <div class="view-xp">
-          <span id="profLevel">Level 1</span>
-          <div class="xpbar"><div class="xpbar-fill" id="profXpFill"></div></div>
-          <span class="muted" id="profXpText"></span>
-        </div>
+        <h1 class="view-title">Atlas</h1>
+        <span class="muted tiny">Pay the toll, change where you work. Everything else follows your location.</span>
       </div>
-      <p class="view-note" id="profNote"></p>
-      <div class="cards" id="profActions"></div>
+      <div class="atlas" id="atlasList"></div>
+    </section>
+
+    <!-- ---- SHOP ---- -->
+    <section class="view" id="viewShop" hidden>
+      <div class="view-head">
+        <h1 class="view-title">Shop</h1>
+        <span class="muted tiny nums" id="shopGold"></span>
+      </div>
+      <h2 class="section-title">Provisioner &mdash; always open</h2>
+      <div class="cards" id="shopStock"></div>
+      <h2 class="section-title">The Smuggler <span class="muted tiny" id="smugglerTimer"></span></h2>
+      <p class="view-note" id="smugglerNote"></p>
+      <div class="cards" id="smugglerStock"></div>
+    </section>
+
+    <!-- ---- BOUNTY ---- -->
+    <section class="view" id="viewBounty" hidden>
+      <div class="view-head">
+        <h1 class="view-title">Bounty Board</h1>
+        <span class="muted tiny" id="bountyTimer"></span>
+      </div>
+      <p class="view-note">Posted on the world clock every twelve hours. Finish it and the next hour of work pays double.</p>
+      <div class="bountybox" id="bountyBox"></div>
     </section>
 
     <!-- ---- INVENTORY ---- -->
     <section class="view" id="viewInventory" hidden>
       <div class="inv-shell">
         <div class="storage-tabs">
-          <button class="stab on" data-store="inv" title="Bag">Bag</button>
-          <button class="stab" data-store="bank" title="Vault">Vault</button>
+          <button class="stab on" data-store="inv">Pack</button>
+          <button class="stab" data-store="bank">Vault</button>
         </div>
-
         <div class="inv-main">
           <div class="view-head">
-            <h1 class="view-title" id="storeTitle">Bag</h1>
+            <h1 class="view-title" id="storeTitle">Pack</h1>
             <span class="muted nums" id="storeCount"></span>
           </div>
           <p class="view-note" id="storeNote"></p>
           <div class="invgrid" id="invGrid"></div>
           <div class="inv-detail" id="invDetail">Select an item.</div>
         </div>
-
         <aside class="inv-side">
           <div class="box">
-            <h2 class="box-title">Equipped</h2>
+            <h2 class="box-title">Worn</h2>
             <div class="equip" id="equipList"></div>
-          </div>
-          <div class="box">
-            <h2 class="box-title">Character</h2>
-            <div class="statlist" id="statList"></div>
           </div>
         </aside>
       </div>
     </section>
 
-    <!-- ---- SKILLS ---- -->
-    <section class="view" id="viewSkills" hidden>
+    <!-- ---- CHARACTER ---- -->
+    <section class="view" id="viewCharacter" hidden>
       <div class="view-head">
-        <h1 class="view-title">Skills</h1>
-        <span class="muted" id="totalLevelText"></span>
+        <h1 class="view-title">Character</h1>
+        <span class="muted tiny" id="charSub"></span>
       </div>
-      <div class="skilltable" id="skillTable"></div>
+      <div class="char-shell">
+        <div class="box">
+          <h2 class="box-title">Standing</h2>
+          <div class="statlist" id="statList"></div>
+        </div>
+        <div class="box">
+          <h2 class="box-title">Skills</h2>
+          <div class="skilltable" id="skillTable"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---- KENNEL ---- -->
+    <section class="view" id="viewKennel" hidden>
+      <div class="view-head">
+        <h1 class="view-title">Kennel</h1>
+        <span class="muted tiny">Bought once, kept forever. They work while you do.</span>
+      </div>
+      <div class="cards" id="petList"></div>
     </section>
 
     <div class="eventlog" id="eventLog"></div>
@@ -158,7 +197,6 @@
 <div class="modal-wrap" id="settingsModal" hidden>
   <div class="modal">
     <h2 class="modal-title">Settings</h2>
-
     <div class="modal-section">
       <h3 class="modal-h3">Account</h3>
       <p class="muted tiny" id="acctStatus"></p>
@@ -173,7 +211,6 @@
       </div>
       <p class="muted tiny" id="acctNote"></p>
     </div>
-
     <div class="modal-section">
       <h3 class="modal-h3">Save string</h3>
       <textarea class="sharebox" id="shareBox" spellcheck="false"></textarea>
@@ -182,7 +219,6 @@
         <button class="btn" id="shareLoad">Load pasted save</button>
       </div>
     </div>
-
     <div class="modal-section">
       <div class="btnrow">
         <button class="btn" id="saveBtn">Save now</button>
