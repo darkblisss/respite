@@ -6,197 +6,292 @@
 <title>Respite</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div class="frame">
 
-<!-- ================= TASKBAR ================= -->
-<header class="taskbar">
-  <div class="tb-brand">
-    <span class="tb-mark" id="brandMark"></span>
-    <span class="tb-name">Respite</span>
-  </div>
-
-  <div class="tb-slot">
-    <div class="tb-slot-head">
-      <span class="tb-slot-label">Labour</span>
-      <span class="tb-slot-title" id="tbSkillTitle">Idle</span>
-      <button class="tb-clear" id="tbSkillClear" title="Finish the current action, then stop">&#8635;</button>
-    </div>
-    <div class="tb-bar"><div class="tb-bar-fill" id="tbSkillBar"></div></div>
-    <div class="tb-proj" id="tbSkillProj">Nothing tasked.</div>
-  </div>
-
-  <div class="tb-slot">
-    <div class="tb-slot-head">
-      <span class="tb-slot-label">Warfare</span>
-      <span class="tb-slot-title" id="tbCombatTitle">Idle</span>
-      <button class="tb-clear" id="tbCombatClear" title="Finish the current fight, then stop">&#8635;</button>
-    </div>
-    <div class="tb-bar"><div class="tb-bar-fill combat" id="tbCombatBar"></div></div>
-    <div class="tb-proj" id="tbCombatProj">Nothing tasked.</div>
-  </div>
-
-  <div class="tb-right">
-    <div class="tb-vital">
-      <span class="tb-vital-label">HP</span>
-      <div class="hpbar"><div class="hpbar-fill" id="hpFill"></div></div>
-      <span class="tb-vital-num" id="hpText">20/20</span>
-    </div>
-    <div class="tb-vital">
-      <span class="tb-coin" id="coinIcon"></span>
-      <span class="tb-vital-num gold" id="goldText">0</span>
-    </div>
-    <button class="iconbtn" id="settingsBtn" title="Settings and account">&#9881;</button>
-  </div>
-</header>
-
-<!-- ================= WORLD STRIP ================= -->
-<div class="worldstrip">
-  <div class="ws-item" id="wsWeather"></div>
-  <div class="ws-item" id="wsBounty"></div>
-  <div class="ws-item" id="wsBuff"></div>
-</div>
-
-<div class="shell">
-
-  <!-- ================= SIDEBAR ================= -->
-  <nav class="sidebar">
-    <div class="icontabs">
-      <button class="itab" data-tab="atlas"><span class="itab-ico" id="icoAtlas"></span><span>Atlas</span></button>
-      <button class="itab" data-tab="shop"><span class="itab-ico" id="icoShop"></span><span>Shop</span></button>
-      <button class="itab" data-tab="bounty"><span class="itab-ico" id="icoBounty"></span><span>Bounty</span></button>
+  <!-- ================= TOPBAR ================= -->
+  <header class="topbar">
+    <div class="tb-brand">
+      <div class="mark" id="brandMark"></div>
+      <div>
+        <h1>RESPITE</h1>
+        <div class="crumbs" id="crumbs"></div>
+      </div>
     </div>
 
-    <div class="navlabel">You</div>
-    <button class="tabbtn" data-tab="inventory"><span class="tabbtn-ico" id="icoInv"></span><span>Inventory</span></button>
-    <button class="tabbtn" data-tab="character"><span class="tabbtn-ico" id="icoChar"></span><span>Character</span></button>
-    <button class="tabbtn" data-tab="kennel"><span class="tabbtn-ico" id="icoKennel"></span><span>Kennel</span></button>
-
-    <div class="navlabel">Gathering</div>
-    <div class="navsub" id="gatherNav"></div>
-
-    <div class="navlabel">Crafting</div>
-    <div class="navsub" id="craftNav"></div>
-
-    <div class="navlabel">War</div>
-    <div class="navsub" id="warNav"></div>
-  </nav>
-
-  <!-- ================= MAIN ================= -->
-  <main class="main">
-
-    <!-- ---- SKILL / WARFARE VIEW ---- -->
-    <section class="view" id="viewSkill" hidden>
-      <div class="hero" id="skillHero">
-        <div class="hero-art" id="heroArt"></div>
-        <div class="hero-body">
-          <span class="hero-kicker" id="heroKicker"></span>
-          <h1 class="hero-title" id="heroTitle"></h1>
-          <p class="hero-note" id="heroNote"></p>
+    <div class="tb-activity">
+      <div class="tb-block">
+        <div class="row1">
+          <div><span class="eyebrow">Trades</span><span class="name" id="tbTradesName">Idle</span></div>
+          <button class="refresh" id="tbTradesClear" title="Finish this action, then stand down">&#8635;</button>
         </div>
-        <div class="hero-lvl">
-          <span id="skillLvl">Lv. 1</span>
-          <div class="xpbar"><div class="xpbar-fill" id="skillXpFill"></div></div>
-          <span class="muted tiny" id="skillXpText"></span>
+        <div class="tb-bar"><i id="tbTradesBar"></i></div>
+        <div class="tb-meta" id="tbTradesMeta">No crews tasked.</div>
+      </div>
+      <div class="tb-div"></div>
+      <div class="tb-block">
+        <div class="row1">
+          <div><span class="eyebrow">The Field</span><span class="name" id="tbFieldName">Idle</span></div>
+          <button class="refresh" id="tbFieldClear" title="Finish this fight, then pull back">&#8635;</button>
         </div>
+        <div class="tb-bar mob"><i id="tbFieldBar"></i></div>
+        <div class="tb-meta" id="tbFieldMeta">Take the field from any region.</div>
       </div>
-      <div class="cards" id="skillCards"></div>
-    </section>
+    </div>
 
-    <!-- ---- ATLAS ---- -->
-    <section class="view" id="viewAtlas" hidden>
-      <div class="view-head">
-        <h1 class="view-title">Atlas</h1>
-        <span class="muted tiny">Pay the toll, change where you work. Everything else follows your location.</span>
+    <div class="tb-stats">
+      <div class="pill gold"><span id="coinIcon"></span><b id="goldText">0</b></div>
+      <div class="pill">HP <span class="hp-mini"><i id="hpFill"></i></span> <b id="hpText">20/20</b></div>
+      <div class="pill clock" title="World clock — bounties and the smuggler run on this"><b id="clockText"></b></div>
+      <button class="gear-btn" id="settingsBtn">&#9881;</button>
+    </div>
+  </header>
+
+  <div class="layout">
+
+    <!-- ================= SIDEBAR ================= -->
+    <aside class="sidebar">
+      <div class="icon-row">
+        <button class="icon-btn" data-page="atlas">Atlas</button>
+        <button class="icon-btn" data-page="shop">Shop</button>
+        <button class="icon-btn" data-page="bounty">Bounty</button>
       </div>
-      <div class="atlas" id="atlasList"></div>
-    </section>
 
-    <!-- ---- SHOP ---- -->
-    <section class="view" id="viewShop" hidden>
-      <div class="view-head">
-        <h1 class="view-title">Shop</h1>
-        <span class="muted tiny nums" id="shopGold"></span>
+      <div class="side-panel">
+        <h4>You</h4>
+        <div id="navYou"></div>
       </div>
-      <h2 class="section-title">Provisioner &mdash; always open</h2>
-      <div class="cards" id="shopStock"></div>
-      <h2 class="section-title">The Smuggler <span class="muted tiny" id="smugglerTimer"></span></h2>
-      <p class="view-note" id="smugglerNote"></p>
-      <div class="cards" id="smugglerStock"></div>
-    </section>
-
-    <!-- ---- BOUNTY ---- -->
-    <section class="view" id="viewBounty" hidden>
-      <div class="view-head">
-        <h1 class="view-title">Bounty Board</h1>
-        <span class="muted tiny" id="bountyTimer"></span>
+      <div class="side-panel">
+        <h4>Gathering</h4>
+        <div id="navGather"></div>
       </div>
-      <p class="view-note">Posted on the world clock every twelve hours. Finish it and the next hour of work pays double.</p>
-      <div class="bountybox" id="bountyBox"></div>
-    </section>
+      <div class="side-panel">
+        <h4>Crafting</h4>
+        <div id="navCraft"></div>
+      </div>
+      <div class="side-panel">
+        <h4>War</h4>
+        <div id="navWar"></div>
+      </div>
 
-    <!-- ---- INVENTORY ---- -->
-    <section class="view" id="viewInventory" hidden>
-      <div class="inv-shell">
-        <div class="storage-tabs">
-          <button class="stab on" data-store="inv">Pack</button>
-          <button class="stab" data-store="bank">Vault</button>
-        </div>
-        <div class="inv-main">
-          <div class="view-head">
-            <h1 class="view-title" id="storeTitle">Pack</h1>
-            <span class="muted nums" id="storeCount"></span>
+      <div class="side-panel weather-panel">
+        <div class="tag" id="weatherTag"></div>
+        <p id="weatherNote"></p>
+        <div class="w-xp" id="weatherXp"></div>
+        <div class="w-next" id="weatherNext"></div>
+      </div>
+    </aside>
+
+    <!-- ================= MAIN ================= -->
+    <main class="main">
+
+      <!-- ---- CHARACTER ---- -->
+      <section class="page" data-page="character" hidden>
+        <div class="hero">
+          <div class="hero-top">
+            <div class="region-tag" id="chRegionTag"></div>
+            <div class="event-chip" id="chBounty"></div>
           </div>
-          <p class="view-note" id="storeNote"></p>
-          <div class="invgrid" id="invGrid"></div>
-          <div class="inv-detail" id="invDetail">Select an item.</div>
-        </div>
-        <aside class="inv-side">
-          <div class="box">
-            <h2 class="box-title">Worn</h2>
-            <div class="equip" id="equipList"></div>
+          <div class="hero-body">
+            <div class="portrait" id="chPortrait">C</div>
+            <div class="hero-name">
+              <h2 id="chName">Commander</h2>
+              <div class="hero-tags" id="chTags"></div>
+            </div>
+            <div class="hero-lvl"><div class="num" id="chTotal"></div><div class="lbl">Total Level</div></div>
           </div>
-        </aside>
-      </div>
-    </section>
-
-    <!-- ---- CHARACTER ---- -->
-    <section class="view" id="viewCharacter" hidden>
-      <div class="view-head">
-        <h1 class="view-title">Character</h1>
-        <span class="muted tiny" id="charSub"></span>
-      </div>
-      <div class="char-shell">
-        <div class="box">
-          <h2 class="box-title">Standing</h2>
-          <div class="statlist" id="statList"></div>
         </div>
-        <div class="box">
-          <h2 class="box-title">Skills</h2>
-          <div class="skilltable" id="skillTable"></div>
+
+        <div class="activity-row">
+          <div class="card">
+            <div class="card-head"><div class="label">Trades</div></div>
+            <div id="chLabour"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><div class="label">The Field</div></div>
+            <div id="chField"></div>
+          </div>
         </div>
-      </div>
-    </section>
 
-    <!-- ---- KENNEL ---- -->
-    <section class="view" id="viewKennel" hidden>
-      <div class="view-head">
-        <h1 class="view-title">Kennel</h1>
-        <span class="muted tiny">Bought once, kept forever. They work while you do.</span>
-      </div>
-      <div class="cards" id="petList"></div>
-    </section>
+        <div class="card">
+          <div class="card-head"><div class="label">Standing</div></div>
+          <div class="stats-strip" id="chStats"></div>
+        </div>
 
-    <div class="eventlog" id="eventLog"></div>
-  </main>
+        <div class="section-label"><h3>Skills</h3></div>
+        <div class="skills-grid" id="chSkills"></div>
+      </section>
+
+      <!-- ---- SKILL ---- -->
+      <section class="page" data-page="skill" hidden>
+        <div class="hero">
+          <div class="hero-top">
+            <div class="region-tag" id="skHeroTag"></div>
+          </div>
+          <div class="hero-body">
+            <div class="hero-art" id="skHeroIcon"></div>
+            <div class="hero-name"><h2 id="skHeroName"></h2></div>
+            <div class="hero-lvl"><div class="num" id="skHeroLvl"></div><div class="lbl" id="skHeroXp"></div></div>
+          </div>
+          <div class="hero-xpbar">
+            <div class="bar"><i id="skHeroBar"></i></div>
+            <div class="meta"><span id="skHeroNote"></span><span id="skHeroNext"></span></div>
+          </div>
+        </div>
+
+        <div class="content-grid">
+          <div class="card">
+            <div class="card-head"><div class="label" id="skWorkLabel"></div></div>
+            <div id="skWorkBody"></div>
+          </div>
+          <div class="rail-stack">
+            <div class="card" id="skRailA">
+              <div class="card-head"><div class="label" id="skRailALabel"></div></div>
+              <div id="skRailABody"></div>
+            </div>
+            <div class="card">
+              <div class="card-head"><div class="label">Mastery</div></div>
+              <div id="skMasteryBody"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><div class="label">Level Milestones</div></div>
+          <div class="milestone-track" id="skMilestones"></div>
+        </div>
+
+        <div class="row-3">
+          <div class="card" id="skYield">
+            <div class="card-head"><div class="label">Yield Table</div></div>
+            <div id="skYieldBody"></div>
+          </div>
+          <div class="card" id="skSeams">
+            <div class="card-head"><div class="label" id="skSeamsLabel"></div></div>
+            <div id="skSeamsBody"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><div class="label">Recent Yields</div></div>
+            <div class="log-list" id="skYieldFeed"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---- INVENTORY ---- -->
+      <section class="page" data-page="inventory" hidden>
+        <div class="card">
+          <div class="tabs">
+            <button class="tab-btn active" data-tab="carried">Carried</button>
+            <button class="tab-btn" data-tab="stores">Camp Stores</button>
+            <button class="tab-btn" data-tab="equipment">Equipment</button>
+          </div>
+
+          <div class="panel" id="panel-carried">
+            <div class="panel-caption">What you carry into the field yourself. Battlefield loot lands here.</div>
+            <div class="filter-row"><div class="cap" id="carriedCap"></div></div>
+            <div class="item-grid" id="carriedGrid"></div>
+            <div class="detail" id="carriedDetail"></div>
+          </div>
+
+          <div class="panel" id="panel-stores" hidden>
+            <div class="panel-caption">What your crews haul back. Every trade delivers here, and every workshop draws from it.</div>
+            <div class="filter-row"><div class="cap" id="storesCap"></div></div>
+            <div class="item-grid" id="storesGrid"></div>
+            <div class="detail" id="storesDetail"></div>
+          </div>
+
+          <div class="panel" id="panel-equipment" hidden>
+            <div class="equip-layout">
+              <div class="eq-col" id="dollLeft"></div>
+              <div class="portrait-col">
+                <div class="portrait-frame"><div class="silhouette" id="dollSil">C</div></div>
+                <div class="portrait-name">
+                  <h3 id="dollName">Commander</h3>
+                  <div class="sub" id="dollSub"></div>
+                </div>
+              </div>
+              <div class="eq-col" id="dollRight"></div>
+            </div>
+            <div class="stats-strip" id="dollStats"></div>
+            <div class="tools-block">
+              <div class="label">Tools in Hand</div>
+              <div id="dollTools"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---- KENNEL ---- -->
+      <section class="page" data-page="kennel" hidden>
+        <div class="card">
+          <div class="card-head"><div class="label">The Kennel</div></div>
+          <p class="panel-caption" id="kennelNote"></p>
+          <div class="pet-list" id="petList"></div>
+        </div>
+      </section>
+
+      <!-- ---- ATLAS ---- -->
+      <section class="page" data-page="atlas" hidden>
+        <div class="card">
+          <div class="card-head"><div class="label">Atlas</div></div>
+          <p class="panel-caption">Pay the toll once, and the road stays open. Where you stand decides what your crews work and what you fight.</p>
+          <div class="atlas-list" id="atlasList"></div>
+        </div>
+      </section>
+
+      <!-- ---- SHOP ---- -->
+      <section class="page" data-page="shop" hidden>
+        <div class="card">
+          <div class="card-head"><div class="label">Provisioner</div></div>
+          <p class="panel-caption">Always open. Provisions are eaten automatically when you drop low in the field.</p>
+          <div class="shop-list" id="shopStock"></div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <div class="label">The Smuggler</div>
+            <div class="muted tiny" id="smugglerTimer"></div>
+          </div>
+          <p class="panel-caption">Turns up twice a day on the world clock with whatever fell off the back of something. One deal a visit.</p>
+          <div class="shop-list" id="smugglerStock"></div>
+        </div>
+      </section>
+
+      <!-- ---- BOUNTY ---- -->
+      <section class="page" data-page="bounty" hidden>
+        <div class="card">
+          <div class="card-head">
+            <div class="label">Bounty Board</div>
+            <div class="muted tiny" id="bountyTimer"></div>
+          </div>
+          <p class="panel-caption">Posted on the world clock every twelve hours, against the ground you're standing on.</p>
+          <div id="bountyBox"></div>
+        </div>
+      </section>
+
+      <div class="card log-card">
+        <div class="card-head"><div class="label">Camp Log</div></div>
+        <div class="log-list" id="eventLog"></div>
+      </div>
+    </main>
+  </div>
 </div>
 
 <!-- ================= SETTINGS ================= -->
 <div class="modal-wrap" id="settingsModal" hidden>
   <div class="modal">
     <h2 class="modal-title">Settings</h2>
+
+    <div class="modal-section">
+      <h3 class="modal-h3">Commander</h3>
+      <div class="fieldrow">
+        <input class="field" id="nameField" maxlength="18" placeholder="Name">
+        <button class="btn" id="nameSave">Set</button>
+      </div>
+    </div>
+
     <div class="modal-section">
       <h3 class="modal-h3">Account</h3>
       <p class="muted tiny" id="acctStatus"></p>
@@ -211,6 +306,7 @@
       </div>
       <p class="muted tiny" id="acctNote"></p>
     </div>
+
     <div class="modal-section">
       <h3 class="modal-h3">Save string</h3>
       <textarea class="sharebox" id="shareBox" spellcheck="false"></textarea>
@@ -219,6 +315,7 @@
         <button class="btn" id="shareLoad">Load pasted save</button>
       </div>
     </div>
+
     <div class="modal-section">
       <div class="btnrow">
         <button class="btn" id="saveBtn">Save now</button>
@@ -232,15 +329,11 @@
 
 <div class="toast-stack" id="toastStack"></div>
 
-<!-- Supabase client. The anon key below is safe to expose — it's public by
-     design, and Row Level Security policies (set up in the SQL editor) are
-     what actually protect each player's data, not secrecy of this key. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
   window.RESPITE_SUPABASE_URL = "https://thjheemzgtotcctcgxls.supabase.co";
   window.RESPITE_SUPABASE_ANON_KEY = "sb_publishable_tOA7kXhnYGSMz5z4kqlSjg_5U10ltb8";
 </script>
-
 <script src="game.js"></script>
 </body>
 </html>

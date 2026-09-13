@@ -20,7 +20,8 @@ const RESPAWN_MS = 2000;
 const PACK_SLOTS = 28;
 const VAULT_START = 40;
 const VAULT_MAX = 200;
-const WAR_UNLOCK_TOTAL = 12;
+const RECOVERY_MS = 5 * 60 * 1000;   // knocked out of the fight after a death
+const DEATH_WEAR = 25;               // extra durability every worn piece loses on death
 
 const EQUIP_SLOTS = ["weapon", "offhand", "head", "chest", "legs", "boots", "gloves", "ring", "amulet"];
 const SLOT_LABELS = {
@@ -40,6 +41,16 @@ function rollRarity() {
   let r = Math.random();
   for (const rar of RARITIES) { if (r < rar.chance) return rar.key; r -= rar.chance; }
   return "common";
+}
+
+/* ================= 10. TITLE CASE ================= */
+
+const LOWER_WORDS = ["of", "the", "and"];
+function titleCase(s) {
+  return String(s).split(" ").map((w, i) => {
+    if (i > 0 && LOWER_WORDS.includes(w.toLowerCase())) return w.toLowerCase();
+    return w.charAt(0).toUpperCase() + w.slice(1);
+  }).join(" ");
 }
 
 /* ================= 2. ICONS (hand-drawn SVG, no external assets) ================= */
@@ -213,14 +224,14 @@ TIERS.forEach((t) => {
 // Provisions are bought, not cooked — there is no cooking skill.
 const RATIONS = TIERS.filter((t) => t.i % 2 === 1).map((t) => ({
   id: `ration_t${t.i}`,
-  name: ["Hard tack", "Salt pork", "Spiced stew", "Blood pudding", "Godsbread"][Math.floor(t.i / 2)],
+  name: ["Hard Tack", "Salt Pork", "Spiced Stew", "Blood Pudding", "Godsbread"][Math.floor(t.i / 2)],
   icon: "ration", kind: "material", tier: t.i,
   heal: Math.round(10 * Math.pow(1.95, t.i - 1)),
   value: Math.round(8 * Math.pow(2.3, t.i - 1)),
 }));
 RATIONS.forEach((r) => { MATERIALS[r.id] = r; });
 
-MATERIALS.vault_chest = { id: "vault_chest", name: "Banded chest", icon: "crate", kind: "material", value: 600, chest: 5, tier: 2 };
+MATERIALS.vault_chest = { id: "vault_chest", name: "Banded Chest", icon: "crate", kind: "material", value: 600, chest: 5, tier: 2 };
 
 PROFESSIONS.forEach((prof) => {
   TIERS.forEach((t) => {
@@ -228,7 +239,7 @@ PROFESSIONS.forEach((prof) => {
       const id = `${slug(t[prof.mat])}_${piece.key}`;
       const power = Math.round(4 * Math.pow(1.52, t.i - 1));
       GEAR[id] = {
-        id, name: `${t[prof.mat]} ${piece.label}`, icon: piece.icon, kind: "gear",
+        id, name: titleCase(`${t[prof.mat]} ${piece.label}`), icon: piece.icon, kind: "gear",
         slot: piece.slot, tier: t.i, prof: prof.id,
         attack: Math.round(power * piece.atk),
         defence: Math.round(power * piece.def),
@@ -282,7 +293,7 @@ const GATHER_ACTIONS = {};
 GATHER_SKILLS.forEach((s) => {
   GATHER_ACTIONS[s.id] = TIERS.map((t) => ({
     id: `${s.id}_t${t.i}`, skillId: s.id, tier: t.i,
-    name: `${t[s.mat]} ${s.node}`, icon: s.matIcon,
+    name: titleCase(`${t[s.mat]} ${s.node}`), icon: s.matIcon,
     level: t.level, time: t.time, xp: t.xp,
     out: { [matId(t, s.mat)]: 1 },
   }));
@@ -308,7 +319,7 @@ PROFESSIONS.forEach((prof) => {
 
 CRAFT_ACTIONS.woodwright.push({
   id: "craft_vault_chest", skillId: "woodwright", tier: 2,
-  name: "Banded chest", icon: "crate", level: 12, time: 45000, xp: 8,
+  name: "Banded Chest", icon: "crate", level: 12, time: 45000, xp: 8,
   cost: { [matId(TIERS[1], "fell")]: 20 },
   out: { vault_chest: 1 },
 });
@@ -362,35 +373,131 @@ const regionById = (id) => REGIONS.find((r) => r.id === id) || REGIONS[0];
 const monsterOfTier = (tier) => MONSTERS.find((m) => m.tier === tier);
 const getMonster = (id) => MONSTERS.find((m) => m.id === id) || null;
 
-/* ================= 10. WEATHER (world clock, deterministic) ================= */
+/* ================= 11. WEATHER (weekly rotation, world clock) ================= */
+/* Fixed to the UTC day of week, so it's predictable and everyone shares it.
+   Weekends are bountiful — normal speed, extra experience. */
 
-const WEATHERS = [
-  { id: "clear", name: "Clear", icon: "sun",  note: "Nothing helping, nothing hindering.", mods: {} },
-  { id: "rain",  name: "Rain",  icon: "rain", note: "Dredging runs faster. Felling bogs down.",
-    mods: { dredging: 0.8, felling: 1.15 } },
-  { id: "fog",   name: "Grave fog", icon: "fog", note: "Flaying and Harvesting slow to a crawl. Delving is unbothered underground.",
-    mods: { flaying: 1.2, harvesting: 1.15, delving: 0.9 } },
-  { id: "frost", name: "Hard frost", icon: "fog", note: "Everything above ground stiffens. Forge work speeds up.",
-    mods: { felling: 1.12, harvesting: 1.12, forgemaster: 0.85 } },
-  { id: "swelter", name: "Swelter", icon: "sun", note: "Camp work drags. Dredging the cold water is a relief.",
-    mods: { forgemaster: 1.15, woodwright: 1.1, dredging: 0.88 } },
+const WEATHER_WEEK = [
+  { id: "bountiful", name: "Bountiful Rest", icon: "sun",
+    note: "The camp works in good spirits. Every trade earns more.", xp: 1.2, mods: {} },                      // Sun
+  { id: "fog", name: "Grave Fog", icon: "fog",
+    note: "Flaying and Harvesting drag. Delving is untroubled underground.", xp: 1,
+    mods: { flaying: 1.1, harvesting: 1.1, delving: 0.9 } },                                                   // Mon
+  { id: "rain", name: "Rain", icon: "rain",
+    note: "Dredging runs quick. Felling bogs down.", xp: 1,
+    mods: { dredging: 0.9, felling: 1.1 } },                                                                   // Tue
+  { id: "clear", name: "Clear Skies", icon: "sun",
+    note: "Nothing helping, nothing hindering.", xp: 1, mods: {} },                                            // Wed
+  { id: "frost", name: "Hard Frost", icon: "fog",
+    note: "Open ground stiffens. Forge work goes faster in the heat.", xp: 1,
+    mods: { felling: 1.1, harvesting: 1.1, forgemaster: 0.9 } },                                               // Thu
+  { id: "swelter", name: "Swelter", icon: "sun",
+    note: "Camp work drags in the heat. The cold water is a relief.", xp: 1,
+    mods: { forgemaster: 1.1, woodwright: 1.1, dredging: 0.9 } },                                              // Fri
+  { id: "bountiful", name: "Bountiful Rest", icon: "sun",
+    note: "The camp works in good spirits. Every trade earns more.", xp: 1.2, mods: {} },                      // Sat
 ];
 
-function seedFrom(n) { let x = Math.sin(n) * 10000; return x - Math.floor(x); }
-function currentWeather() {
-  const day = Math.floor(Date.now() / DAY_MS);
-  return WEATHERS[Math.floor(seedFrom(day * 7.77) * WEATHERS.length)];
+function weatherOn(dayOffset) {
+  const d = new Date(Date.now() + (dayOffset || 0) * DAY_MS);
+  return WEATHER_WEEK[d.getUTCDay()];
 }
+const currentWeather = () => weatherOn(0);
+
+function serverClock() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  return `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())} UTC`;
+}
+
+/* ================= 12. MASTERY ================= */
+/* Levelling a skill permanently improves it. No item, no choice — it just
+   gets better as a reward for the grind. */
+
+const MASTERY_TRACK = [
+  { level: 10, speed: 0.03, double: 0,    label: "Steady Hands", desc: "+3% speed" },
+  { level: 20, speed: 0,    double: 0.02, label: "Keen Eye",     desc: "+2% double yield" },
+  { level: 30, speed: 0.03, double: 0,    label: "Practised",    desc: "+3% speed" },
+  { level: 40, speed: 0,    double: 0.03, label: "Rich Pickings", desc: "+3% double yield" },
+  { level: 50, speed: 0.04, double: 0,    label: "Journeyman",   desc: "+4% speed" },
+  { level: 60, speed: 0,    double: 0.05, label: "Deep Instinct", desc: "+5% double yield" },
+  { level: 70, speed: 0.05, double: 0,    label: "Master's Pace", desc: "+5% speed" },
+  { level: 80, speed: 0,    double: 0.05, label: "Bountiful Hand", desc: "+5% double yield" },
+  { level: 90, speed: 0.05, double: 0.05, label: "Peerless",     desc: "+5% speed, +5% double" },
+];
+
+function mastery(skillId) {
+  const lvl = skillLevel(skillId);
+  let speed = 0, dbl = 0;
+  MASTERY_TRACK.forEach((m) => { if (lvl >= m.level) { speed += m.speed; dbl += m.double; } });
+  return { speed, double: dbl };
+}
+
+/* ================= 13. TOOLS ================= */
+/* One tool per gathering skill, forged from ore. Pure speed. */
+
+const TOOL_SPEC = {
+  delving:    { key: "pick",   label: "Pick",   icon: "pick" },
+  felling:    { key: "axe",    label: "Axe",    icon: "axe" },
+  harvesting: { key: "sickle", label: "Sickle", icon: "sickle" },
+  flaying:    { key: "knife",  label: "Knife",  icon: "knife" },
+  dredging:   { key: "net",    label: "Drag",   icon: "net" },
+};
+
+const TOOLS = {};
+TIERS.forEach((t) => {
+  Object.keys(TOOL_SPEC).forEach((skillId) => {
+    const spec = TOOL_SPEC[skillId];
+    const id = `${slug(t.delve)}_${spec.key}`;
+    TOOLS[id] = {
+      id, name: titleCase(`${t.delve} ${spec.label}`), icon: spec.icon, kind: "tool",
+      forSkill: skillId, tier: t.i,
+      speed: 0.04 + t.i * 0.02,                 // tier 1 = 6% faster, tier 9 = 22%
+      value: Math.round(60 * Math.pow(2.1, t.i - 1)),
+    };
+    CRAFT_ACTIONS.forgemaster.push({
+      id: `craft_${id}`, skillId: "forgemaster", tier: t.i,
+      name: TOOLS[id].name, icon: spec.icon,
+      level: t.level + 1, time: Math.round(t.time * 1.1), xp: Math.round(t.xp * 1.8) + 1,
+      cost: { [matId(t, "delve")]: 3 },
+      out: { [id]: 1 },
+    });
+  });
+});
+
+function toolFor(skillId) {
+  const id = state.tools && state.tools[skillId];
+  return id ? TOOLS[id] : null;
+}
+
+/* ================= 14. SPEED + YIELD ================= */
 
 function speedMod(skillId) {
   let m = currentWeather().mods[skillId] || 1;
-  if (state.pets && state.pets.golem && GATHER_SKILLS.some((s) => s.id === skillId)) m *= 0.88;
-  return m;
+  m *= (1 - mastery(skillId).speed);
+  const tool = toolFor(skillId);
+  if (tool) m *= (1 - tool.speed);
+  if (state.pets && state.pets.golem && GATHER_SKILLS.some((s) => s.id === skillId)) m *= 0.9;
+  return Math.max(0.35, m);
 }
 
 function actionTime(def) { return Math.max(1000, Math.round(def.time * speedMod(def.skillId))); }
 
-/* ================= 11. STATE ================= */
+function doubleChance(skillId) {
+  let c = mastery(skillId).double;
+  if (state.pets && state.pets.golem && GATHER_SKILLS.some((s) => s.id === skillId)) c += 0.1;
+  return Math.min(0.75, c);
+}
+
+// A thin chance the ground gives up something from the tier above.
+const RICH_FIND_CHANCE = 0.015;
+function richFind(def) {
+  if (!GATHER_ACTIONS[def.skillId] || def.tier >= TIERS.length) return null;
+  const gs = GATHER_SKILLS.find((s) => s.id === def.skillId);
+  return matId(TIERS[def.tier], gs.mat);
+}
+
+/* ================= 15. STATE ================= */
 
 let state = freshState();
 
@@ -401,34 +508,34 @@ function freshState() {
   EQUIP_SLOTS.forEach((s) => { equipment[s] = null; });
   return {
     schema: SCHEMA,
-    meta: { createdAt: Date.now(), lastSeen: Date.now(), playtimeMs: 0, account: null, userId: null },
-    player: { gold: 0, hp: 20 },
+    meta: { createdAt: Date.now(), lastSeen: Date.now(), playtimeMs: 0, account: null, userId: null, name: "Commander" },
+    player: { gold: 0, hp: 20, recoveryUntil: 0 },
     skills,
-    inv: { slots: PACK_SLOTS, items: {}, order: [] },
-    bank: { slots: VAULT_START, items: {}, order: [] },
+    inv:  { slots: PACK_SLOTS,  items: {}, order: [] },   // carried — combat loot
+    bank: { slots: VAULT_START, items: {}, order: [] },   // camp stores — trade output
     equipment,
+    tools: {},        // skillId -> tool item id
     wear: {},
     tasks: { skilling: null, combat: null },
     region: "region_1",
     travel: { unlocked: ["region_1"] },
-    unlocked: { delving: true, felling: true, harvesting: true, flaying: true, dredging: true,
-                forgemaster: false, woodwright: false, tanner: false, weaver: false, artificer: false,
-                warfare: false },
     pets: { golem: false, sprite: false, mule: false },
     bounty: null,
-    buff: null,           // { until, mult }
+    buff: null,
     smugglerBought: {},
+    yields: [],       // rolling recent-yield feed for the skill page
     stats: { kills: 0, actions: 0, deaths: 0, crafted: 0, epics: 0, goldEarned: 0 },
     log: [],
   };
 }
 
-let tab = "skill";
-let skillView = "delving";
-let storeView = "inv";
+/* Routing state — reflected in the URL hash so pages are linkable. */
+let route = { page: "character", arg: null };
+let storeView = "bank";
+let invTab = "carried";
 let selected = null;
 
-/* ================= 12. HELPERS ================= */
+/* ================= 16. HELPERS ================= */
 
 const el = (id) => document.getElementById(id);
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
@@ -437,6 +544,7 @@ const randInt = (a, b) => Math.floor(Math.random() * (b - a + 1)) + a;
 function skillLevel(id) { return levelFromXp(state.skills[id] || 0); }
 function totalLevel() { return SKILLS.reduce((n, s) => n + skillLevel(s.id), 0); }
 function currentRegion() { return regionById(state.region); }
+function recovering() { return state.player.recoveryUntil > Date.now(); }
 
 function fmt(n) {
   n = Math.floor(n);
@@ -457,7 +565,7 @@ function fmtTime(ms) {
   return `${Math.floor(h / 24)}d ${h % 24}h`;
 }
 
-function say(msg) { state.log.push(msg); if (state.log.length > 60) state.log.shift(); }
+function say(msg) { state.log.push({ t: Date.now(), m: msg }); if (state.log.length > 60) state.log.shift(); }
 
 function toast(msg) {
   const stack = el("toastStack");
@@ -468,6 +576,11 @@ function toast(msg) {
   t.onclick = () => t.remove();
   stack.appendChild(t);
   setTimeout(() => { if (t.parentNode) t.remove(); }, 7000);
+}
+
+function logYield(text) {
+  state.yields.push({ t: Date.now(), m: text });
+  if (state.yields.length > 12) state.yields.shift();
 }
 
 /* ---- storage ---- */
@@ -499,11 +612,16 @@ function removeFrom(w, key, qty) {
   }
 }
 
+// Trade output goes to camp stores; if those are full it spills into the pack.
+function deposit(key, qty) {
+  return addTo("bank", key, qty) || addTo("inv", key, qty);
+}
+
 function spend(key, qty) {
-  const fromInv = Math.min(qty, qtyIn("inv", key));
-  if (fromInv) removeFrom("inv", key, fromInv);
-  const rest = qty - fromInv;
-  if (rest > 0) removeFrom("bank", key, rest);
+  const fromBank = Math.min(qty, qtyIn("bank", key));
+  if (fromBank) removeFrom("bank", key, fromBank);
+  const rest = qty - fromBank;
+  if (rest > 0) removeFrom("inv", key, rest);
 }
 
 function canAfford(cost) { return !cost || Object.keys(cost).every((k) => haveQty(k) >= cost[k]); }
@@ -542,10 +660,12 @@ function wearPct(key) {
 
 function addGold(n) { state.player.gold += n; state.stats.goldEarned += n; }
 
-/* ================= 13. PROGRESSION ================= */
+/* ================= 17. PROGRESSION ================= */
 
 function xpMult() {
-  return (state.buff && state.buff.until > Date.now()) ? state.buff.mult : 1;
+  let m = currentWeather().xp || 1;
+  if (state.buff && state.buff.until > Date.now()) m *= state.buff.mult;
+  return m;
 }
 
 function grantXp(skillId, amount) {
@@ -556,32 +676,13 @@ function grantXp(skillId, amount) {
   if (after > before) {
     say(`${skillName(skillId)} reaches level ${after}.`);
     if (skillId === "warfare") state.player.hp = maxHp();
-    if (after % 10 === 0) toast(`${skillName(skillId)} — level ${after}`);
+    const hit = MASTERY_TRACK.find((m) => m.level === after);
+    if (hit) toast(`${skillName(skillId)} ${after} — ${hit.label} (${hit.desc})`);
+    else if (after % 10 === 0) toast(`${skillName(skillId)} — level ${after}`);
   }
 }
 
-function checkUnlocks() {
-  const u = state.unlocked;
-  const owns = (suffix) => Object.keys(state.inv.items).concat(Object.keys(state.bank.items))
-    .some((k) => parseKey(k).base.endsWith(suffix));
-
-  GATHER_SKILLS.forEach((s) => {
-    if (!u[s.feeds] && owns("_" + s.mat)) {
-      u[s.feeds] = true;
-      const prof = PROFESSIONS.find((p) => p.id === s.feeds);
-      say(`${prof.name} opens at camp.`);
-      toast(`${prof.name} unlocked`);
-    }
-  });
-
-  if (!u.warfare && totalLevel() >= WAR_UNLOCK_TOTAL) {
-    u.warfare = true;
-    say("You are ready to take the field. The camp keeps working while you fight.");
-    toast("Warfare unlocked — it runs alongside your labour");
-  }
-}
-
-/* ================= 14. TICK ================= */
+/* ================= 18. TICK ================= */
 
 function tick(dt) {
   if (state.tasks.skilling) skillTick(dt);
@@ -599,10 +700,15 @@ function skillTick(dt) {
   let guard = 0;
 
   while (task.progress >= time && guard++ < 200000) {
-    if (!canAfford(def.cost)) { say(`Stopped — out of materials for ${def.name.toLowerCase()}.`); state.tasks.skilling = null; return; }
-    if (!outputFits(def)) {
-      say(`Stopped — your pack is full.`);
-      toast("Pack full — move things to the vault or sell them");
+    if (!canAfford(def.cost)) {
+      say(`Work stopped — no materials left for ${def.name.toLowerCase()}.`);
+      toast("Out of materials");
+      state.tasks.skilling = null;
+      return;
+    }
+    if (storeFull("bank") && storeFull("inv")) {
+      say("Work stopped — camp stores and pack are both full.");
+      toast("Nowhere to put anything — sell or expand your stores");
       state.tasks.skilling = null;
       return;
     }
@@ -614,45 +720,44 @@ function skillTick(dt) {
     task.done++;
     state.stats.actions++;
     bountyProgress("gather", def);
-    checkUnlocks();
 
     if (task.queued) {
       const q = task.queued;
-      if (q === "stop") { state.tasks.skilling = null; say("Task finished. Stopped as ordered."); return; }
+      if (q === "stop") { state.tasks.skilling = null; say("Work finished and stood down."); return; }
       state.tasks.skilling = newSkillTask(q.skillId, q.actionId);
-      say(`Moved on to ${findAction(q.skillId, q.actionId).name.toLowerCase()}.`);
+      say(`Crews moved on to ${findAction(q.skillId, q.actionId).name.toLowerCase()}.`);
       return;
     }
   }
-}
-
-function outputFits(def) {
-  if (def.craftGear) return !storeFull("inv");
-  if (!def.out) return true;
-  return Object.keys(def.out).every((k) => state.inv.items[k] || !storeFull("inv"));
 }
 
 function produce(def) {
   if (def.out) {
     Object.keys(def.out).forEach((k) => {
       let qty = def.out[k];
-      // Stone golem: sometimes hauls out a second load.
-      if (state.pets.golem && GATHER_ACTIONS[def.skillId] && Math.random() < 0.15) qty *= 2;
-      if (!addTo("inv", k, qty)) say(`No room for ${itemName(k)}.`);
+      if (GATHER_ACTIONS[def.skillId] && Math.random() < doubleChance(def.skillId)) qty *= 2;
+      if (deposit(k, qty)) logYield(`+${qty} ${itemName(k)}`);
+      else say(`Nowhere to put ${itemName(k)}.`);
     });
+    const rich = richFind(def);
+    if (rich && Math.random() < RICH_FIND_CHANCE && deposit(rich, 1)) {
+      logYield(`+1 ${itemName(rich)} (rich find)`);
+      say(`A richer seam gave up ${itemName(rich)}.`);
+    }
   }
   if (def.craftGear) {
     const rarity = rollRarity();
     const key = makeKey(def.craftGear, rarity);
-    if (addTo("inv", key, 1)) {
+    if (deposit(key, 1)) {
       state.stats.crafted++;
+      logYield(`+1 ${itemName(key)}`);
       bountyProgress("craft", def);
       if (rarity !== "common") {
         say(`The ${GEAR[def.craftGear].name.toLowerCase()} comes out ${rarityDef(rarity).name.toLowerCase()}.`);
-        if (rarity === "epic") { state.stats.epics++; toast(`Epic: ${GEAR[def.craftGear].name}`); }
-        else if (rarity === "rare") toast(`Rare: ${GEAR[def.craftGear].name}`);
+        if (rarity === "epic") { state.stats.epics++; toast(`Epic: ${itemName(key)}`); }
+        else if (rarity === "rare") toast(`Rare: ${itemName(key)}`);
       }
-    } else say(`No room for the ${GEAR[def.craftGear].name.toLowerCase()} — it was lost.`);
+    } else say(`Nowhere to put the ${GEAR[def.craftGear].name.toLowerCase()}.`);
   }
 }
 
@@ -675,7 +780,7 @@ function combatTick(dt) {
   if (c.respawn > 0) {
     c.respawn -= dt;
     if (c.respawn <= 0) {
-      if (c.queued === "stop") { state.tasks.combat = null; say("Fight finished. Stopped as ordered."); return; }
+      if (c.queued === "stop") { state.tasks.combat = null; say("Vanguard pulled back."); return; }
       if (c.queued) { state.tasks.combat = newCombatTask(c.queued); return; }
       c.mobHp = mob.hp; c.mobMax = mob.hp; c.mobTimer = mob.speed; c.playerTimer = PLAYER_SWING_MS;
     }
@@ -704,14 +809,25 @@ function combatTick(dt) {
       if (food) { spend(food, 1); state.player.hp = Math.min(maxHp(), state.player.hp + itemDef(food).heal); }
     }
 
-    if (state.player.hp <= 0) {
-      state.player.hp = maxHp();
-      state.tasks.combat = null;
-      state.stats.deaths++;
-      say(`The ${mob.name.toLowerCase()} put you down. You keep what you carried — buy provisions.`);
-      toast(`Killed by a ${mob.name.toLowerCase()}`);
-    }
+    if (state.player.hp <= 0) die(mob);
   }
+}
+
+/* Death: you get dragged back to camp. Five minutes out of the fight, and
+   your kit takes a beating for it. Your people keep working regardless. */
+function die(mob) {
+  state.player.hp = maxHp();
+  state.tasks.combat = null;
+  state.stats.deaths++;
+  state.player.recoveryUntil = Date.now() + RECOVERY_MS;
+
+  EQUIP_SLOTS.forEach((slot) => {
+    const key = state.equipment[slot];
+    if (key && itemDef(key).maxDur) damageItem(key, DEATH_WEAR);
+  });
+
+  say(`The ${mob.name.toLowerCase()} put you down. Dragged back to camp — five minutes to recover, and your kit is worse for it.`);
+  toast("You fell. Recovering for five minutes.");
 }
 
 function killMob(mob) {
@@ -724,15 +840,13 @@ function killMob(mob) {
 
   mob.drops.forEach(([k, qty, chance]) => {
     if (Math.random() >= chance) return;
-    // Looting sprite: carries drops straight to the vault when the pack is full.
-    if (!addTo("inv", k, qty)) {
-      if (state.pets.sprite && addTo("bank", k, qty)) return;
-      say(`No room for ${itemName(k)}.`);
-    }
+    // Loot you carry yourself; the sprite runs the overflow back to camp.
+    if (addTo("inv", k, qty)) logYield(`+${qty} ${itemName(k)}`);
+    else if (state.pets.sprite && addTo("bank", k, qty)) logYield(`+${qty} ${itemName(k)} → stores`);
+    else say(`No room for ${itemName(k)}.`);
   });
 
   applyWear();
-  checkUnlocks();
   c.respawn = RESPAWN_MS;
 }
 
@@ -783,12 +897,12 @@ function salvage(key) {
   const out = salvageValue(key);
   if (!out) return;
   removeFrom(storeView, key, 1);
-  if (!addTo("inv", out.mat, out.qty)) addTo("bank", out.mat, out.qty);
+  deposit(out.mat, out.qty);
   say(`Broke down the ${itemName(key).toLowerCase()} for ${out.qty} ${itemName(out.mat).toLowerCase()}.`);
   render();
 }
 
-/* ================= 15. TASKS ================= */
+/* ================= 19. TASKS ================= */
 
 function newSkillTask(skillId, actionId) {
   return { skillId, actionId, progress: 0, done: 0, startedAt: Date.now(), queued: null };
@@ -815,11 +929,11 @@ function selectSkillAction(skillId, actionId) {
 }
 
 function selectMonster(monsterId) {
-  if (!state.unlocked.warfare) return;
+  if (recovering()) { say("You're still recovering. Give it a few minutes."); render(); return; }
   const t = state.tasks.combat;
   if (!t) { state.tasks.combat = newCombatTask(monsterId); state.player.hp = maxHp(); render(); return; }
   if (t.monsterId === monsterId) t.queued = t.queued === "stop" ? null : "stop";
-  else { t.queued = monsterId; say("Queued a new quarry — this fight finishes first."); }
+  else { t.queued = monsterId; say("New quarry queued — this fight finishes first."); }
   render();
 }
 
@@ -837,7 +951,7 @@ function skillPlan() {
     Object.keys(def.cost).forEach((k) => { byMats = Math.min(byMats, Math.floor(haveQty(k) / def.cost[k])); });
     if (byMats < remaining) { remaining = byMats; capped = true; }
   }
-  return { def, done: t.done, target: t.done + remaining, timeLeft: remaining * time - t.progress,
+  return { def, time, done: t.done, target: t.done + remaining, timeLeft: remaining * time - t.progress,
     capped, pct: clamp((t.progress / time) * 100, 0, 100) };
 }
 
@@ -859,7 +973,7 @@ function combatPlan() {
     food, foodNeed, foodHave: food ? haveQty(food) : 0 };
 }
 
-/* ================= 16. BOUNTY (world clock) ================= */
+/* ================= 20. BOUNTY ================= */
 
 function currentWindow() { return Math.floor(Date.now() / WINDOW_MS); }
 function windowEndsIn() { return WINDOW_MS - (Date.now() % WINDOW_MS); }
@@ -870,17 +984,17 @@ function makeBounty() {
   const t = TIERS[region.tier - 1];
   const roll = seedFrom(w * 3.31 + region.tier);
 
-  if (roll < 0.45 && state.unlocked.warfare) {
+  if (roll < 0.45) {
     const mob = monsterOfTier(region.tier);
     const amount = 10 + Math.floor(seedFrom(w * 5.5) * 15);
     return { window: w, region: region.id, kind: "slay", targetId: mob.id,
-      label: `Put down ${amount} ${mob.name.toLowerCase()}`, amount, progress: 0, claimed: false,
+      label: `Put down ${amount} ${mob.name}`, amount, progress: 0, claimed: false,
       gold: Math.round(mob.gold[1] * amount * 0.8) };
   }
   const skill = GATHER_SKILLS[Math.floor(seedFrom(w * 9.13 + region.tier) * GATHER_SKILLS.length)];
   const amount = 20 + Math.floor(seedFrom(w * 2.7) * 30);
   return { window: w, region: region.id, kind: "gather", targetId: matId(t, skill.mat),
-    label: `Bring in ${amount} ${t[skill.mat].toLowerCase()}`, amount, progress: 0, claimed: false,
+    label: `Bring in ${amount} ${titleCase(t[skill.mat])}`, amount, progress: 0, claimed: false,
     gold: Math.round(MATERIALS[matId(t, skill.mat)].value * amount * 1.5) };
 }
 
@@ -906,23 +1020,20 @@ function claimBounty() {
   addGold(b.gold);
   state.buff = { until: Date.now() + 60 * 60 * 1000, mult: 2 };
   say(`Bounty paid: ${fmt(b.gold)} gold. Double experience for the next hour.`);
-  toast("Double XP for one hour");
+  toast("Double experience for one hour");
   render();
 }
 
-/* ================= 17. SHOP ================= */
+/* ================= 21. SHOP ================= */
 
-function shopStock() {
-  return RATIONS.map((r) => ({ key: r.id, price: Math.round(r.value * 1.6), unlockTier: r.tier }));
-}
+function shopStock() { return RATIONS.map((r) => ({ key: r.id, price: Math.round(r.value * 1.6) })); }
 
 function smugglerStock() {
   const w = currentWindow();
   const picks = [];
   const pool = Object.keys(MATERIALS).filter((k) => MATERIALS[k].tier && !MATERIALS[k].heal && k !== "vault_chest");
   for (let i = 0; i < 3; i++) {
-    const idx = Math.floor(seedFrom(w * (i + 2) * 1.77) * pool.length);
-    const key = pool[idx];
+    const key = pool[Math.floor(seedFrom(w * (i + 2) * 1.77) * pool.length)];
     const qty = 5 + Math.floor(seedFrom(w * (i + 3) * 4.2) * 20);
     picks.push({ key, qty, price: Math.round(MATERIALS[key].value * qty * 2.4), slot: i });
   }
@@ -931,34 +1042,36 @@ function smugglerStock() {
 
 function buyShop(key, price, qty) {
   if (state.player.gold < price) { say("Not enough gold."); render(); return; }
-  if (!addTo("inv", key, qty)) { say("No room in your pack."); render(); return; }
+  if (!addTo("inv", key, qty) && !addTo("bank", key, qty)) { say("Nowhere to put it."); render(); return; }
   state.player.gold -= price;
-  say(`Bought ${qty}\u00D7 ${itemName(key).toLowerCase()}.`);
+  say(`Bought ${qty} ${itemName(key).toLowerCase()}.`);
   render();
 }
 
 function buySmuggler(entry) {
-  const w = currentWindow();
-  const tag = `${w}_${entry.slot}`;
+  const tag = `${currentWindow()}_${entry.slot}`;
   if (state.smugglerBought[tag]) return;
   if (state.player.gold < entry.price) { say("The smuggler doesn't haggle."); render(); return; }
-  if (!addTo("inv", entry.key, entry.qty)) { say("No room in your pack."); render(); return; }
+  if (!deposit(entry.key, entry.qty)) { say("Nowhere to put it."); render(); return; }
   state.player.gold -= entry.price;
-  state.smugglerBought = {};           // only the current window matters
+  state.smugglerBought = {};
   state.smugglerBought[tag] = true;
-  say(`The smuggler hands over ${entry.qty}\u00D7 ${itemName(entry.key).toLowerCase()}.`);
+  say(`The smuggler hands over ${entry.qty} ${itemName(entry.key).toLowerCase()}.`);
   render();
 }
 
-/* ================= 18. PETS ================= */
+/* ================= 22. PETS ================= */
 
 const PETS = [
-  { id: "golem",  name: "Stone golem",  icon: "golemMob", cost: 4000,
-    note: "Works the seam beside you. Gathering runs 12% faster, and one load in seven comes out doubled." },
-  { id: "sprite", name: "Looting sprite", icon: "horror", cost: 7500,
-    note: "Flits between the field and the vault. Drops that won't fit your pack go straight to storage." },
-  { id: "mule",   name: "Pack mule",    icon: "beast", cost: 2500,
-    note: "Carries what you can't. Eight more slots in your pack, permanently." },
+  { id: "golem",  name: "Stone Golem",    icon: "golemMob", cost: 4000,
+    note: "Works the seam alongside your crews.",
+    effect: "Gathering 10% faster, +10% chance of a doubled load." },
+  { id: "sprite", name: "Looting Sprite", icon: "horror", cost: 7500,
+    note: "Flits between the field and the camp.",
+    effect: "Battlefield loot that won't fit your pack is run back to stores." },
+  { id: "mule",   name: "Pack Mule",      icon: "beast", cost: 2500,
+    note: "Carries what you can't.",
+    effect: "Eight more slots in your pack, permanently." },
 ];
 
 function buyPet(id) {
@@ -972,7 +1085,7 @@ function buyPet(id) {
   render();
 }
 
-/* ================= 19. TRAVEL ================= */
+/* ================= 23. TRAVEL + EQUIPMENT ================= */
 
 function travelTo(regionId) {
   const r = regionById(regionId);
@@ -989,13 +1102,21 @@ function travelTo(regionId) {
   render();
 }
 
-/* ================= 20. EQUIPMENT ================= */
-
 function equip(key) {
   const d = itemDef(key);
+  if (d && d.kind === "tool") {
+    const old = state.tools[d.forSkill];
+    if (old) deposit(old, 1);
+    removeFrom(storeView, key, 1);
+    state.tools[d.forSkill] = d.base;
+    say(`${itemName(key)} taken up for ${skillName(d.forSkill)}.`);
+    render();
+    return;
+  }
   if (!d || !d.slot) return;
+
   if (d.slot === "weapon" && d.twoHanded && state.equipment.offhand) {
-    if (!addTo("inv", state.equipment.offhand, 1)) { say("No room to stow your offhand."); render(); return; }
+    if (!deposit(state.equipment.offhand, 1)) { say("Nowhere to stow your offhand."); render(); return; }
     state.equipment.offhand = null;
   }
   if (d.slot === "offhand") {
@@ -1003,7 +1124,7 @@ function equip(key) {
     if (w && itemDef(w).twoHanded) { say(`Both hands are on the ${itemName(w).toLowerCase()}.`); render(); return; }
   }
   const old = state.equipment[d.slot];
-  if (old && !addTo("inv", old, 1)) { say("No room for what you're taking off."); render(); return; }
+  if (old && !deposit(old, 1)) { say("Nowhere for what you're taking off."); render(); return; }
   removeFrom(storeView, key, 1);
   state.equipment[d.slot] = key;
   render();
@@ -1012,8 +1133,16 @@ function equip(key) {
 function unequip(slot) {
   const key = state.equipment[slot];
   if (!key) return;
-  if (!addTo("inv", key, 1)) { say("No room in your pack."); render(); return; }
+  if (!deposit(key, 1)) { say("Nowhere to put it."); render(); return; }
   state.equipment[slot] = null;
+  render();
+}
+
+function unequipTool(skillId) {
+  const id = state.tools[skillId];
+  if (!id) return;
+  if (!deposit(id, 1)) { say("Nowhere to put it."); render(); return; }
+  delete state.tools[skillId];
   render();
 }
 
@@ -1029,7 +1158,7 @@ function transfer(key, all) {
   const from = storeView, to = from === "inv" ? "bank" : "inv";
   const qty = all ? qtyIn(from, key) : 1;
   if (qty <= 0) return;
-  if (!store(to).items[key] && storeFull(to)) { say(`${to === "bank" ? "Vault" : "Pack"} is full.`); render(); return; }
+  if (!store(to).items[key] && storeFull(to)) { say(`${to === "bank" ? "Camp stores" : "Pack"} is full.`); render(); return; }
   removeFrom(from, key, qty);
   addTo(to, key, qty);
   render();
@@ -1037,14 +1166,13 @@ function transfer(key, all) {
 
 function useChest(key) {
   if (parseKey(key).base !== "vault_chest") return;
-  if (state.bank.slots >= VAULT_MAX) { say("The vault is as deep as it goes."); render(); return; }
+  if (state.bank.slots >= VAULT_MAX) { say("The stores are as deep as they go."); render(); return; }
   removeFrom(storeView, key, 1);
   state.bank.slots = Math.min(VAULT_MAX, state.bank.slots + MATERIALS.vault_chest.chest);
-  say(`Vault widened to ${state.bank.slots} slots.`);
+  say(`Camp stores widened to ${state.bank.slots} slots.`);
   render();
 }
-
-/* ================= 21. SAVE / ACCOUNTS ================= */
+/* ================= 24. SAVE / ACCOUNTS ================= */
 /* Two tiers, so the game works before and after you paste in your anon key:
    - No key set: accounts are per-browser, exactly as before.
    - Key set: accounts live in Supabase (auth.users + a `saves` table with
@@ -1173,7 +1301,7 @@ function migrate(loaded) {
   if (!loaded || typeof loaded !== "object") return base;
   const m = Object.assign(base, loaded);
   m.schema = SCHEMA;
-  ["meta", "player", "skills", "equipment", "tasks", "travel", "unlocked", "pets", "stats"].forEach((k) => {
+  ["meta", "player", "skills", "equipment", "tasks", "travel", "pets", "stats"].forEach((k) => {
     m[k] = Object.assign(base[k], loaded[k] || {});
   });
   m.inv = Object.assign(base.inv, loaded.inv || {});
@@ -1183,13 +1311,16 @@ function migrate(loaded) {
   m.inv.order = ((loaded.inv && loaded.inv.order) || []).slice();
   m.bank.order = ((loaded.bank && loaded.bank.order) || []).slice();
   m.wear = Object.assign({}, loaded.wear || {});
-  m.log = (loaded.log || []).slice(-60);
+  m.tools = Object.assign({}, loaded.tools || {});
+  m.yields = (loaded.yields || []).slice(-12);
+  m.log = (loaded.log || []).slice(-60).map((e) => (typeof e === "string" ? { t: Date.now(), m: e } : e));
 
   ["inv", "bank"].forEach((w) => {
     Object.keys(m[w].items).forEach((k) => { if (!itemDef(k)) delete m[w].items[k]; });
     m[w].order = m[w].order.filter((k) => itemDef(k));
   });
   EQUIP_SLOTS.forEach((s) => { if (m.equipment[s] && !itemDef(m.equipment[s])) m.equipment[s] = null; });
+  Object.keys(m.tools).forEach((k) => { if (!TOOLS[m.tools[k]]) delete m.tools[k]; });
   if (m.tasks.skilling && !findAction(m.tasks.skilling.skillId, m.tasks.skilling.actionId)) m.tasks.skilling = null;
   if (m.tasks.combat && !getMonster(m.tasks.combat.monsterId)) m.tasks.combat = null;
   if (!regionById(m.region)) m.region = "region_1";
@@ -1291,325 +1422,922 @@ function importSave(str) {
   return null;
 }
 
-/* ================= 22. RENDER ================= */
+/* ================= 25. ROUTING ================= */
+/* Hash routes, so every page is linkable, bookmarkable, and the browser
+   back button works — without tearing down the tick loop a real page load
+   would cost. */
+
+const PAGES = ["character", "inventory", "kennel", "atlas", "shop", "bounty", "skill"];
+
+function parseHash() {
+  const raw = (location.hash || "").replace(/^#\/?/, "");
+  const [page, arg] = raw.split("/");
+  if (!PAGES.includes(page)) return { page: "character", arg: null };
+  if (page === "skill" && !skillDef(arg)) return { page: "skill", arg: "delving" };
+  return { page, arg: arg || null };
+}
+
+function go(page, arg) {
+  const hash = "#/" + page + (arg ? "/" + arg : "");
+  if (location.hash === hash) { route = parseHash(); render(); }
+  else location.hash = hash;
+}
+
+window.addEventListener("hashchange", () => { route = parseHash(); selected = null; render(); });
+
+/* ================= 26. RENDER ================= */
 
 let keys = {};
-let skillRefs = [], monsterRefs = [];
+let liveRefs = { node: null, monster: null };
 
-function render() { keys = {}; renderAll(); }
+function render() { keys = {}; liveRefs = { node: null, monster: null }; renderAll(); }
 
 function renderAll() {
-  renderTaskbar();
-  renderWorldStrip();
-  renderTabs();
-  renderNav();
-  if (tab === "skill") renderSkillView();
-  if (tab === "atlas") renderAtlas();
-  if (tab === "shop") renderShop();
-  if (tab === "bounty") renderBounty();
-  if (tab === "inventory") renderInventory();
-  if (tab === "character") renderCharacter();
-  if (tab === "kennel") renderKennel();
+  renderTopbar();
+  renderSidebar();
+  renderPage();
   renderLog();
 }
 
-function renderTaskbar() {
+/* ---- topbar ---- */
+
+function renderTopbar() {
   el("goldText").textContent = fmt(state.player.gold);
+  el("clockText").textContent = serverClock();
   const hp = Math.max(0, Math.ceil(state.player.hp));
   el("hpFill").style.width = clamp((hp / maxHp()) * 100, 0, 100) + "%";
   el("hpText").textContent = `${hp}/${maxHp()}`;
 
   const sp = skillPlan();
-  const sBar = el("tbSkillBar");
+  const sBar = el("tbTradesBar");
   if (sp) {
-    el("tbSkillTitle").textContent = sp.def.name;
+    el("tbTradesName").textContent = titleCase(sp.def.name);
     sBar.classList.toggle("nojump", sp.pct < 6);
     sBar.style.width = sp.pct + "%";
-    let line = `${fmt(sp.done)} / ${fmt(sp.target)} actions \u00B7 ${fmtTime(sp.timeLeft)} left`;
+    let line = `${fmt(sp.done)} / ${fmt(sp.target)} actions · ${fmtTime(sp.timeLeft)} left`;
     if (sp.capped) line += " (stock)";
-    if (state.tasks.skilling.queued) line += state.tasks.skilling.queued === "stop" ? " \u00B7 stopping" : " \u00B7 switching";
-    el("tbSkillProj").textContent = line;
-    el("tbSkillClear").classList.toggle("queued", !!state.tasks.skilling.queued);
+    if (state.tasks.skilling.queued) line += state.tasks.skilling.queued === "stop" ? " · standing down" : " · switching";
+    el("tbTradesMeta").textContent = line;
+    el("tbTradesClear").classList.toggle("queued", !!state.tasks.skilling.queued);
   } else {
-    el("tbSkillTitle").textContent = "Idle";
+    el("tbTradesName").textContent = "Idle";
     sBar.style.width = "0";
-    el("tbSkillProj").textContent = "Nothing tasked.";
-    el("tbSkillClear").classList.remove("queued");
+    el("tbTradesMeta").textContent = "No crews tasked.";
+    el("tbTradesClear").classList.remove("queued");
   }
 
   const cp = combatPlan();
-  const cBar = el("tbCombatBar");
+  const cBar = el("tbFieldBar");
   if (cp) {
-    el("tbCombatTitle").textContent = cp.mob.name;
+    el("tbFieldName").textContent = cp.mob.name;
     cBar.style.width = cp.pct + "%";
-    let line = `${fmt(cp.done)} / ${fmt(cp.target)} kills \u00B7 ${fmtTime(cp.timeLeft)} left`;
-    line += cp.food ? ` \u00B7 food ${fmt(cp.foodHave)}/${fmt(cp.foodNeed)}` : " \u00B7 no provisions";
-    if (state.tasks.combat.queued) line += " \u00B7 changing";
-    el("tbCombatProj").textContent = line;
-    el("tbCombatClear").classList.toggle("queued", !!state.tasks.combat.queued);
+    let line = `${fmt(cp.done)} / ${fmt(cp.target)} kills · ${fmtTime(cp.timeLeft)} left`;
+    line += cp.food ? ` · food ${fmt(cp.foodHave)}/${fmt(cp.foodNeed)}` : " · no provisions";
+    if (state.tasks.combat.queued) line += " · changing";
+    el("tbFieldMeta").textContent = line;
+    el("tbFieldClear").classList.toggle("queued", !!state.tasks.combat.queued);
   } else {
-    el("tbCombatTitle").textContent = "Idle";
+    el("tbFieldName").textContent = recovering() ? "Recovering" : "Idle";
     cBar.style.width = "0";
-    el("tbCombatProj").textContent = state.unlocked.warfare
-      ? "Choose a quarry in Warfare." : `Unlocks at total level ${WAR_UNLOCK_TOTAL} (now ${totalLevel()}).`;
-    el("tbCombatClear").classList.remove("queued");
+    el("tbFieldMeta").textContent = recovering()
+      ? `Back on your feet in ${fmtTime(state.player.recoveryUntil - Date.now())}.`
+      : "Take the field from any region.";
+    el("tbFieldClear").classList.remove("queued");
   }
 }
 
-function renderWorldStrip() {
-  const w = currentWeather();
-  el("wsWeather").innerHTML = icon(w.icon, "ico-sm") + `<span><b>${w.name}</b> \u00B7 ${w.note}</span>`;
+/* ---- sidebar ---- */
 
-  refreshBounty();
-  const b = state.bounty;
-  const bountyEl = el("wsBounty");
-  if (b) {
-    const done = b.claimed ? "claimed" : `${fmt(Math.min(b.progress, b.amount))}/${fmt(b.amount)}`;
-    bountyEl.className = "ws-item" + (!b.claimed && b.progress >= b.amount ? " hot" : "");
-    bountyEl.innerHTML = icon("scroll", "ico-sm") + `<span>Bounty <b>${done}</b> \u00B7 resets in ${fmtTime(windowEndsIn())}</span>`;
-  } else bountyEl.innerHTML = "";
+function renderSidebar() {
+  const sig = SKILLS.map((s) => s.id + skillLevel(s.id)).join(",") + "|" + route.page + route.arg +
+    "|" + (state.tasks.skilling ? state.tasks.skilling.skillId : "-") + "|" + currentWeather().id;
+  if (keys.side === sig) return;
+  keys.side = sig;
 
-  const buffEl = el("wsBuff");
-  if (state.buff && state.buff.until > Date.now()) {
-    buffEl.className = "ws-item good";
-    buffEl.innerHTML = `<span><b>Double experience</b> for ${fmtTime(state.buff.until - Date.now())}</span>`;
-  } else buffEl.innerHTML = "";
-}
-
-function renderTabs() {
-  if (keys.tabs === tab + skillView) return;
-  keys.tabs = tab + skillView;
-  document.querySelectorAll(".itab, .tabbtn").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
-  [["skill", "viewSkill"], ["atlas", "viewAtlas"], ["shop", "viewShop"], ["bounty", "viewBounty"],
-   ["inventory", "viewInventory"], ["character", "viewCharacter"], ["kennel", "viewKennel"]]
-    .forEach(([t, id]) => { el(id).hidden = tab !== t; });
-}
-
-function renderNav() {
-  const sig = SKILLS.map((s) => s.id + skillLevel(s.id) + (state.unlocked[s.id] ? 1 : 0)).join(",") +
-    "|" + skillView + "|" + tab + "|" + (state.tasks.skilling ? state.tasks.skilling.skillId : "-");
-  if (keys.nav === sig) return;
-  keys.nav = sig;
-
-  const build = (box, list) => {
+  const mkNav = (box, items) => {
     box.innerHTML = "";
-    list.forEach((s) => {
-      if (!state.unlocked[s.id]) return;
+    items.forEach(({ label, page, arg, lvl, busy }) => {
       const b = document.createElement("button");
-      b.className = "subbtn" + (tab === "skill" && skillView === s.id ? " on" : "") +
-        (state.tasks.skilling && state.tasks.skilling.skillId === s.id ? " busy" : "");
-      b.innerHTML = `<span class="subbtn-ico">${icon(s.icon, "ico-sm")}</span>` +
-        `<span class="subbtn-name"></span><span class="subbtn-lvl"></span>`;
-      b.querySelector(".subbtn-name").textContent = s.name;
-      b.querySelector(".subbtn-lvl").textContent = "Lv. " + skillLevel(s.id);
-      b.onclick = () => { skillView = s.id; tab = "skill"; render(); };
+      b.className = "nav-item" + (route.page === page && (!arg || route.arg === arg) ? " active" : "") + (busy ? " busy" : "");
+      b.innerHTML = '<span class="nav-name"></span><span class="lvl"></span>';
+      b.children[0].textContent = label;
+      b.children[1].textContent = lvl == null ? "" : "Lv." + lvl;
+      b.onclick = () => go(page, arg);
       box.appendChild(b);
     });
   };
 
-  build(el("gatherNav"), SKILLS.filter((s) => s.kind === "gather"));
-  build(el("craftNav"), SKILLS.filter((s) => s.kind === "craft"));
-  build(el("warNav"), SKILLS.filter((s) => s.kind === "war"));
+  mkNav(el("navYou"), [
+    { label: "Character", page: "character" },
+    { label: "Inventory", page: "inventory" },
+    { label: "Kennel", page: "kennel" },
+  ]);
+  mkNav(el("navGather"), SKILLS.filter((s) => s.kind === "gather").map((s) => ({
+    label: s.name, page: "skill", arg: s.id, lvl: skillLevel(s.id),
+    busy: state.tasks.skilling && state.tasks.skilling.skillId === s.id,
+  })));
+  mkNav(el("navCraft"), SKILLS.filter((s) => s.kind === "craft").map((s) => ({
+    label: s.name, page: "skill", arg: s.id, lvl: skillLevel(s.id),
+    busy: state.tasks.skilling && state.tasks.skilling.skillId === s.id,
+  })));
+  mkNav(el("navWar"), SKILLS.filter((s) => s.kind === "war").map((s) => ({
+    label: s.name, page: "skill", arg: s.id, lvl: skillLevel(s.id),
+    busy: !!state.tasks.combat,
+  })));
+
+  const w = currentWeather(), tm = weatherOn(1);
+  el("weatherTag").textContent = w.name;
+  el("weatherNote").textContent = w.note;
+  el("weatherXp").textContent = w.xp > 1 ? `+${Math.round((w.xp - 1) * 100)}% experience` : "";
+  el("weatherNext").textContent = `Tomorrow: ${tm.name}`;
 }
 
-/* ---- skill / warfare view ---- */
+/* ---- page dispatch ---- */
 
-function renderSkillView() {
-  const s = skillDef(skillView) || skillDef("delving");
+function renderPage() {
+  document.querySelectorAll(".page").forEach((p) => { p.hidden = p.dataset.page !== route.page; });
+  document.querySelectorAll(".icon-btn").forEach((b) => b.classList.toggle("active", b.dataset.page === route.page));
+  el("crumbs").innerHTML = crumbText();
+
+  if (route.page === "character") renderCharacter();
+  if (route.page === "skill") renderSkill();
+  if (route.page === "inventory") renderInventory();
+  if (route.page === "kennel") renderKennel();
+  if (route.page === "atlas") renderAtlas();
+  if (route.page === "shop") renderShop();
+  if (route.page === "bounty") renderBounty();
+}
+
+function crumbText() {
+  const r = currentRegion();
+  if (route.page === "skill") {
+    const s = skillDef(route.arg);
+    const group = s.kind === "gather" ? "Gathering" : s.kind === "craft" ? "Crafting" : "The Field";
+    return `Respite &nbsp;/&nbsp; ${group} &nbsp;/&nbsp; <b>${s.name}</b>`;
+  }
+  return `Respite &nbsp;/&nbsp; ${r.name} &nbsp;/&nbsp; <b>${titleCase(route.page)}</b>`;
+}
+
+/* ================= SKILL PAGE ================= */
+
+function renderSkill() {
+  const s = skillDef(route.arg) || skillDef("delving");
   const region = currentRegion();
   const lvl = skillLevel(s.id);
   const xp = state.skills[s.id] || 0;
   const base = XP_TABLE[lvl], next = XP_TABLE[Math.min(lvl + 1, MAX_LEVEL)];
+  const pct = lvl >= MAX_LEVEL ? 100 : ((xp - base) / (next - base)) * 100;
 
-  el("heroKicker").textContent = s.kind === "war" ? "Warfare" : (s.kind === "gather" ? `In ${region.name}` : "At camp");
-  el("heroTitle").textContent = s.name;
-  el("heroArt").innerHTML = icon(s.icon, "ico-xl tint-" + region.tier);
-  el("skillLvl").textContent = "Lv. " + lvl;
-  el("skillXpFill").style.width = clamp(lvl >= MAX_LEVEL ? 100 : ((xp - base) / (next - base)) * 100, 0, 100) + "%";
-  el("skillXpText").textContent = `${fmt(xp)} / ${fmt(next)}`;
-
-  const gs = GATHER_SKILLS.find((g) => g.id === s.id);
-  const prof = PROFESSIONS.find((p) => p.id === s.id);
-  el("heroNote").textContent = gs ? gs.note : prof ? prof.note
-    : "Fights resolve on their own. Provisions get eaten automatically when you drop low.";
+  el("skHeroTag").textContent = s.kind === "gather" ? `In ${region.name}` : s.kind === "war" ? "The Field" : "At Camp";
+  el("skHeroName").textContent = s.name;
+  el("skHeroIcon").innerHTML = icon(s.icon, "ico-xl");
+  el("skHeroLvl").textContent = "Lv " + lvl;
+  el("skHeroXp").textContent = lvl >= MAX_LEVEL ? "Mastered" : `${fmt(xp)} / ${fmt(next)} XP`;
+  el("skHeroBar").style.width = clamp(pct, 0, 100) + "%";
+  el("skHeroNote").textContent = skillBlurb(s);
+  el("skHeroNext").textContent = lvl >= MAX_LEVEL ? "" : `${fmt(next - xp)} to next level`;
 
   const t = state.tasks.skilling, c = state.tasks.combat;
-  const key = `${s.id}|${lvl}|${region.id}|${t ? t.skillId + t.actionId + (t.queued ? "q" : "") : "-"}|` +
-    `${c ? c.monsterId + (c.queued ? "q" : "") : "-"}|${state.unlocked.warfare}`;
-  if (keys.skill === key) { updateSkillCards(); updateMonsterCards(); return; }
-  keys.skill = key;
-  skillRefs = []; monsterRefs = [];
+  const sig = `${s.id}|${lvl}|${region.id}|${t ? t.skillId + t.actionId + (t.queued ? "q" : "") : "-"}|` +
+    `${c ? c.monsterId + (c.queued ? "q" : "") : "-"}|${state.tools[s.id] || "-"}|${recovering()}`;
+  if (keys.skill === sig) { updateLive(); return; }
+  keys.skill = sig;
+  liveRefs = { node: null, monster: null };
 
-  const box = el("skillCards");
-  box.innerHTML = "";
+  if (s.kind === "war") renderFieldBody(region);
+  else if (s.kind === "gather") renderGatherBody(s, region);
+  else renderCraftBody(s);
 
-  if (s.kind === "war") {
-    if (!state.unlocked.warfare) {
-      const p = document.createElement("p");
-      p.className = "view-note";
-      p.textContent = `Warfare unlocks at total level ${WAR_UNLOCK_TOTAL}. You are ${totalLevel()}.`;
-      box.appendChild(p);
-    } else {
-      box.appendChild(buildMonsterCard(monsterOfTier(region.tier)));
-    }
-  } else if (gs) {
-    // One node, for the region you're standing in. Change region in the Atlas.
-    box.appendChild(buildActionCard(GATHER_ACTIONS[s.id][region.tier - 1], s.id));
-    const hint = document.createElement("p");
-    hint.className = "view-note";
-    hint.textContent = "One seam per region. Move in the Atlas to work richer ground.";
-    box.appendChild(hint);
-  } else {
-    actionsFor(s.id).filter((a) => a.level <= lvl + 20)
-      .forEach((def) => box.appendChild(buildActionCard(def, s.id)));
-  }
-
-  updateSkillCards();
-  updateMonsterCards();
+  renderMastery(s.id);
+  renderMilestones(s.id, lvl);
+  renderYieldFeed();
+  updateLive();
 }
 
-function buildActionCard(def, skillId) {
-  const lvl = skillLevel(skillId);
+function skillBlurb(s) {
+  const gs = GATHER_SKILLS.find((g) => g.id === s.id);
+  if (gs) return gs.note;
+  const p = PROFESSIONS.find((x) => x.id === s.id);
+  if (p) return p.note;
+  return "You take the vanguard yourself. Provisions are eaten automatically when you drop low.";
+}
+
+function renderGatherBody(s, region) {
+  const def = GATHER_ACTIONS[s.id][region.tier - 1];
+  const lvl = skillLevel(s.id);
   const locked = lvl < def.level;
   const t = state.tasks.skilling;
-  const active = !!(t && t.skillId === skillId && t.actionId === def.id && (!t.queued || t.queued === "stop"));
-  const queued = !!(t && t.queued && t.queued !== "stop" && t.queued.actionId === def.id);
+  const active = !!(t && t.skillId === s.id && t.actionId === def.id);
 
-  const card = document.createElement("button");
-  card.className = "card" + (locked ? " locked" : "") + (active ? " on" : "") + (queued ? " queued" : "");
-  card.disabled = locked;
+  el("skWorkLabel").textContent = `Working · ${titleCase(def.name)}`;
+  const box = el("skWorkBody");
+  box.innerHTML = "";
 
-  const top = document.createElement("div");
-  top.className = "card-top";
-  top.innerHTML = icon(def.icon, "tint-" + (def.tier || 1)) + '<span class="card-name"></span>';
-  top.querySelector(".card-name").textContent = def.name;
-  card.appendChild(top);
+  const card = document.createElement("div");
+  card.className = "node-card";
+  card.innerHTML = `<div class="node-icon">${icon(def.icon, "ico-lg")}</div>`;
 
-  const meta = document.createElement("div");
-  meta.className = "card-meta";
+  const info = document.createElement("div");
+  info.className = "node-info";
+
+  const h = document.createElement("h3");
+  h.textContent = titleCase(def.name);
+  info.appendChild(h);
+
+  const sub = document.createElement("div");
+  sub.className = "node-sub";
+  sub.textContent = locked
+    ? `This ground needs ${s.name} ${def.level}. Your crews can't work it yet — move somewhere shallower in the Atlas.`
+    : "One seam per region. Move in the Atlas to work richer ground.";
+  info.appendChild(sub);
+
+  const chips = document.createElement("div");
+  chips.className = "stat-chips";
   const time = actionTime(def);
-  meta.textContent = locked ? `Requires ${skillName(skillId)} ${def.level}`
-    : `Lv. ${def.level} \u00B7 ${(time / 1000).toFixed(0)}s \u00B7 ${fmt(def.xp)} xp` +
-      (time !== def.time ? " (weather)" : "");
-  card.appendChild(meta);
-
-  let costEl = null;
-  if (def.cost && !locked) { costEl = document.createElement("div"); costEl.className = "card-cost"; card.appendChild(costEl); }
-  let planEl = null;
-  if (!locked) { planEl = document.createElement("div"); planEl.className = "card-plan"; card.appendChild(planEl); }
+  const w = currentWeather();
+  const mod = w.mods[s.id];
+  chips.innerHTML =
+    `<div class="chip">${(time / 1000).toFixed(1)}s / action</div>` +
+    `<div class="chip">${fmt(def.xp)} XP base</div>` +
+    `<div class="chip${mod && mod > 1 ? " warn" : ""}">${w.name}: ${mod ? (mod > 1 ? "slowed" : "quickened") : "unaffected"}</div>` +
+    (doubleChance(s.id) > 0 ? `<div class="chip good">${Math.round(doubleChance(s.id) * 100)}% double yield</div>` : "");
+  info.appendChild(chips);
 
   const prog = document.createElement("div");
-  prog.className = "card-prog";
-  card.appendChild(prog);
+  prog.className = "node-progress";
+  prog.innerHTML = '<div class="bar"><i></i></div><div class="meta"><span></span><b></b></div>';
+  info.appendChild(prog);
 
-  card.onclick = () => selectSkillAction(skillId, def.id);
-  skillRefs.push({ def, skillId, costEl, planEl, prog });
-  return card;
+  const btn = document.createElement("button");
+  btn.className = "btn btn-primary node-btn";
+  btn.textContent = active ? (t.queued === "stop" ? "Standing down after this" : "Stop working") : "Put crews to work";
+  btn.disabled = locked;
+  btn.onclick = () => selectSkillAction(s.id, def.id);
+  info.appendChild(btn);
+
+  card.appendChild(info);
+  box.appendChild(card);
+
+  liveRefs.node = { def, skillId: s.id,
+    bar: prog.querySelector("i"), left: prog.querySelector("span"), right: prog.querySelector("b") };
+
+  renderToolPanel(s.id);
+  renderYieldTable(def, s.id);
+  renderOtherSeams(s.id);
 }
 
-function updateSkillCards() {
+function renderCraftBody(s) {
+  const lvl = skillLevel(s.id);
+  el("skWorkLabel").textContent = "Workshop";
+  const box = el("skWorkBody");
+  box.innerHTML = "";
+
+  const list = document.createElement("div");
+  list.className = "recipe-list";
   const t = state.tasks.skilling;
-  skillRefs.forEach((ref) => {
-    const time = actionTime(ref.def);
-    if (ref.costEl) {
-      ref.costEl.innerHTML = "";
-      ref.costEl.appendChild(document.createTextNode("Needs "));
-      Object.keys(ref.def.cost).forEach((k, i) => {
-        const sp = document.createElement("span");
-        if (haveQty(k) < ref.def.cost[k]) sp.className = "short";
-        sp.textContent = `${i ? ", " : ""}${ref.def.cost[k]}\u00D7 ${itemName(k).toLowerCase()} (${fmt(haveQty(k))})`;
-        ref.costEl.appendChild(sp);
-      });
-    }
-    if (ref.planEl) {
-      const per12h = Math.floor(IDLE_CAP_MS / time);
-      let line = `12h idle: ${fmt(per12h)} actions, ${fmt(per12h * ref.def.xp)} xp`;
-      if (ref.def.cost) {
-        let byMats = Infinity;
-        Object.keys(ref.def.cost).forEach((k) => { byMats = Math.min(byMats, Math.floor(haveQty(k) / ref.def.cost[k])); });
-        if (byMats < per12h) line += ` \u2014 stock covers ${fmt(byMats)}`;
-      }
-      const lvl = skillLevel(ref.skillId);
-      if (lvl < MAX_LEVEL) {
-        const need = XP_TABLE[lvl + 1] - (state.skills[ref.skillId] || 0);
-        line += ` \u00B7 next level in ${fmt(Math.ceil(need / (ref.def.xp * xpMult())))}`;
-      }
-      ref.planEl.textContent = line;
-    }
-    const isActive = t && t.skillId === ref.skillId && t.actionId === ref.def.id;
-    if (isActive) {
-      const pct = clamp((t.progress / time) * 100, 0, 100);
-      ref.prog.classList.toggle("nojump", pct < 6);
-      ref.prog.style.width = pct + "%";
-    } else ref.prog.style.width = "0";
+
+  actionsFor(s.id).filter((a) => a.level <= lvl + 20).forEach((def) => {
+    const locked = lvl < def.level;
+    const active = !!(t && t.skillId === s.id && t.actionId === def.id);
+    const row = document.createElement("button");
+    row.className = "recipe" + (locked ? " locked" : "") + (active ? " active" : "");
+    row.disabled = locked;
+
+    const costTxt = Object.keys(def.cost || {}).map((k) =>
+      `${def.cost[k]}× ${itemName(k)} (${fmt(haveQty(k))})`).join(", ");
+    const short = Object.keys(def.cost || {}).some((k) => haveQty(k) < def.cost[k]);
+
+    row.innerHTML =
+      `<span class="r-ico">${icon(def.icon, "ico-sm")}</span>` +
+      `<span class="r-name"></span>` +
+      `<span class="r-cost${short ? " short" : ""}"></span>` +
+      `<span class="r-meta"></span>`;
+    row.children[1].textContent = titleCase(def.name);
+    row.children[2].textContent = locked ? `Needs Lv ${def.level}` : costTxt;
+    row.children[3].textContent = `${(actionTime(def) / 1000).toFixed(0)}s · ${fmt(def.xp)} XP`;
+    row.onclick = () => selectSkillAction(s.id, def.id);
+    list.appendChild(row);
   });
+
+  box.appendChild(list);
+
+  const activeDef = t && t.skillId === s.id ? findAction(t.skillId, t.actionId) : null;
+  if (activeDef) {
+    const prog = document.createElement("div");
+    prog.className = "node-progress craft-progress";
+    prog.innerHTML = '<div class="bar"><i></i></div><div class="meta"><span></span><b></b></div>';
+    box.appendChild(prog);
+    liveRefs.node = { def: activeDef, skillId: s.id,
+      bar: prog.querySelector("i"), left: prog.querySelector("span"), right: prog.querySelector("b") };
+  }
+
+  el("skRailA").hidden = true;
+  el("skYield").hidden = true;
+  el("skSeams").hidden = true;
 }
 
-function buildMonsterCard(mob) {
+function renderFieldBody(region) {
+  const mob = monsterOfTier(region.tier);
   const t = state.tasks.combat;
-  const active = !!(t && t.monsterId === mob.id && (!t.queued || t.queued === "stop"));
-  const card = document.createElement("button");
-  card.className = "card" + (active ? " on" : "");
+  const active = !!(t && t.monsterId === mob.id);
 
-  const top = document.createElement("div");
-  top.className = "card-top";
-  top.innerHTML = icon(mob.icon, "tint-" + mob.tier) + '<span class="card-name"></span>';
-  top.querySelector(".card-name").textContent = mob.name;
-  card.appendChild(top);
+  el("skWorkLabel").textContent = `The Field · ${region.name}`;
+  const box = el("skWorkBody");
+  box.innerHTML = "";
 
-  const meta = document.createElement("div");
-  meta.className = "card-meta";
-  meta.textContent = `Lv. ${mob.level} \u00B7 ${fmt(mob.hp)} hp \u00B7 ${fmt(mob.attack)} atk \u00B7 ${fmt(mob.xp)} xp`;
-  card.appendChild(meta);
+  const card = document.createElement("div");
+  card.className = "node-card";
+  card.innerHTML = `<div class="node-icon war">${icon(mob.icon, "ico-lg")}</div>`;
 
-  const drops = document.createElement("div");
-  drops.className = "card-cost";
-  drops.textContent = "Leaves " + mob.drops.map(([k]) => itemName(k).toLowerCase()).join(", ");
-  card.appendChild(drops);
+  const info = document.createElement("div");
+  info.className = "node-info";
+  info.innerHTML = `<h3>${mob.name}</h3>`;
 
-  const plan = document.createElement("div");
-  plan.className = "card-plan";
-  card.appendChild(plan);
+  const sub = document.createElement("div");
+  sub.className = "node-sub";
+  sub.textContent = recovering()
+    ? `You're still being patched up. Back on your feet in ${fmtTime(state.player.recoveryUntil - Date.now())}.`
+    : "You lead the vanguard personally. Your crews keep working while you're out.";
+  info.appendChild(sub);
+
+  const chips = document.createElement("div");
+  chips.className = "stat-chips";
+  const atk = attackPower();
+  const avg = Math.max(1, (atk * 0.55 + atk) / 2 - mob.defence * 0.35);
+  const killMs = (mob.hp / avg) * PLAYER_SWING_MS + RESPAWN_MS;
+  const incoming = Math.max(1, (mob.attack * 0.55 + mob.attack) / 2 - defencePower() * 0.4);
+  const survive = (maxHp() / (incoming / mob.speed * 1000));
+  chips.innerHTML =
+    `<div class="chip">${fmt(mob.hp)} HP</div>` +
+    `<div class="chip">${fmt(mob.attack)} attack</div>` +
+    `<div class="chip">${fmt(mob.xp)} XP a kill</div>` +
+    `<div class="chip${survive < 30 ? " warn" : ""}">~${fmtTime(killMs)} a kill</div>` +
+    `<div class="chip${survive < 30 ? " warn" : " good"}">${survive < 30 ? "You will not last here" : "Survivable"}</div>`;
+  info.appendChild(chips);
 
   const bar = document.createElement("div");
-  bar.className = "card-hp";
-  const hpFill = document.createElement("div");
-  hpFill.className = "card-hp-fill";
-  bar.appendChild(hpFill);
-  card.appendChild(bar);
+  bar.className = "node-progress";
+  bar.innerHTML = '<div class="bar mob"><i style="width:100%"></i></div><div class="meta"><span></span><b></b></div>';
+  info.appendChild(bar);
 
-  const prog = document.createElement("div");
-  prog.className = "card-prog combat";
-  card.appendChild(prog);
+  const btn = document.createElement("button");
+  btn.className = "btn btn-primary node-btn";
+  btn.textContent = recovering() ? "Recovering" : active ? (t.queued === "stop" ? "Pulling back after this" : "Pull back") : "Take the field";
+  btn.disabled = recovering();
+  btn.onclick = () => selectMonster(mob.id);
+  info.appendChild(btn);
 
-  card.onclick = () => selectMonster(mob.id);
-  monsterRefs.push({ mob, hpFill, prog, plan });
-  return card;
-}
+  card.appendChild(info);
+  box.appendChild(card);
 
-function updateMonsterCards() {
-  const t = state.tasks.combat;
-  monsterRefs.forEach((ref) => {
-    const atk = attackPower();
-    const avg = Math.max(1, (atk * 0.55 + atk) / 2 - ref.mob.defence * 0.35);
-    const killMs = (ref.mob.hp / avg) * PLAYER_SWING_MS + RESPAWN_MS;
-    ref.plan.textContent = `~${fmtTime(killMs)} a kill \u00B7 ${fmt(Math.floor(IDLE_CAP_MS / killMs))} per 12h idle`;
-    const isActive = t && t.monsterId === ref.mob.id;
-    if (isActive) {
-      ref.hpFill.style.width = clamp((t.mobHp / t.mobMax) * 100, 0, 100) + "%";
-      const swing = t.respawn > 0 ? 0 : (1 - t.playerTimer / PLAYER_SWING_MS) * 100;
-      ref.prog.classList.toggle("nojump", swing < 6);
-      ref.prog.style.width = clamp(swing, 0, 100) + "%";
-    } else { ref.hpFill.style.width = "100%"; ref.prog.style.width = "0"; }
+  liveRefs.monster = { mob, bar: bar.querySelector("i"), left: bar.querySelector("span"), right: bar.querySelector("b") };
+
+  // right rail: what it drops
+  el("skRailA").hidden = false;
+  el("skRailALabel").textContent = "Leaves Behind";
+  const rail = el("skRailABody");
+  rail.innerHTML = "";
+  mob.drops.forEach(([k, qty, chance]) => {
+    const row = document.createElement("div");
+    row.className = "yield-item";
+    row.innerHTML = `<div class="left">${icon(itemDef(k).icon, "ico-sm")}<span></span></div><div class="chance"></div>`;
+    row.querySelector("span").textContent = itemName(k);
+    row.querySelector(".chance").textContent = Math.round(chance * 100) + "%";
+    rail.appendChild(row);
+  });
+
+  el("skYield").hidden = true;
+  el("skSeams").hidden = false;
+  el("skSeamsLabel").textContent = "Other Quarry";
+  const seams = el("skSeamsBody");
+  seams.innerHTML = "";
+  MONSTERS.forEach((m) => {
+    if (m.id === mob.id) return;
+    const r = regionOfTier(m.tier);
+    const unlocked = state.travel.unlocked.includes(r.id);
+    const row = document.createElement("button");
+    row.className = "seam-row";
+    row.innerHTML = `<div class="name"></div><div class="region"></div>`;
+    row.children[0].textContent = m.name;
+    row.children[1].textContent = `Lv ${m.level} · ${r.name}${unlocked ? "" : ` · ${fmt(r.toll)}g`}`;
+    row.onclick = () => travelTo(r.id);
+    seams.appendChild(row);
   });
 }
 
-/* ---- atlas ---- */
+const regionOfTier = (tier) => REGIONS.find((r) => r.tier === tier);
+
+function renderToolPanel(skillId) {
+  el("skRailA").hidden = false;
+  el("skRailALabel").textContent = "Tool in Hand";
+  const box = el("skRailABody");
+  box.innerHTML = "";
+
+  const tool = toolFor(skillId);
+  const card = document.createElement("div");
+  card.className = "tool-card";
+  if (tool) {
+    card.innerHTML = `<div class="tool-icon">${icon(tool.icon)}</div>` +
+      `<div><div class="tool-name"></div><div class="tool-sub"></div></div>`;
+    card.querySelector(".tool-name").textContent = tool.name;
+    card.querySelector(".tool-sub").textContent = `+${Math.round(tool.speed * 100)}% ${skillName(skillId)} speed · Tier ${tool.tier}`;
+    const off = document.createElement("button");
+    off.className = "minibtn";
+    off.textContent = "Stow";
+    off.onclick = () => unequipTool(skillId);
+    card.appendChild(off);
+  } else {
+    card.innerHTML = `<div class="tool-icon empty">${icon(TOOL_SPEC[skillId].icon)}</div>` +
+      `<div><div class="tool-name">Bare hands</div><div class="tool-sub">Forge a ${TOOL_SPEC[skillId].label.toLowerCase()} at the Forgemaster for more speed.</div></div>`;
+  }
+  box.appendChild(card);
+}
+
+function renderYieldTable(def, skillId) {
+  el("skYield").hidden = false;
+  const box = el("skYieldBody");
+  box.innerHTML = "";
+
+  const mainKey = Object.keys(def.out)[0];
+  const rows = [[mainKey, "Every action"]];
+  const dbl = doubleChance(skillId);
+  if (dbl > 0) rows.push([mainKey, `${Math.round(dbl * 100)}% doubled`]);
+  const rich = richFind(def);
+  if (rich) rows.push([rich, `${(RICH_FIND_CHANCE * 100).toFixed(1)}% rich find`]);
+
+  rows.forEach(([k, label]) => {
+    const row = document.createElement("div");
+    row.className = "yield-item";
+    row.innerHTML = `<div class="left">${icon(itemDef(k).icon, "ico-sm")}<span></span></div><div class="chance"></div>`;
+    row.querySelector("span").textContent = itemName(k);
+    row.querySelector(".chance").textContent = label;
+    box.appendChild(row);
+  });
+}
+
+function renderOtherSeams(skillId) {
+  el("skSeams").hidden = false;
+  el("skSeamsLabel").textContent = `Other ${skillName(skillId)} Grounds`;
+  const box = el("skSeamsBody");
+  box.innerHTML = "";
+  const lvl = skillLevel(skillId);
+
+  GATHER_ACTIONS[skillId].forEach((def) => {
+    if (def.tier === currentRegion().tier) return;
+    const r = regionOfTier(def.tier);
+    const unlocked = state.travel.unlocked.includes(r.id);
+    const row = document.createElement("button");
+    row.className = "seam-row" + (lvl < def.level ? " dim" : "");
+    row.innerHTML = `<div class="name"></div><div class="region"></div>`;
+    row.children[0].textContent = titleCase(def.name);
+    row.children[1].textContent = `Lv ${def.level} · ${r.name}${unlocked ? "" : ` · ${fmt(r.toll)}g toll`}`;
+    row.onclick = () => travelTo(r.id);
+    box.appendChild(row);
+  });
+}
+
+function renderMastery(skillId) {
+  const lvl = skillLevel(skillId);
+  const box = el("skMasteryBody");
+  box.innerHTML = "";
+  const m = mastery(skillId);
+  const head = document.createElement("div");
+  head.className = "mastery-summary";
+  head.textContent = (m.speed || m.double)
+    ? `+${Math.round(m.speed * 100)}% speed · +${Math.round(m.double * 100)}% double yield`
+    : "No mastery earned yet.";
+  box.appendChild(head);
+
+  MASTERY_TRACK.forEach((step) => {
+    const done = lvl >= step.level;
+    const row = document.createElement("div");
+    row.className = "mastery-row";
+    row.innerHTML = `<div class="name"><span class="glyph${done ? " on" : ""}"></span><span></span></div><div class="val"></div>`;
+    row.querySelector(".glyph").textContent = done ? "✓" : "·";
+    row.querySelectorAll("span")[2].textContent = step.label;
+    const val = row.querySelector(".val");
+    val.textContent = done ? step.desc : "Lv " + step.level;
+    if (done) val.classList.add("on");
+    box.appendChild(row);
+  });
+}
+
+function renderMilestones(skillId, lvl) {
+  const box = el("skMilestones");
+  box.innerHTML = "";
+  const marks = [{ level: 1, desc: "Ground opened" }].concat(
+    MASTERY_TRACK.map((m) => ({ level: m.level, desc: m.label })));
+  marks.forEach((m) => {
+    const d = document.createElement("div");
+    d.className = "milestone" + (lvl >= m.level ? " done" : "");
+    d.innerHTML = '<div class="lv"></div><div class="desc"></div>';
+    d.children[0].textContent = "Lv " + m.level;
+    d.children[1].textContent = m.desc;
+    box.appendChild(d);
+  });
+}
+
+function renderYieldFeed() {
+  const box = el("skYieldFeed");
+  box.innerHTML = "";
+  if (!state.yields.length) {
+    box.innerHTML = '<div class="log-item muted">Nothing yet.</div>';
+    return;
+  }
+  state.yields.slice().reverse().forEach((y) => {
+    const d = document.createElement("div");
+    d.className = "log-item";
+    d.innerHTML = '<span class="t"></span><span></span>';
+    const ago = Date.now() - y.t;
+    d.children[0].textContent = ago < 4000 ? "now" : fmtTime(ago);
+    d.children[1].textContent = y.m;
+    box.appendChild(d);
+  });
+}
+
+/* ---- live per-frame updates (no DOM rebuild) ---- */
+
+function updateLive() {
+  const n = liveRefs.node;
+  if (n) {
+    const t = state.tasks.skilling;
+    const active = t && t.skillId === n.skillId && t.actionId === n.def.id;
+    const time = actionTime(n.def);
+    if (active) {
+      const pct = clamp((t.progress / time) * 100, 0, 100);
+      n.bar.classList.toggle("nojump", pct < 6);
+      n.bar.style.width = pct + "%";
+      const plan = skillPlan();
+      n.left.textContent = `${fmt(plan.done)} / ${fmt(plan.target)} actions`;
+      n.right.textContent = fmtTime(plan.timeLeft) + " left";
+    } else {
+      n.bar.style.width = "0";
+      const per12 = Math.floor(IDLE_CAP_MS / time);
+      n.left.textContent = `${fmt(per12)} actions per 12h idle`;
+      n.right.textContent = fmt(per12 * n.def.xp * xpMult()) + " XP";
+    }
+  }
+
+  const m = liveRefs.monster;
+  if (m) {
+    const t = state.tasks.combat;
+    const active = t && t.monsterId === m.mob.id;
+    if (active) {
+      m.bar.style.width = clamp(t.respawn > 0 ? 0 : (t.mobHp / t.mobMax) * 100, 0, 100) + "%";
+      const plan = combatPlan();
+      m.left.textContent = `${fmt(plan.done)} / ${fmt(plan.target)} kills`;
+      m.right.textContent = fmtTime(plan.timeLeft) + " left";
+    } else {
+      m.bar.style.width = "100%";
+      m.left.textContent = "Not engaged";
+      m.right.textContent = "";
+    }
+  }
+}
+
+/* ================= CHARACTER PAGE ================= */
+
+function renderCharacter() {
+  const sig = SKILLS.map((s) => s.id + (state.skills[s.id] || 0)).join(",") + "|" +
+    EQUIP_SLOTS.map((s) => state.equipment[s]).join(",") + "|" + state.stats.kills + "|" +
+    (state.tasks.skilling ? state.tasks.skilling.actionId : "-") + "|" + (state.tasks.combat ? 1 : 0) +
+    "|" + JSON.stringify(state.bounty);
+  if (keys.char === sig) return;
+  keys.char = sig;
+
+  el("chName").textContent = state.meta.name || "Commander";
+  el("chTags").innerHTML = `<span>Commander</span><span>${currentRegion().name}</span>`;
+  el("chRegionTag").textContent = `In ${currentRegion().name}`;
+  el("chTotal").textContent = "Lv " + totalLevel();
+
+  const b = state.bounty;
+  el("chBounty").innerHTML = b
+    ? `Bounty <b>${fmt(Math.min(b.progress, b.amount))} / ${fmt(b.amount)}</b> · resets in ${fmtTime(windowEndsIn())}`
+    : "";
+
+  // activity cards
+  const sp = skillPlan();
+  const labour = el("chLabour");
+  labour.innerHTML = "";
+  if (sp) {
+    labour.innerHTML =
+      `<div class="task-name">${icon(sp.def.icon, "ico-sm")}<span></span></div>` +
+      '<div class="bar"><i></i></div>' +
+      '<div class="task-meta"><span></span><b></b></div>';
+    labour.querySelector("span").textContent = titleCase(sp.def.name);
+    labour.querySelector("i").style.width = sp.pct + "%";
+    labour.querySelectorAll(".task-meta span")[0].textContent = `${fmt(sp.done)} / ${fmt(sp.target)} actions`;
+    labour.querySelector("b").textContent = fmtTime(sp.timeLeft) + " left";
+  } else {
+    labour.innerHTML = '<div class="idle-block"><div class="big">No crews tasked</div>' +
+      '<div>Your people are standing around. Put them on something.</div></div>';
+    const btn = document.createElement("button");
+    btn.className = "btn";
+    btn.textContent = "Open Delving";
+    btn.onclick = () => go("skill", "delving");
+    labour.querySelector(".idle-block").appendChild(btn);
+  }
+
+  const cp = combatPlan();
+  const field = el("chField");
+  field.innerHTML = "";
+  if (cp) {
+    field.innerHTML =
+      `<div class="task-name">${icon(cp.mob.icon, "ico-sm")}<span></span></div>` +
+      '<div class="bar mob"><i></i></div>' +
+      '<div class="task-meta"><span></span><b></b></div>';
+    field.querySelector("span").textContent = cp.mob.name;
+    field.querySelector("i").style.width = cp.pct + "%";
+    field.querySelectorAll(".task-meta span")[0].textContent = `${fmt(cp.done)} / ${fmt(cp.target)} kills`;
+    field.querySelector("b").textContent = fmtTime(cp.timeLeft) + " left";
+  } else {
+    field.innerHTML = '<div class="idle-block"><div class="big"></div><div></div></div>';
+    field.querySelector(".big").textContent = recovering() ? "Recovering" : "No quarry chosen";
+    field.querySelectorAll(".idle-block div")[1].textContent = recovering()
+      ? `Back on your feet in ${fmtTime(state.player.recoveryUntil - Date.now())}.`
+      : "You take the field yourself. The camp keeps turning without you.";
+    const btn = document.createElement("button");
+    btn.className = "btn";
+    btn.textContent = "Open The Field";
+    btn.onclick = () => go("skill", "warfare");
+    field.querySelector(".idle-block").appendChild(btn);
+  }
+
+  // combat stat strip
+  const strip = el("chStats");
+  strip.innerHTML = "";
+  [["Health", maxHp()], ["Attack", Math.round(attackPower())], ["Defence", Math.round(defencePower())],
+   ["Kills", fmt(state.stats.kills)], ["Deaths", fmt(state.stats.deaths)], ["Gold Earned", fmt(state.stats.goldEarned)]]
+    .forEach(([l, v]) => {
+      const d = document.createElement("div");
+      d.className = "stat-box";
+      d.innerHTML = '<div class="v"></div><div class="l"></div>';
+      d.children[0].textContent = v;
+      d.children[1].textContent = l;
+      strip.appendChild(d);
+    });
+
+  // skill grid
+  const grid = el("chSkills");
+  grid.innerHTML = "";
+  SKILLS.forEach((s) => {
+    const lvl = skillLevel(s.id);
+    const xp = state.skills[s.id] || 0;
+    const base = XP_TABLE[lvl], next = XP_TABLE[Math.min(lvl + 1, MAX_LEVEL)];
+    const card = document.createElement("button");
+    card.className = "skill-card";
+    card.innerHTML =
+      `<div class="top"><div class="name">${icon(s.icon, "ico-sm")}<span></span></div><div class="lvl"></div></div>` +
+      '<div class="xp"></div><div class="bar"><i></i></div>';
+    card.querySelector(".name span").textContent = s.name;
+    card.querySelector(".lvl").textContent = "Lv " + lvl;
+    card.querySelector(".xp").textContent = lvl >= MAX_LEVEL ? "Mastered" : `${fmt(xp)} / ${fmt(next)} XP`;
+    card.querySelector("i").style.width =
+      clamp(lvl >= MAX_LEVEL ? 100 : ((xp - base) / (next - base)) * 100, 0, 100) + "%";
+    card.onclick = () => go("skill", s.id);
+    grid.appendChild(card);
+  });
+}
+
+/* ================= INVENTORY PAGE ================= */
+
+function renderInventory() {
+  document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === invTab));
+  ["carried", "stores", "equipment"].forEach((t) => { el("panel-" + t).hidden = invTab !== t; });
+
+  if (invTab === "equipment") { renderPaperdoll(); return; }
+
+  storeView = invTab === "carried" ? "inv" : "bank";
+  const s = store(storeView);
+  const ids = orderedKeys(storeView);
+  const sig = `${storeView}|${ids.map((k) => k + ":" + s.items[k]).join(",")}|${slotCap(storeView)}|${selected}|${state.player.gold}`;
+  if (keys.inv === sig) return;
+  keys.inv = sig;
+
+  el(invTab === "carried" ? "carriedCap" : "storesCap").innerHTML =
+    `Capacity <b>${slotsUsed(storeView)} / ${slotCap(storeView)}</b>`;
+
+  const grid = el(invTab === "carried" ? "carriedGrid" : "storesGrid");
+  grid.innerHTML = "";
+  const cap = slotCap(storeView);
+
+  for (let i = 0; i < cap; i++) {
+    const key = ids[i];
+    const cell = document.createElement("div");
+    if (!key) {
+      cell.className = "item empty";
+      cell.innerHTML = '<div class="art"></div><div class="n">Empty</div>';
+      grid.appendChild(cell);
+      continue;
+    }
+    const d = itemDef(key);
+    cell.className = "item " + (d.rarity || "common") + (key === selected ? " on" : "");
+    cell.tabIndex = 0;
+    cell.innerHTML =
+      `<div class="qty">${fmt(s.items[key])}</div>` +
+      `<div class="art">${icon(d.icon, "ico-lg")}</div>` +
+      `<div class="n"></div><div class="r"></div>`;
+    cell.querySelector(".n").textContent = itemName(key);
+    cell.querySelector(".r").textContent = d.kind === "gear"
+      ? rarityDef(d.rarity).name : d.kind === "tool" ? "Tool" : d.heal ? "Provision" : "Material";
+    cell.title = `${itemName(key)} × ${s.items[key]}`;
+
+    cell.draggable = true;
+    cell.onclick = () => { selected = selected === key ? null : key; keys.inv = ""; renderInventory(); };
+    cell.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); cell.onclick(); } };
+    cell.ondragstart = (e) => e.dataTransfer.setData("text/plain", key);
+    cell.ondragover = (e) => { e.preventDefault(); cell.classList.add("dragover"); };
+    cell.ondragleave = () => cell.classList.remove("dragover");
+    cell.ondrop = (e) => {
+      e.preventDefault(); cell.classList.remove("dragover");
+      const from = e.dataTransfer.getData("text/plain");
+      if (from && from !== key) reorder(from, key);
+    };
+    grid.appendChild(cell);
+  }
+
+  renderDetail(invTab === "carried" ? "carriedDetail" : "storesDetail");
+}
+
+function reorder(fromKey, toKey) {
+  const ids = orderedKeys(storeView);
+  const a = ids.indexOf(fromKey), b = ids.indexOf(toKey);
+  if (a < 0 || b < 0) return;
+  ids.splice(a, 1);
+  ids.splice(b, 0, fromKey);
+  store(storeView).order = ids;
+  keys.inv = "";
+  renderInventory();
+}
+
+function renderDetail(targetId) {
+  const box = el(targetId);
+  box.innerHTML = "";
+  if (!selected || !store(storeView).items[selected]) {
+    box.innerHTML = '<div class="muted">Select an item to equip, move or sell it.</div>';
+    return;
+  }
+
+  const d = itemDef(selected);
+  const qty = qtyIn(storeView, selected);
+
+  const head = document.createElement("div");
+  head.className = "detail-head";
+  head.innerHTML = icon(d.icon, "ico-lg");
+  const nm = document.createElement("div");
+  nm.innerHTML = '<div class="dname"></div><div class="dsub muted tiny"></div>';
+  nm.querySelector(".dname").textContent = itemName(selected);
+  if (d.rarity) nm.querySelector(".dname").classList.add("rar-" + d.rarity);
+  nm.querySelector(".dsub").textContent = `×${fmt(qty)} · ${fmt(d.value)}g each`;
+  head.appendChild(nm);
+  box.appendChild(head);
+
+  const bits = [];
+  if (d.attack) bits.push(`+${d.attack} attack`);
+  if (d.defence) bits.push(`+${d.defence} defence`);
+  if (d.health) bits.push(`+${d.health} max health`);
+  if (d.heal) bits.push(`restores ${d.heal}`);
+  if (d.speed) bits.push(`+${Math.round(d.speed * 100)}% ${skillName(d.forSkill)} speed`);
+  if (d.twoHanded) bits.push("two-handed");
+  if (d.maxDur) bits.push(`${fmt(d.maxDur)} durability`);
+  if (d.chest) bits.push(`+${d.chest} store slots`);
+  if (bits.length) {
+    const st = document.createElement("div");
+    st.className = "detail-stats";
+    st.textContent = bits.join(" · ");
+    box.appendChild(st);
+  }
+
+  const row = document.createElement("div");
+  row.className = "btnrow";
+  const add = (label, fn, cls) => {
+    const b = document.createElement("button");
+    b.className = "btn" + (cls ? " " + cls : "");
+    b.textContent = label;
+    b.onclick = fn;
+    row.appendChild(b);
+  };
+  if (d.slot) add(`Equip · ${SLOT_LABELS[d.slot]}`, () => equip(selected), "btn-primary");
+  if (d.kind === "tool") add(`Take up · ${skillName(d.forSkill)}`, () => equip(selected), "btn-primary");
+  if (d.chest) add("Open chest", () => useChest(selected));
+  add(storeView === "inv" ? "→ Stores" : "→ Pack", () => transfer(selected, false));
+  add(storeView === "inv" ? "All → Stores" : "All → Pack", () => transfer(selected, true), "btn-quiet");
+  const sv = salvageValue(selected);
+  if (sv) add(`Break down · ${sv.qty}× ${itemName(sv.mat)}`, () => salvage(selected), "btn-quiet");
+  add(`Sell 1 · ${fmt(d.value)}g`, () => sell(selected, false));
+  add(`Sell all · ${fmt(d.value * qty)}g`, () => sell(selected, true), "btn-quiet");
+  box.appendChild(row);
+}
+
+function renderPaperdoll() {
+  const sig = EQUIP_SLOTS.map((s) => s + state.equipment[s] + (state.wear[state.equipment[s]] || 0)).join(",") +
+    JSON.stringify(state.tools);
+  if (keys.doll === sig) return;
+  keys.doll = sig;
+
+  const twoH = state.equipment.weapon && itemDef(state.equipment.weapon).twoHanded;
+
+  const slotEl = (slot) => {
+    const key = state.equipment[slot];
+    const d = key ? itemDef(key) : null;
+    const box = document.createElement("div");
+    box.className = "eq-slot " + (key ? "filled " + (d.rarity || "") : "empty");
+    box.innerHTML = `<span class="type">${SLOT_LABELS[slot]}</span>` +
+      `<div class="art">${icon(d ? d.icon : slotGlyph(slot), key ? "ico-lg" : "ico")}</div>` +
+      `<div class="name"></div>`;
+    box.querySelector(".name").textContent = key ? itemName(key) : "Empty";
+
+    if (key) {
+      const pct = wearPct(key);
+      if (pct !== null) {
+        const w = document.createElement("div");
+        w.className = "eq-wear " + (pct > 60 ? "fine" : pct > 25 ? "worn" : "bad");
+        w.textContent = pct + "%";
+        box.appendChild(w);
+      }
+      const bar = document.createElement("div");
+      bar.className = "eq-actions";
+      const cost = repairCost(key);
+      if (cost) {
+        const fix = document.createElement("button");
+        fix.className = "minibtn";
+        fix.textContent = `Repair ${cost.qty}×`;
+        fix.disabled = haveQty(cost.mat) < cost.qty;
+        fix.title = `Uses ${cost.qty} ${itemName(cost.mat)}`;
+        fix.onclick = (e) => { e.stopPropagation(); repairItem(key); };
+        bar.appendChild(fix);
+      }
+      const off = document.createElement("button");
+      off.className = "minibtn";
+      off.textContent = "Remove";
+      off.onclick = (e) => { e.stopPropagation(); unequip(slot); };
+      bar.appendChild(off);
+      box.appendChild(bar);
+    }
+    return box;
+  };
+
+  const left = el("dollLeft"), right = el("dollRight");
+  left.innerHTML = ""; right.innerHTML = "";
+
+  const pair = document.createElement("div");
+  pair.className = "weapon-pair" + (twoH ? " merged" : "");
+  pair.appendChild(slotEl("weapon"));
+  if (!twoH) pair.appendChild(slotEl("offhand"));
+  left.appendChild(pair);
+  ["head", "chest"].forEach((s) => left.appendChild(slotEl(s)));
+  ["legs", "boots", "gloves", "ring", "amulet"].forEach((s) => right.appendChild(slotEl(s)));
+
+  el("dollName").textContent = state.meta.name || "Commander";
+  el("dollSub").textContent = `Commander · ${currentRegion().name}`;
+  el("dollSil").textContent = (state.meta.name || "C").charAt(0).toUpperCase();
+
+  const strip = el("dollStats");
+  strip.innerHTML = "";
+  [["Health", maxHp()], ["Attack", Math.round(attackPower())],
+   ["Defence", Math.round(defencePower())], ["Warfare", "Lv " + skillLevel("warfare")]]
+    .forEach(([l, v]) => {
+      const d = document.createElement("div");
+      d.className = "stat-box";
+      d.innerHTML = '<div class="v"></div><div class="l"></div>';
+      d.children[0].textContent = v;
+      d.children[1].textContent = l;
+      strip.appendChild(d);
+    });
+
+  const tools = el("dollTools");
+  tools.innerHTML = "";
+  GATHER_SKILLS.forEach((s) => {
+    const tool = toolFor(s.id);
+    const row = document.createElement("div");
+    row.className = "tool-row";
+    row.innerHTML = `<span class="tr-ico">${icon(TOOL_SPEC[s.id].icon, "ico-sm")}</span>` +
+      `<span class="tr-skill"></span><span class="tr-name"></span>`;
+    row.children[1].textContent = s.name;
+    row.children[2].textContent = tool ? `${tool.name} (+${Math.round(tool.speed * 100)}%)` : "Bare hands";
+    if (!tool) row.children[2].classList.add("muted");
+    if (tool) {
+      const off = document.createElement("button");
+      off.className = "minibtn";
+      off.textContent = "Stow";
+      off.onclick = () => unequipTool(s.id);
+      row.appendChild(off);
+    }
+    tools.appendChild(row);
+  });
+}
+
+function slotGlyph(slot) {
+  return { weapon: "blade", offhand: "ward", head: "cowl", chest: "plate", legs: "greaves",
+    boots: "treads", gloves: "gauntlets", ring: "band", amulet: "charm" }[slot] || "unknown";
+}
+
+/* ================= OTHER PAGES ================= */
 
 function renderAtlas() {
-  const key = state.region + "|" + state.travel.unlocked.join(",") + "|" + Math.floor(state.player.gold / 50);
-  if (keys.atlas === key) return;
-  keys.atlas = key;
+  const sig = state.region + state.travel.unlocked.join(",") + Math.floor(state.player.gold / 50);
+  if (keys.atlas === sig) return;
+  keys.atlas = sig;
 
   const box = el("atlasList");
   box.innerHTML = "";
@@ -1618,71 +2346,46 @@ function renderAtlas() {
     const here = state.region === r.id;
     const card = document.createElement("button");
     card.className = "atlas-card" + (here ? " on" : "") + (unlocked ? "" : " locked");
-
-    const top = document.createElement("div");
-    top.className = "atlas-top";
-    top.innerHTML = icon("atlas", "tint-" + r.tier) +
-      '<span class="atlas-name"></span><span class="atlas-tier"></span>';
-    top.querySelector(".atlas-name").textContent = r.name;
-    top.querySelector(".atlas-tier").textContent = `Lv. ${r.level}`;
-    card.appendChild(top);
-
-    const note = document.createElement("div");
-    note.className = "atlas-note";
-    note.textContent = r.note;
-    card.appendChild(note);
-
-    const foot = document.createElement("div");
-    if (here) { foot.className = "atlas-here"; foot.textContent = "You are here"; }
-    else if (unlocked) { foot.className = "atlas-cost"; foot.textContent = "Road open — travel free"; }
+    card.innerHTML =
+      `<div class="atlas-top">${icon("atlas", "ico-lg")}<div><div class="atlas-name"></div>` +
+      `<div class="atlas-tier"></div></div></div><div class="atlas-note"></div><div class="atlas-foot"></div>`;
+    card.querySelector(".atlas-name").textContent = r.name;
+    card.querySelector(".atlas-tier").textContent = `Tier ${r.tier} · gear and ground around Lv ${r.level}`;
+    card.querySelector(".atlas-note").textContent = r.note;
+    const foot = card.querySelector(".atlas-foot");
+    if (here) { foot.className = "atlas-foot here"; foot.textContent = "You are here"; }
+    else if (unlocked) { foot.className = "atlas-foot open"; foot.textContent = "Road open — travel free"; }
     else {
-      foot.className = "atlas-cost" + (state.player.gold < r.toll ? " cant" : "");
+      foot.className = "atlas-foot cost" + (state.player.gold < r.toll ? " cant" : "");
       foot.textContent = `Toll ${fmt(r.toll)} gold`;
     }
-    card.appendChild(foot);
-
     card.onclick = () => travelTo(r.id);
     box.appendChild(card);
   });
 }
 
-/* ---- shop ---- */
-
 function renderShop() {
-  const key = `${state.player.gold}|${currentWindow()}|${JSON.stringify(state.smugglerBought)}`;
-  if (keys.shop === key) { el("smugglerTimer").textContent = `— moves on in ${fmtTime(windowEndsIn())}`; return; }
-  keys.shop = key;
-
-  el("shopGold").textContent = `${fmt(state.player.gold)} gold on hand`;
-  el("smugglerTimer").textContent = `— moves on in ${fmtTime(windowEndsIn())}`;
-  el("smugglerNote").textContent = "Turns up on the world clock twice a day with whatever fell off the back of something. One purchase per visit.";
+  el("smugglerTimer").textContent = `Moves on in ${fmtTime(windowEndsIn())}`;
+  const sig = `${state.player.gold}|${currentWindow()}|${JSON.stringify(state.smugglerBought)}`;
+  if (keys.shop === sig) return;
+  keys.shop = sig;
 
   const stock = el("shopStock");
   stock.innerHTML = "";
   shopStock().forEach((entry) => {
     const d = itemDef(entry.key);
     const card = document.createElement("div");
-    card.className = "card flat";
-    card.innerHTML = icon(d.icon, "tint-" + d.tier) === "" ? "" : "";
-
-    const top = document.createElement("div");
-    top.className = "card-top";
-    top.innerHTML = icon(d.icon, "tint-" + d.tier) + '<span class="card-name"></span>';
-    top.querySelector(".card-name").textContent = d.name;
-    card.appendChild(top);
-
-    const meta = document.createElement("div");
-    meta.className = "card-meta";
-    meta.textContent = `Restores ${fmt(d.heal)} health \u00B7 ${fmt(entry.price)} gold each`;
-    card.appendChild(meta);
-
+    card.className = "shop-card";
+    card.innerHTML = `<div class="shop-ico">${icon(d.icon, "ico-lg")}</div>` +
+      '<div class="shop-body"><div class="shop-name"></div><div class="shop-sub"></div></div>';
+    card.querySelector(".shop-name").textContent = d.name;
+    card.querySelector(".shop-sub").textContent = `Restores ${fmt(d.heal)} health · ${fmt(entry.price)}g each`;
     const row = document.createElement("div");
     row.className = "btnrow";
-    row.style.marginTop = "9px";
     [1, 10, 50].forEach((n) => {
       const b = document.createElement("button");
       b.className = "btn btn-gold";
-      b.textContent = `Buy ${n} (${fmt(entry.price * n)}g)`;
+      b.textContent = `${n} · ${fmt(entry.price * n)}g`;
       b.disabled = state.player.gold < entry.price * n;
       b.onclick = () => buyShop(entry.key, entry.price * n, n);
       row.appendChild(b);
@@ -1697,23 +2400,14 @@ function renderShop() {
     const d = itemDef(entry.key);
     const bought = !!state.smugglerBought[`${currentWindow()}_${entry.slot}`];
     const card = document.createElement("div");
-    card.className = "card flat";
-
-    const top = document.createElement("div");
-    top.className = "card-top";
-    top.innerHTML = icon(d.icon, "tint-" + d.tier) + '<span class="card-name"></span>';
-    top.querySelector(".card-name").textContent = `${entry.qty}\u00D7 ${d.name}`;
-    card.appendChild(top);
-
-    const meta = document.createElement("div");
-    meta.className = "card-meta";
-    meta.textContent = `Tier ${d.tier} \u00B7 ${fmt(entry.price)} gold the lot`;
-    card.appendChild(meta);
-
+    card.className = "shop-card";
+    card.innerHTML = `<div class="shop-ico">${icon(d.icon, "ico-lg")}</div>` +
+      '<div class="shop-body"><div class="shop-name"></div><div class="shop-sub"></div></div>';
+    card.querySelector(".shop-name").textContent = `${entry.qty}× ${d.name}`;
+    card.querySelector(".shop-sub").textContent = `Tier ${d.tier} · ${fmt(entry.price)}g the lot`;
     const b = document.createElement("button");
     b.className = "btn btn-gold";
-    b.style.marginTop = "9px";
-    b.textContent = bought ? "Already dealt" : `Buy (${fmt(entry.price)}g)`;
+    b.textContent = bought ? "Already dealt" : `Buy · ${fmt(entry.price)}g`;
     b.disabled = bought || state.player.gold < entry.price;
     b.onclick = () => buySmuggler(entry);
     card.appendChild(b);
@@ -1721,364 +2415,110 @@ function renderShop() {
   });
 }
 
-/* ---- bounty ---- */
-
 function renderBounty() {
   refreshBounty();
-  const b = state.bounty;
   el("bountyTimer").textContent = `New posting in ${fmtTime(windowEndsIn())}`;
-  const box = el("bountyBox");
-  const key = JSON.stringify(b);
-  if (keys.bounty === key) return;
-  keys.bounty = key;
+  const b = state.bounty;
+  const sig = JSON.stringify(b);
+  if (keys.bounty === sig) return;
+  keys.bounty = sig;
 
+  const box = el("bountyBox");
   box.innerHTML = "";
   if (!b) return;
 
   const card = document.createElement("div");
   card.className = "bounty-card";
-
-  const h = document.createElement("h3");
-  h.className = "bounty-title";
-  h.textContent = b.label;
-  card.appendChild(h);
-
-  const sub = document.createElement("div");
-  sub.className = "muted tiny";
-  sub.textContent = `Posted for ${regionById(b.region).name}.`;
-  card.appendChild(sub);
-
-  const bar = document.createElement("div");
-  bar.className = "bounty-prog";
-  const fill = document.createElement("div");
-  fill.style.width = clamp((b.progress / b.amount) * 100, 0, 100) + "%";
-  bar.appendChild(fill);
-  card.appendChild(bar);
-
-  const rew = document.createElement("div");
-  rew.className = "bounty-reward";
-  rew.textContent = `${fmt(Math.min(b.progress, b.amount))} of ${fmt(b.amount)} \u00B7 pays ${fmt(b.gold)} gold and one hour of double experience.`;
-  card.appendChild(rew);
+  card.innerHTML =
+    '<h3 class="bounty-title"></h3><div class="muted tiny"></div>' +
+    '<div class="bar"><i></i></div><div class="bounty-reward"></div>';
+  card.querySelector(".bounty-title").textContent = b.label;
+  card.querySelector(".tiny").textContent = `Posted for ${regionById(b.region).name}.`;
+  card.querySelector("i").style.width = clamp((b.progress / b.amount) * 100, 0, 100) + "%";
+  card.querySelector(".bounty-reward").textContent =
+    `${fmt(Math.min(b.progress, b.amount))} of ${fmt(b.amount)} · pays ${fmt(b.gold)} gold and an hour of double experience.`;
 
   const btn = document.createElement("button");
   btn.className = "btn btn-gold";
-  btn.style.marginTop = "11px";
   btn.textContent = b.claimed ? "Paid out" : (b.progress >= b.amount ? "Claim" : "Not finished");
   btn.disabled = b.claimed || b.progress < b.amount;
   btn.onclick = claimBounty;
   card.appendChild(btn);
-
   box.appendChild(card);
 }
 
-/* ---- inventory ---- */
-
-function renderInventory() {
-  const s = store(storeView);
-  const ids = orderedKeys(storeView);
-  const key = `${storeView}|${ids.map((k) => k + ":" + s.items[k]).join(",")}|${slotCap(storeView)}|${selected}|${state.player.gold}`;
-  if (keys.inv !== key) {
-    keys.inv = key;
-    el("storeTitle").textContent = storeView === "inv" ? "Pack" : "Vault";
-    el("storeCount").textContent = `${slotsUsed(storeView)} / ${slotCap(storeView)} slots`;
-    el("storeNote").textContent = storeView === "inv"
-      ? "What you carry. Fill it and your work stops."
-      : "Camp storage. Banded chests from the Woodwright widen it.";
-    renderGrid(ids);
-    renderDetail();
-  }
-  const eKey = EQUIP_SLOTS.map((sl) => sl + ":" + state.equipment[sl] + ":" + (state.wear[state.equipment[sl]] || 0)).join(",");
-  if (keys.equip !== eKey) { keys.equip = eKey; renderEquip(); }
-}
-
-function renderGrid(ids) {
-  const grid = el("invGrid");
-  grid.innerHTML = "";
-  const s = store(storeView);
-  const cap = slotCap(storeView);
-
-  for (let i = 0; i < cap; i++) {
-    const key = ids[i];
-    const d = key ? itemDef(key) : null;
-    const cell = document.createElement("div");
-    cell.className = "cell" + (key ? "" : " empty") + (key === selected ? " on" : "") +
-      (d && d.rarity && d.rarity !== "common" ? ` r-${d.rarity}` : "");
-    cell.tabIndex = key ? 0 : -1;
-
-    if (key) {
-      cell.innerHTML = icon(d.icon, "ico-lg tint-" + (d.tier || 1));
-      cell.title = `${itemName(key)} \u00D7 ${s.items[key]}`;
-      const q = document.createElement("span");
-      q.className = "cell-qty";
-      q.textContent = fmt(s.items[key]);
-      cell.appendChild(q);
-
-      cell.draggable = true;
-      cell.onclick = () => { selected = selected === key ? null : key; keys.inv = ""; renderInventory(); };
-      cell.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); cell.onclick(); } };
-      cell.ondragstart = (e) => e.dataTransfer.setData("text/plain", key);
-      cell.ondragover = (e) => { e.preventDefault(); cell.classList.add("dragover"); };
-      cell.ondragleave = () => cell.classList.remove("dragover");
-      cell.ondrop = (e) => {
-        e.preventDefault(); cell.classList.remove("dragover");
-        const from = e.dataTransfer.getData("text/plain");
-        if (from && from !== key) reorder(from, key);
-      };
-    }
-    grid.appendChild(cell);
-  }
-}
-
-function reorder(fromKey, toKey) {
-  const ids = orderedKeys(storeView);
-  const a = ids.indexOf(fromKey), b = ids.indexOf(toKey);
-  if (a < 0 || b < 0) return;
-  ids.splice(a, 1);
-  ids.splice(b, 0, fromKey);
-  store(storeView).order = ids;
-  keys.inv = "";
-  renderInventory();
-}
-
-function renderDetail() {
-  const box = el("invDetail");
-  box.innerHTML = "";
-  if (!selected || !store(storeView).items[selected]) { box.textContent = "Select an item."; return; }
-
-  const d = itemDef(selected);
-  const qty = qtyIn(storeView, selected);
-
-  const head = document.createElement("div");
-  head.className = "detail-head";
-  head.innerHTML = icon(d.icon, "tint-" + (d.tier || 1));
-  const nm = document.createElement("span");
-  nm.className = "dname" + (d.rarity ? " rar-" + d.rarity : "");
-  nm.textContent = itemName(selected);
-  head.appendChild(nm);
-  const sub = document.createElement("span");
-  sub.className = "muted tiny";
-  sub.textContent = `\u00D7${fmt(qty)} \u00B7 ${fmt(d.value)}g each`;
-  head.appendChild(sub);
-  box.appendChild(head);
-
-  const bits = [];
-  if (d.attack) bits.push(`+${d.attack} attack`);
-  if (d.defence) bits.push(`+${d.defence} defence`);
-  if (d.health) bits.push(`+${d.health} max hp`);
-  if (d.heal) bits.push(`restores ${d.heal}`);
-  if (d.twoHanded) bits.push("two-handed");
-  if (d.maxDur) bits.push(`${fmt(d.maxDur)} durability`);
-  if (d.chest) bits.push(`+${d.chest} vault slots`);
-  if (bits.length) {
-    const st = document.createElement("div");
-    st.className = "muted tiny";
-    st.textContent = bits.join(" \u00B7 ");
-    box.appendChild(st);
-  }
-
-  const row = document.createElement("div");
-  row.className = "btnrow";
-  const add = (label, fn, cls) => {
-    const b = document.createElement("button");
-    b.className = "btn" + (cls ? " " + cls : "");
-    b.textContent = label;
-    b.onclick = fn;
-    row.appendChild(b);
-  };
-  if (d.slot) add(`Equip (${SLOT_LABELS[d.slot]})`, () => equip(selected));
-  if (d.chest) add("Open chest", () => useChest(selected));
-  add(storeView === "inv" ? "To vault" : "To pack", () => transfer(selected, false));
-  add(storeView === "inv" ? "All to vault" : "All to pack", () => transfer(selected, true), "btn-quiet");
-  const sv = salvageValue(selected);
-  if (sv) add(`Break down (${sv.qty}\u00D7 ${itemName(sv.mat).toLowerCase()})`, () => salvage(selected), "btn-quiet");
-  add(`Sell 1 (${fmt(d.value)}g)`, () => sell(selected, false));
-  add(`Sell all (${fmt(d.value * qty)}g)`, () => sell(selected, true), "btn-quiet");
-  box.appendChild(row);
-}
-
-function renderEquip() {
-  const box = el("equipList");
-  box.innerHTML = "";
-  EQUIP_SLOTS.forEach((slot) => {
-    const key = state.equipment[slot];
-    const row = document.createElement("div");
-    row.className = "equip-row";
-
-    const label = document.createElement("span");
-    label.className = "equip-slot";
-    label.textContent = SLOT_LABELS[slot];
-    row.appendChild(label);
-
-    const name = document.createElement("span");
-    name.className = "equip-name";
-    if (key) {
-      const d = itemDef(key);
-      name.textContent = itemName(key);
-      if (d.rarity && d.rarity !== "common") name.classList.add("rar-" + d.rarity);
-    } else { name.textContent = "Empty"; name.classList.add("muted"); }
-    row.appendChild(name);
-
-    if (key) {
-      const pct = wearPct(key);
-      if (pct !== null) {
-        const w = document.createElement("span");
-        w.className = "equip-wear " + (pct > 60 ? "fine" : pct > 25 ? "worn" : "bad");
-        w.textContent = pct + "%";
-        row.appendChild(w);
-        const cost = repairCost(key);
-        if (cost) {
-          const fix = document.createElement("button");
-          fix.className = "minibtn";
-          fix.textContent = `Fix ${cost.qty}\u00D7`;
-          fix.disabled = haveQty(cost.mat) < cost.qty;
-          fix.title = `Repair with ${cost.qty} ${itemName(cost.mat).toLowerCase()}`;
-          fix.onclick = () => repairItem(key);
-          row.appendChild(fix);
-        }
-      }
-      const off = document.createElement("button");
-      off.className = "minibtn";
-      off.textContent = "Off";
-      off.onclick = () => unequip(slot);
-      row.appendChild(off);
-    }
-    box.appendChild(row);
-  });
-}
-
-/* ---- character ---- */
-
-function renderCharacter() {
-  const key = SKILLS.map((s) => s.id + (state.skills[s.id] || 0)).join(",") + "|" +
-    EQUIP_SLOTS.map((s) => state.equipment[s]).join(",") + "|" + state.stats.kills;
-  if (keys.char === key) return;
-  keys.char = key;
-
-  el("charSub").textContent = `Total level ${totalLevel()} of ${SKILLS.length * MAX_LEVEL}`;
-
-  const box = el("statList");
-  box.innerHTML = "";
-  const rows = [
-    ["Attack", Math.round(attackPower())], ["Defence", Math.round(defencePower())],
-    ["Max health", maxHp()], ["Warfare level", skillLevel("warfare")],
-    ["sep"],
-    ["Kills", fmt(state.stats.kills)], ["Actions worked", fmt(state.stats.actions)],
-    ["Items crafted", fmt(state.stats.crafted)], ["Epic rolls", fmt(state.stats.epics)],
-    ["Deaths", fmt(state.stats.deaths)], ["Gold earned", fmt(state.stats.goldEarned)],
-    ["Time played", fmtTime(state.meta.playtimeMs)],
-  ];
-  rows.forEach((r) => {
-    const d = document.createElement("div");
-    d.className = "statrow" + (r[0] === "sep" ? " sep" : "");
-    if (r[0] === "sep") { box.appendChild(d); return; }
-    d.innerHTML = "<span></span><span></span>";
-    d.children[0].textContent = r[0];
-    d.children[1].textContent = r[1];
-    box.appendChild(d);
-  });
-
-  const table = el("skillTable");
-  table.innerHTML = "";
-  SKILLS.forEach((s) => {
-    const lvl = skillLevel(s.id);
-    const xp = state.skills[s.id] || 0;
-    const base = XP_TABLE[lvl], next = XP_TABLE[Math.min(lvl + 1, MAX_LEVEL)];
-    const row = document.createElement("div");
-    row.className = "skillrow";
-    row.innerHTML = `<span>${icon(s.icon, "ico-sm")}</span><span></span><span class="sr-lvl"></span>` +
-      '<span class="bar"><div></div></span><span class="sr-xp"></span>';
-    row.children[1].textContent = s.name;
-    row.children[2].textContent = "Lv. " + lvl;
-    row.children[3].firstChild.style.width =
-      clamp(lvl >= MAX_LEVEL ? 100 : ((xp - base) / (next - base)) * 100, 0, 100) + "%";
-    row.children[4].textContent = lvl >= MAX_LEVEL ? "max" : `${fmt(xp)} / ${fmt(next)}`;
-    table.appendChild(row);
-  });
-}
-
-/* ---- kennel ---- */
-
 function renderKennel() {
-  const key = JSON.stringify(state.pets) + state.player.gold;
-  if (keys.kennel === key) return;
-  keys.kennel = key;
+  const sig = JSON.stringify(state.pets) + state.player.gold;
+  if (keys.kennel === sig) return;
+  keys.kennel = sig;
 
   const box = el("petList");
   box.innerHTML = "";
   PETS.forEach((pet) => {
     const owned = state.pets[pet.id];
     const card = document.createElement("div");
-    card.className = "card flat" + (owned ? " on" : "");
-
-    const top = document.createElement("div");
-    top.className = "card-top";
-    top.innerHTML = icon(pet.icon, "ico-lg") + '<span class="card-name"></span>';
-    top.querySelector(".card-name").textContent = pet.name;
-    card.appendChild(top);
-
-    const meta = document.createElement("div");
-    meta.className = "card-meta";
-    meta.textContent = pet.note;
-    card.appendChild(meta);
+    card.className = "pet-card" + (owned ? " owned" : "");
+    card.innerHTML =
+      `<div class="pet-art">${icon(pet.icon, "ico-xl")}</div>` +
+      '<div class="pet-body"><div class="pet-name"></div><div class="pet-note"></div>' +
+      '<div class="pet-effect"></div></div>';
+    card.querySelector(".pet-name").textContent = pet.name;
+    card.querySelector(".pet-note").textContent = pet.note;
+    card.querySelector(".pet-effect").textContent = pet.effect;
 
     const b = document.createElement("button");
-    b.className = "btn btn-gold";
-    b.style.marginTop = "9px";
-    b.textContent = owned ? "In the kennel" : `Buy (${fmt(pet.cost)}g)`;
+    b.className = "btn " + (owned ? "btn-quiet" : "btn-gold");
+    b.textContent = owned ? "In the kennel" : `Buy · ${fmt(pet.cost)}g`;
     b.disabled = owned || state.player.gold < pet.cost;
     b.onclick = () => buyPet(pet.id);
     card.appendChild(b);
     box.appendChild(card);
   });
+
+  el("kennelNote").textContent = Object.values(state.pets).some(Boolean)
+    ? "Bound to the camp permanently. They work whether you're here or not."
+    : "Nothing bound yet. Gold buys hands that never tire.";
 }
 
 function renderLog() {
-  const key = state.log.length + "|" + (state.log[state.log.length - 1] || "");
-  if (keys.log === key) return;
-  keys.log = key;
+  const sig = state.log.length + "|" + (state.log.length ? state.log[state.log.length - 1].m : "");
+  if (keys.log === sig) return;
+  keys.log = sig;
   const box = el("eventLog");
   box.innerHTML = "";
-  state.log.slice(-10).forEach((line) => {
+  state.log.slice(-8).forEach((e) => {
     const d = document.createElement("div");
-    d.textContent = line;
+    d.className = "log-item";
+    d.innerHTML = '<span class="t"></span><span></span>';
+    const ago = Date.now() - e.t;
+    d.children[0].textContent = ago < 4000 ? "now" : fmtTime(ago);
+    d.children[1].textContent = e.m;
     box.appendChild(d);
   });
 }
 
-/* ================= 23. WIRING ================= */
+/* ================= 27. WIRING ================= */
 
-el("brandMark").innerHTML = icon("moon");
+el("brandMark").innerHTML = icon("moon", "ico-sm");
 el("coinIcon").innerHTML = icon("coin", "ico-sm");
-el("icoAtlas").innerHTML = icon("atlas", "ico-sm");
-el("icoShop").innerHTML = icon("shop", "ico-sm");
-el("icoBounty").innerHTML = icon("scroll", "ico-sm");
-el("icoInv").innerHTML = icon("pack", "ico-sm");
-el("icoChar").innerHTML = icon("person", "ico-sm");
-el("icoKennel").innerHTML = icon("paw", "ico-sm");
 
-document.querySelectorAll(".itab, .tabbtn").forEach((b) => { b.onclick = () => { tab = b.dataset.tab; render(); }; });
-document.querySelectorAll(".stab").forEach((b) => {
-  b.onclick = () => {
-    storeView = b.dataset.store;
-    selected = null;
-    document.querySelectorAll(".stab").forEach((x) => x.classList.toggle("on", x.dataset.store === storeView));
-    keys.inv = "";
-    renderInventory();
-  };
+document.querySelectorAll(".icon-btn").forEach((b) => { b.onclick = () => go(b.dataset.page); });
+document.querySelectorAll(".tab-btn").forEach((b) => {
+  b.onclick = () => { invTab = b.dataset.tab; selected = null; keys.inv = ""; keys.doll = ""; renderInventory(); };
 });
 
-el("tbSkillClear").onclick = () => {
+el("tbTradesClear").onclick = () => {
   const t = state.tasks.skilling;
   if (!t) return;
   t.queued = t.queued === "stop" ? null : "stop";
-  say(t.queued ? "Will stop once this action finishes." : "Stop cancelled.");
+  say(t.queued ? "Crews will stand down once this action finishes." : "Stand-down cancelled.");
   render();
 };
-el("tbCombatClear").onclick = () => {
+el("tbFieldClear").onclick = () => {
   const t = state.tasks.combat;
   if (!t) return;
   t.queued = t.queued === "stop" ? null : "stop";
-  say(t.queued ? "Will stop once this fight finishes." : "Stop cancelled.");
+  say(t.queued ? "Pulling back once this fight finishes." : "Pull-back cancelled.");
   render();
 };
 
@@ -2089,17 +2529,14 @@ function refreshAccountUi() {
   const a = state.meta.account;
   const cloud = !!sb;
   el("acctStatus").textContent = a
-    ? `Signed in as ${a}${cloud ? " (cloud)" : " (this browser only)"}. Autosaving.`
-    : cloud
-      ? "Playing as a guest. Create an account to play from any device."
-      : "Playing as a guest, this browser only. Paste a Supabase anon key into index.html to enable cloud accounts.";
+    ? `Signed in as ${a}${cloud ? " — syncing to the cloud" : " — this browser only"}.`
+    : cloud ? "Playing as a guest. Make an account to play from any device."
+            : "Playing as a guest, this browser only.";
   el("acctFields").hidden = !!a;
   el("acctCreate").hidden = !!a;
   el("acctLogin").hidden = !!a;
   el("acctLogout").hidden = !a;
-  el("acctNote").textContent = cloud
-    ? "Accounts sync through Supabase — sign in from any device to keep playing the same character."
-    : "Local-only mode. Move between devices with the save string below until cloud accounts are set up.";
+  el("nameField").value = state.meta.name || "Commander";
 }
 
 el("acctCreate").onclick = async () => {
@@ -2107,7 +2544,7 @@ el("acctCreate").onclick = async () => {
   el("acctNote").textContent = "Working...";
   const err = await createAccount(el("acctUser").value, el("acctPass").value);
   el("acctCreate").disabled = false;
-  el("acctNote").textContent = err || `Account made. Signed in as ${state.meta.account}.`;
+  el("acctNote").textContent = err || `Signed in as ${state.meta.account}.`;
   if (!err) { el("acctPass").value = ""; refreshAccountUi(); render(); }
 };
 el("acctLogin").onclick = async () => {
@@ -2120,6 +2557,11 @@ el("acctLogin").onclick = async () => {
 };
 el("acctLogout").onclick = async () => { await logoutAccount(); refreshAccountUi(); };
 
+el("nameSave").onclick = () => {
+  const v = (el("nameField").value || "").trim().slice(0, 18);
+  if (v) { state.meta.name = v; save(); toast("Name set"); render(); }
+};
+
 el("shareCopy").onclick = () => {
   const box = el("shareBox");
   box.select();
@@ -2129,20 +2571,22 @@ el("shareLoad").onclick = () => {
   if (!confirm("Loading a save replaces your current character. Continue?")) return;
   toast(importSave(el("shareBox").value) || "Save loaded");
 };
-el("saveBtn").onclick = () => { if (save()) el("saveNote").textContent = "Saved at " + new Date().toLocaleTimeString() + "."; };
+el("saveBtn").onclick = () => { if (save()) toast("Saved"); };
 el("wipeBtn").onclick = () => {
   if (!confirm("Delete this save permanently?")) return;
   try { localStorage.removeItem(saveKey()); } catch (e) {}
   location.reload();
 };
 
-/* ================= 24. BOOT + LOOP ================= */
+/* ================= 28. BOOT + LOOP ================= */
 
 const away = bootLoad();
 if (away) catchUp(away);
 refreshBounty();
-if (state.log.length === 0) say("You put your pack down on dead ground and start clearing a place to work.");
-
+if (state.log.length === 0) {
+  say("You take command of a ruin. There are people here who will work if you tell them what to do.");
+}
+route = parseHash();
 render();
 resumeCloudSession();
 
@@ -2154,15 +2598,16 @@ function loop() {
   lastTick = now;
   if (dt > 0) { tick(Math.min(dt, 60000)); state.meta.playtimeMs += Math.min(dt, 60000); }
 
-  renderTaskbar();
-  renderWorldStrip();
-  if (tab === "skill") { updateSkillCards(); updateMonsterCards(); }
-  if (tab === "inventory") renderInventory();
-  renderNav();
+  renderTopbar();
+  if (route.page === "skill") updateLive();
+  if (route.page === "character") renderCharacter();
+  if (route.page === "inventory") renderInventory();
+  renderSidebar();
   renderLog();
 }
 
 setInterval(loop, 60);
+setInterval(() => { if (route.page === "skill") renderYieldFeed(); }, 2000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) { lastTick = Date.now(); render(); } });
 setInterval(save, 10000);
 window.addEventListener("beforeunload", save);
