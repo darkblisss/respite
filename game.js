@@ -1360,19 +1360,23 @@ function saveKey() { return state.meta.account ? `${SAVE_PREFIX}_${state.meta.ac
 
 function save() {
   state.meta.lastSeen = Date.now();
-  let ok = true;
-  try { localStorage.setItem(saveKey(), JSON.stringify(state)); }
-  catch (e) { const n = el("saveNote"); if (n) n.textContent = "Local storage is blocked here."; ok = false; }
-
-  // Cloud write is fire-and-forget — the local write above already
-  // protects this session; this just carries it to other devices.
+  
+  // Only save to Supabase server, bypassing local storage completely
   if (sb && state.meta.userId) {
     sb.from("saves")
       .update({ data: state, updated_at: new Date().toISOString() })
       .eq("user_id", state.meta.userId)
-      .then(({ error }) => { if (error) console.error("Cloud save failed:", error.message); });
+      .then(({ error }) => { 
+        if (error) {
+          console.error("Cloud save failed:", error.message);
+          toast("Cloud save failed");
+        } else {
+          toast("Saved to server");
+        }
+      });
+  } else {
+    console.warn("Not logged into Supabase — save skipped.");
   }
-  return ok;
 }
 
 async function createAccount(user, pass) {
