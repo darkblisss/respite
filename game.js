@@ -1128,6 +1128,10 @@ function combatPlan() {
     food, foodNeed, foodHave: food ? haveQty(food) : 0 };
 }
 
+function seedFrom(s) {
+  const x = Math.sin(s) * 10000;
+  return x - Math.floor(x);
+}
 /* ================= 20. BOUNTY ================= */
 
 function currentWindow() { return Math.floor(Date.now() / WINDOW_MS); }
