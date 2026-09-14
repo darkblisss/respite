@@ -1167,9 +1167,13 @@ function refreshBounty() {
 function bountyProgress(kind, thing) {
   const b = state.bounty;
   if (!b || b.claimed || b.kind !== kind) return;
-  if (kind === "slay" && thing.tier === b.targetTier) b.progress++;
+  
+  const wasDone = b.progress >= b.amount;
+  
+  if (kind === "slay" && thing.id === b.targetId) b.progress++;
   if (kind === "gather" && thing.out && thing.out[b.targetId]) b.progress += thing.out[b.targetId];
-  if (b.progress >= b.amount && !b.claimed) toast("Bounty complete — claim it on the board");
+  
+  if (!wasDone && b.progress >= b.amount) toast("Bounty complete — claim it on the board");
 }
 
 function claimBounty() {
