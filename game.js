@@ -1499,26 +1499,7 @@ function migrate(loaded) {
 // session already exists (cookie/localStorage token from supabase-js),
 // resumeCloudSession() below takes over a moment later and reconciles.
 function bootLoad() {
-  const accts = readAccounts();
-  let newest = null;
-  Object.keys(accts).forEach((u) => {
-    const raw = localStorage.getItem(`${SAVE_PREFIX}_${u}`);
-    if (!raw) return;
-    try { const p = JSON.parse(raw); const ls = (p.meta && p.meta.lastSeen) || 0;
-      if (!newest || ls > newest.ls) newest = { user: u, ls }; } catch (e) {}
-  });
-  const key = newest ? `${SAVE_PREFIX}_${newest.user}` : `${SAVE_PREFIX}_guest`;
-
-  let raw = null;
-  try { raw = localStorage.getItem(key); } catch (e) { raw = null; }
-  if (!raw) return null;
-  let parsed;
-  try { parsed = JSON.parse(raw); } catch (e) { return null; }
-  const last = (parsed.meta && parsed.meta.lastSeen) || Date.now();
-  state = migrate(parsed);
-  const gone = Date.now() - last;
-  if (gone <= 30000) return null;
-  return { ms: Math.min(gone, IDLE_CAP_MS), overCap: gone > IDLE_CAP_MS };
+  return null; // Forces the game to rely on resumeCloudSession() from Supabase
 }
 
 // Picks up an existing Supabase session on page refresh, so a signed-in
