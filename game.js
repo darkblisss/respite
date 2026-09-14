@@ -2873,7 +2873,7 @@ function renderLog() {
 
 /* ================= 27. WIRING ================= */
 
-el("brandMark").innerHTML = `<img class="mark-img" src="assets/respite-logo.jpg" alt="Respite">`;
+el("brandMark").innerHTML = `<img class="mark-img" src="assets/respite-logo.webp" alt="Respite">`;
 el("coinIcon").innerHTML = icon("coin", "ico-sm");
 
 document.querySelectorAll(".icon-btn").forEach((b) => { b.onclick = () => go(b.dataset.page); });
