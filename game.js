@@ -17,17 +17,21 @@ const DAY_MS = 24 * 60 * 60 * 1000;         // weather window
 const MAX_LEVEL = 99;
 const PLAYER_SWING_MS = 2400;
 const RESPAWN_MS = 2000;
-const PACK_SLOTS = 28;
-const VAULT_START = 40;
-const VAULT_MAX = 200;
+const PACK_SLOTS = 18;
+const STORES_SLOTS = 30;   // camp stores
+const BANK_SLOTS = 50;     // shared bank, reachable from either page
+const BANK_MAX = 200;
 const RECOVERY_MS = 5 * 60 * 1000;   // knocked out of the fight after a death
 const DEATH_WEAR = 25;               // extra durability every worn piece loses on death
 
-const EQUIP_SLOTS = ["weapon", "offhand", "head", "chest", "legs", "boots", "gloves", "ring", "amulet"];
+const EQUIP_SLOTS = ["weapon", "offhand", "head", "chest", "hands", "feet", "neck", "ring"];
 const SLOT_LABELS = {
-  weapon: "Weapon", offhand: "Offhand", head: "Head", chest: "Chest", legs: "Legs",
-  boots: "Boots", gloves: "Gloves", ring: "Ring", amulet: "Amulet",
+  weapon: "Weapon", offhand: "Offhand", head: "Head", chest: "Chest",
+  hands: "Hands", feet: "Feet", neck: "Neck", ring: "Ring",
 };
+
+// Row 1 / Row 2 of the 4x2 paperdoll. A two-hander makes Weapon span both.
+const DOLL_ORDER = ["weapon", "head", "chest", "hands", "offhand", "feet", "neck", "ring"];
 
 const RARITIES = [
   { key: "common",   name: "Common",   mult: 1.00, chance: 0.80 },
@@ -138,16 +142,23 @@ function levelFromXp(xp) {
 /* ================= 4. TIERS ================= */
 /* Action times and XP taken straight from your per-item table. */
 
+const STRATA = [
+  { key: "scavenged", name: "Scavenged", tiers: [1, 2, 3] },
+  { key: "barrow",    name: "Barrow",    tiers: [4, 5, 6] },
+  { key: "sovereign", name: "Sovereign", tiers: [7, 8, 9] },
+];
+const stratumOf = (tier) => STRATA.find((s) => s.tiers.includes(tier)) || STRATA[0];
+
 const TIERS = [
-  { i: 1, level: 1,  time: 12000, xp: 1,  fell: "Bitter Ash",  delve: "Slag Stone", harvest: "Bitterweed",     flay: "Mangy Pelt",     dredge: "Mud Pearl" },
-  { i: 2, level: 10, time: 20000, xp: 3,  fell: "Blood Oak",   delve: "Bog Iron",   harvest: "Grave Moss",     flay: "Bristle Hide",   dredge: "River Amber" },
-  { i: 3, level: 20, time: 29000, xp: 6,  fell: "Ironbark",    delve: "Cold Iron",  harvest: "Blood Lotus",    flay: "Dire Pelt",      dredge: "Cave Agate" },
-  { i: 4, level: 30, time: 38000, xp: 10, fell: "Grave Pine",  delve: "Black Steel",harvest: "Corpse Bloom",   flay: "Cave Leather",   dredge: "Blood Pearl" },
-  { i: 5, level: 40, time: 48000, xp: 15, fell: "Sallow Wood", delve: "Blood Steel",harvest: "Widowsbane",     flay: "Bog Scale",      dredge: "Ghost Opal" },
-  { i: 6, level: 50, time: 58000, xp: 22, fell: "Umber Oak",   delve: "Star Iron",  harvest: "Dragon Tongue",  flay: "Troll Skin",     dredge: "Sun Ruby" },
-  { i: 7, level: 60, time: 69000, xp: 30, fell: "Wyrmwood",    delve: "Drake Stone",harvest: "Moon Mandrake",  flay: "Drake Scale",    dredge: "Abyssal Coral" },
-  { i: 8, level: 70, time: 80000, xp: 39, fell: "Void Root",   delve: "Deep Slate", harvest: "Fade Weed",      flay: "Manticore Pelt", dredge: "Leviathan Bone" },
-  { i: 9, level: 80, time: 92000, xp: 49, fell: "Blood Knot",  delve: "Titan Core", harvest: "God Bane",       flay: "Demon Hide",     dredge: "Void Sapphire" },
+  { i: 1, level: 1,  time: 12000, xp: 1,  fell: "Bitter Brush",    delve: "Slag Ore",       harvest: "Stink Weed",     flay: "Mangy Pelt",         dredge: "Mud Pebble" },
+  { i: 2, level: 10, time: 20000, xp: 3,  fell: "Blood Ash",       delve: "Bog Ore",        harvest: "Grave Moss",     flay: "Bristle Pelt",       dredge: "River Amber" },
+  { i: 3, level: 20, time: 29000, xp: 6,  fell: "Iron Bark",       delve: "Cold Ore",       harvest: "Pale Rush",      flay: "Dire Pelt",          dredge: "Cave Agate" },
+  { i: 4, level: 30, time: 38000, xp: 10, fell: "Barrow Pine",     delve: "Cairn Steel",    harvest: "Corpse Bloom",   flay: "Cured Hide",         dredge: "Mourning Quartz" },
+  { i: 5, level: 40, time: 48000, xp: 15, fell: "Sallow Timber",   delve: "Crucible Steel", harvest: "Widows Bloom",   flay: "Scaled Hide",        dredge: "Ghost Opal" },
+  { i: 6, level: 50, time: 58000, xp: 22, fell: "Umber Heartwood", delve: "Star Steel",     harvest: "Dragon Bloom",   flay: "Chitin Hide",        dredge: "Blood Ruby" },
+  { i: 7, level: 60, time: 69000, xp: 30, fell: "Wyrm Root",       delve: "Wyrm Core",      harvest: "Moon Frond",     flay: "Drake Carapace",     dredge: "Abyssal Coral" },
+  { i: 8, level: 70, time: 80000, xp: 39, fell: "Void Root",       delve: "Void Core",      harvest: "Fade Frond",     flay: "Leviathan Carapace", dredge: "Leviathan Bone" },
+  { i: 9, level: 80, time: 92000, xp: 49, fell: "Godsdown Knot",   delve: "Titan Core",     harvest: "Godsbane Frond", flay: "Demon Carapace",     dredge: "Void Sapphire" },
 ];
 
 const slug = (s) => s.toLowerCase().replace(/[^a-z]/g, "");
@@ -170,37 +181,40 @@ const GATHER_SKILLS = [
 /* ================= 6. PROFESSIONS ================= */
 
 const PROFESSIONS = [
-  { id: "forgemaster", name: "Forgemaster", icon: "plate", from: "delving", mat: "delve",
-    note: "Ore into weapons, harness and greaves. The heaviest protection in the camp.",
+  { id: "forgemaster", name: "Forgemaster", icon: "plate", from: "delving", mat: "delve", weight: "Heavy",
+    note: "Heavy plate and steel from Delving. Slow, unglamorous, and the only thing that holds a line.",
     pieces: [
-      { key: "blade",      label: "blade",      slot: "weapon", icon: "blade",      atk: 1.0, def: 0.15, qty: 3, off: 0 },
-      { key: "greatblade", label: "greatblade", slot: "weapon", icon: "greatblade", atk: 1.75, def: 0,   qty: 5, off: 6, twoHanded: true },
-      { key: "harness",    label: "harness",    slot: "chest",  icon: "plate",      atk: 0,   def: 1.0,  qty: 4, off: 4 },
-      { key: "greaves",    label: "greaves",    slot: "legs",   icon: "greaves",    atk: 0,   def: 0.8,  qty: 3, off: 2 },
+      { key: "blade",      label: "Blade",      slot: "weapon",  icon: "blade",      atk: 1.0,  def: 0.15, qty: 3, off: 0 },
+      { key: "greatblade", label: "Greatblade", slot: "weapon",  icon: "greatblade", atk: 1.75, def: 0,    qty: 5, off: 6, twoHanded: true },
+      { key: "coif",       label: "Coif",       slot: "head",    icon: "cowl",       atk: 0,    def: 0.55, qty: 2, off: 2 },
+      { key: "harness",    label: "Harness",    slot: "chest",   icon: "plate",      atk: 0,    def: 1.0,  qty: 4, off: 4 },
+      { key: "greaves",    label: "Greaves",    slot: "feet",    icon: "greaves",    atk: 0,    def: 0.7,  qty: 3, off: 3 },
     ] },
-  { id: "woodwright", name: "Woodwright", icon: "ward", from: "felling", mat: "fell",
-    note: "Timber into wards, staves and the chests that line your vault.",
+  { id: "woodwright", name: "Woodwright", icon: "ward", from: "felling", mat: "fell", weight: "Heavy",
+    note: "Wards and focus staves from Felling. Also the banded chests that widen your stores.",
     pieces: [
-      { key: "ward",  label: "ward",  slot: "offhand", icon: "ward",  atk: 0,   def: 0.9, qty: 3, off: 1 },
-      { key: "stave", label: "stave", slot: "weapon",  icon: "stave", atk: 1.2, def: 0.3, qty: 4, off: 4, twoHanded: true },
+      { key: "ward",  label: "Ward",  slot: "offhand", icon: "ward",  atk: 0,   def: 0.9, qty: 3, off: 1 },
+      { key: "stave", label: "Stave", slot: "weapon",  icon: "stave", atk: 1.2, def: 0.3, qty: 4, off: 4, twoHanded: true },
     ] },
-  { id: "tanner", name: "Tanner", icon: "treads", from: "flaying", mat: "flay",
-    note: "Hide into treads and gauntlets. Quiet, supple, and it never stops wearing out.",
+  { id: "tanner", name: "Tanner", icon: "treads", from: "flaying", mat: "flay", weight: "Medium",
+    note: "Medium leather from Flaying. Gambesons, treads and grips — quick, quiet, and always wearing out.",
     pieces: [
-      { key: "treads",    label: "treads",    slot: "boots",  icon: "treads",    atk: 0,    def: 0.45, qty: 2, off: 0 },
-      { key: "gauntlets", label: "gauntlets", slot: "gloves", icon: "gauntlets", atk: 0.18, def: 0.32, qty: 2, off: 1 },
+      { key: "treads",   label: "Treads",   slot: "feet",  icon: "treads",    atk: 0,    def: 0.45, qty: 2, off: 0 },
+      { key: "grips",    label: "Grips",    slot: "hands", icon: "gauntlets", atk: 0.18, def: 0.32, qty: 2, off: 1 },
+      { key: "gambeson", label: "Gambeson", slot: "chest", icon: "shroud",    atk: 0.1,  def: 0.7,  qty: 3, off: 3 },
     ] },
-  { id: "weaver", name: "Weaver", icon: "cowl", from: "harvesting", mat: "harvest",
-    note: "Fibre into cowls and shrouds. Almost no defence, but it carries the life in it.",
+  { id: "weaver", name: "Weaver", icon: "cowl", from: "harvesting", mat: "harvest", weight: "Light",
+    note: "Light woven cloth from Harvesting. Almost no defence, but it carries the life in it.",
     pieces: [
-      { key: "cowl",   label: "cowl",   slot: "head",  icon: "cowl",   atk: 0,    def: 0.32, qty: 2, off: 0, hp: 0.7 },
-      { key: "shroud", label: "shroud", slot: "chest", icon: "shroud", atk: 0.18, def: 0.42, qty: 4, off: 3, hp: 1.1 },
+      { key: "cowl",   label: "Cowl",   slot: "head",  icon: "cowl",   atk: 0,    def: 0.3,  qty: 2, off: 0, hp: 0.8 },
+      { key: "shroud", label: "Shroud", slot: "chest", icon: "shroud", atk: 0.18, def: 0.4,  qty: 4, off: 3, hp: 1.2 },
+      { key: "wraps",  label: "Wraps",  slot: "hands", icon: "gauntlets", atk: 0.22, def: 0.15, qty: 2, off: 1, hp: 0.4 },
     ] },
-  { id: "artificer", name: "Artificer", icon: "charm", from: "dredging", mat: "dredge",
-    note: "Pearl, amber and bone into bands and charms. Small things that change the arithmetic.",
+  { id: "artificer", name: "Artificer", icon: "charm", from: "dredging", mat: "dredge", weight: "Relic",
+    note: "Bands and charms from Dredging. Small things that quietly change the arithmetic.",
     pieces: [
-      { key: "band",  label: "band",  slot: "ring",   icon: "band",  atk: 0.55, def: 0,   qty: 3, off: 2, hp: 0.4 },
-      { key: "charm", label: "charm", slot: "amulet", icon: "charm", atk: 0.22, def: 0.2, qty: 3, off: 5, hp: 1.4 },
+      { key: "band",  label: "Band",  slot: "ring", icon: "band",  atk: 0.55, def: 0,   qty: 3, off: 2, hp: 0.4 },
+      { key: "charm", label: "Charm", slot: "neck", icon: "charm", atk: 0.22, def: 0.2, qty: 3, off: 5, hp: 1.4 },
     ] },
 ];
 
@@ -221,13 +235,21 @@ TIERS.forEach((t) => {
   });
 });
 
-// Provisions are bought, not cooked — there is no cooking skill.
-const RATIONS = TIERS.filter((t) => t.i % 2 === 1).map((t) => ({
-  id: `ration_t${t.i}`,
-  name: ["Hard Tack", "Salt Pork", "Spiced Stew", "Blood Pudding", "Godsbread"][Math.floor(t.i / 2)],
-  icon: "ration", kind: "material", tier: t.i,
-  heal: Math.round(10 * Math.pow(1.95, t.i - 1)),
-  value: Math.round(8 * Math.pow(2.3, t.i - 1)),
+// Provisions are bought, not crafted — a placeholder until an Apothecary
+// or Camp Cook profession exists. bestFood() picks the strongest you hold.
+const PROVISION_SPEC = [
+  { tier: 1, name: "Bitter-Ash Salve",     heal: 25,   price: 50 },
+  { tier: 3, name: "Gravemoss Poultice",   heal: 70,   price: 150 },
+  { tier: 4, name: "Corpse-Marrow Draught",heal: 180,  price: 450 },
+  { tier: 6, name: "Star-Steel Tonic",     heal: 380,  price: 1400 },
+  { tier: 7, name: "Leviathan Blood",      heal: 800,  price: 4200, smuggler: true },
+  { tier: 9, name: "Godsbane Elixir",      heal: 1800, price: 12000, smuggler: true },
+];
+
+const RATIONS = PROVISION_SPEC.map((p) => ({
+  id: `provision_t${p.tier}`, name: p.name, icon: "ration", kind: "material",
+  tier: p.tier, heal: p.heal, value: Math.round(p.price * 0.4), price: p.price,
+  smuggler: !!p.smuggler,
 }));
 RATIONS.forEach((r) => { MATERIALS[r.id] = r; });
 
@@ -254,8 +276,16 @@ PROFESSIONS.forEach((prof) => {
   });
 });
 
-function makeKey(base, rarity) { return rarity ? `${base}|${rarity}` : base; }
-function parseKey(key) { const b = String(key).split("|"); return { base: b[0], rarity: b[1] || null }; }
+// Common gear stacks. Uncommon and above gets a unique instance id so each
+// piece occupies its own slot and carries its own wear. Tools and materials
+// have no rarity at all, so they always stack.
+function makeKey(base, rarity) {
+  if (!rarity) return base;
+  if (rarity === "common") return `${base}|common`;
+  return `${base}|${rarity}|${state.uid++}`;
+}
+function stacks(key) { const p = parseKey(key); return !p.uid; }
+function parseKey(key) { const b = String(key).split("|"); return { base: b[0], rarity: b[1] || null, uid: b[2] || null }; }
 
 function itemDef(key) {
   const { base, rarity } = parseKey(key);
@@ -284,7 +314,7 @@ function itemName(key) {
 const SKILLS = []
   .concat(GATHER_SKILLS.map((s) => ({ id: s.id, name: s.name, icon: s.icon, kind: "gather" })))
   .concat(PROFESSIONS.map((p) => ({ id: p.id, name: p.name, icon: p.icon, kind: "craft" })))
-  .concat([{ id: "warfare", name: "Warfare", icon: "swords", kind: "war" }]);
+  .concat([{ id: "warfare", name: "Combat", icon: "swords", kind: "war" }]);
 
 const skillDef = (id) => SKILLS.find((s) => s.id === id);
 const skillName = (id) => (skillDef(id) ? skillDef(id).name : id);
@@ -344,33 +374,68 @@ const REGION_NAMES = [
 // Toll scaling, anchored to your numbers: t2 = 300, t6 = 2,500, t9 = 10,000.
 const TOLLS = [0, 300, 600, 1100, 1700, 2500, 4200, 6500, 10000];
 
-const MONSTER_SPEC = [
-  ["Carrion rat", "beast"], ["Gibbet shade", "horror"], ["Warren goblin", "man"],
-  ["Cairn wight", "horror"], ["Fen troll", "beast"], ["Umber golem", "golemMob"],
-  ["Wyrmkin raider", "drakeMob"], ["Fade warden", "horror"], ["Godsdown horror", "horror"],
-];
 
 const REGIONS = TIERS.map((t, i) => ({
   id: `region_${t.i}`, tier: t.i, name: REGION_NAMES[i][0], note: REGION_NAMES[i][1],
   level: t.level, toll: TOLLS[i],
 }));
 
-const MONSTERS = TIERS.map((t, i) => {
+/* Each region fields a roster: a Grunt you'll see most of the time, an
+   Elite that hits harder, and a Sovereign that only shows up once the
+   region's Threat has built to boiling point. */
+
+const ROSTER_SPEC = [
+  { grunt: ["Carrion Rat", "beast"],       elite: ["Ash Stalker", "horror"],     boss: ["The Ashen Warden", "horror"] },
+  { grunt: ["Bog Crawler", "beast"],       elite: ["Gibbet Shade", "horror"],    boss: ["The Drowned Bailiff", "man"] },
+  { grunt: ["Warren Goblin", "man"],       elite: ["Warren Butcher", "man"],     boss: ["The Cold Matriarch", "horror"] },
+  { grunt: ["Cairn Hound", "beast"],       elite: ["Cairn Wight", "horror"],     boss: ["The Barrow King", "man"] },
+  { grunt: ["Fen Lurker", "beast"],        elite: ["Sallow Troll", "beast"],     boss: ["Mother Sallow", "horror"] },
+  { grunt: ["Umber Husk", "golemMob"],     elite: ["Star-Iron Golem", "golemMob"], boss: ["The Umber Colossus", "golemMob"] },
+  { grunt: ["Wyrmkin Raider", "drakeMob"], elite: ["Wyrmkin Warlord", "drakeMob"], boss: ["The Wyrm Beneath", "drakeMob"] },
+  { grunt: ["Fade Echo", "horror"],        elite: ["Fade Warden", "horror"],     boss: ["The Thin Man", "horror"] },
+  { grunt: ["Godsdown Spawn", "horror"],   elite: ["Godsdown Horror", "horror"], boss: ["What Feeds The Roots", "horror"] },
+];
+
+const THREAT_CAP = 100;
+
+const MONSTERS = [];
+TIERS.forEach((t, i) => {
   const s = Math.pow(2.1, t.i - 1);
-  return {
-    id: `mob_t${t.i}`, tier: t.i, name: MONSTER_SPEC[i][0], icon: MONSTER_SPEC[i][1],
-    level: t.level, hp: Math.round(16 * s), attack: Math.round(4 * s), defence: Math.round(1.6 * s),
-    speed: 3000, xp: Math.round(t.xp * 2.6), gold: [Math.round(3 * s), Math.round(8 * s)],
+  const spec = ROSTER_SPEC[i];
+  const mk = (rank, nameIcon, mul) => ({
+    id: `mob_t${t.i}_${rank}`, tier: t.i, rank,
+    name: nameIcon[0], icon: nameIcon[1],
+    level: t.level + (rank === "elite" ? 4 : rank === "boss" ? 8 : 0),
+    hp: Math.round(16 * s * mul.hp),
+    attack: Math.round(4 * s * mul.atk),
+    defence: Math.round(1.6 * s * mul.def),
+    speed: rank === "elite" ? 2600 : rank === "boss" ? 3000 : 3000,
+    xp: Math.round(t.xp * 2.6 * mul.xp),
+    gold: [Math.round(3 * s * mul.gold), Math.round(8 * s * mul.gold)],
     drops: [
-      [matId(t, "flay"), 1, 0.5],
-      [matId(t, "delve"), 1, 0.22],
-      [matId(t, "dredge"), 1, 0.14],
+      [matId(t, "flay"), rank === "boss" ? 3 : 1, 0.5],
+      [matId(t, "delve"), rank === "boss" ? 3 : 1, 0.22],
+      [matId(t, "dredge"), rank === "boss" ? 2 : 1, 0.14],
     ],
-  };
+  });
+  MONSTERS.push(mk("grunt", spec.grunt, { hp: 1, atk: 1, def: 1, xp: 1, gold: 1 }));
+  MONSTERS.push(mk("elite", spec.elite, { hp: 1.8, atk: 1.45, def: 1.3, xp: 2.4, gold: 2.2 }));
+  MONSTERS.push(mk("boss",  spec.boss,  { hp: 9, atk: 2.1, def: 1.8, xp: 14, gold: 16 }));
 });
 
+const rosterFor = (tier) => MONSTERS.filter((m) => m.tier === tier);
+const rankOf = (tier, rank) => MONSTERS.find((m) => m.tier === tier && m.rank === rank);
+function threatIn(tier) { return (state.threat && state.threat[tier]) || 0; }
+
+// 80% grunt, 20% elite — unless the region has boiled over, then the
+// Sovereign takes the field and the Threat resets when it dies.
+function rollSpawn(tier) {
+  if (threatIn(tier) >= THREAT_CAP) return rankOf(tier, "boss");
+  return rankOf(tier, Math.random() < 0.2 ? "elite" : "grunt");
+}
+
 const regionById = (id) => REGIONS.find((r) => r.id === id) || REGIONS[0];
-const monsterOfTier = (tier) => MONSTERS.find((m) => m.tier === tier);
+const monsterOfTier = (tier) => rankOf(tier, "grunt");
 const getMonster = (id) => MONSTERS.find((m) => m.id === id) || null;
 
 /* ================= 11. WEATHER (weekly rotation, world clock) ================= */
@@ -511,8 +576,11 @@ function freshState() {
     meta: { createdAt: Date.now(), lastSeen: Date.now(), playtimeMs: 0, account: null, userId: null, name: "Commander" },
     player: { gold: 0, hp: 20, recoveryUntil: 0 },
     skills,
-    inv:  { slots: PACK_SLOTS,  items: {}, order: [] },   // carried — combat loot
-    bank: { slots: VAULT_START, items: {}, order: [] },   // camp stores — trade output
+    inv:   { slots: PACK_SLOTS,   items: {}, order: [] },  // the pack you carry
+    bank:  { slots: STORES_SLOTS, items: {}, order: [] },  // camp stores — trade output
+    vault: { slots: BANK_SLOTS,   items: {}, order: [] },  // the bank — shared long-term pool
+    spoils: [],       // unclaimed battlefield loot; costs no space until claimed
+    uid: 1,           // instance counter for non-stacking gear
     equipment,
     tools: {},        // skillId -> tool item id
     wear: {},
@@ -520,6 +588,7 @@ function freshState() {
     region: "region_1",
     travel: { unlocked: ["region_1"] },
     pets: { golem: false, sprite: false, mule: false },
+    threat: {},        // regionTier -> kills toward the Sovereign
     bounty: null,
     buff: null,
     smugglerBought: {},
@@ -531,9 +600,13 @@ function freshState() {
 
 /* Routing state — reflected in the URL hash so pages are linkable. */
 let route = { page: "character", arg: null };
-let storeView = "bank";
-let invTab = "carried";
+let storeView = "inv";
+let eqTab = "pack";       // pack | bank
+let campTab = "stores";   // stores | bank
+let gridFilter = "all";
+let gridSort = "custom";
 let selected = null;
+let navOpen = { vanguard: true, camp: false, trades: true, workshops: false, field: false };
 
 /* ================= 16. HELPERS ================= */
 
@@ -585,11 +658,15 @@ function logYield(text) {
 
 /* ---- storage ---- */
 
-function store(w) { return w === "bank" ? state.bank : state.inv; }
+function store(w) { return w === "vault" ? state.vault : w === "bank" ? state.bank : state.inv; }
 function packSlots() { return PACK_SLOTS + (state.pets.mule ? 8 : 0); }
-function slotCap(w) { return w === "bank" ? state.bank.slots : packSlots(); }
+function slotCap(w) {
+  if (w === "vault") return state.vault.slots;
+  if (w === "bank") return state.bank.slots;
+  return packSlots();
+}
 function qtyIn(w, k) { return store(w).items[k] || 0; }
-function haveQty(k) { return qtyIn("inv", k) + qtyIn("bank", k); }
+function haveQty(k) { return qtyIn("inv", k) + qtyIn("bank", k) + qtyIn("vault", k); }
 function slotsUsed(w) { return Object.keys(store(w).items).length; }
 function storeFull(w) { return slotsUsed(w) >= slotCap(w); }
 
@@ -613,15 +690,18 @@ function removeFrom(w, key, qty) {
 }
 
 // Trade output goes to camp stores; if those are full it spills into the pack.
+// Trade output lands in camp stores, spilling to the bank then the pack.
 function deposit(key, qty) {
-  return addTo("bank", key, qty) || addTo("inv", key, qty);
+  return addTo("bank", key, qty) || addTo("vault", key, qty) || addTo("inv", key, qty);
 }
 
 function spend(key, qty) {
-  const fromBank = Math.min(qty, qtyIn("bank", key));
-  if (fromBank) removeFrom("bank", key, fromBank);
-  const rest = qty - fromBank;
-  if (rest > 0) removeFrom("inv", key, rest);
+  let left = qty;
+  ["bank", "vault", "inv"].forEach((w) => {
+    if (left <= 0) return;
+    const take = Math.min(left, qtyIn(w, key));
+    if (take) { removeFrom(w, key, take); left -= take; }
+  });
 }
 
 function canAfford(cost) { return !cost || Object.keys(cost).every((k) => haveQty(k) >= cost[k]); }
@@ -763,7 +843,7 @@ function produce(def) {
 
 function bestFood() {
   let pick = null, best = 0;
-  ["inv", "bank"].forEach((w) => {
+  ["inv", "bank", "vault"].forEach((w) => {
     Object.keys(store(w).items).forEach((k) => {
       const d = itemDef(k);
       if (d && d.heal && d.heal > best) { best = d.heal; pick = k; }
@@ -782,7 +862,11 @@ function combatTick(dt) {
     if (c.respawn <= 0) {
       if (c.queued === "stop") { state.tasks.combat = null; say("Vanguard pulled back."); return; }
       if (c.queued) { state.tasks.combat = newCombatTask(c.queued); return; }
-      c.mobHp = mob.hp; c.mobMax = mob.hp; c.mobTimer = mob.speed; c.playerTimer = PLAYER_SWING_MS;
+      const next = rollSpawn(c.tier);
+      c.monsterId = next.id;
+      c.mobHp = next.hp; c.mobMax = next.hp; c.mobTimer = next.speed; c.playerTimer = PLAYER_SWING_MS;
+      if (next.rank === "boss") { say(`${next.name} comes up out of the dark.`); toast(`Sovereign: ${next.name}`); }
+      else if (next.rank === "elite") say(`An elite — ${next.name.toLowerCase()} — takes the field.`);
     }
     return;
   }
@@ -830,6 +914,54 @@ function die(mob) {
   toast("You fell. Recovering for five minutes.");
 }
 
+/* Loot from the field goes to an unclaimed spoils table. It costs no pack
+   space until you decide to take it, so a full pack never loses you a drop. */
+const SPOILS_CAP = 40;
+
+function addSpoil(key, qty) {
+  const existing = stacks(key) ? state.spoils.find((s) => s.key === key) : null;
+  if (existing) { existing.qty += qty; existing.t = Date.now(); }
+  else {
+    state.spoils.push({ key, qty, t: Date.now() });
+    if (state.spoils.length > SPOILS_CAP) state.spoils.shift();
+  }
+  logYield(`+${qty} ${itemName(key)} (spoils)`);
+}
+
+function claimSpoil(index) {
+  const s = state.spoils[index];
+  if (!s) return;
+  const target = state.pets.sprite ? "bank" : "inv";
+  if (!addTo(target, s.key, s.qty) && !addTo("inv", s.key, s.qty) && !addTo("vault", s.key, s.qty)) {
+    say("Nowhere to put it — clear some space first.");
+    render();
+    return;
+  }
+  state.spoils.splice(index, 1);
+  render();
+}
+
+function claimAllSpoils() {
+  let stuck = 0;
+  for (let i = state.spoils.length - 1; i >= 0; i--) {
+    const s = state.spoils[i];
+    const target = state.pets.sprite ? "bank" : "inv";
+    if (addTo(target, s.key, s.qty) || addTo("inv", s.key, s.qty) || addTo("vault", s.key, s.qty)) {
+      state.spoils.splice(i, 1);
+    } else stuck++;
+  }
+  if (stuck) { say(`${stuck} lot${stuck > 1 ? "s" : ""} left on the field — no room.`); toast("Not everything fit"); }
+  render();
+}
+
+function sellSpoil(index) {
+  const s = state.spoils[index];
+  if (!s) return;
+  addGold(itemDef(s.key).value * s.qty);
+  state.spoils.splice(index, 1);
+  render();
+}
+
 function killMob(mob) {
   const c = state.tasks.combat;
   grantXp("warfare", mob.xp);
@@ -840,14 +972,36 @@ function killMob(mob) {
 
   mob.drops.forEach(([k, qty, chance]) => {
     if (Math.random() >= chance) return;
-    // Loot you carry yourself; the sprite runs the overflow back to camp.
-    if (addTo("inv", k, qty)) logYield(`+${qty} ${itemName(k)}`);
-    else if (state.pets.sprite && addTo("bank", k, qty)) logYield(`+${qty} ${itemName(k)} → stores`);
-    else say(`No room for ${itemName(k)}.`);
+    addSpoil(k, qty);
   });
+
+  if (mob.rank === "boss") {
+    state.threat[mob.tier] = 0;
+    state.stats.bosses = (state.stats.bosses || 0) + 1;
+    const spoils = dropSovereignSpoils(mob.tier);
+    say(`${mob.name} is down. The region quiets — for now.`);
+    toast(`Sovereign felled · ${spoils}`);
+  } else {
+    state.threat[mob.tier] = Math.min(THREAT_CAP, threatIn(mob.tier) + 1);
+    if (threatIn(mob.tier) === THREAT_CAP) {
+      say("Something bigger has noticed you. It will be waiting.");
+      toast("Threat at boiling point — a Sovereign stirs");
+    }
+  }
 
   applyWear();
   c.respawn = RESPAWN_MS;
+}
+
+// A Sovereign always leaves one Epic-rarity piece behind, rolled from
+// whichever profession works this tier.
+function dropSovereignSpoils(tier) {
+  const pool = Object.values(GEAR).filter((g) => g.tier === tier);
+  const pick = pool[randInt(0, pool.length - 1)];
+  const key = makeKey(pick.id, "epic");
+  addSpoil(key, 1);
+  state.stats.epics++;
+  return itemName(key);
 }
 
 function applyWear() {
@@ -908,10 +1062,11 @@ function newSkillTask(skillId, actionId) {
   return { skillId, actionId, progress: 0, done: 0, startedAt: Date.now(), queued: null };
 }
 
-function newCombatTask(monsterId) {
-  const mob = getMonster(monsterId);
-  return { monsterId, mobHp: mob.hp, mobMax: mob.hp, playerTimer: PLAYER_SWING_MS,
-    mobTimer: mob.speed, respawn: 0, done: 0, startedAt: Date.now(), queued: null };
+function newCombatTask(tier) {
+  const mob = rollSpawn(tier);
+  return { tier, monsterId: mob.id, mobHp: mob.hp, mobMax: mob.hp,
+    playerTimer: PLAYER_SWING_MS, mobTimer: mob.speed,
+    respawn: 0, done: 0, startedAt: Date.now(), queued: null };
 }
 
 function selectSkillAction(skillId, actionId) {
@@ -928,12 +1083,12 @@ function selectSkillAction(skillId, actionId) {
   render();
 }
 
-function selectMonster(monsterId) {
-  if (recovering()) { say("You're still recovering. Give it a few minutes."); render(); return; }
+function engageRegion(tier) {
+  if (recovering()) { say("You're still being patched up. Give it a few minutes."); render(); return; }
   const t = state.tasks.combat;
-  if (!t) { state.tasks.combat = newCombatTask(monsterId); state.player.hp = maxHp(); render(); return; }
-  if (t.monsterId === monsterId) t.queued = t.queued === "stop" ? null : "stop";
-  else { t.queued = monsterId; say("New quarry queued — this fight finishes first."); }
+  if (!t) { state.tasks.combat = newCombatTask(tier); state.player.hp = maxHp(); render(); return; }
+  if (t.tier === tier) t.queued = t.queued === "stop" ? null : "stop";
+  else { t.queued = tier; say("New ground queued — this fight finishes first."); }
   render();
 }
 
@@ -987,8 +1142,8 @@ function makeBounty() {
   if (roll < 0.45) {
     const mob = monsterOfTier(region.tier);
     const amount = 10 + Math.floor(seedFrom(w * 5.5) * 15);
-    return { window: w, region: region.id, kind: "slay", targetId: mob.id,
-      label: `Put down ${amount} ${mob.name}`, amount, progress: 0, claimed: false,
+    return { window: w, region: region.id, kind: "slay", targetTier: region.tier,
+      label: `Put down ${amount} of whatever holds ${region.name}`, amount, progress: 0, claimed: false,
       gold: Math.round(mob.gold[1] * amount * 0.8) };
   }
   const skill = GATHER_SKILLS[Math.floor(seedFrom(w * 9.13 + region.tier) * GATHER_SKILLS.length)];
@@ -1008,7 +1163,7 @@ function refreshBounty() {
 function bountyProgress(kind, thing) {
   const b = state.bounty;
   if (!b || b.claimed || b.kind !== kind) return;
-  if (kind === "slay" && thing.id === b.targetId) b.progress++;
+  if (kind === "slay" && thing.tier === b.targetTier) b.progress++;
   if (kind === "gather" && thing.out && thing.out[b.targetId]) b.progress += thing.out[b.targetId];
   if (b.progress >= b.amount && !b.claimed) toast("Bounty complete — claim it on the board");
 }
@@ -1166,9 +1321,9 @@ function transfer(key, all) {
 
 function useChest(key) {
   if (parseKey(key).base !== "vault_chest") return;
-  if (state.bank.slots >= VAULT_MAX) { say("The stores are as deep as they go."); render(); return; }
+  if (state.bank.slots >= BANK_MAX) { say("The stores are as deep as they go."); render(); return; }
   removeFrom(storeView, key, 1);
-  state.bank.slots = Math.min(VAULT_MAX, state.bank.slots + MATERIALS.vault_chest.chest);
+  state.bank.slots = Math.min(BANK_MAX, state.bank.slots + MATERIALS.vault_chest.chest);
   say(`Camp stores widened to ${state.bank.slots} slots.`);
   render();
 }
@@ -1427,7 +1582,7 @@ function importSave(str) {
    back button works — without tearing down the tick loop a real page load
    would cost. */
 
-const PAGES = ["character", "inventory", "kennel", "atlas", "shop", "bounty", "skill"];
+const PAGES = ["character", "equipment", "camp", "kennel", "atlas", "shop", "bounty", "skill"];
 
 function parseHash() {
   const raw = (location.hash || "").replace(/^#\/?/, "");
@@ -1508,42 +1663,67 @@ function renderTopbar() {
 
 /* ---- sidebar ---- */
 
+function toggleNav(group) { navOpen[group] = !navOpen[group]; keys.side = ""; renderSidebar(); }
+
 function renderSidebar() {
   const sig = SKILLS.map((s) => s.id + skillLevel(s.id)).join(",") + "|" + route.page + route.arg +
-    "|" + (state.tasks.skilling ? state.tasks.skilling.skillId : "-") + "|" + currentWeather().id;
+    "|" + eqTab + campTab + "|" + JSON.stringify(navOpen) + "|" + currentWeather().id +
+    "|" + slotsUsed("inv") + "/" + slotsUsed("bank") + "|" + (state.tasks.skilling ? state.tasks.skilling.skillId : "-") +
+    "|" + state.spoils.length;
   if (keys.side === sig) return;
   keys.side = sig;
 
-  const mkNav = (box, items) => {
-    box.innerHTML = "";
-    items.forEach(({ label, page, arg, lvl, busy }) => {
-      const b = document.createElement("button");
-      b.className = "nav-item" + (route.page === page && (!arg || route.arg === arg) ? " active" : "") + (busy ? " busy" : "");
-      b.innerHTML = '<span class="nav-name"></span><span class="lvl"></span>';
-      b.children[0].textContent = label;
-      b.children[1].textContent = lvl == null ? "" : "Lv." + lvl;
-      b.onclick = () => go(page, arg);
-      box.appendChild(b);
-    });
+  Object.keys(navOpen).forEach((g) => {
+    const box = el("pill-" + g);
+    if (box) box.classList.toggle("open", navOpen[g]);
+  });
+
+  const mkItem = ({ label, page, arg, right, active, locked, tag, onclick }) => {
+    const b = document.createElement("button");
+    b.className = "nav-item" + (active ? " active" : "") + (locked ? " locked" : "");
+    b.innerHTML = '<span class="nav-name"></span><span class="lvl"></span>';
+    b.children[0].textContent = label;
+    b.children[1].textContent = right || "";
+    if (tag) { b.children[1].className = "soon"; b.children[1].textContent = tag; }
+    if (!locked) b.onclick = onclick || (() => go(page, arg));
+    return b;
   };
 
-  mkNav(el("navYou"), [
-    { label: "Character", page: "character" },
-    { label: "Inventory", page: "inventory" },
-    { label: "Kennel", page: "kennel" },
-  ]);
-  mkNav(el("navGather"), SKILLS.filter((s) => s.kind === "gather").map((s) => ({
-    label: s.name, page: "skill", arg: s.id, lvl: skillLevel(s.id),
-    busy: state.tasks.skilling && state.tasks.skilling.skillId === s.id,
-  })));
-  mkNav(el("navCraft"), SKILLS.filter((s) => s.kind === "craft").map((s) => ({
-    label: s.name, page: "skill", arg: s.id, lvl: skillLevel(s.id),
-    busy: state.tasks.skilling && state.tasks.skilling.skillId === s.id,
-  })));
-  mkNav(el("navWar"), SKILLS.filter((s) => s.kind === "war").map((s) => ({
-    label: s.name, page: "skill", arg: s.id, lvl: skillLevel(s.id),
-    busy: !!state.tasks.combat,
-  })));
+  const van = el("navVanguard");
+  van.innerHTML = "";
+  van.appendChild(mkItem({ label: "Character", page: "character", active: route.page === "character" }));
+  van.appendChild(mkItem({ label: "Equipment & Pack", page: "equipment",
+    right: `${slotsUsed("inv")}/${packSlots()}`, active: route.page === "equipment" }));
+
+  const camp = el("navCamp");
+  camp.innerHTML = "";
+  camp.appendChild(mkItem({ label: "Camp Stores", page: "camp",
+    right: `${slotsUsed("bank")}/${slotCap("bank")}`, active: route.page === "camp" }));
+  camp.appendChild(mkItem({ label: "The Kennel", page: "kennel", active: route.page === "kennel" }));
+  const b = state.bounty;
+  camp.appendChild(mkItem({ label: "The Board", page: "bounty", active: route.page === "bounty",
+    right: b ? `${fmt(Math.min(b.progress, b.amount))}/${fmt(b.amount)}` : "" }));
+
+  const mkSkills = (box, kind) => {
+    box.innerHTML = "";
+    SKILLS.filter((s) => s.kind === kind).forEach((s) => {
+      const item = mkItem({ label: s.name, page: "skill", arg: s.id, right: "Lv." + skillLevel(s.id),
+        active: route.page === "skill" && route.arg === s.id });
+      if (kind !== "war" && state.tasks.skilling && state.tasks.skilling.skillId === s.id) item.classList.add("busy");
+      if (kind === "war" && state.tasks.combat) item.classList.add("busy");
+      box.appendChild(item);
+    });
+  };
+  mkSkills(el("navTrades"), "gather");
+  mkSkills(el("navWorkshops"), "craft");
+  mkSkills(el("navField"), "war");
+  el("navField").appendChild(mkItem({ label: "Dungeons", locked: true, tag: "Soon" }));
+
+  const spoilTag = el("spoilsTag");
+  if (spoilTag) {
+    spoilTag.textContent = state.spoils.length ? `${state.spoils.length} unclaimed` : "";
+    spoilTag.hidden = !state.spoils.length;
+  }
 
   const w = currentWeather(), tm = weatherOn(1);
   el("weatherTag").textContent = w.name;
@@ -1561,7 +1741,8 @@ function renderPage() {
 
   if (route.page === "character") renderCharacter();
   if (route.page === "skill") renderSkill();
-  if (route.page === "inventory") renderInventory();
+  if (route.page === "equipment") renderStorePage("eq");
+  if (route.page === "camp") renderStorePage("camp");
   if (route.page === "kennel") renderKennel();
   if (route.page === "atlas") renderAtlas();
   if (route.page === "shop") renderShop();
@@ -1608,6 +1789,7 @@ function renderSkill() {
   else if (s.kind === "gather") renderGatherBody(s, region);
   else renderCraftBody(s);
 
+  if (s.kind !== "war") { const sp = el("skSpoils"); if (sp) sp.hidden = true; }
   renderMastery(s.id);
   renderMilestones(s.id, lvl);
   renderYieldFeed();
@@ -1737,9 +1919,10 @@ function renderCraftBody(s) {
 }
 
 function renderFieldBody(region) {
-  const mob = monsterOfTier(region.tier);
+  const tier = region.tier;
   const t = state.tasks.combat;
-  const active = !!(t && t.monsterId === mob.id);
+  const engaged = !!(t && t.tier === tier);
+  const live = engaged ? getMonster(t.monsterId) : rankOf(tier, "grunt");
 
   el("skWorkLabel").textContent = `The Field · ${region.name}`;
   const box = el("skWorkBody");
@@ -1747,30 +1930,38 @@ function renderFieldBody(region) {
 
   const card = document.createElement("div");
   card.className = "node-card";
-  card.innerHTML = `<div class="node-icon war">${icon(mob.icon, "ico-lg")}</div>`;
+  card.innerHTML = `<div class="node-icon war">${icon(live.icon, "ico-lg")}</div>`;
 
   const info = document.createElement("div");
   info.className = "node-info";
-  info.innerHTML = `<h3>${mob.name}</h3>`;
+  const h = document.createElement("h3");
+  h.textContent = live.name;
+  if (live.rank !== "grunt") {
+    const tag = document.createElement("span");
+    tag.className = "rank-tag " + live.rank;
+    tag.textContent = live.rank === "boss" ? "Sovereign" : "Elite";
+    h.appendChild(tag);
+  }
+  info.appendChild(h);
 
   const sub = document.createElement("div");
   sub.className = "node-sub";
   sub.textContent = recovering()
     ? `You're still being patched up. Back on your feet in ${fmtTime(state.player.recoveryUntil - Date.now())}.`
-    : "You lead the vanguard personally. Your crews keep working while you're out.";
+    : "You lead the vanguard yourself. Your crews keep working while you're out here.";
   info.appendChild(sub);
 
   const chips = document.createElement("div");
   chips.className = "stat-chips";
   const atk = attackPower();
-  const avg = Math.max(1, (atk * 0.55 + atk) / 2 - mob.defence * 0.35);
-  const killMs = (mob.hp / avg) * PLAYER_SWING_MS + RESPAWN_MS;
-  const incoming = Math.max(1, (mob.attack * 0.55 + mob.attack) / 2 - defencePower() * 0.4);
-  const survive = (maxHp() / (incoming / mob.speed * 1000));
+  const avg = Math.max(1, (atk * 0.55 + atk) / 2 - live.defence * 0.35);
+  const killMs = (live.hp / avg) * PLAYER_SWING_MS + RESPAWN_MS;
+  const incoming = Math.max(1, (live.attack * 0.55 + live.attack) / 2 - defencePower() * 0.4);
+  const survive = maxHp() / (incoming / live.speed * 1000);
   chips.innerHTML =
-    `<div class="chip">${fmt(mob.hp)} HP</div>` +
-    `<div class="chip">${fmt(mob.attack)} attack</div>` +
-    `<div class="chip">${fmt(mob.xp)} XP a kill</div>` +
+    `<div class="chip">${fmt(live.hp)} HP</div>` +
+    `<div class="chip">${fmt(live.attack)} attack</div>` +
+    `<div class="chip">${fmt(live.xp)} XP</div>` +
     `<div class="chip${survive < 30 ? " warn" : ""}">~${fmtTime(killMs)} a kill</div>` +
     `<div class="chip${survive < 30 ? " warn" : " good"}">${survive < 30 ? "You will not last here" : "Survivable"}</div>`;
   info.appendChild(chips);
@@ -1782,44 +1973,80 @@ function renderFieldBody(region) {
 
   const btn = document.createElement("button");
   btn.className = "btn btn-primary node-btn";
-  btn.textContent = recovering() ? "Recovering" : active ? (t.queued === "stop" ? "Pulling back after this" : "Pull back") : "Take the field";
+  btn.textContent = recovering() ? "Recovering"
+    : engaged ? (t.queued === "stop" ? "Pulling back after this" : "Pull back") : "Take the field";
   btn.disabled = recovering();
-  btn.onclick = () => selectMonster(mob.id);
+  btn.onclick = () => engageRegion(tier);
   info.appendChild(btn);
 
   card.appendChild(info);
   box.appendChild(card);
+  liveRefs.monster = { tier, bar: bar.querySelector("i"), left: bar.querySelector("span"), right: bar.querySelector("b") };
 
-  liveRefs.monster = { mob, bar: bar.querySelector("i"), left: bar.querySelector("span"), right: bar.querySelector("b") };
+  // --- threat tracker ---
+  const threat = threatIn(tier);
+  const tr = document.createElement("div");
+  tr.className = "threat-block";
+  tr.innerHTML =
+    '<div class="threat-head"><span class="label">Regional Threat</span><span class="threat-num"></span></div>' +
+    '<div class="bar threat"><i></i></div><div class="threat-note"></div>';
+  tr.querySelector(".threat-num").textContent = `${threat} / ${THREAT_CAP}`;
+  tr.querySelector("i").style.width = (threat / THREAT_CAP) * 100 + "%";
+  tr.querySelector(".threat-note").textContent = threat >= THREAT_CAP
+    ? `${rankOf(tier, "boss").name} is waiting. It will take the field on the next spawn.`
+    : `Every kill here draws more attention. At ${THREAT_CAP}, ${rankOf(tier, "boss").name} comes out.`;
+  box.appendChild(tr);
 
-  // right rail: what it drops
+  // --- roster rail ---
   el("skRailA").hidden = false;
-  el("skRailALabel").textContent = "Leaves Behind";
+  el("skRailALabel").textContent = "Regional Roster";
   const rail = el("skRailABody");
   rail.innerHTML = "";
-  mob.drops.forEach(([k, qty, chance]) => {
+  rosterFor(tier).forEach((m) => {
+    const row = document.createElement("div");
+    row.className = "roster-row" + (m.id === live.id ? " on" : "");
+    row.innerHTML =
+      `<div class="left">${icon(m.icon, "ico-sm")}<div><div class="rname"></div><div class="rsub"></div></div></div>` +
+      `<div class="rrank ${m.rank}"></div>`;
+    row.querySelector(".rname").textContent = m.name;
+    row.querySelector(".rsub").textContent = `${fmt(m.hp)} HP · ${fmt(m.xp)} XP`;
+    row.querySelector(".rrank").textContent =
+      m.rank === "grunt" ? "80%" : m.rank === "elite" ? "20%" : "Threat " + THREAT_CAP;
+    rail.appendChild(row);
+  });
+
+  el("skYield").hidden = false;
+  el("skYieldBody").innerHTML = "";
+  live.drops.forEach(([k, qty, chance]) => {
     const row = document.createElement("div");
     row.className = "yield-item";
     row.innerHTML = `<div class="left">${icon(itemDef(k).icon, "ico-sm")}<span></span></div><div class="chance"></div>`;
     row.querySelector("span").textContent = itemName(k);
-    row.querySelector(".chance").textContent = Math.round(chance * 100) + "%";
-    rail.appendChild(row);
+    row.querySelector(".chance").textContent = `${Math.round(chance * 100)}% · ${qty}`;
+    el("skYieldBody").appendChild(row);
   });
+  if (live.rank === "boss") {
+    const row = document.createElement("div");
+    row.className = "yield-item";
+    row.innerHTML = '<div class="left"><span class="rar-epic">Epic component</span></div><div class="chance">Guaranteed</div>';
+    el("skYieldBody").appendChild(row);
+  }
 
-  el("skYield").hidden = true;
+  renderSpoils();
+
   el("skSeams").hidden = false;
-  el("skSeamsLabel").textContent = "Other Quarry";
+  el("skSeamsLabel").textContent = "Other Ground";
   const seams = el("skSeamsBody");
   seams.innerHTML = "";
-  MONSTERS.forEach((m) => {
-    if (m.id === mob.id) return;
-    const r = regionOfTier(m.tier);
+  REGIONS.forEach((r) => {
+    if (r.tier === tier) return;
     const unlocked = state.travel.unlocked.includes(r.id);
+    const grunt = rankOf(r.tier, "grunt");
     const row = document.createElement("button");
     row.className = "seam-row";
-    row.innerHTML = `<div class="name"></div><div class="region"></div>`;
-    row.children[0].textContent = m.name;
-    row.children[1].textContent = `Lv ${m.level} · ${r.name}${unlocked ? "" : ` · ${fmt(r.toll)}g`}`;
+    row.innerHTML = '<div class="name"></div><div class="region"></div>';
+    row.children[0].textContent = grunt.name;
+    row.children[1].textContent = `Lv ${grunt.level} · ${r.name}${unlocked ? "" : ` · ${fmt(r.toll)}g`}`;
     row.onclick = () => travelTo(r.id);
     seams.appendChild(row);
   });
@@ -1893,6 +2120,50 @@ function renderOtherSeams(skillId) {
     row.children[1].textContent = `Lv ${def.level} · ${r.name}${unlocked ? "" : ` · ${fmt(r.toll)}g toll`}`;
     row.onclick = () => travelTo(r.id);
     box.appendChild(row);
+  });
+}
+
+function renderSpoils() {
+  const box = el("skSpoils");
+  if (!box) return;
+  box.hidden = false;
+  const list = el("skSpoilsBody");
+  list.innerHTML = "";
+  el("skSpoilsCount").textContent = state.spoils.length ? `${state.spoils.length} lots waiting` : "";
+
+  if (!state.spoils.length) {
+    list.innerHTML = '<div class="muted tiny">Nothing on the field. Loot waits here and costs no pack space until you claim it.</div>';
+    el("skSpoilsActions").hidden = true;
+    return;
+  }
+  el("skSpoilsActions").hidden = false;
+
+  state.spoils.slice().reverse().forEach((s, i) => {
+    const idx = state.spoils.length - 1 - i;
+    const d = itemDef(s.key);
+    const row = document.createElement("div");
+    row.className = "spoil-row";
+    row.innerHTML = `<div class="left">${icon(d.icon, "ico-sm")}<span></span></div>` +
+      '<div class="sp-qty"></div>';
+    const nm = row.querySelector("span");
+    nm.textContent = itemName(s.key);
+    if (d.rarity && d.rarity !== "common") nm.classList.add("rar-" + d.rarity);
+    row.querySelector(".sp-qty").textContent = "×" + fmt(s.qty);
+
+    const take = document.createElement("button");
+    take.className = "minibtn";
+    take.textContent = "Take";
+    take.onclick = () => claimSpoil(idx);
+    row.appendChild(take);
+
+    const sellB = document.createElement("button");
+    sellB.className = "minibtn";
+    sellB.textContent = fmt(d.value * s.qty) + "g";
+    sellB.title = "Sell without picking up";
+    sellB.onclick = () => sellSpoil(idx);
+    row.appendChild(sellB);
+
+    list.appendChild(row);
   });
 }
 
@@ -1981,7 +2252,7 @@ function updateLive() {
   const m = liveRefs.monster;
   if (m) {
     const t = state.tasks.combat;
-    const active = t && t.monsterId === m.mob.id;
+    const active = t && t.tier === m.tier;
     if (active) {
       m.bar.style.width = clamp(t.respawn > 0 ? 0 : (t.mobHp / t.mobMax) * 100, 0, 100) + "%";
       const plan = combatPlan();
@@ -2099,51 +2370,112 @@ function renderCharacter() {
   });
 }
 
-/* ================= INVENTORY PAGE ================= */
+/* ================= STORE PAGES (split pane) ================= */
+/* Equipment & Pack and Camp Stores share one renderer. Each has its own
+   grid plus a Bank tab, and Bank is the same 50-slot pool from either. */
 
-function renderInventory() {
-  document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === invTab));
-  ["carried", "stores", "equipment"].forEach((t) => { el("panel-" + t).hidden = invTab !== t; });
+const FILTERS = [
+  { id: "all",       label: "ALL",  test: () => true },
+  { id: "gear",      label: "Gear", icon: "blade", test: (d) => d.kind === "gear" },
+  { id: "material",  label: "Mats", icon: "ore",   test: (d) => d.kind === "material" && !d.heal && !d.forSkill },
+  { id: "provision", label: "Food", icon: "ration", test: (d) => !!d.heal },
+  { id: "tool",      label: "Tools", icon: "pick", test: (d) => d.kind === "tool" },
+];
 
-  if (invTab === "equipment") { renderPaperdoll(); return; }
+function scopeTab(scope) { return scope === "eq" ? eqTab : campTab; }
+function scopeStore(scope) {
+  const tab = scopeTab(scope);
+  if (tab === "bank") return "vault";
+  return scope === "eq" ? "inv" : "bank";
+}
 
-  storeView = invTab === "carried" ? "inv" : "bank";
+function renderStorePage(scope) {
+  storeView = scopeStore(scope);
   const s = store(storeView);
-  const ids = orderedKeys(storeView);
-  const sig = `${storeView}|${ids.map((k) => k + ":" + s.items[k]).join(",")}|${slotCap(storeView)}|${selected}|${state.player.gold}`;
-  if (keys.inv === sig) return;
-  keys.inv = sig;
+  const ids = sortedKeys(storeView);
+  const sig = `${scope}|${scopeTab(scope)}|${storeView}|${ids.map((k) => k + ":" + s.items[k]).join(",")}` +
+    `|${slotCap(storeView)}|${selected}|${gridFilter}|${gridSort}|${state.player.gold}`;
 
-  el(invTab === "carried" ? "carriedCap" : "storesCap").innerHTML =
-    `Capacity <b>${slotsUsed(storeView)} / ${slotCap(storeView)}</b>`;
+  if (keys.store !== sig) {
+    keys.store = sig;
+    const pre = scope === "eq" ? "eq" : "camp";
 
-  const grid = el(invTab === "carried" ? "carriedGrid" : "storesGrid");
+    document.querySelectorAll(`.tab-btn[data-scope="${scope}"]`).forEach((b) =>
+      b.classList.toggle("active", b.dataset.tab === scopeTab(scope)));
+
+    el(pre + "Cap").textContent = `Capacity ${slotsUsed(storeView)} / ${slotCap(storeView)}`;
+    renderFilters(pre);
+    renderPillGrid(el(pre + "Grid"), ids);
+    renderDetail(pre + "Detail");
+  }
+
+  if (scope === "eq") renderPaperdoll();
+  else renderLedger();
+}
+
+function sortedKeys(w) {
+  let ids = orderedKeys(w);
+  const f = FILTERS.find((x) => x.id === gridFilter) || FILTERS[0];
+  ids = ids.filter((k) => { const d = itemDef(k); return d && f.test(d); });
+
+  if (gridSort === "rarity") {
+    const order = { epic: 0, rare: 1, uncommon: 2, common: 3 };
+    ids.sort((a, bb) => {
+      const da = itemDef(a), db = itemDef(bb);
+      const ra = order[da.rarity] != null ? order[da.rarity] : 4;
+      const rb = order[db.rarity] != null ? order[db.rarity] : 4;
+      return ra - rb || itemName(a).localeCompare(itemName(bb));
+    });
+  } else if (gridSort === "name") {
+    ids.sort((a, bb) => itemName(a).localeCompare(itemName(bb)));
+  }
+  return ids;
+}
+
+function renderFilters(pre) {
+  const box = el(pre + "Filters");
+  box.innerHTML = "";
+  FILTERS.forEach((f) => {
+    const b = document.createElement("button");
+    b.className = "ficon" + (gridFilter === f.id ? " active" : "");
+    b.innerHTML = f.icon ? icon(f.icon, "ico-sm") : f.label;
+    b.title = f.label;
+    b.onclick = () => { gridFilter = f.id; keys.store = ""; renderStorePage(pre === "eq" ? "eq" : "camp"); };
+    box.appendChild(b);
+  });
+  const sel = el(pre + "Sort");
+  if (sel && sel.value !== gridSort) sel.value = gridSort;
+}
+
+function renderPillGrid(grid, ids) {
   grid.innerHTML = "";
   const cap = slotCap(storeView);
+  const s = store(storeView);
 
   for (let i = 0; i < cap; i++) {
     const key = ids[i];
     const cell = document.createElement("div");
+
     if (!key) {
-      cell.className = "item empty";
-      cell.innerHTML = '<div class="art"></div><div class="n">Empty</div>';
+      cell.className = "item-pill empty";
+      cell.innerHTML = '<div class="art"></div><div class="info"><div class="n">Empty</div><div class="r">Empty Slot</div></div>';
       grid.appendChild(cell);
       continue;
     }
+
     const d = itemDef(key);
-    cell.className = "item " + (d.rarity || "common") + (key === selected ? " on" : "");
+    cell.className = `item-pill ${d.rarity || "common"}${key === selected ? " on" : ""}`;
     cell.tabIndex = 0;
     cell.innerHTML =
       `<div class="qty">${fmt(s.items[key])}</div>` +
       `<div class="art">${icon(d.icon, "ico-lg")}</div>` +
-      `<div class="n"></div><div class="r"></div>`;
+      '<div class="info"><div class="n"></div><div class="r"></div></div>';
     cell.querySelector(".n").textContent = itemName(key);
-    cell.querySelector(".r").textContent = d.kind === "gear"
-      ? rarityDef(d.rarity).name : d.kind === "tool" ? "Tool" : d.heal ? "Provision" : "Material";
+    cell.querySelector(".r").textContent = itemKindLabel(d);
     cell.title = `${itemName(key)} × ${s.items[key]}`;
 
     cell.draggable = true;
-    cell.onclick = () => { selected = selected === key ? null : key; keys.inv = ""; renderInventory(); };
+    cell.onclick = () => { selected = selected === key ? null : key; keys.store = ""; renderAll(); };
     cell.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); cell.onclick(); } };
     cell.ondragstart = (e) => e.dataTransfer.setData("text/plain", key);
     cell.ondragover = (e) => { e.preventDefault(); cell.classList.add("dragover"); };
@@ -2155,8 +2487,14 @@ function renderInventory() {
     };
     grid.appendChild(cell);
   }
+}
 
-  renderDetail(invTab === "carried" ? "carriedDetail" : "storesDetail");
+function itemKindLabel(d) {
+  if (d.kind === "gear") return rarityDef(d.rarity).name;
+  if (d.kind === "tool") return "Tool";
+  if (d.heal) return "Provision";
+  if (d.chest) return "Component";
+  return "Material";
 }
 
 function reorder(fromKey, toKey) {
@@ -2166,15 +2504,16 @@ function reorder(fromKey, toKey) {
   ids.splice(a, 1);
   ids.splice(b, 0, fromKey);
   store(storeView).order = ids;
-  keys.inv = "";
-  renderInventory();
+  gridSort = "custom";
+  keys.store = "";
+  renderAll();
 }
 
 function renderDetail(targetId) {
   const box = el(targetId);
   box.innerHTML = "";
   if (!selected || !store(storeView).items[selected]) {
-    box.innerHTML = '<div class="muted">Select an item to equip, move or sell it.</div>';
+    box.innerHTML = '<div class="muted tiny">Select an item to equip, move or sell it.</div>';
     return;
   }
 
@@ -2188,7 +2527,7 @@ function renderDetail(targetId) {
   nm.innerHTML = '<div class="dname"></div><div class="dsub muted tiny"></div>';
   nm.querySelector(".dname").textContent = itemName(selected);
   if (d.rarity) nm.querySelector(".dname").classList.add("rar-" + d.rarity);
-  nm.querySelector(".dsub").textContent = `×${fmt(qty)} · ${fmt(d.value)}g each`;
+  nm.querySelector(".dsub").textContent = `${itemKindLabel(d)} · ×${fmt(qty)} · ${fmt(d.value)}g each`;
   head.appendChild(nm);
   box.appendChild(head);
 
@@ -2196,7 +2535,7 @@ function renderDetail(targetId) {
   if (d.attack) bits.push(`+${d.attack} attack`);
   if (d.defence) bits.push(`+${d.defence} defence`);
   if (d.health) bits.push(`+${d.health} max health`);
-  if (d.heal) bits.push(`restores ${d.heal}`);
+  if (d.heal) bits.push(`restores ${fmt(d.heal)}`);
   if (d.speed) bits.push(`+${Math.round(d.speed * 100)}% ${skillName(d.forSkill)} speed`);
   if (d.twoHanded) bits.push("two-handed");
   if (d.maxDur) bits.push(`${fmt(d.maxDur)} durability`);
@@ -2217,34 +2556,61 @@ function renderDetail(targetId) {
     b.onclick = fn;
     row.appendChild(b);
   };
+
   if (d.slot) add(`Equip · ${SLOT_LABELS[d.slot]}`, () => equip(selected), "btn-primary");
   if (d.kind === "tool") add(`Take up · ${skillName(d.forSkill)}`, () => equip(selected), "btn-primary");
   if (d.chest) add("Open chest", () => useChest(selected));
-  add(storeView === "inv" ? "→ Stores" : "→ Pack", () => transfer(selected, false));
-  add(storeView === "inv" ? "All → Stores" : "All → Pack", () => transfer(selected, true), "btn-quiet");
+
+  // Move between any two of the three pools.
+  const pools = [["inv", "Pack"], ["bank", "Stores"], ["vault", "Bank"]];
+  pools.forEach(([w, label]) => {
+    if (w === storeView) return;
+    add(`→ ${label}`, () => moveTo(selected, w, false));
+    add(`All → ${label}`, () => moveTo(selected, w, true), "btn-quiet");
+  });
+
   const sv = salvageValue(selected);
   if (sv) add(`Break down · ${sv.qty}× ${itemName(sv.mat)}`, () => salvage(selected), "btn-quiet");
   add(`Sell 1 · ${fmt(d.value)}g`, () => sell(selected, false));
-  add(`Sell all · ${fmt(d.value * qty)}g`, () => sell(selected, true), "btn-quiet");
+  if (qty > 1) add(`Sell all · ${fmt(d.value * qty)}g`, () => sell(selected, true), "btn-quiet");
   box.appendChild(row);
 }
 
+function moveTo(key, target, all) {
+  const from = storeView;
+  const qty = all ? qtyIn(from, key) : 1;
+  if (qty <= 0) return;
+  if (!store(target).items[key] && storeFull(target)) {
+    say(`${target === "vault" ? "The bank" : target === "bank" ? "Camp stores" : "Your pack"} is full.`);
+    render();
+    return;
+  }
+  removeFrom(from, key, qty);
+  addTo(target, key, qty);
+  render();
+}
+
+/* ---- paperdoll: 4x2 with two-handed merge ---- */
+
 function renderPaperdoll() {
-  const sig = EQUIP_SLOTS.map((s) => s + state.equipment[s] + (state.wear[state.equipment[s]] || 0)).join(",") +
-    JSON.stringify(state.tools);
+  const sig = EQUIP_SLOTS.map((s) => s + state.equipment[s] + (state.wear[state.equipment[s]] || 0)).join(",");
   if (keys.doll === sig) return;
   keys.doll = sig;
 
   const twoH = state.equipment.weapon && itemDef(state.equipment.weapon).twoHanded;
+  const grid = el("dollGrid");
+  grid.innerHTML = "";
 
-  const slotEl = (slot) => {
+  DOLL_ORDER.forEach((slot) => {
+    if (slot === "offhand" && twoH) return;   // merged away by the two-hander
     const key = state.equipment[slot];
     const d = key ? itemDef(key) : null;
     const box = document.createElement("div");
-    box.className = "eq-slot " + (key ? "filled " + (d.rarity || "") : "empty");
+    box.className = `eq-slot slot-${slot} ` + (key ? (d.rarity || "common") : "empty") +
+      (slot === "weapon" && twoH ? " merged" : "");
     box.innerHTML = `<span class="type">${SLOT_LABELS[slot]}</span>` +
-      `<div class="art">${icon(d ? d.icon : slotGlyph(slot), key ? "ico-lg" : "ico")}</div>` +
-      `<div class="name"></div>`;
+      `<div class="art">${icon(d ? d.icon : slotGlyph(slot), twoH && slot === "weapon" ? "ico-xl" : "ico-lg")}</div>` +
+      '<div class="name"></div>';
     box.querySelector(".name").textContent = key ? itemName(key) : "Empty";
 
     if (key) {
@@ -2261,7 +2627,7 @@ function renderPaperdoll() {
       if (cost) {
         const fix = document.createElement("button");
         fix.className = "minibtn";
-        fix.textContent = `Repair ${cost.qty}×`;
+        fix.textContent = `Fix ${cost.qty}×`;
         fix.disabled = haveQty(cost.mat) < cost.qty;
         fix.title = `Uses ${cost.qty} ${itemName(cost.mat)}`;
         fix.onclick = (e) => { e.stopPropagation(); repairItem(key); };
@@ -2274,62 +2640,83 @@ function renderPaperdoll() {
       bar.appendChild(off);
       box.appendChild(bar);
     }
-    return box;
-  };
-
-  const left = el("dollLeft"), right = el("dollRight");
-  left.innerHTML = ""; right.innerHTML = "";
-
-  const pair = document.createElement("div");
-  pair.className = "weapon-pair" + (twoH ? " merged" : "");
-  pair.appendChild(slotEl("weapon"));
-  if (!twoH) pair.appendChild(slotEl("offhand"));
-  left.appendChild(pair);
-  ["head", "chest"].forEach((s) => left.appendChild(slotEl(s)));
-  ["legs", "boots", "gloves", "ring", "amulet"].forEach((s) => right.appendChild(slotEl(s)));
+    grid.appendChild(box);
+  });
 
   el("dollName").textContent = state.meta.name || "Commander";
   el("dollSub").textContent = `Commander · ${currentRegion().name}`;
   el("dollSil").textContent = (state.meta.name || "C").charAt(0).toUpperCase();
 
-  const strip = el("dollStats");
-  strip.innerHTML = "";
-  [["Health", maxHp()], ["Attack", Math.round(attackPower())],
-   ["Defence", Math.round(defencePower())], ["Warfare", "Lv " + skillLevel("warfare")]]
-    .forEach(([l, v]) => {
-      const d = document.createElement("div");
-      d.className = "stat-box";
-      d.innerHTML = '<div class="v"></div><div class="l"></div>';
-      d.children[0].textContent = v;
-      d.children[1].textContent = l;
-      strip.appendChild(d);
+  const stand = el("dollStanding");
+  stand.innerHTML = "";
+  [["Health", fmt(maxHp())], ["Attack Power", Math.round(attackPower()), "gold"],
+   ["Defence", Math.round(defencePower())], ["Combat", "Lv " + skillLevel("warfare"), "good"],
+   ["Pack Space", `${slotsUsed("inv")} / ${packSlots()}`]]
+    .forEach(([l, v, cls]) => {
+      const r = document.createElement("div");
+      r.className = "stat-row";
+      r.innerHTML = '<div class="l"></div><div class="v"></div>';
+      r.children[0].textContent = l;
+      r.children[1].textContent = v;
+      if (cls) r.children[1].classList.add(cls);
+      stand.appendChild(r);
     });
+}
+
+/* ---- camp ledger: tool rack + standing ---- */
+
+function renderLedger() {
+  const sig = JSON.stringify(state.tools) + slotsUsed("bank") + slotsUsed("vault") + state.player.gold + totalLevel();
+  if (keys.ledger === sig) return;
+  keys.ledger = sig;
 
   const tools = el("dollTools");
   tools.innerHTML = "";
   GATHER_SKILLS.forEach((s) => {
     const tool = toolFor(s.id);
-    const row = document.createElement("div");
-    row.className = "tool-row";
-    row.innerHTML = `<span class="tr-ico">${icon(TOOL_SPEC[s.id].icon, "ico-sm")}</span>` +
-      `<span class="tr-skill"></span><span class="tr-name"></span>`;
-    row.children[1].textContent = s.name;
-    row.children[2].textContent = tool ? `${tool.name} (+${Math.round(tool.speed * 100)}%)` : "Bare hands";
-    if (!tool) row.children[2].classList.add("muted");
+    const box = document.createElement("div");
+    box.className = "tool-slot" + (tool ? " filled" : "");
+    box.innerHTML = `<span class="type">${skillName(s.id)}</span>` +
+      `<div class="art">${icon(tool ? tool.icon : TOOL_SPEC[s.id].icon, "ico-lg")}</div>` +
+      '<div class="name"></div>';
+    box.querySelector(".name").textContent = tool ? tool.name : "Bare hands";
     if (tool) {
       const off = document.createElement("button");
       off.className = "minibtn";
       off.textContent = "Stow";
       off.onclick = () => unequipTool(s.id);
-      row.appendChild(off);
+      box.appendChild(off);
     }
-    tools.appendChild(row);
+    tools.appendChild(box);
   });
+  const res = document.createElement("div");
+  res.className = "tool-slot reserved";
+  res.innerHTML = '<span class="type">Reserved</span>' +
+    `<div class="art">${icon("unknown", "ico-lg")}</div><div class="name">Scavenging</div>`;
+  tools.appendChild(res);
+
+  const list = el("dollLedger");
+  list.innerHTML = "";
+  const addRow = (l, v, cls) => {
+    const r = document.createElement("div");
+    r.className = "stat-row";
+    r.innerHTML = '<div class="l"></div><div class="v"></div>';
+    r.children[0].textContent = l;
+    r.children[1].textContent = v;
+    if (cls) r.children[1].classList.add(cls);
+    list.appendChild(r);
+  };
+  addRow("Total Level", totalLevel(), "good");
+  addRow("Gold on Hand", fmt(state.player.gold), "gold");
+  addRow("Camp Stores", `${slotsUsed("bank")} / ${slotCap("bank")}`);
+  addRow("Bank", `${slotsUsed("vault")} / ${slotCap("vault")}`);
+  addRow("Actions Worked", fmt(state.stats.actions));
+  addRow("Sovereigns Felled", fmt(state.stats.bosses || 0));
 }
 
 function slotGlyph(slot) {
-  return { weapon: "blade", offhand: "ward", head: "cowl", chest: "plate", legs: "greaves",
-    boots: "treads", gloves: "gauntlets", ring: "band", amulet: "charm" }[slot] || "unknown";
+  return { weapon: "blade", offhand: "ward", head: "cowl", chest: "plate",
+    hands: "gauntlets", feet: "treads", neck: "charm", ring: "band" }[slot] || "unknown";
 }
 
 /* ================= OTHER PAGES ================= */
@@ -2503,9 +2890,26 @@ el("brandMark").innerHTML = icon("moon", "ico-sm");
 el("coinIcon").innerHTML = icon("coin", "ico-sm");
 
 document.querySelectorAll(".icon-btn").forEach((b) => { b.onclick = () => go(b.dataset.page); });
+document.querySelectorAll(".pill-head").forEach((b) => { b.onclick = () => toggleNav(b.dataset.nav); });
 document.querySelectorAll(".tab-btn").forEach((b) => {
-  b.onclick = () => { invTab = b.dataset.tab; selected = null; keys.inv = ""; keys.doll = ""; renderInventory(); };
+  b.onclick = () => {
+    if (b.dataset.scope === "eq") eqTab = b.dataset.tab; else campTab = b.dataset.tab;
+    selected = null;
+    keys.store = "";
+    renderAll();
+  };
 });
+
+["eqSort", "campSort"].forEach((id) => {
+  const sel = el(id);
+  if (sel) sel.onchange = () => { gridSort = sel.value; keys.store = ""; renderAll(); };
+});
+
+el("spoilsClaimAll").onclick = claimAllSpoils;
+el("spoilsSellAll").onclick = () => {
+  for (let i = state.spoils.length - 1; i >= 0; i--) sellSpoil(i);
+  toast("Spoils sold");
+};
 
 el("tbTradesClear").onclick = () => {
   const t = state.tasks.skilling;
@@ -2601,7 +3005,8 @@ function loop() {
   renderTopbar();
   if (route.page === "skill") updateLive();
   if (route.page === "character") renderCharacter();
-  if (route.page === "inventory") renderInventory();
+  if (route.page === "equipment") renderStorePage("eq");
+  if (route.page === "camp") renderStorePage("camp");
   renderSidebar();
   renderLog();
 }
