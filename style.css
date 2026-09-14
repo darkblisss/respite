@@ -56,8 +56,8 @@ body{
 }
 .tb-brand{ display:flex; align-items:center; gap:11px; flex-shrink:0; }
 .tb-brand .mark{
-  width:30px; height:30px; border-radius:7px; flex-shrink:0;
-  background:linear-gradient(160deg,var(--violet),var(--violet-dim));
+  width:45px; height:45px; border-radius:7px; flex-shrink:0;
+  background:transparent;
   display:flex; align-items:center; justify-content:center; color:#0c0a10;
 }
 .tb-brand h1{ font-family:var(--font-display); font-weight:700; font-size:16px; letter-spacing:.08em; }
