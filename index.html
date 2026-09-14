@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Respite</title>
+<link rel="icon" type="image/jpeg" href="assets/respite-logo.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -75,7 +76,7 @@
       </div>
 
       <div class="pill-group" id="pill-workshops">
-        <button class="pill-head" data-nav="workshops"><span class="t">Workshops</span><span class="chev">&#9656;</span></button>
+        <button class="pill-head" data-nav="workshops"><span class="t">Artisans</span><span class="chev">&#9656;</span></button>
         <div class="pill-body" id="navWorkshops"></div>
       </div>
 
@@ -231,7 +232,7 @@
             <div class="card">
               <div class="card-head"><div class="label">Equipped</div></div>
               <div class="equip-body">
-                <div class="portrait-frame"><div class="silhouette" id="dollSil">C</div></div>
+                <div class="portrait-frame"><img src="assets/commander-default.webp" alt="Commander" id="dollSil"></div>
                 <div class="portrait-name">
                   <h3 id="dollName">Commander</h3>
                   <div class="sub" id="dollSub"></div>
@@ -367,26 +368,18 @@
     </div>
 
     <div class="modal-section">
-      <h3 class="modal-h3">Save string</h3>
-      <textarea class="sharebox" id="shareBox" spellcheck="false"></textarea>
-      <div class="btnrow">
-        <button class="btn" id="shareCopy">Copy</button>
-        <button class="btn" id="shareLoad">Load pasted save</button>
-      </div>
-    </div>
-
-    <div class="modal-section">
       <div class="btnrow">
         <button class="btn" id="saveBtn">Save now</button>
-        <button class="btn btn-danger" id="wipeBtn">Delete this save</button>
+        <button class="btn btn-danger" id="wipeBtn">Reset character</button>
         <button class="btn btn-quiet" id="settingsClose">Close</button>
       </div>
-      <p class="muted tiny" id="saveNote">Autosaves every 10 seconds.</p>
+      <p class="muted tiny">Saves to the cloud automatically as you play.</p>
     </div>
   </div>
 </div>
 
 <div class="toast-stack" id="toastStack"></div>
+
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>

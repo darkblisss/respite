@@ -9,8 +9,6 @@
 /* ================= 1. CONSTANTS ================= */
 
 const SCHEMA = 5;
-const SAVE_PREFIX = "respite_save_v5";
-const ACCOUNTS_KEY = "respite_accounts_v1";
 const IDLE_CAP_MS = 12 * 60 * 60 * 1000;
 const WINDOW_MS = 12 * 60 * 60 * 1000;      // bounty + smuggler refresh, on world clock
 const DAY_MS = 24 * 60 * 60 * 1000;         // weather window
@@ -463,6 +461,11 @@ const WEATHER_WEEK = [
     note: "The camp works in good spirits. Every trade earns more.", xp: 1.2, mods: {} },                      // Sat
 ];
 
+// Deterministic pseudo-random from a number — same input always gives the
+// same output, which is what makes bounties/smuggler stock/weather line up
+// identically for every player on the same world-clock window.
+function seedFrom(n) { const x = Math.sin(n) * 10000; return x - Math.floor(x); }
+
 function weatherOn(dayOffset) {
   const d = new Date(Date.now() + (dayOffset || 0) * DAY_MS);
   return WEATHER_WEEK[d.getUTCDay()];
@@ -606,7 +609,7 @@ let campTab = "stores";   // stores | bank
 let gridFilter = "all";
 let gridSort = "custom";
 let selected = null;
-let navOpen = { vanguard: true, camp: false, trades: true, workshops: false, field: false };
+let navOpen = { vanguard: true, camp: true, trades: true, workshops: true, field: true };
 
 /* ================= 16. HELPERS ================= */
 
@@ -1076,10 +1079,9 @@ function selectSkillAction(skillId, actionId) {
   if (!t) { state.tasks.skilling = newSkillTask(skillId, actionId); render(); return; }
   if (t.skillId === skillId && t.actionId === actionId) {
     t.queued = t.queued === "stop" ? null : "stop";
-    say(t.queued ? "Crews will stand down once this action finishes." : "Stand-down cancelled.");
   } else {
-    state.tasks.skilling = newSkillTask(skillId, actionId);
-    say(`Crews instantly shifted to ${def.name.toLowerCase()}.`);
+    t.queued = { skillId, actionId };
+    say(`Queued ${def.name.toLowerCase()} — the current action finishes first.`);
   }
   render();
 }
@@ -1129,10 +1131,6 @@ function combatPlan() {
     food, foodNeed, foodHave: food ? haveQty(food) : 0 };
 }
 
-function seedFrom(s) {
-  const x = Math.sin(s) * 10000;
-  return x - Math.floor(x);
-}
 /* ================= 20. BOUNTY ================= */
 
 function currentWindow() { return Math.floor(Date.now() / WINDOW_MS); }
@@ -1168,13 +1166,9 @@ function refreshBounty() {
 function bountyProgress(kind, thing) {
   const b = state.bounty;
   if (!b || b.claimed || b.kind !== kind) return;
-  
-  const wasDone = b.progress >= b.amount;
-  
-  if (kind === "slay" && thing.id === b.targetId) b.progress++;
+  if (kind === "slay" && thing.tier === b.targetTier) b.progress++;
   if (kind === "gather" && thing.out && thing.out[b.targetId]) b.progress += thing.out[b.targetId];
-  
-  if (!wasDone && b.progress >= b.amount) toast("Bounty complete — claim it on the board");
+  if (b.progress >= b.amount && !b.claimed) toast("Bounty complete — claim it on the board");
 }
 
 function claimBounty() {
@@ -1337,62 +1331,74 @@ function useChest(key) {
   render();
 }
 /* ================= 24. SAVE / ACCOUNTS ================= */
-/* Two tiers, so the game works before and after you paste in your anon key:
-   - No key set: accounts are per-browser, exactly as before.
-   - Key set: accounts live in Supabase (auth.users + a `saves` table with
-     row-level security), and localStorage becomes a write-through cache
-     so a dropped connection never loses progress mid-session. */
+/* Cloud-only. Nothing about a character is ever written to localStorage —
+   the only thing living in the browser is Supabase's own auth session
+   token, which supabase-js manages itself and which this file never reads
+   or writes directly. Every character save is a row in Supabase's `saves`
+   table, and save() always re-confirms the live session before writing,
+   so a stale in-memory userId can never silently write to the wrong place
+   — or silently write nowhere at all. */
 
 const sb = (window.supabase && window.RESPITE_SUPABASE_URL && window.RESPITE_SUPABASE_ANON_KEY
   && window.RESPITE_SUPABASE_ANON_KEY !== "PASTE_YOUR_ANON_KEY_HERE")
   ? window.supabase.createClient(window.RESPITE_SUPABASE_URL, window.RESPITE_SUPABASE_ANON_KEY)
   : null;
 
-// Supabase auth wants an email. Usernames are mapped to one under a fake
-// domain so the login UI can stay "username + password".
 function emailFor(user) { return `${user}@players.respite`; }
 function validUsername(u) { return /^[a-z0-9_]{3,20}$/.test(u || ""); }
 
-function hashPass(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0; return String(h); }
-function readAccounts() { try { return JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || "{}"); } catch (e) { return {}; } }
-function writeAccounts(a) { try { localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(a)); } catch (e) {} }
-function saveKey() { return state.meta.account ? `${SAVE_PREFIX}_${state.meta.account}` : `${SAVE_PREFIX}_guest`; }
+let saveInFlight = false;
+let saveQueued = false;
+let saveTimer = null;
 
-function save() {
+// Always asks Supabase for the current session rather than trusting
+// state.meta.userId — that's what makes this "bulletproof" against a
+// cleared/expired token silently no-op'ing every write.
+async function save() {
   state.meta.lastSeen = Date.now();
-  
-  // Only save to Supabase server, bypassing local storage completely
-  if (sb && state.meta.userId) {
-    sb.from("saves")
+  if (!sb) { console.warn("Respite: Supabase isn't configured, nothing to save to."); return false; }
+
+  if (saveInFlight) { saveQueued = true; return true; }
+  saveInFlight = true;
+
+  try {
+    const { data: { session }, error: sessErr } = await sb.auth.getSession();
+    if (sessErr || !session) {
+      console.warn("Respite: save skipped, not signed in.");
+      return false;
+    }
+    state.meta.userId = session.user.id;
+
+    const { error } = await sb.from("saves")
       .update({ data: state, updated_at: new Date().toISOString() })
-      .eq("user_id", state.meta.userId)
-      .then(({ error }) => { 
-        if (error) {
-          console.error("Cloud save failed:", error.message);
-          toast("Cloud save failed");
-        } else {
-          toast("Saved to server");
-        }
-      });
-  } else {
-    console.warn("Not logged into Supabase — save skipped.");
+      .eq("user_id", session.user.id);
+
+    if (error) {
+      console.error("Respite: cloud save failed —", error.message);
+      toast("Save failed — check the console");
+      return false;
+    }
+    return true;
+  } finally {
+    saveInFlight = false;
+    if (saveQueued) { saveQueued = false; save(); }
   }
+}
+
+// Fires ~700ms after the last state-changing action, so a burst of clicks
+// (equip, then equip again, then sell) becomes one write, not five —
+// while still feeling instant. renderAll() calls this on every full render.
+function scheduleSave() {
+  if (!sb || !state.meta.userId) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(save, 700);
 }
 
 async function createAccount(user, pass) {
   user = (user || "").trim().toLowerCase();
   if (!validUsername(user)) return "Username: 3–20 characters, lowercase letters, numbers, underscore only.";
   if ((pass || "").length < 4) return "Password needs at least 4 characters.";
-
-  if (!sb) {
-    const accts = readAccounts();
-    if (accts[user]) return "That name is taken on this browser.";
-    accts[user] = { hash: hashPass(pass), created: Date.now() };
-    writeAccounts(accts);
-    state.meta.account = user;
-    save();
-    return null;
-  }
+  if (!sb) return "Cloud isn't configured — check the Supabase keys in index.html.";
 
   const { data, error } = await sb.auth.signUp({ email: emailFor(user), password: pass });
   if (error) return error.message.includes("already") ? "That username is taken." : error.message;
@@ -1407,33 +1413,13 @@ async function createAccount(user, pass) {
 
   state.meta.account = user;
   state.meta.userId = userId;
-  save();
+  await save();
   return null;
 }
 
 async function loginAccount(user, pass) {
   user = (user || "").trim().toLowerCase();
-
-  if (!sb) {
-    const accts = readAccounts();
-    if (!accts[user]) return "No account by that name on this browser.";
-    if (accts[user].hash !== hashPass(pass)) return "Wrong password.";
-    const raw = localStorage.getItem(`${SAVE_PREFIX}_${user}`);
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw);
-        const last = (parsed.meta && parsed.meta.lastSeen) || Date.now();
-        state = migrate(parsed);
-        state.meta.account = user;
-        const gone = Date.now() - last;
-        if (gone > 30000) catchUp({ ms: Math.min(gone, IDLE_CAP_MS), overCap: gone > IDLE_CAP_MS });
-      } catch (e) { return "That account's save is corrupted."; }
-    } else { state = freshState(); state.meta.account = user; }
-    selected = null;
-    refreshBounty();
-    render();
-    return null;
-  }
+  if (!sb) return "Cloud isn't configured — check the Supabase keys in index.html.";
 
   const { data, error } = await sb.auth.signInWithPassword({ email: emailFor(user), password: pass });
   if (error) return "Wrong username or password.";
@@ -1442,25 +1428,28 @@ async function loginAccount(user, pass) {
   const { data: row, error: selErr } = await sb.from("saves").select("data, updated_at").eq("user_id", userId).single();
   if (selErr) return "Signed in, but couldn't load your save: " + selErr.message;
 
-  const last = (row.data && row.data.meta && row.data.meta.lastSeen) || Date.parse(row.updated_at) || Date.now();
-  state = migrate(row.data);
-  state.meta.account = user;
-  state.meta.userId = userId;
-  const gone = Date.now() - last;
-  if (gone > 30000) catchUp({ ms: Math.min(gone, IDLE_CAP_MS), overCap: gone > IDLE_CAP_MS });
-
-  selected = null;
-  refreshBounty();
-  save();
-  render();
+  applyLoadedRow(row, user, userId);
   return null;
 }
 
 async function logoutAccount() {
-  save();
+  await save();
   if (sb) { try { await sb.auth.signOut(); } catch (e) {} }
   state = freshState();
   selected = null;
+  render();
+}
+
+// Wipes this character back to the start. There's no local save to fall
+// back to, so this is a full reset rather than a delete-and-reload.
+async function resetCharacter() {
+  const acct = state.meta.account, userId = state.meta.userId;
+  state = freshState();
+  state.meta.account = acct;
+  state.meta.userId = userId;
+  await save();
+  selected = null;
+  refreshBounty();
   render();
 }
 
@@ -1495,15 +1484,23 @@ function migrate(loaded) {
   return m;
 }
 
-// Synchronous local boot, so the page paints instantly. If a Supabase
-// session already exists (cookie/localStorage token from supabase-js),
-// resumeCloudSession() below takes over a moment later and reconciles.
-function bootLoad() {
-  return null; // Forces the game to rely on resumeCloudSession() from Supabase
+function applyLoadedRow(row, username, userId) {
+  const last = (row.data && row.data.meta && row.data.meta.lastSeen) || Date.parse(row.updated_at) || Date.now();
+  state = migrate(row.data);
+  state.meta.account = username;
+  state.meta.userId = userId;
+  const gone = Date.now() - last;
+  if (gone > 30000) catchUp({ ms: Math.min(gone, IDLE_CAP_MS), overCap: gone > IDLE_CAP_MS });
+  selected = null;
+  refreshBounty();
+  render();
 }
 
-// Picks up an existing Supabase session on page refresh, so a signed-in
-// player doesn't get dropped back to guest every reload.
+// Boot is purely cloud-driven: the game starts as a blank guest character
+// so the page paints instantly, then resumeCloudSession() swaps in the
+// real one a moment later if a session already exists.
+function bootLoad() { return null; }
+
 async function resumeCloudSession() {
   if (!sb) return;
   const { data: { session } } = await sb.auth.getSession();
@@ -1512,15 +1509,7 @@ async function resumeCloudSession() {
   const userId = session.user.id;
   const { data: row, error } = await sb.from("saves").select("data, username, updated_at").eq("user_id", userId).single();
   if (error || !row) return;
-
-  const last = (row.data && row.data.meta && row.data.meta.lastSeen) || Date.parse(row.updated_at) || Date.now();
-  state = migrate(row.data);
-  state.meta.account = row.username;
-  state.meta.userId = userId;
-  const gone = Date.now() - last;
-  if (gone > 30000) catchUp({ ms: Math.min(gone, IDLE_CAP_MS), overCap: gone > IDLE_CAP_MS });
-  refreshBounty();
-  render();
+  applyLoadedRow(row, row.username, userId);
 }
 
 function catchUp(result) {
@@ -1553,24 +1542,6 @@ function catchUp(result) {
   if (gains.length) say(`Away ${fmtTime(result.ms)}: ${gains.slice(0, 4).join(", ")}.`);
 }
 
-function exportSave() { state.meta.lastSeen = Date.now(); return btoa(unescape(encodeURIComponent(JSON.stringify(state)))); }
-
-function importSave(str) {
-  let json;
-  try { json = decodeURIComponent(escape(atob((str || "").trim()))); } catch (e) { return "That isn't a Respite save."; }
-  let parsed;
-  try { parsed = JSON.parse(json); } catch (e) { return "Save string is corrupted."; }
-  if (!parsed.skills) return "No character in that save.";
-  const acct = state.meta.account, uid = state.meta.userId;
-  state = migrate(parsed);
-  state.meta.account = acct;
-  state.meta.userId = uid;
-  save();
-  selected = null;
-  render();
-  return null;
-}
-
 /* ================= 25. ROUTING ================= */
 /* Hash routes, so every page is linkable, bookmarkable, and the browser
    back button works — without tearing down the tick loop a real page load
@@ -1599,7 +1570,7 @@ window.addEventListener("hashchange", () => { route = parseHash(); selected = nu
 let keys = {};
 let liveRefs = { node: null, monster: null };
 
-function render() { keys = {}; liveRefs = { node: null, monster: null }; renderAll(); }
+function render() { keys = {}; liveRefs = { node: null, monster: null }; renderAll(); scheduleSave(); }
 
 function renderAll() {
   renderTopbar();
@@ -1862,17 +1833,39 @@ function renderGatherBody(s, region) {
   renderOtherSeams(s.id);
 }
 
+let craftTierTab = 1;
+let craftTierTabSkill = null;
+
 function renderCraftBody(s) {
   const lvl = skillLevel(s.id);
-  el("skWorkLabel").textContent = "Workshop";
+  el("skWorkLabel").textContent = "The Bench";
   const box = el("skWorkBody");
   box.innerHTML = "";
+
+  const availableTiers = TIERS.map((t) => t.i).filter((i) => actionsFor(s.id).some((a) => a.tier === i));
+  if (craftTierTabSkill !== s.id) {
+    craftTierTabSkill = s.id;
+    craftTierTab = availableTiers.reduce((best, i) => (TIERS[i - 1].level <= lvl ? i : best), availableTiers[0]);
+  }
+
+  const tabs = document.createElement("div");
+  tabs.className = "tabs craft-tier-tabs";
+  availableTiers.forEach((i) => {
+    const tier = TIERS[i - 1];
+    const b = document.createElement("button");
+    b.className = "tab-btn" + (craftTierTab === i ? " active" : "") + (lvl < tier.level ? " locked" : "");
+    b.textContent = "Lv." + tier.level;
+    b.title = stratumOf(i).name;
+    b.onclick = () => { craftTierTab = i; keys.skill = ""; renderSkill(); };
+    tabs.appendChild(b);
+  });
+  box.appendChild(tabs);
 
   const list = document.createElement("div");
   list.className = "recipe-list";
   const t = state.tasks.skilling;
 
-  actionsFor(s.id).filter((a) => a.level <= lvl + 20).forEach((def) => {
+  actionsFor(s.id).filter((a) => a.tier === craftTierTab).forEach((def) => {
     const locked = lvl < def.level;
     const active = !!(t && t.skillId === s.id && t.actionId === def.id);
     const row = document.createElement("button");
@@ -1906,6 +1899,7 @@ function renderCraftBody(s) {
     liveRefs.node = { def: activeDef, skillId: s.id,
       bar: prog.querySelector("i"), left: prog.querySelector("span"), right: prog.querySelector("b") };
   }
+
 
   el("skRailA").hidden = true;
   el("skYield").hidden = true;
@@ -2639,7 +2633,6 @@ function renderPaperdoll() {
 
   el("dollName").textContent = state.meta.name || "Commander";
   el("dollSub").textContent = `Commander · ${currentRegion().name}`;
-  el("dollSil").textContent = (state.meta.name || "C").charAt(0).toUpperCase();
 
   const stand = el("dollStanding");
   stand.innerHTML = "";
@@ -2880,7 +2873,7 @@ function renderLog() {
 
 /* ================= 27. WIRING ================= */
 
-el("brandMark").innerHTML = icon("moon", "ico-sm");
+el("brandMark").innerHTML = `<img class="mark-img" src="assets/respite-logo.jpg" alt="Respite">`;
 el("coinIcon").innerHTML = icon("coin", "ico-sm");
 
 document.querySelectorAll(".icon-btn").forEach((b) => { b.onclick = () => go(b.dataset.page); });
@@ -2920,16 +2913,16 @@ el("tbFieldClear").onclick = () => {
   render();
 };
 
-el("settingsBtn").onclick = () => { el("shareBox").value = exportSave(); refreshAccountUi(); el("settingsModal").hidden = false; };
+el("settingsBtn").onclick = () => { refreshAccountUi(); el("settingsModal").hidden = false; };
 el("settingsClose").onclick = () => { el("settingsModal").hidden = true; };
 
 function refreshAccountUi() {
   const a = state.meta.account;
   const cloud = !!sb;
-  el("acctStatus").textContent = a
-    ? `Signed in as ${a}${cloud ? " — syncing to the cloud" : " — this browser only"}.`
-    : cloud ? "Playing as a guest. Make an account to play from any device."
-            : "Playing as a guest, this browser only.";
+  el("acctStatus").textContent = !cloud
+    ? "Cloud isn't configured — check the Supabase keys in index.html."
+    : a ? `Signed in as ${a}. Saving to the cloud as you play.`
+        : "Not signed in. Create an account to keep a character.";
   el("acctFields").hidden = !!a;
   el("acctCreate").hidden = !!a;
   el("acctLogin").hidden = !!a;
@@ -2955,25 +2948,16 @@ el("acctLogin").onclick = async () => {
 };
 el("acctLogout").onclick = async () => { await logoutAccount(); refreshAccountUi(); };
 
-el("nameSave").onclick = () => {
+el("nameSave").onclick = async () => {
   const v = (el("nameField").value || "").trim().slice(0, 18);
-  if (v) { state.meta.name = v; save(); toast("Name set"); render(); }
+  if (v) { state.meta.name = v; await save(); toast("Name set"); render(); }
 };
 
-el("shareCopy").onclick = () => {
-  const box = el("shareBox");
-  box.select();
-  navigator.clipboard.writeText(box.value).then(() => toast("Save string copied")).catch(() => toast("Select and copy manually"));
-};
-el("shareLoad").onclick = () => {
-  if (!confirm("Loading a save replaces your current character. Continue?")) return;
-  toast(importSave(el("shareBox").value) || "Save loaded");
-};
-el("saveBtn").onclick = () => { if (save()) toast("Saved"); };
-el("wipeBtn").onclick = () => {
-  if (!confirm("Delete this save permanently?")) return;
-  try { localStorage.removeItem(saveKey()); } catch (e) {}
-  location.reload();
+el("saveBtn").onclick = async () => { toast((await save()) ? "Saved" : "Save failed — check the console"); };
+el("wipeBtn").onclick = async () => {
+  if (!confirm("Reset this character back to the very start? This cannot be undone.")) return;
+  await resetCharacter();
+  toast("Character reset");
 };
 
 /* ================= 28. BOOT + LOOP ================= */

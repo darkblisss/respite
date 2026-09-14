@@ -688,3 +688,15 @@ body{
   .pill-grid{ grid-template-columns:repeat(4,1fr); }
 }
 @media (max-width:760px){ .pill-grid{ grid-template-columns:repeat(3,1fr); } .da-grid{ grid-template-columns:repeat(2,1fr); } }
+
+/* ================= LOGO + DEFAULT PORTRAIT ================= */
+
+.mark-img{ width:30px; height:30px; border-radius:7px; object-fit:cover; display:block; }
+.portrait-frame{ background-size:cover; background-position:center 15%; }
+.portrait-frame img{ width:100%; height:100%; object-fit:cover; object-position:center 12%; display:block; }
+.silhouette{ font-family:var(--font-display); font-size:92px; color:rgba(141,111,209,0.35); }
+
+/* ================= ARTISAN TIER TABS ================= */
+
+.craft-tier-tabs{ margin-bottom:12px; flex-wrap:wrap; }
+.tab-btn.locked{ opacity:.45; }
