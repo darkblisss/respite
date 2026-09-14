@@ -2194,7 +2194,7 @@ function renderMastery(skillId) {
     row.className = "mastery-row";
     row.innerHTML = `<div class="name"><span class="glyph${done ? " on" : ""}"></span><span></span></div><div class="val"></div>`;
     row.querySelector(".glyph").textContent = done ? "✓" : "·";
-    row.querySelectorAll("span")[2].textContent = step.label;
+    row.querySelectorAll("span")[1].textContent = step.label;
     const val = row.querySelector(".val");
     val.textContent = done ? step.desc : "Lv " + step.level;
     if (done) val.classList.add("on");
