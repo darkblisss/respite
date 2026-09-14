@@ -1076,9 +1076,10 @@ function selectSkillAction(skillId, actionId) {
   if (!t) { state.tasks.skilling = newSkillTask(skillId, actionId); render(); return; }
   if (t.skillId === skillId && t.actionId === actionId) {
     t.queued = t.queued === "stop" ? null : "stop";
+    say(t.queued ? "Crews will stand down once this action finishes." : "Stand-down cancelled.");
   } else {
-    t.queued = { skillId, actionId };
-    say(`Queued ${def.name.toLowerCase()} — the current action finishes first.`);
+    state.tasks.skilling = newSkillTask(skillId, actionId);
+    say(`Crews instantly shifted to ${def.name.toLowerCase()}.`);
   }
   render();
 }
