@@ -325,8 +325,11 @@
 
       <section class="page" data-page="forecast" hidden>
         <div class="card">
-          <div class="card-head"><div class="label">Camp Forecast</div></div>
-          <p class="panel-caption">Seven days, fixed at the start of the week. Weather shifts experience only — never how fast your crews work. Intensity runs 1 to 10.</p>
+          <div class="card-head">
+            <div class="label">Camp Forecast</div>
+            <div class="muted tiny" id="forecastNext"></div>
+          </div>
+          <p class="panel-caption">The week ahead is revealed every Sunday at 00:00 UTC. Weather shifts experience only, never how fast your crews work: each day favours one trade and hinders another by the same amount. Weekends are Bountiful, +20% XP to every trade.</p>
           <div class="forecast" id="forecastGrid"></div>
         </div>
       </section>
@@ -352,15 +355,24 @@
 
 <!-- ================= ITEM POPUP MODAL ================= -->
 <div class="modal-wrap" id="itemModal" hidden>
-  <div class="modal item-popup-modal">
-    <h2 class="modal-title" id="ipTitle">Item Details</h2>
-    <div class="item-popup-grid" id="ipContent"></div>
-    <div class="modal-section" style="padding-bottom:0; border:none;">
-      <button class="btn btn-quiet" onclick="el('itemModal').hidden = true;">Close</button>
+  <div class="modal item-modal" role="dialog" aria-modal="true" aria-labelledby="ipName">
+    <button type="button" class="modal-x" id="ipClose" aria-label="Close">&times;</button>
+    <div class="ip-head">
+      <div class="ip-art" id="ipArt"></div>
+      <div class="ip-titles">
+        <div class="ip-name" id="ipName"></div>
+        <div class="ip-sub" id="ipSub"></div>
+      </div>
     </div>
+    <p class="ip-desc" id="ipDesc"></p>
+    <div class="ip-stats" id="ipStats"></div>
+    <div class="ip-effect" id="ipEffect" hidden></div>
+    <div class="ip-sources" id="ipSources"></div>
+    <div class="ip-compare" id="ipCompare" hidden></div>
+    <div class="ip-actions" id="ipActions"></div>
   </div>
 </div>
-
+  
 <!-- ================= SETTINGS ================= -->
 <div class="modal-wrap" id="settingsModal" hidden>
   <div class="modal">
@@ -433,6 +445,12 @@
   window.RESPITE_SUPABASE_URL = "https://thjheemzgtotcctcgxls.supabase.co";
   window.RESPITE_SUPABASE_ANON_KEY = "sb_publishable_tOA7kXhnYGSMz5z4kqlSjg_5U10ltb8";
 </script>
-<script src="game.js"></script>
+<!-- Order matters: data first, ui.js last (it boots the game). -->
+<script src="data.js"></script>
+<script src="utils.js"></script>
+<script src="cloud.js"></script>
+<script src="combat.js"></script>
+<script src="engine.js"></script>
+<script src="ui.js"></script>
 </body>
 </html>
