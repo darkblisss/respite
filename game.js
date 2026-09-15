@@ -32,10 +32,12 @@ const SLOT_LABELS = {
 const DOLL_ORDER = ["weapon", "head", "chest", "hands", "offhand", "feet", "neck", "ring"];
 
 const RARITIES = [
-  { key: "common",   name: "Common",   mult: 1.00, chance: 0.80 },
-  { key: "uncommon", name: "Uncommon", mult: 1.18, chance: 0.15 },
-  { key: "rare",     name: "Rare",     mult: 1.42, chance: 0.04 },
-  { key: "epic",     name: "Epic",     mult: 1.75, chance: 0.01 },
+  { key: "common",    name: "Common",    mult: 1.00, chance: 0.800 },
+  { key: "uncommon",  name: "Uncommon",  mult: 1.10, chance: 0.145 },
+  { key: "rare",      name: "Rare",      mult: 1.20, chance: 0.040 },
+  { key: "epic",      name: "Epic",      mult: 1.30, chance: 0.012 },
+  { key: "legendary", name: "Legendary", mult: 1.50, chance: 0.0025 },
+  { key: "relic",     name: "Relic",     mult: 1.50, chance: 0.0005 },
 ];
 const rarityDef = (k) => RARITIES.find((r) => r.key === k) || RARITIES[0];
 
@@ -43,6 +45,31 @@ function rollRarity() {
   let r = Math.random();
   for (const rar of RARITIES) { if (r < rar.chance) return rar.key; r -= rar.chance; }
   return "common";
+}
+
+/* Relics roll a prefix on top of Legendary stats. The prefix becomes part
+   of the item's name — "Echoing Slag Sword" — and carries one effect. */
+const WEAPON_PREFIXES = [
+  { id: "echoing",     name: "Echoing",      effect: "Chance to strike twice" },
+  { id: "sundering",   name: "Sundering",    effect: "Ignores some Defence" },
+  { id: "furious",     name: "Furious",      effect: "Consecutive hits build damage" },
+  { id: "executioner", name: "Executioner's", effect: "Hits harder on wounded foes" },
+  { id: "wounding",    name: "Wounding",     effect: "Chance to inflict Bleed" },
+];
+const ARMOUR_PREFIXES = [
+  { id: "stalwart",  name: "Stalwart",  effect: "Chance to blunt incoming damage" },
+  { id: "vital",     name: "Vital",     effect: "Improves health and recovery" },
+  { id: "thorned",   name: "Thorned",   effect: "Reflects some damage taken" },
+  { id: "resilient", name: "Resilient", effect: "Hardens when badly hurt" },
+  { id: "bulwark",   name: "Bulwark",   effect: "Improves Defence" },
+];
+const ALL_PREFIXES = WEAPON_PREFIXES.concat(ARMOUR_PREFIXES);
+const prefixDef = (id) => ALL_PREFIXES.find((p) => p.id === id) || null;
+
+function rollPrefix(baseId) {
+  const g = GEAR[baseId];
+  const pool = (g && (g.slot === "weapon" || g.slot === "offhand")) ? WEAPON_PREFIXES : ARMOUR_PREFIXES;
+  return pool[Math.floor(Math.random() * pool.length)].id;
 }
 
 /* ================= 10. TITLE CASE ================= */
@@ -110,6 +137,13 @@ const ICONS = {
   sun:    '<circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M5 5l1.8 1.8M17.2 17.2 19 19M19 5l-1.8 1.8M6.8 17.2 5 19"/>',
   fog:    '<path d="M3 8h14M6 12h15M3 16h13M7 20h11"/>',
   unknown:'<circle cx="12" cy="12" r="8"/><path d="M12 16h.01M9.5 9.5a2.5 2.5 0 1 1 3 3.5"/>',
+
+  // reagents
+  coalIco:   '<path d="M8 4 4 9l3 10h10l3-10-4-5H8Z"/><path d="M10 9h4l1 5h-6l1-5Z"/>',
+  resinIco:  '<path d="M12 3c3 5 5 7.5 5 10a5 5 0 0 1-10 0c0-2.5 2-5 5-10Z"/><path d="M10.5 14a1.5 1.5 0 0 0 3 0"/>',
+  pulpIco:   '<path d="M5 6h11l3 3v9H5V6Z"/><path d="M16 6v3h3M8 12h8M8 15h6"/>',
+  tallowIco: '<path d="M7 10h10v9a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-9Z"/><path d="M12 10V6M12 3c1.5 1.5 1.5 3 0 3s-1.5-1.5 0-3Z"/>',
+  shardIco:  '<path d="m12 2 4 7-4 13-4-13 4-7Z"/><path d="M8 9h8"/>',
 };
 
 function icon(name, cls) {
@@ -155,6 +189,8 @@ const TIERS = [
   { i: 9, level: 80, time: 72000, xp: 49, fell: "Godsdown Knot",   delve: "Titan Core",     harvest: "Godsbane Frond", flay: "Demon Carapace",     dredge: "Void Sapphire" },
 ];
 
+// Tier -> chance the reagent drops alongside the resource. T1/T2 have
+// dedicated nodes instead, so they sit at 0 here.
 const REAGENT_CHANCES = [0, 0, 0, 0.0125, 0.025, 0.0375, 0.05, 0.0625, 0.075, 0.10];
 
 const basePrefix = (name) => name.split(" ")[0];
@@ -162,12 +198,25 @@ const slug = (s) => s.toLowerCase().replace(/[^a-z]/g, "");
 
 /* ================= 5. SKILLS ================= */
 
+/* Five reagents, global — one per gathering skill, no tier prefix.
+   Recipes ask for "T reagent", meaning tier-many of them: a T9 bar needs
+   9 Coal. Dedicated nodes exist in T1 and T2; from T3 on they drop
+   alongside the main resource at an increasing chance. */
+const REAGENTS = [
+  { id: "coal",       name: "Coal",       icon: "coalIco",   skill: "delving",    category: "Reagent" },
+  { id: "resin",      name: "Resin",      icon: "resinIco",  skill: "felling",    category: "Reagent" },
+  { id: "pulp",       name: "Pulp",       icon: "pulpIco",   skill: "harvesting", category: "Reagent" },
+  { id: "tallow",     name: "Tallow",     icon: "tallowIco", skill: "flaying",    category: "Reagent" },
+  { id: "veil_shard", name: "Veil Shard", icon: "shardIco",  skill: "dredging",   category: "Reagent" },
+];
+const reagentOf = (skillId) => REAGENTS.find((r) => r.skill === skillId);
+
 const GATHER_SKILLS = [
-  { id: "delving",    name: "Delving",    icon: "pick",   mat: "delve",   reagent: "Coal",      matIcon: "ore",   reagIcon: "gem" },
-  { id: "felling",    name: "Felling",    icon: "axe",    mat: "fell",    reagent: "Resin",     matIcon: "log",   reagIcon: "gem" },
-  { id: "harvesting", name: "Harvesting", icon: "sickle", mat: "harvest", reagent: "Pulp",      matIcon: "fibre", reagIcon: "gem" },
-  { id: "flaying",    name: "Flaying",    icon: "knife",  mat: "flay",    reagent: "Tallow",    matIcon: "hide",  reagIcon: "gem" },
-  { id: "dredging",   name: "Dredging",   icon: "net",    mat: "dredge",  reagent: "Veil Shard",matIcon: "gem",   reagIcon: "gem" },
+  { id: "delving",    name: "Delving",    icon: "pick",   mat: "delve",   resource: "Ore",    reagent: "coal",       matIcon: "ore" },
+  { id: "felling",    name: "Felling",    icon: "axe",    mat: "fell",    resource: "Timber", reagent: "resin",      matIcon: "log" },
+  { id: "harvesting", name: "Harvesting", icon: "sickle", mat: "harvest", resource: "Fibre",  reagent: "pulp",       matIcon: "fibre" },
+  { id: "flaying",    name: "Flaying",    icon: "knife",  mat: "flay",    resource: "Hides",  reagent: "tallow",     matIcon: "hide" },
+  { id: "dredging",   name: "Dredging",   icon: "net",    mat: "dredge",  resource: "Finds",  reagent: "veil_shard", matIcon: "gem" },
 ];
 
 const PROFESSIONS = [
@@ -219,6 +268,11 @@ RATIONS.forEach((r) => { MATERIALS[r.id] = r; });
 
 MATERIALS.vault_chest = { id: "vault_chest", name: "Banded Chest", icon: "crate", kind: "material", value: 600, chest: 5, tier: 2 };
 
+REAGENTS.forEach((r) => {
+  MATERIALS[r.id] = { id: r.id, name: r.name, icon: r.icon, kind: "material",
+    category: "Reagent", value: 8, tier: 1, reagent: true };
+});
+
 CRAFT_ACTIONS.woodwright.push({
   id: "craft_vault_chest", skillId: "woodwright", tier: 2, name: "Banded Chest", icon: "crate",
   level: 12, time: 45000, xp: 8, cost: { [matId(TIERS[1], "fell")]: 20 }, out: { vault_chest: 1 }
@@ -230,8 +284,9 @@ const gearTime = (t) => (90 + 150 * t) * 1000;
 const statPwr = (t) => 4 * Math.pow(1.52, t - 1);
 const valBase = (t) => 4 * Math.pow(2.05, t - 1);
 
-function addMat(id, name, icon, tier, valMult) {
-  MATERIALS[id] = { id, name, icon, kind: "material", value: Math.round(valBase(tier) * valMult), tier };
+function addMat(id, name, icon, tier, valMult, category) {
+  MATERIALS[id] = { id, name, icon, kind: "material",
+    value: Math.round(valBase(tier) * valMult), tier, category: category || "Component" };
 }
 
 function addGear(id, name, icon, slot, tier, prof, atk, def, hp, twoHand, maxDur) {
@@ -263,35 +318,32 @@ TIERS.forEach((t) => {
   // 1. RAW MATERIALS & GATHER ACTIONS
   GATHER_SKILLS.forEach((s) => {
     const rawId = matId(t, s.mat);
-    const reagId = `${slug(basePrefix(t[s.mat]))}_${slug(s.reagent)}`;
-    addMat(rawId, t[s.mat], s.matIcon, tier, 1.0);
-    addMat(reagId, `${basePrefix(t[s.mat])} ${s.reagent}`, s.reagIcon, tier, 1.5);
+    const reag = MATERIALS[s.reagent];
+    addMat(rawId, t[s.mat], s.matIcon, tier, 1.0, s.resource);
 
     if (!GATHER_ACTIONS[s.id]) GATHER_ACTIONS[s.id] = [];
-    
+
     if (tier === 1 || tier === 2) {
+      // Dedicated reagent ground. Same level as the tier — never gated
+      // behind extra levels, so it's workable the moment you arrive.
       GATHER_ACTIONS[s.id].push({
         id: `${s.id}_t${tier}_raw`, skillId: s.id, tier, name: `Gather ${t[s.mat]}`, icon: s.matIcon,
         level: t.level, time: t.time, xp: t.xp, out: { [rawId]: 1 }
       });
       GATHER_ACTIONS[s.id].push({
-        id: `${s.id}_t${tier}_reag`, skillId: s.id, tier, name: `Gather ${MATERIALS[reagId].name}`, icon: s.reagIcon,
-        level: t.level + (tier === 1 ? 3 : 5), time: t.time, xp: t.xp + 1, out: { [reagId]: 1 }
+        id: `${s.id}_t${tier}_reag`, skillId: s.id, tier, name: `Gather ${reag.name}`, icon: reag.icon,
+        level: t.level, time: t.time, xp: t.xp, out: { [s.reagent]: 1 }
       });
     } else {
       GATHER_ACTIONS[s.id].push({
         id: `${s.id}_t${tier}`, skillId: s.id, tier, name: `Gather ${t[s.mat]}`, icon: s.matIcon,
         level: t.level, time: t.time, xp: t.xp, out: { [rawId]: 1 },
-        reagentId: reagId, reagentChance: REAGENT_CHANCES[tier]
+        reagentId: s.reagent, reagentChance: REAGENT_CHANCES[tier]
       });
     }
   });
 
-  const coal = `${slug(tDelve)}_coal`;
-  const resin = `${slug(tFell)}_resin`;
-  const pulp = `${slug(tHarv)}_pulp`;
-  const tallow = `${slug(tFlay)}_tallow`;
-  const shard = `${slug(tDred)}_veilshard`;
+  const coal = "coal", resin = "resin", pulp = "pulp", tallow = "tallow", shard = "veil_shard";
 
   // 2. REFINED MATERIALS
   const bar = `${slug(tDelve)}_bar`;
@@ -300,11 +352,11 @@ TIERS.forEach((t) => {
   const leather = `${slug(tFlay)}_leather`;
   const inlay = `${slug(tDred)}_inlay`;
 
-  addMat(bar, `${tDelve} Bar`, "ore", tier, 3.5);
-  addMat(plank, `${tFell} Plank`, "log", tier, 3.5);
-  addMat(weave, `${tHarv} Weave`, "fibre", tier, 3.5);
-  addMat(leather, `${tFlay} Leather`, "hide", tier, 3.5);
-  addMat(inlay, `${tDred} Inlay`, "gem", tier, 3.5);
+  addMat(bar, `${tDelve} Bar`, "ore", tier, 3.5, "Bars");
+  addMat(plank, `${tFell} Plank`, "log", tier, 3.5, "Planks");
+  addMat(weave, `${tHarv} Weave`, "fibre", tier, 3.5, "Weave");
+  addMat(leather, `${tFlay} Leather`, "hide", tier, 3.5, "Leather");
+  addMat(inlay, `${tDred} Inlay`, "gem", tier, 3.5, "Inlays");
 
   addCraft("forgemaster", bar, MATERIALS[bar].name, "ore", tier, 0, t.time, 0.5, { [matId(t, "delve")]: 2, [coal]: tier }, false, false);
   addCraft("woodwright", plank, MATERIALS[plank].name, "log", tier, 0, t.time, 0.5, { [matId(t, "fell")]: 2, [resin]: tier }, false, false);
@@ -327,19 +379,19 @@ TIERS.forEach((t) => {
   const book = `${slug(tHarv)}_book`;
   const clasp = `${slug(tDred)}_clasp`;
 
-  addMat(blade, `${tDelve} Blade`, "blade", tier, 10);
-  addMat(handle, `${tFell} Handle`, "log", tier, 10);
-  addMat(score, `${tFell} Shield Core`, "ward", tier, 10);
-  addMat(bind, `${tFlay} Binding`, "hide", tier, 6);
-  addMat(stave, `${tFell} Bow Stave`, "stave", tier, 10);
-  addMat(string, `${tHarv} Bowstring`, "fibre", tier, 8);
-  addMat(grip, `${tFlay} Grip`, "hide", tier, 8);
-  addMat(shaft, `${tFell} Shaft`, "stave", tier, 10);
-  addMat(head, `${tDelve} Staff Head`, "gem", tier, 10);
-  addMat(gblade, `${tDelve} Great Blade`, "greatblade", tier, 14);
-  addMat(ggrip, `${tFell} Great Grip`, "log", tier, 10);
-  addMat(book, `${tHarv} Book Tome`, "book", tier, 14);
-  addMat(clasp, `${tDred} Clasp`, "gem", tier, 6);
+  addMat(blade, `${tDelve} Blade`, "blade", tier, 10, "Component");
+  addMat(handle, `${tFell} Handle`, "log", tier, 10, "Component");
+  addMat(score, `${tFell} Shield Core`, "ward", tier, 10, "Component");
+  addMat(bind, `${tFlay} Binding`, "hide", tier, 6, "Component");
+  addMat(stave, `${tFell} Bow Stave`, "stave", tier, 10, "Component");
+  addMat(string, `${tHarv} Bowstring`, "fibre", tier, 8, "Component");
+  addMat(grip, `${tFlay} Grip`, "hide", tier, 8, "Component");
+  addMat(shaft, `${tFell} Shaft`, "stave", tier, 10, "Component");
+  addMat(head, `${tDelve} Staff Head`, "gem", tier, 10, "Component");
+  addMat(gblade, `${tDelve} Great Blade`, "greatblade", tier, 14, "Component");
+  addMat(ggrip, `${tFell} Great Grip`, "log", tier, 10, "Component");
+  addMat(book, `${tHarv} Book Tome`, "book", tier, 14, "Component");
+  addMat(clasp, `${tDred} Clasp`, "gem", tier, 6, "Component");
 
   const cTime = compTime(tier);
   addCraft("forgemaster", blade, MATERIALS[blade].name, "blade", tier, 1, cTime, 1.2, { [bar]: 12, [coal]: tier }, false, false);
@@ -449,42 +501,63 @@ TIERS.forEach((t) => {
 });
 
 // Common gear stacks. Uncommon and above gets a unique instance id
-function makeKey(base, rarity) {
+/* Key shapes:
+     material            -> "slag_delve"
+     common gear/tool    -> "slag_sword|common"          (stacks)
+     uncommon+           -> "slag_sword|rare|17"         (unique instance)
+     relic               -> "slag_sword|relic|17|echoing" (instance + prefix) */
+function makeKey(base, rarity, prefix) {
   if (!rarity) return base;
   if (rarity === "common") return `${base}|common`;
-  return `${base}|${rarity}|${state.uid++}`;
+  const uid = state.uid++;
+  if (rarity === "relic") return `${base}|relic|${uid}|${prefix || rollPrefix(base)}`;
+  return `${base}|${rarity}|${uid}`;
 }
 
-function stacks(key) { 
-  const p = parseKey(key); 
-  return !p.uid; 
+function stacks(key) {
+  const p = parseKey(key);
+  return !p.uid;
 }
 
-function parseKey(key) { 
-  const b = String(key).split("|"); 
-  return { base: b[0], rarity: b[1] || null, uid: b[2] || null }; 
+function parseKey(key) {
+  const b = String(key).split("|");
+  return { base: b[0], rarity: b[1] || null, uid: b[2] || null, prefix: b[3] || null };
 }
 
 function itemDef(key) {
-  const { base, rarity } = parseKey(key);
+  const { base, rarity, prefix } = parseKey(key);
   const g = GEAR[base];
   if (g) {
     const m = rarityDef(rarity || "common").mult;
+    const pfx = prefix ? prefixDef(prefix) : null;
     return {
-      base, rarity: rarity || "common", kind: "gear", name: g.name, icon: g.icon, slot: g.slot,
+      base, rarity: rarity || "common", prefix: prefix || null, kind: "gear",
+      name: g.name, icon: g.icon, slot: g.slot,
       attack: Math.round(g.attack * m), defence: Math.round(g.defence * m), health: Math.round(g.health * m),
       twoHanded: g.twoHanded, maxDur: g.maxDur, repairMat: g.repairMat,
-      value: Math.round(g.value * m), tier: g.tier, prof: g.prof
+      value: Math.round(g.value * m * (pfx ? 2 : 1)), tier: g.tier, prof: g.prof,
+      effect: pfx ? pfx.effect : null, category: "Equipment",
     };
   }
-  const mat = MATERIALS[base] || TOOLS[base];
+  const tool = TOOLS[base];
+  if (tool) {
+    const m = rarityDef(rarity || "common").mult;
+    return Object.assign({}, tool, { base, rarity: rarity || "common",
+      speed: tool.speed * m, category: "Tool" });
+  }
+  const mat = MATERIALS[base];
   return mat ? Object.assign({ base, rarity: null }, mat) : null;
 }
 
 function itemName(key) {
   const d = itemDef(key);
   if (!d) return String(key);
-  return d.kind === "gear" && d.rarity !== "common" ? `${rarityDef(d.rarity).name} ${d.name}` : d.name;
+  // A relic wears its prefix instead of the word "Relic": Echoing Slag Sword.
+  if (d.prefix) return `${prefixDef(d.prefix).name} ${d.name}`;
+  if ((d.kind === "gear" || d.kind === "tool") && d.rarity && d.rarity !== "common") {
+    return `${rarityDef(d.rarity).name} ${d.name}`;
+  }
+  return d.name;
 }
 
 function actionsFor(skillId) { 
@@ -562,28 +635,80 @@ const monsterOfTier = (tier) => rankOf(tier, "grunt");
 const getMonster = (id) => MONSTERS.find((m) => m.id === id) || null;
 
 /* ================= 11. WEATHER ================= */
+/* A week of weather is generated in advance from the week's seed, so the
+   whole forecast is visible and identical for everyone, but next week is
+   still unknown. Weather touches XP only — never action speed. Intensity
+   runs 1-10 and maps straight to a 1-10% modifier. */
 
-const WEATHER_WEEK = [
-  { id: "bountiful", name: "Bountiful Rest", icon: "sun", note: "Every trade earns more.", xp: 1.2, mods: {} },
-  { id: "fog", name: "Grave Fog", icon: "fog", note: "Flaying and Harvesting drag. Delving is untroubled.", xp: 1, mods: { flaying: 1.1, harvesting: 1.1, delving: 0.9 } },
-  { id: "rain", name: "Rain", icon: "rain", note: "Dredging runs quick. Felling bogs down.", xp: 1, mods: { dredging: 0.9, felling: 1.1 } },
-  { id: "clear", name: "Clear Skies", icon: "sun", note: "Nothing helping, nothing hindering.", xp: 1, mods: {} },
-  { id: "frost", name: "Hard Frost", icon: "fog", note: "Open ground stiffens. Forge goes faster.", xp: 1, mods: { felling: 1.1, harvesting: 1.1, forgemaster: 0.9 } },
-  { id: "swelter", name: "Swelter", icon: "sun", note: "Camp work drags. Cold water is a relief.", xp: 1, mods: { forgemaster: 1.1, woodwright: 1.1, dredging: 0.9 } },
-  { id: "bountiful", name: "Bountiful Rest", icon: "sun", note: "Every trade earns more.", xp: 1.2, mods: {} },
+function seedFrom(n) {
+  const x = Math.sin(n) * 10000;
+  return x - Math.floor(x);
+}
+
+const WEATHER_TYPES = [
+  { id: "clear",   name: "Clear Skies",  icon: "sun",  calm: true },
+  { id: "rain",    name: "Rain",         icon: "rain", boons: ["dredging", "harvesting"], banes: ["felling", "delving"] },
+  { id: "fog",     name: "Grave Fog",    icon: "fog",  boons: ["dredging", "flaying"],    banes: ["harvesting", "felling"] },
+  { id: "frost",   name: "Hard Frost",   icon: "fog",  boons: ["delving", "felling"],     banes: ["harvesting", "flaying"] },
+  { id: "swelter", name: "Swelter",      icon: "sun",  boons: ["harvesting", "felling"],  banes: ["delving", "dredging"] },
+  { id: "storm",   name: "Veil Storm",   icon: "rain", boons: ["dredging", "delving"],    banes: ["flaying", "harvesting"] },
+  { id: "bountiful", name: "Bountiful Rest", icon: "sun", bountiful: true },
 ];
 
-function seedFrom(n) { 
-  const x = Math.sin(n) * 10000; 
-  return x - Math.floor(x); 
+const INTENSITY_WORDS = ["Faint", "Light", "Mild", "Steady", "Marked", "Strong", "Heavy", "Severe", "Fierce", "Torrential"];
+
+const WEEK_MS = 7 * DAY_MS;
+const dayIndex = () => Math.floor(Date.now() / DAY_MS);
+
+// Deterministic: same day number always yields the same weather, for everyone.
+function weatherForDay(dayNum) {
+  const weekSeed = Math.floor(dayNum / 7);
+  const r1 = seedFrom(weekSeed * 13.77 + dayNum * 4.13);
+  const r2 = seedFrom(weekSeed * 5.21 + dayNum * 9.91);
+
+  const type = WEATHER_TYPES[Math.floor(r1 * WEATHER_TYPES.length)];
+  const intensity = 1 + Math.floor(r2 * 10);          // 1-10
+  const mods = {};
+
+  if (type.bountiful) {
+    GATHER_SKILLS.forEach((s) => { mods[s.id] = 1 + intensity / 100; });
+    PROFESSIONS.forEach((p) => { mods[p.id] = 1 + intensity / 100; });
+  } else if (!type.calm) {
+    (type.boons || []).forEach((sk, i) => { mods[sk] = 1 + (intensity - i * 2) / 100; });
+    (type.banes || []).forEach((sk, i) => { mods[sk] = 1 - Math.max(1, intensity - 3 - i * 2) / 100; });
+  }
+
+  return {
+    id: type.id, name: type.name, icon: type.icon, intensity,
+    label: type.calm ? type.name : `${INTENSITY_WORDS[intensity - 1]} ${type.name}`,
+    mods, calm: !!type.calm, bountiful: !!type.bountiful,
+  };
 }
 
-function weatherOn(dayOffset) { 
-  const d = new Date(Date.now() + (dayOffset || 0) * DAY_MS); 
-  return WEATHER_WEEK[d.getUTCDay()]; 
-}
-
+function weatherOn(dayOffset) { return weatherForDay(dayIndex() + (dayOffset || 0)); }
 const currentWeather = () => weatherOn(0);
+
+// Seven days starting today.
+function forecast() {
+  const out = [];
+  for (let i = 0; i < 7; i++) out.push({ offset: i, w: weatherOn(i) });
+  return out;
+}
+
+// "Harvesting +7% XP · Felling -4% XP"
+function weatherEffectText(w) {
+  const parts = Object.keys(w.mods).map((sk) => {
+    const pct = Math.round((w.mods[sk] - 1) * 100);
+    if (!pct) return null;
+    return `${skillName(sk)} ${pct > 0 ? "+" : ""}${pct}% XP`;
+  }).filter(Boolean);
+  return parts.join(" · ");
+}
+
+function weatherXpMult(skillId) {
+  const m = currentWeather().mods[skillId];
+  return typeof m === "number" ? m : 1;
+}
 
 function serverClock() { 
   const d = new Date();
@@ -591,27 +716,106 @@ function serverClock() {
   return `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())} UTC`; 
 }
 
+/* ================= 11b. REQUISITIONS ================= */
+/* A roster of Agents you send out for a chosen resource. Three deployments
+   a day, resolved at the daily reset — a supplement to gathering, never a
+   replacement for it. */
+
+const AGENT_RARITIES = [
+  { key: "common",    name: "Common",    mult: 1.0,  chance: 0.50 },
+  { key: "uncommon",  name: "Uncommon",  mult: 1.6,  chance: 0.26 },
+  { key: "rare",      name: "Rare",      mult: 2.5,  chance: 0.14 },
+  { key: "epic",      name: "Epic",      mult: 4.0,  chance: 0.07 },
+  { key: "legendary", name: "Legendary", mult: 6.5,  chance: 0.025 },
+  { key: "relic",     name: "Relic",     mult: 10.0, chance: 0.005 },
+];
+
+const AGENT_NAMES = [
+  "Mara Voss", "Old Teague", "The Quartermaster", "Sable", "Hollis Crane",
+  "Bracken", "Wren Ashby", "Doctor Pike", "The Tallyman", "Ivo Kestrel",
+  "Greave", "Silt", "Marrow Jack", "Ashen Nell", "Corvin Rue",
+];
+
+const REQUISITIONS_PER_DAY = 3;
+const AGENT_HIRE_COST = 2500;
+
+function rollAgentRarity() {
+  let r = Math.random();
+  for (const a of AGENT_RARITIES) { if (r < a.chance) return a.key; r -= a.chance; }
+  return "common";
+}
+
+const agentRarityDef = (k) => AGENT_RARITIES.find((a) => a.key === k) || AGENT_RARITIES[0];
+
+function hireAgent() {
+  if (state.player.gold < AGENT_HIRE_COST) { say(`Hiring costs ${fmt(AGENT_HIRE_COST)} gold.`); render(); return; }
+  if (state.agents.length >= 12) { say("The roster is full."); render(); return; }
+  state.player.gold -= AGENT_HIRE_COST;
+  const rarity = rollAgentRarity();
+  const used = state.agents.map((a) => a.name);
+  const pool = AGENT_NAMES.filter((n) => !used.includes(n));
+  const name = pool.length ? pool[randInt(0, pool.length - 1)] : AGENT_NAMES[randInt(0, AGENT_NAMES.length - 1)];
+  state.agents.push({ id: "agent_" + (state.uid++), name, rarity });
+  say(`${name} signs on — ${agentRarityDef(rarity).name}.`);
+  toast(`Agent hired: ${name}`);
+  render();
+}
+
+// A requisition is a promise for tomorrow, not an instant reward.
+function deployAgent(agentId, itemKey) {
+  const agent = state.agents.find((a) => a.id === agentId);
+  if (!agent) return;
+  if (state.requisitions.filter((r) => !r.resolved).length >= REQUISITIONS_PER_DAY) {
+    say(`Only ${REQUISITIONS_PER_DAY} deployments a day.`); render(); return;
+  }
+  if (state.requisitions.some((r) => !r.resolved && r.agentId === agentId)) {
+    say(`${agent.name} is already out.`); render(); return;
+  }
+  const qty = Math.max(1, Math.round(12 * agentRarityDef(agent.rarity).mult));
+  state.requisitions.push({ agentId, agentName: agent.name, itemKey, qty, day: dayIndex(), resolved: false });
+  say(`${agent.name} sets out for ${itemName(itemKey)}.`);
+  render();
+}
+
+// Runs on load and on tick when the world day rolls over.
+function resolveRequisitions() {
+  if (state.reqDay === dayIndex()) return;
+  const pending = state.requisitions.filter((r) => !r.resolved);
+  if (pending.length) {
+    const lines = [];
+    pending.forEach((r) => {
+      r.resolved = true;
+      if (deposit(r.itemKey, r.qty)) lines.push(`${fmt(r.qty)} ${itemName(r.itemKey)}`);
+      else lines.push(`${itemName(r.itemKey)} (no room)`);
+    });
+    say(`Requisitions returned: ${lines.join(", ")}.`);
+    toast("Requisitions returned");
+  }
+  state.requisitions = [];
+  state.reqDay = dayIndex();
+}
+
 /* ================= 12. MASTERY ================= */
 
 const MASTERY_TRACK = [
-  { level: 10, speed: 0.03, double: 0,    label: "Steady Hands", desc: "+3% speed" },
-  { level: 20, speed: 0,    double: 0.02, label: "Keen Eye",     desc: "+2% double yield" },
-  { level: 30, speed: 0.03, double: 0,    label: "Practised",    desc: "+3% speed" },
-  { level: 40, speed: 0,    double: 0.03, label: "Rich Pickings", desc: "+3% double yield" },
-  { level: 50, speed: 0.04, double: 0,    label: "Journeyman",   desc: "+4% speed" },
-  { level: 60, speed: 0,    double: 0.05, label: "Deep Instinct", desc: "+5% double yield" },
-  { level: 70, speed: 0.05, double: 0,    label: "Master's Pace", desc: "+5% speed" },
-  { level: 80, speed: 0,    double: 0.05, label: "Bountiful Hand", desc: "+5% double yield" },
-  { level: 90, speed: 0.05, double: 0.05, label: "Peerless",     desc: "+5% speed, +5% double" },
+  { level: 10, double: 0.01, label: "Steady Hands" },
+  { level: 20, double: 0.01, label: "Keen Eye" },
+  { level: 30, double: 0.01, label: "Practised" },
+  { level: 40, double: 0.01, label: "Rich Pickings" },
+  { level: 50, double: 0.01, label: "Journeyman" },
+  { level: 60, double: 0.01, label: "Deep Instinct" },
+  { level: 70, double: 0.01, label: "Seasoned" },
+  { level: 80, double: 0.01, label: "Bountiful Hand" },
+  { level: 90, double: 0.02, label: "Peerless" },
 ];
 
 function mastery(skillId) {
+  // Gathering only — artisan benches get nothing from this.
+  if (!GATHER_ACTIONS[skillId]) return { double: 0 };
   const lvl = skillLevel(skillId);
-  let speed = 0, dbl = 0;
-  MASTERY_TRACK.forEach((m) => { 
-    if (lvl >= m.level) { speed += m.speed; dbl += m.double; } 
-  });
-  return { speed, double: dbl };
+  let dbl = 0;
+  MASTERY_TRACK.forEach((m) => { if (lvl >= m.level) dbl += m.double; });
+  return { double: dbl };
 }
 
 /* ================= 13. TOOLS & MODS ================= */
@@ -621,9 +825,9 @@ function toolFor(skillId) {
   return id ? TOOLS[id] : null;
 }
 
+// Speed comes from tools and the golem only. Weather is XP, mastery is yield.
 function speedMod(skillId) {
-  let m = currentWeather().mods[skillId] || 1;
-  m *= (1 - mastery(skillId).speed);
+  let m = 1;
   const tool = toolFor(skillId);
   if (tool) m *= (1 - tool.speed);
   if (state.pets && state.pets.golem && GATHER_SKILLS.some((s) => s.id === skillId)) m *= 0.9;
@@ -640,13 +844,6 @@ function doubleChance(skillId) {
   return Math.min(0.75, c);
 }
 
-const RICH_FIND_CHANCE = 0.015;
-
-function richFind(def) {
-  if (!GATHER_ACTIONS[def.skillId] || def.tier >= TIERS.length) return null;
-  const gs = GATHER_SKILLS.find((s) => s.id === def.skillId);
-  return matId(TIERS[def.tier], gs.mat);
-}
 
 /* ================= 15. STATE ================= */
 
@@ -661,7 +858,7 @@ function freshState() {
   return {
     schema: SCHEMA,
     meta: { createdAt: Date.now(), lastSeen: Date.now(), playtimeMs: 0, account: null, userId: null, name: "Commander" },
-    player: { gold: 0, hp: 20, recoveryUntil: 0 },
+    player: { gold: 0, hp: 20, recoveryUntil: 0, klass: null },
     skills,
     inv:   { slots: PACK_SLOTS,   items: {}, order: [] },
     bank:  { slots: STORES_SLOTS, items: {}, order: [] },
@@ -675,7 +872,10 @@ function freshState() {
     region: "region_1", 
     travel: { unlocked: ["region_1"] },
     pets: { golem: false, sprite: false, mule: false },
-    threat: {}, 
+    threat: {},
+    agents: [],        // hired requisition agents
+    requisitions: [],  // deployments awaiting the daily reset
+    reqDay: 0,
     bounty: null, 
     buff: null, 
     smugglerBought: {},
@@ -849,17 +1049,73 @@ function equipStat(stat) {
   return total;
 }
 
-function maxHp() { 
-  return 20 + skillLevel("warfare") * 5 + equipStat("health"); 
+/* ---- classes ---- */
+/* Chosen once, at Combat level 5. Each shapes the same combat loop rather
+   than forking it: different base stats, different swing speed, and a
+   different thing to do when the Veil fills. */
+
+const CLASS_PICK_LEVEL = 5;
+
+const CLASSES = [
+  { id: "warrior", name: "Warrior", icon: "plate",
+    blurb: "Forces the Veil through the body. Slow, heavy, hard to put down.",
+    health: 24, attack: 5, defence: 1.5, speed: 2600,
+    crit: 0.05, critDmg: 1.5, block: 0.12, dodge: 0.03, pen: 0.05,
+    veilName: "Onslaught", veilNote: "A brutal swing that ignores half of Defence." },
+  { id: "rogue", name: "Rogue", icon: "blade",
+    blurb: "Brief, precise Veil surges. Fast hands, thin margins.",
+    health: 20, attack: 4, defence: 0.8, speed: 2000,
+    crit: 0.15, critDmg: 1.8, block: 0.02, dodge: 0.12, pen: 0.10,
+    veilName: "Bleedout", veilNote: "A flurry that always crits." },
+  { id: "mage", name: "Mage", icon: "stave",
+    blurb: "Shapes the Veil directly. Fragile, and worth it.",
+    health: 18, attack: 6, defence: 0.5, speed: 2800,
+    crit: 0.08, critDmg: 1.6, block: 0.02, dodge: 0.05, pen: 0.20,
+    veilName: "Unmaking", veilNote: "Detonates the Veil for heavy damage." },
+];
+
+const classDef = (id) => CLASSES.find((c) => c.id === id) || null;
+const myClass = () => classDef(state.player.klass);
+const canPickClass = () => !state.player.klass && skillLevel("warfare") >= CLASS_PICK_LEVEL;
+
+const VEIL_MAX = 100;
+const VEIL_PER_HIT = 18;
+
+function classStat(field, fallback) {
+  const c = myClass();
+  return c ? c[field] : fallback;
 }
 
-function attackPower() { 
-  return 4 + skillLevel("warfare") * 1.6 + equipStat("attack"); 
+function maxHp() {
+  const base = classStat("health", 20);
+  return Math.round(base + skillLevel("warfare") * 5 + equipStat("health"));
 }
 
-function defencePower() { 
-  return skillLevel("warfare") * 0.9 + equipStat("defence"); 
+function attackPower() {
+  const base = classStat("attack", 4);
+  return base + skillLevel("warfare") * 1.6 + equipStat("attack");
 }
+
+function defencePower() {
+  const base = classStat("defence", 1);
+  return base * 0.5 + skillLevel("warfare") * 0.9 + equipStat("defence");
+}
+
+function swingSpeed() { return classStat("speed", PLAYER_SWING_MS); }
+function critChance() { return classStat("crit", 0.05) + prefixBonus("sundering") * 0; }
+function critDamage() { return classStat("critDmg", 1.5); }
+function blockChance() { return classStat("block", 0.05) + (hasPrefix("stalwart") ? 0.08 : 0); }
+function dodgeChance() { return classStat("dodge", 0.05); }
+function defencePen() { return classStat("pen", 0.05) + (hasPrefix("sundering") ? 0.15 : 0); }
+
+// Relic prefixes are read straight off worn gear.
+function hasPrefix(id) {
+  return EQUIP_SLOTS.some((s) => {
+    const k = state.equipment[s];
+    return k && parseKey(k).prefix === id;
+  });
+}
+function prefixBonus() { return 0; }
 
 function wearPct(key) { 
   const d = itemDef(key); 
@@ -874,20 +1130,21 @@ function addGold(n) {
 
 /* ================= 17. PROGRESSION ================= */
 
-function xpMult() { 
-  let m = currentWeather().xp || 1; 
-  if (state.buff && state.buff.until > Date.now()) m *= state.buff.mult; 
-  return m; 
+function xpMult(skillId) {
+  let m = skillId ? weatherXpMult(skillId) : 1;
+  if (state.buff && state.buff.until > Date.now()) m *= state.buff.mult;
+  return m;
 }
 
 function grantXp(skillId, amount) {
-  const gain = Math.max(1, Math.round(amount * xpMult()));
+  const gain = Math.max(1, Math.round(amount * xpMult(skillId)));
   const before = skillLevel(skillId);
   state.skills[skillId] = (state.skills[skillId] || 0) + gain;
   const after = skillLevel(skillId);
   
   if (after > before) {
     say(`${skillName(skillId)} reaches level ${after}.`);
+    if (skillId === "warfare" && canPickClass()) setTimeout(maybeOfferClass, 60);
     if (skillId === "warfare") state.player.hp = maxHp();
     const hit = MASTERY_TRACK.find((m) => m.level === after);
     if (hit) toast(`${skillName(skillId)} ${after} — ${hit.label}`);
@@ -898,6 +1155,7 @@ function grantXp(skillId, amount) {
 /* ================= 18. TICK ================= */
 
 function tick(dt) {
+  resolveRequisitions();
   if (state.tasks.skilling) skillTick(dt);
   if (state.tasks.combat) combatTick(dt);
   if (state.buff && state.buff.until <= Date.now()) state.buff = null;
@@ -941,8 +1199,7 @@ function skillTick(dt) {
     if (task.queued) {
       const q = task.queued;
       if (q === "stop") { 
-        state.tasks.skilling = null; 
-        say("Work finished and stood down."); 
+        state.tasks.skilling = null;  
         return; 
       }
       state.tasks.skilling = newSkillTask(q.skillId, q.actionId);
@@ -982,11 +1239,6 @@ function produce(def) {
       }
     }
     
-    const rich = richFind(def);
-    if (rich && Math.random() < RICH_FIND_CHANCE && deposit(rich, 1)) {
-      logYield(`+1 ${itemName(rich)} (rich find)`); 
-      say(`A richer seam gave up ${itemName(rich)}.`);
-    }
   }
   
   if (def.craftGear) {
@@ -1009,14 +1261,16 @@ function produce(def) {
       logYield(`+1 ${itemName(key)}`); 
       bountyProgress("craft", def);
       
-      if (rarity !== "common") {
-        say(`The ${GEAR[def.craftGear].name.toLowerCase()} comes out ${rarityDef(rarity).name.toLowerCase()}.`);
-        if (rarity === "epic") { 
-          state.stats.epics++; 
-          toast(`Epic: ${itemName(key)}`); 
-        } else if (rarity === "rare") {
-          toast(`Rare: ${itemName(key)}`);
-        }
+      // Only genuinely rare outcomes are worth a log line; the rest toast.
+      if (rarity === "relic" || rarity === "legendary") {
+        state.stats.epics++;
+        say(`${itemName(key)} comes off the bench.`);
+        toast(`${rarityDef(rarity).name}: ${itemName(key)}`);
+      } else if (rarity === "epic") {
+        state.stats.epics++;
+        toast(`Epic: ${itemName(key)}`);
+      } else if (rarity !== "common") {
+        toast(`${rarityDef(rarity).name}: ${itemName(key)}`);
       }
     } else {
       say(`Nowhere to put the ${GEAR[def.craftGear].name.toLowerCase()}.`);
@@ -1044,75 +1298,139 @@ function bestFood() {
 function combatTick(dt) {
   const c = state.tasks.combat;
   const mob = getMonster(c.monsterId);
-  
-  if (!mob) { 
-    state.tasks.combat = null; 
-    return; 
+
+  if (!mob) {
+    state.tasks.combat = null;
+    return;
   }
 
   if (c.respawn > 0) {
     c.respawn -= dt;
     if (c.respawn <= 0) {
-      if (c.queued === "stop") { 
-        state.tasks.combat = null; 
-        say("Vanguard pulled back."); 
-        return; 
+      if (c.queued === "stop") {
+        state.tasks.combat = null;
+        return;
       }
-      if (c.queued) { 
-        state.tasks.combat = newCombatTask(c.queued); 
-        return; 
+      if (c.queued) {
+        state.tasks.combat = newCombatTask(c.queued);
+        return;
       }
-      
-      const next = rollSpawn(c.tier); 
+
+      const next = rollSpawn(c.tier);
       c.monsterId = next.id;
-      c.mobHp = next.hp; 
-      c.mobMax = next.hp; 
-      c.mobTimer = next.speed; 
-      c.playerTimer = PLAYER_SWING_MS;
-      
-      if (next.rank === "boss") { 
-        say(`${next.name} comes up out of the dark.`); 
-        toast(`Sovereign: ${next.name}`); 
-      } else if (next.rank === "elite") {
-        say(`An elite takes the field.`);
+      c.mobHp = next.hp;
+      c.mobMax = next.hp;
+      c.mobTimer = next.speed;
+      c.playerTimer = swingSpeed();
+
+      if (next.rank === "boss") {
+        say(`${next.name} comes up out of the dark.`);
+        toast(`Sovereign: ${next.name}`);
       }
     }
     return;
   }
 
+  // ---- your swing ----
   c.playerTimer -= dt;
   if (c.playerTimer <= 0) {
-    c.playerTimer += PLAYER_SWING_MS; 
-    const atk = attackPower();
-    let dmg = randInt(Math.max(1, Math.floor(atk * 0.55)), Math.ceil(atk));
-    dmg = Math.max(1, Math.round(dmg - mob.defence * 0.35)); 
+    c.playerTimer += swingSpeed();
+    let dmg = rollPlayerHit(mob, false);
+
+    // Echoing relics sometimes land a second blow.
+    if (hasPrefix("echoing") && Math.random() < 0.12) dmg += rollPlayerHit(mob, false);
+
+    // Furious relics build up over a streak of uninterrupted hits.
+    if (hasPrefix("furious")) {
+      c.streak = (c.streak || 0) + 1;
+      dmg = Math.round(dmg * (1 + Math.min(0.25, c.streak * 0.03)));
+    }
+    // Executioner's leans on wounded targets.
+    if (hasPrefix("executioner") && c.mobHp / c.mobMax < 0.3) dmg = Math.round(dmg * 1.3);
+    // Wounding leaves something behind.
+    if (hasPrefix("wounding") && Math.random() < 0.2) c.bleed = (c.bleed || 0) + Math.max(1, Math.round(dmg * 0.15));
+
+    c.veil = Math.min(VEIL_MAX, (c.veil || 0) + VEIL_PER_HIT);
+
+    // Veil full — spend it on the class technique.
+    if (c.veil >= VEIL_MAX) {
+      c.veil = 0;
+      dmg += veilTechnique(mob);
+    }
+
     c.mobHp -= dmg;
-    
-    if (c.mobHp <= 0) { 
-      killMob(mob); 
-      return; 
+    if (c.mobHp <= 0) { killMob(mob); return; }
+  }
+
+  // ---- bleed ticks ----
+  if (c.bleed) {
+    c.bleedTimer = (c.bleedTimer || 0) + dt;
+    if (c.bleedTimer >= 1000) {
+      c.bleedTimer = 0;
+      c.mobHp -= c.bleed;
+      c.bleed = Math.max(0, c.bleed - 1);
+      if (c.mobHp <= 0) { killMob(mob); return; }
     }
   }
 
+  // ---- its swing ----
   c.mobTimer -= dt;
   if (c.mobTimer <= 0) {
     c.mobTimer += mob.speed;
-    let dmg = randInt(Math.max(1, Math.floor(mob.attack * 0.55)), mob.attack);
-    dmg = Math.max(1, Math.round(dmg - defencePower() * 0.4)); 
-    state.player.hp -= dmg;
-    
+
+    if (Math.random() < dodgeChance()) {
+      c.streak = c.streak || 0;
+    } else {
+      let dmg = randInt(Math.max(1, Math.floor(mob.attack * 0.55)), mob.attack);
+      dmg = Math.max(1, Math.round(dmg - defencePower() * 0.4));
+      if (Math.random() < blockChance()) dmg = Math.round(dmg * 0.5);
+      if (hasPrefix("resilient") && state.player.hp < maxHp() * 0.35) dmg = Math.round(dmg * 0.8);
+      state.player.hp -= dmg;
+      if (hasPrefix("thorned")) c.mobHp -= Math.max(1, Math.round(dmg * 0.15));
+      if (hasPrefix("furious")) c.streak = 0;
+
+      if (c.mobHp <= 0) { killMob(mob); return; }
+    }
+
     if (state.player.hp <= maxHp() * 0.45) {
       const food = bestFood();
-      if (food) { 
-        spend(food, 1); 
-        state.player.hp = Math.min(maxHp(), state.player.hp + itemDef(food).heal); 
+      if (food) {
+        spend(food, 1);
+        const heal = itemDef(food).heal * (hasPrefix("vital") ? 1.2 : 1);
+        state.player.hp = Math.min(maxHp(), state.player.hp + heal);
       }
     }
-    
-    if (state.player.hp <= 0) {
-      die(mob);
-    }
+
+    if (state.player.hp <= 0) die(mob);
   }
+}
+
+// One basic hit, with crit and Defence penetration folded in.
+function rollPlayerHit(mob, guaranteedCrit) {
+  const atk = attackPower();
+  let dmg = randInt(Math.max(1, Math.floor(atk * 0.55)), Math.ceil(atk));
+  const effDef = mob.defence * (1 - defencePen());
+  dmg = Math.max(1, Math.round(dmg - effDef * 0.35));
+  if (guaranteedCrit || Math.random() < critChance()) dmg = Math.round(dmg * critDamage());
+  return dmg;
+}
+
+// Class-specific payoff when the Veil fills.
+function veilTechnique(mob) {
+  const c = state.tasks.combat;
+  const klass = state.player.klass;
+  if (klass === "warrior") {
+    const atk = attackPower();
+    const dmg = Math.round(randInt(Math.floor(atk * 0.8), Math.ceil(atk * 1.4)) - mob.defence * 0.17);
+    return Math.max(1, dmg);
+  }
+  if (klass === "rogue") {
+    return rollPlayerHit(mob, true) + rollPlayerHit(mob, true);
+  }
+  if (klass === "mage") {
+    return Math.max(1, Math.round(attackPower() * 2.2 - mob.defence * 0.1));
+  }
+  return rollPlayerHit(mob, false);
 }
 
 function die(mob) {
@@ -1283,7 +1601,9 @@ function newSkillTask(skillId, actionId) {
 
 function newCombatTask(tier) {
   const mob = rollSpawn(tier);
-  return { tier, monsterId: mob.id, mobHp: mob.hp, mobMax: mob.hp, playerTimer: PLAYER_SWING_MS, mobTimer: mob.speed, respawn: 0, done: 0, startedAt: Date.now(), queued: null };
+  return { tier, monsterId: mob.id, mobHp: mob.hp, mobMax: mob.hp,
+    playerTimer: swingSpeed(), mobTimer: mob.speed, respawn: 0, done: 0,
+    startedAt: Date.now(), queued: null, veil: 0, streak: 0, bleed: 0, bleedTimer: 0 };
 }
 
 function selectSkillAction(skillId, actionId) {
@@ -1297,11 +1617,9 @@ function selectSkillAction(skillId, actionId) {
   }
   
   if (t.skillId === skillId && t.actionId === actionId) {
-    t.queued = t.queued === "stop" ? null : "stop";
+    state.tasks.skilling = null;          // clicking the live action stops it, now
   } else {
-    // INSTANT switch
-    state.tasks.skilling = newSkillTask(skillId, actionId);
-    say(`Crews instantly moved to ${def.name.toLowerCase()}.`);
+    state.tasks.skilling = newSkillTask(skillId, actionId);   // instant switch
   }
   render();
 }
@@ -1363,7 +1681,7 @@ function combatPlan() {
   
   const atk = attackPower();
   const avgHit = Math.max(1, (atk * 0.55 + atk) / 2 - mob.defence * 0.35);
-  const killMs = (mob.hp / avgHit) * PLAYER_SWING_MS + RESPAWN_MS;
+  const killMs = (mob.hp / avgHit) * swingSpeed() + RESPAWN_MS;
   const windowLeft = Math.max(0, IDLE_CAP_MS - (Date.now() - t.startedAt));
   const remaining = Math.floor(windowLeft / killMs);
   const incoming = Math.max(1, (mob.attack * 0.55 + mob.attack) / 2 - defencePower() * 0.4);
@@ -1514,8 +1832,7 @@ function travelTo(regionId) {
     toast(`${r.name} unlocked`);
   }
   state.region = regionId; 
-  refreshBounty(); 
-  say(`Moved to ${r.name}.`); 
+  refreshBounty();  
   render();
 }
 
@@ -1824,7 +2141,7 @@ function catchUp(result) {
 
 /* ================= 25. ROUTING ================= */
 
-const PAGES = ["character", "equipment", "camp", "kennel", "atlas", "shop", "bounty", "skill"];
+const PAGES = ["character", "equipment", "camp", "kennel", "atlas", "shop", "bounty", "skill", "requisitions", "forecast"];
 
 function parseHash() {
   const raw = (location.hash || "").replace(/^#\/?/, "");
@@ -1961,6 +2278,9 @@ function renderSidebar() {
   
   const b = state.bounty; 
   camp.appendChild(mkItem({ label: "The Board", page: "bounty", active: route.page === "bounty", right: b ? `${fmt(Math.min(b.progress, b.amount))}/${fmt(b.amount)}` : "" }));
+  const reqLeft = REQUISITIONS_PER_DAY - state.requisitions.filter((r) => !r.resolved).length;
+  camp.appendChild(mkItem({ label: "Requisitions", page: "requisitions", active: route.page === "requisitions",
+    right: `${reqLeft}/${REQUISITIONS_PER_DAY}` }));
 
   const mkSkills = (box, kind) => {
     box.innerHTML = "";
@@ -1985,10 +2305,10 @@ function renderSidebar() {
   
   const w = currentWeather();
   const tm = weatherOn(1);
-  el("weatherTag").textContent = w.name; 
-  el("weatherNote").textContent = w.note; 
-  el("weatherXp").textContent = w.xp > 1 ? `+${Math.round((w.xp - 1) * 100)}% experience` : ""; 
-  el("weatherNext").textContent = `Tomorrow: ${tm.name}`;
+  el("weatherTag").textContent = w.label;
+  el("weatherNote").textContent = weatherEffectText(w) || "Nothing helping, nothing hindering.";
+  el("weatherXp").textContent = w.calm ? "" : `Intensity ${w.intensity}/10`;
+  el("weatherNext").textContent = `Tomorrow: ${tm.label}`;
 }
 
 function renderPage() {
@@ -2008,6 +2328,8 @@ function renderPage() {
   if (route.page === "kennel") renderKennel();
   if (route.page === "atlas") renderAtlas();
   if (route.page === "shop") renderShop();
+  if (route.page === "requisitions") renderRequisitions();
+  if (route.page === "forecast") renderForecast();
   if (route.page === "bounty") renderBounty();
 }
 
@@ -2118,7 +2440,12 @@ function renderGatherBody(s, region) {
     btn.className = "btn btn-primary node-btn";
     btn.textContent = active ? (t.queued === "stop" ? "Stopping..." : "Stop working") : "Put crews to work";
     btn.disabled = locked; 
-    btn.onclick = () => selectSkillAction(s.id, actionDef.id);
+    btn.onclick = () => {
+      const t = state.tasks.skilling;
+      const live = t && t.skillId === s.id && t.actionId === actionDef.id;
+      if (live) selectSkillAction(s.id, actionDef.id);   // stop, no ceremony
+      else openTaskPop(s.id, actionDef.id);
+    };
     info.appendChild(btn);
 
     card.appendChild(info); 
@@ -2142,6 +2469,7 @@ function renderGatherBody(s, region) {
 
 let craftTierTab = 1;
 let craftTierTabSkill = null;
+let craftCatTab = "all";
 
 function renderCraftBody(s) {
   const lvl = skillLevel(s.id); 
@@ -2168,11 +2496,47 @@ function renderCraftBody(s) {
   }); 
   box.appendChild(tabs);
 
+  // Second row: what kind of thing you're making, so the bench isn't a wall.
+  const inTier = actionsFor(s.id).filter((a) => a.tier === craftTierTab);
+  const catOf = (def) => {
+    if (def.craftGear) {
+      const g = GEAR[def.craftGear];
+      return (g && (g.slot === "weapon" || g.slot === "offhand")) ? "weapons" : "armour";
+    }
+    if (def.out && TOOLS[Object.keys(def.out)[0]]) return "tools";
+    const outId = def.out ? Object.keys(def.out)[0] : null;
+    const cat = outId && MATERIALS[outId] ? MATERIALS[outId].category : null;
+    if (cat && ["Bars", "Planks", "Weave", "Leather", "Inlays"].includes(cat)) return "refined";
+    return "components";
+  };
+
+  const cats = [
+    { id: "all", label: "All" },
+    { id: "refined", label: "Refined" },
+    { id: "components", label: "Components" },
+    { id: "weapons", label: "Weapons" },
+    { id: "armour", label: "Armour" },
+    { id: "tools", label: "Tools" },
+  ].filter((c) => c.id === "all" || inTier.some((d) => catOf(d) === c.id));
+
+  if (!cats.some((c) => c.id === craftCatTab)) craftCatTab = "all";
+
+  const catTabs = document.createElement("div");
+  catTabs.className = "tabs craft-cat-tabs";
+  cats.forEach((c) => {
+    const b = document.createElement("button");
+    b.className = "tab-btn" + (craftCatTab === c.id ? " active" : "");
+    b.textContent = c.label;
+    b.onclick = () => { craftCatTab = c.id; keys.skill = ""; renderSkill(); };
+    catTabs.appendChild(b);
+  });
+  box.appendChild(catTabs);
+
   const list = document.createElement("div"); 
   list.className = "recipe-list";
   const t = state.tasks.skilling;
   
-  actionsFor(s.id).filter((a) => a.tier === craftTierTab).forEach((def) => {
+  inTier.filter((a) => craftCatTab === "all" || catOf(a) === craftCatTab).forEach((def) => {
     const locked = lvl < def.level;
     const active = !!(t && t.skillId === s.id && t.actionId === def.id);
     const row = document.createElement("button"); 
@@ -2186,7 +2550,12 @@ function renderCraftBody(s) {
     row.children[1].textContent = titleCase(def.name); 
     row.children[2].textContent = locked ? `Needs Lv ${def.level}` : costTxt;
     row.children[3].textContent = `${(actionTime(def) / 1000).toFixed(0)}s · ${fmt(def.xp)} XP`;
-    row.onclick = () => selectSkillAction(s.id, def.id); 
+    row.onclick = () => {
+      const t = state.tasks.skilling;
+      const live = t && t.skillId === s.id && t.actionId === def.id;
+      if (live) selectSkillAction(s.id, def.id);
+      else openTaskPop(s.id, def.id);
+    };
     list.appendChild(row);
   }); 
   box.appendChild(list);
@@ -2247,7 +2616,7 @@ function renderFieldBody(region) {
   chips.className = "stat-chips";
   const atk = attackPower();
   const avg = Math.max(1, (atk * 0.55 + atk) / 2 - live.defence * 0.35);
-  const killMs = (live.hp / avg) * PLAYER_SWING_MS + RESPAWN_MS;
+  const killMs = (live.hp / avg) * swingSpeed() + RESPAWN_MS;
   const incoming = Math.max(1, (live.attack * 0.55 + live.attack) / 2 - defencePower() * 0.4);
   const survive = maxHp() / (incoming / live.speed * 1000);
   
@@ -2395,8 +2764,6 @@ function renderYieldTable(def, skillId) {
   
   if (dbl > 0) rows.push([mainKey, `${Math.round(dbl * 100)}% doubled`]);
   if (def.reagentId) rows.push([def.reagentId, `${Math.round(def.reagentChance * 100)}% chance`]);
-  const rich = richFind(def); 
-  if (rich) rows.push([rich, `${(RICH_FIND_CHANCE * 100).toFixed(1)}% rich find`]);
 
   rows.forEach(([k, label]) => {
     const row = document.createElement("div"); 
@@ -2550,7 +2917,7 @@ function updateLive() {
       n.bar.style.width = "0"; 
       const per12 = Math.floor(IDLE_CAP_MS / time);
       n.left.textContent = `${fmt(per12)} actions per 12h idle`; 
-      n.right.textContent = fmt(per12 * n.def.xp * xpMult()) + " XP";
+      n.right.textContent = fmt(per12 * n.def.xp * xpMult(n.skillId)) + " XP";
     }
   }
   
@@ -2829,6 +3196,16 @@ function buildItemCol(key, isEquipped = false) {
   if (d.twoHanded) addStat("Type", "Two-Handed");
   if (d.maxDur) addStat("Durability", `${d.maxDur} / ${d.maxDur}`);
   if (d.chest) addStat("Store Slots", `+${d.chest}`);
+  if (isEquipped && d.maxDur) {
+    const pct = wearPct(key);
+    if (pct !== null) addStat("Condition", pct + "%");
+  }
+  if (d.effect) {
+    const e = document.createElement("div");
+    e.className = "ip-effect";
+    e.textContent = `${prefixDef(d.prefix).name} — ${d.effect}`;
+    stats.appendChild(e);
+  }
 
   if (!isEquipped) {
     const acts = col.querySelector(".ip-actions");
@@ -2915,8 +3292,10 @@ function renderPaperdoll() {
       off.className = "minibtn"; 
       off.textContent = "Remove"; 
       off.onclick = (e) => { e.stopPropagation(); unequip(slot); }; 
-      bar.appendChild(off); 
+      bar.appendChild(off);
       box.appendChild(bar);
+      box.style.cursor = "pointer";
+      box.onclick = () => showItemPopup(key, storeView);
     }
     grid.appendChild(box);
   });
@@ -2927,7 +3306,19 @@ function renderPaperdoll() {
   const stand = el("dollStanding"); 
   stand.innerHTML = "";
   
-  [["Health", fmt(maxHp())], ["Attack Power", Math.round(attackPower()), "gold"], ["Defence", Math.round(defencePower())], ["Combat", "Lv " + skillLevel("warfare"), "good"], ["Pack Space", `${slotsUsed("inv")} / ${packSlots()}`]].forEach(([l, v, cls]) => {
+  const kls = myClass();
+  [["Discipline", kls ? kls.name : (canPickClass() ? "Choose one" : `Combat ${CLASS_PICK_LEVEL}`), kls ? "good" : "gold"],
+   ["Health", fmt(maxHp())],
+   ["Attack Power", Math.round(attackPower()), "gold"],
+   ["Defence", Math.round(defencePower())],
+   ["Attack Speed", (swingSpeed() / 1000).toFixed(1) + "s"],
+   ["Crit Chance", Math.round(critChance() * 100) + "%"],
+   ["Crit Damage", Math.round(critDamage() * 100) + "%"],
+   ["Block", Math.round(blockChance() * 100) + "%"],
+   ["Dodge", Math.round(dodgeChance() * 100) + "%"],
+   ["Defence Pen.", Math.round(defencePen() * 100) + "%"],
+   ["Combat", "Lv " + skillLevel("warfare"), "good"],
+   ["Pack Space", `${slotsUsed("inv")} / ${packSlots()}`]].forEach(([l, v, cls]) => {
     const r = document.createElement("div"); 
     r.className = "stat-row"; 
     r.innerHTML = '<div class="l"></div><div class="v"></div>';
@@ -3133,6 +3524,223 @@ function renderLog() {
   });
 }
 
+
+/* ================= TASK CONFIRM POPUP ================= */
+/* Before committing crews, show exactly what 12 hours of it buys. */
+
+let pendingTask = null;
+
+function openTaskPop(skillId, actionId) {
+  const def = findAction(skillId, actionId);
+  if (!def) return;
+  pendingTask = { skillId, actionId };
+
+  const time = actionTime(def);
+  const per12 = Math.floor(IDLE_CAP_MS / time);
+
+  el("taskPopArt").innerHTML = icon(def.icon, "ico-lg");
+  el("taskPopTitle").textContent = titleCase(def.name);
+  el("taskPopSub").textContent = `${skillName(skillId)} · ${(time / 1000).toFixed(0)}s an action`;
+
+  const stats = el("taskPopStats");
+  stats.innerHTML = "";
+  const row = (l, v) => {
+    const r = document.createElement("div");
+    r.className = "pop-stat";
+    r.innerHTML = '<div class="l"></div><div class="v"></div>';
+    r.children[0].textContent = l;
+    r.children[1].textContent = v;
+    stats.appendChild(r);
+  };
+
+  // Materials cap the run before the clock does, quite often.
+  let capped = per12;
+  if (def.cost) {
+    Object.keys(def.cost).forEach((k) => {
+      capped = Math.min(capped, Math.floor(haveQty(k) / def.cost[k]));
+    });
+  }
+
+  row("Actions in 12 hours", fmt(per12));
+  if (def.cost && capped < per12) row("Your stock covers", fmt(capped) + " actions");
+  row("Experience", fmt(Math.round(per12 * def.xp * xpMult(skillId))) + " XP");
+
+  if (def.out) {
+    Object.keys(def.out).forEach((k) => {
+      const dbl = GATHER_ACTIONS[skillId] ? (1 + doubleChance(skillId)) : 1;
+      row(itemName(k), "~" + fmt(Math.round(per12 * def.out[k] * dbl)));
+    });
+  }
+  if (def.craftGear) row(GEAR[def.craftGear].name, fmt(per12));
+  if (def.reagentId) row(itemName(def.reagentId), "~" + fmt(Math.round(per12 * def.reagentChance)));
+  if (def.cost) {
+    Object.keys(def.cost).forEach((k) => {
+      row("Consumes " + itemName(k), `${fmt(def.cost[k] * Math.min(per12, capped))} (have ${fmt(haveQty(k))})`);
+    });
+  }
+
+  el("taskPop").hidden = false;
+}
+
+function closeTaskPop() { el("taskPop").hidden = true; pendingTask = null; }
+
+/* ================= CLASS PICKER ================= */
+
+function maybeOfferClass() {
+  if (!canPickClass()) return;
+  if (el("classPop").hidden === false) return;
+  renderClassPicker();
+  el("classPop").hidden = false;
+}
+
+function renderClassPicker() {
+  const grid = el("classGrid");
+  grid.innerHTML = "";
+  CLASSES.forEach((c) => {
+    const card = document.createElement("button");
+    card.className = "class-card";
+    card.innerHTML =
+      `<div class="cc-top">${icon(c.icon, "ico-lg")}<div class="cc-name"></div></div>` +
+      '<div class="cc-blurb"></div><div class="cc-stats"></div><div class="cc-veil"></div>';
+    card.querySelector(".cc-name").textContent = c.name;
+    card.querySelector(".cc-blurb").textContent = c.blurb;
+    const st = card.querySelector(".cc-stats");
+    [[`${c.health} health`], [`${c.attack} attack`], [`${c.defence} defence`],
+     [`${(c.speed / 1000).toFixed(1)}s swing`], [`${Math.round(c.crit * 100)}% crit`]]
+      .forEach(([txt]) => { const s = document.createElement("span"); s.textContent = txt; st.appendChild(s); });
+    card.querySelector(".cc-veil").textContent = `Veil — ${c.veilName}: ${c.veilNote}`;
+    card.onclick = () => pickClass(c.id);
+    grid.appendChild(card);
+  });
+}
+
+function pickClass(id) {
+  state.player.klass = id;
+  state.player.hp = maxHp();
+  el("classPop").hidden = true;
+  say(`You take up the ${classDef(id).name}'s discipline.`);
+  toast(`${classDef(id).name} chosen`);
+  render();
+}
+
+/* ================= FORECAST ================= */
+
+function renderForecast() {
+  const key = "fc" + dayIndex();
+  if (keys.forecast === key) return;
+  keys.forecast = key;
+
+  const grid = el("forecastGrid");
+  grid.innerHTML = "";
+  const names = ["Today", "Tomorrow"];
+  forecast().forEach(({ offset, w }) => {
+    const d = new Date(Date.now() + offset * DAY_MS);
+    const cell = document.createElement("div");
+    cell.className = "fc-day" + (offset === 0 ? " today" : "");
+    cell.innerHTML = '<div class="fc-when"></div><div class="fc-name"></div><div class="fc-int"></div><div class="fc-mods"></div>';
+    cell.querySelector(".fc-when").textContent = names[offset] ||
+      d.toLocaleDateString(undefined, { weekday: "short", timeZone: "UTC" });
+    cell.querySelector(".fc-name").textContent = w.label;
+    cell.querySelector(".fc-int").textContent = w.calm ? "No effect" : `Intensity ${w.intensity}/10`;
+    const mods = cell.querySelector(".fc-mods");
+    Object.keys(w.mods).forEach((sk) => {
+      const pct = Math.round((w.mods[sk] - 1) * 100);
+      if (!pct) return;
+      const s = document.createElement("span");
+      s.className = pct > 0 ? "up" : "down";
+      s.textContent = `${skillName(sk)} ${pct > 0 ? "+" : ""}${pct}% XP`;
+      mods.appendChild(s);
+    });
+    grid.appendChild(cell);
+  });
+}
+
+/* ================= REQUISITIONS ================= */
+
+function requisitionTargets() {
+  // Anything you've actually seen is fair game to ask an agent for.
+  const out = [];
+  REAGENTS.forEach((r) => out.push(r.id));
+  TIERS.forEach((t) => {
+    GATHER_SKILLS.forEach((s) => {
+      if (t.level <= skillLevel(s.id)) out.push(matId(t, s.mat));
+    });
+  });
+  return out;
+}
+
+function renderRequisitions() {
+  const key = JSON.stringify(state.agents) + JSON.stringify(state.requisitions) + state.player.gold;
+  if (keys.req === key) return;
+  keys.req = key;
+
+  const pending = state.requisitions.filter((r) => !r.resolved);
+  el("reqSlots").textContent = `${REQUISITIONS_PER_DAY - pending.length} of ${REQUISITIONS_PER_DAY} deployments left today`;
+
+  const pend = el("reqPending");
+  pend.innerHTML = "";
+  if (!pending.length) {
+    pend.innerHTML = '<div class="muted tiny">Nobody is out. Send someone before the day turns.</div>';
+  } else {
+    pending.forEach((r) => {
+      const row = document.createElement("div");
+      row.className = "req-row";
+      row.innerHTML = '<div class="r-who"></div><div class="r-what"></div>';
+      row.children[0].textContent = r.agentName;
+      row.children[1].textContent = `${fmt(r.qty)} × ${itemName(r.itemKey)} — returns at reset`;
+      pend.appendChild(row);
+    });
+  }
+
+  const roster = el("agentRoster");
+  roster.innerHTML = "";
+  const hire = el("hireAgentBtn");
+  hire.textContent = `Hire an Agent · ${fmt(AGENT_HIRE_COST)}g`;
+  hire.disabled = state.player.gold < AGENT_HIRE_COST || state.agents.length >= 12;
+
+  if (!state.agents.length) {
+    roster.innerHTML = '<div class="muted tiny">No Agents on the books. Hiring is a gamble — rarity is rolled.</div>';
+    return;
+  }
+
+  const targets = requisitionTargets();
+  state.agents.forEach((a) => {
+    const out = pending.some((r) => r.agentId === a.id);
+    const rd = agentRarityDef(a.rarity);
+    const card = document.createElement("div");
+    card.className = "agent-card" + (out ? " out" : "");
+    card.innerHTML = '<div class="agent-name"></div><div class="agent-rarity"></div><div class="agent-yield"></div>';
+    card.querySelector(".agent-name").textContent = a.name;
+    const rr = card.querySelector(".agent-rarity");
+    rr.textContent = rd.name;
+    rr.className = "agent-rarity rar-" + a.rarity;
+    card.querySelector(".agent-yield").textContent = out
+      ? "Out on a run."
+      : `Returns about ${Math.max(1, Math.round(12 * rd.mult))} of whatever you ask for.`;
+
+    if (!out) {
+      const sel = document.createElement("select");
+      targets.forEach((tk) => {
+        const o = document.createElement("option");
+        o.value = tk;
+        o.textContent = itemName(tk);
+        sel.appendChild(o);
+      });
+      card.appendChild(sel);
+
+      const b = document.createElement("button");
+      b.className = "btn btn-gold";
+      b.style.marginTop = "8px";
+      b.style.width = "100%";
+      b.textContent = "Deploy";
+      b.disabled = pending.length >= REQUISITIONS_PER_DAY;
+      b.onclick = () => deployAgent(a.id, sel.value);
+      card.appendChild(b);
+    }
+    roster.appendChild(card);
+  });
+}
+
 /* ================= WIRING & BOOT ================= */
 
 el("brandMark").innerHTML = `<img class="mark-img" src="assets/respite-logo.webp" alt="Respite">`;
@@ -3178,21 +3786,30 @@ el("spoilsSellAll").onclick = () => {
   toast("Spoils sold"); 
 };
 
-el("tbTradesClear").onclick = () => { 
-  const t = state.tasks.skilling; 
-  if (!t) return; 
-  t.queued = t.queued === "stop" ? null : "stop"; 
-  say(t.queued ? "Crews will stand down once this action finishes." : "Stand-down cancelled."); 
-  render(); 
+// Trades stop the moment you ask — crews down tools immediately.
+el("tbTradesClear").onclick = () => {
+  if (!state.tasks.skilling) return;
+  state.tasks.skilling = null;
+  render();
 };
 
-el("tbFieldClear").onclick = () => { 
-  const t = state.tasks.combat; 
-  if (!t) return; 
-  t.queued = t.queued === "stop" ? null : "stop"; 
-  say(t.queued ? "Pulling back once this fight finishes." : "Pull-back cancelled."); 
-  render(); 
+// You can't walk out mid-swing — combat disengages after the current fight.
+el("tbFieldClear").onclick = () => {
+  const t = state.tasks.combat;
+  if (!t) return;
+  t.queued = t.queued === "stop" ? null : "stop";
+  toast(t.queued ? "Pulling back after this fight" : "Pull-back cancelled");
+  render();
 };
+
+el("taskPopGo").onclick = () => {
+  if (pendingTask) selectSkillAction(pendingTask.skillId, pendingTask.actionId);
+  closeTaskPop();
+};
+el("taskPopCancel").onclick = closeTaskPop;
+el("taskPop").onclick = (e) => { if (e.target === el("taskPop")) closeTaskPop(); };
+el("classPop").onclick = (e) => { if (e.target === el("classPop")) el("classPop").hidden = true; };
+el("hireAgentBtn").onclick = hireAgent;
 
 el("settingsBtn").onclick = () => { 
   refreshAccountUi(); 

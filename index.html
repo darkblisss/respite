@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Respite</title>
-<link rel="icon" type="image/jpeg" href="assets/respite-logo.jpg">
+<link rel="icon" type="image/webp" href="assets/respite-logo.webp">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -58,6 +58,7 @@
       <div class="icon-row">
         <button class="icon-btn" data-page="atlas">Atlas</button>
         <button class="icon-btn" data-page="shop">Shop</button>
+        <button class="icon-btn" data-page="forecast">Sky</button>
       </div>
 
       <div class="pill-group open" id="pill-vanguard">
@@ -65,7 +66,7 @@
         <div class="pill-body" id="navVanguard"></div>
       </div>
 
-      <div class="pill-group" id="pill-camp">
+      <div class="pill-group open" id="pill-camp">
         <button class="pill-head" data-nav="camp"><span class="t">The Camp</span><span class="chev">&#9656;</span></button>
         <div class="pill-body" id="navCamp"></div>
       </div>
@@ -75,12 +76,12 @@
         <div class="pill-body" id="navTrades"></div>
       </div>
 
-      <div class="pill-group" id="pill-workshops">
+      <div class="pill-group open" id="pill-workshops">
         <button class="pill-head" data-nav="workshops"><span class="t">Artisans</span><span class="chev">&#9656;</span></button>
         <div class="pill-body" id="navWorkshops"></div>
       </div>
 
-      <div class="pill-group" id="pill-field">
+      <div class="pill-group open" id="pill-field">
         <button class="pill-head" data-nav="field"><span class="t">The Field</span><span class="chev">&#9656;</span></button>
         <div class="pill-body" id="navField"></div>
       </div>
@@ -318,6 +319,32 @@
       </section>
 
       <!-- ---- BOUNTY ---- -->
+      <section class="page" data-page="requisitions" hidden>
+        <div class="card">
+          <div class="card-head">
+            <div class="label">Requisitions</div>
+            <div class="req-slots" id="reqSlots"></div>
+          </div>
+          <p class="panel-caption">Send Agents out for supplies. They return at the daily reset, and better Agents come back heavier. Three deployments a day.</p>
+          <div class="req-pending" id="reqPending"></div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <div class="label">The Roster</div>
+            <button class="btn btn-gold" id="hireAgentBtn">Hire an Agent</button>
+          </div>
+          <div class="req-grid" id="agentRoster"></div>
+        </div>
+      </section>
+
+      <section class="page" data-page="forecast" hidden>
+        <div class="card">
+          <div class="card-head"><div class="label">Camp Forecast</div></div>
+          <p class="panel-caption">Seven days, fixed at the start of the week. Weather shifts experience only — never how fast your crews work. Intensity runs 1 to 10.</p>
+          <div class="forecast" id="forecastGrid"></div>
+        </div>
+      </section>
+
       <section class="page" data-page="bounty" hidden>
         <div class="card">
           <div class="card-head">
@@ -384,6 +411,31 @@
       </div>
       <p class="muted tiny">Saves to the cloud automatically as you play.</p>
     </div>
+  </div>
+</div>
+
+<div class="pop-wrap" id="taskPop" hidden>
+  <div class="pop">
+    <div class="pop-head">
+      <div class="pop-art" id="taskPopArt"></div>
+      <div>
+        <div class="pop-title" id="taskPopTitle"></div>
+        <div class="pop-sub" id="taskPopSub"></div>
+      </div>
+    </div>
+    <div class="pop-stats" id="taskPopStats"></div>
+    <div class="pop-actions">
+      <button class="btn btn-primary" id="taskPopGo">Start</button>
+      <button class="btn btn-quiet" id="taskPopCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="pop-wrap" id="classPop" hidden>
+  <div class="pop" style="max-width:620px;">
+    <div class="pop-title">Choose your discipline</div>
+    <div class="pop-sub">Set once, at Combat level 5. It decides your bulk, your speed, and what happens when the Veil fills.</div>
+    <div class="class-grid" id="classGrid"></div>
   </div>
 </div>
 
