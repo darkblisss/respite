@@ -782,3 +782,220 @@ body{
 
 .craft-cat-tabs{ margin:-4px 0 12px; }
 .craft-cat-tabs .tab-btn{ padding:6px 11px; font-size:11.5px; }
+
+/* ================= SPACING, SKILL PAGES, TOOLTIP & ITEM POPUP ================= */
+/* Overrides earlier rules. One rhythm everywhere: 14px between boxes,
+   12px between tiles inside a box. */
+
+:root{
+  --gap:14px;
+  --gap-in:12px;
+  --r-legendary:#d3ad5c;
+  --r-relic:#c1613a;
+}
+
+html{ background:var(--bg); }
+[hidden]{ display:none !important; }
+
+/* ---- page rhythm ---- */
+
+.sidebar{ gap:var(--gap); }
+.page{ display:flex; flex-direction:column; gap:var(--gap); }
+.activity-row, .split-layout, .split-right, .skills-grid{ gap:var(--gap); }
+.card-head, .panel-caption, .tabs, .grid-toolbar, .grid-cap{ margin-bottom:var(--gap-in); }
+.atlas-list, .shop-list, .pet-list, .req-grid, .forecast{ gap:var(--gap-in); }
+.req-grid, .req-pending, .forecast{ margin-top:0; }
+.card > .stats-strip{ margin-top:0; padding-top:0; border-top:none; }
+.log-card{ padding:15px; }
+
+/* ---- hero: lets the mastery tooltip hang below it ---- */
+
+.hero{ overflow:visible; }
+.hero::before{ border-radius:inherit; }
+
+/* ---- skill page ---- */
+
+.card-row{ display:grid; grid-template-columns:repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap:var(--gap); }
+
+.node-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap:var(--gap-in); }
+.node-card{
+  display:flex; align-items:flex-start; gap:14px; min-width:0; padding:14px;
+  background:var(--panel-raised); border:1px solid var(--line); border-radius:10px;
+}
+.node-card.active{ border-color:var(--violet-dim); }
+.node-card .node-info{ display:flex; flex-direction:column; align-self:stretch; }
+.node-card .node-info h3{ margin-bottom:8px; line-height:1.2; }
+.node-card .node-sub{ margin:-2px 0 10px; }
+.node-card .stat-chips{ gap:6px; margin-bottom:14px; }
+.node-card .node-progress{ margin-top:auto; }
+.node-card .node-btn{ margin-top:14px; align-self:flex-start; }
+
+.node-stack{ flex-direction:column; align-items:stretch; }
+.node-stack .threat-block{ margin-top:0; padding-top:0; border-top:none; }
+.roster{ padding-top:12px; border-top:1px solid var(--line); }
+.roster > .label{
+  font-size:10px; letter-spacing:.13em; text-transform:uppercase;
+  color:var(--bone-faint); font-weight:600; margin-bottom:2px;
+}
+
+button.yield-item{ width:100%; text-align:left; }
+button.yield-item:hover .left{ color:var(--bone); }
+.spoil-actions{ margin-top:var(--gap-in); }
+.spoil-row .sp-open{ text-align:left; }
+.spoil-row .sp-open:hover{ color:var(--bone); }
+
+/* ---- mastery tooltip (gathering heroes) ---- */
+
+.tip{ position:relative; margin-left:auto; }
+.tip-btn{
+  display:flex; align-items:center; gap:7px; padding:5px 10px 5px 7px; border-radius:7px;
+  background:rgba(12,10,16,.6); border:1px solid var(--line);
+  font-size:11.5px; font-weight:500; color:var(--bone-dim); cursor:help;
+}
+.tip:hover .tip-btn, .tip:focus-within .tip-btn{ color:var(--bone); border-color:var(--violet-dim); }
+.tip-i{ display:flex; color:var(--violet); }
+.tip-panel{
+  position:absolute; top:calc(100% + 8px); right:0; z-index:40;
+  width:340px; max-width:calc(100vw - 48px); padding:14px;
+  background:var(--panel-raised); border:1px solid var(--line); border-radius:10px;
+  box-shadow:0 14px 34px rgba(0,0,0,.55);
+  opacity:0; visibility:hidden; transform:translateY(-4px);
+  transition:opacity 120ms ease, transform 120ms ease, visibility 0s linear 120ms;
+}
+.tip-panel::before{ content:""; position:absolute; left:0; right:0; top:-10px; height:10px; }
+.tip:hover .tip-panel, .tip:focus-within .tip-panel{
+  opacity:1; visibility:visible; transform:none;
+  transition:opacity 120ms ease, transform 120ms ease;
+}
+.tip-title{ font-family:var(--font-display); font-size:15px; font-weight:600; color:var(--bone); margin-bottom:8px; }
+.tip-list{ list-style:none; display:flex; flex-direction:column; gap:5px; margin-bottom:12px; }
+.tip-list li{ position:relative; padding-left:13px; font-size:12px; line-height:1.45; color:var(--bone-dim); }
+.tip-list li::before{
+  content:""; position:absolute; left:2px; top:.6em; width:4px; height:4px;
+  border-radius:50%; background:var(--violet);
+}
+.tip-track{ border-top:1px solid var(--line); }
+.tip-step{
+  display:grid; grid-template-columns:18px 40px 1fr auto; align-items:center; gap:8px;
+  padding:5px 0; border-bottom:1px solid var(--line); font-size:12px; color:var(--bone-faint);
+}
+.tip-step.done{ color:var(--bone-dim); }
+.tip-glyph{
+  width:16px; height:16px; border-radius:4px; display:flex; align-items:center; justify-content:center;
+  background:var(--panel-deep); border:1px solid var(--line); font-size:9.5px;
+}
+.tip-step.done .tip-glyph{ color:var(--violet); border-color:var(--violet-dim); }
+.tip-lv, .tip-val{ font-variant-numeric:tabular-nums; }
+.tip-step.done .tip-val{ color:var(--good); }
+.tip-foot{ margin-top:10px; font-size:11.5px; color:var(--good); }
+
+/* ---- sidebar ---- */
+
+.spoils-side{ width:100%; text-align:left; font-size:11.5px; font-weight:600; color:var(--gold); }
+.spoils-side:hover{ border-color:rgba(211,173,92,.35); }
+.weather-panel p .up{ color:var(--good); }
+.weather-panel p .down{ color:var(--ember); }
+
+/* ---- rarities above epic ---- */
+
+.rar-legendary{ color:var(--r-legendary); }
+.rar-relic{ color:var(--r-relic); }
+.item-pill.legendary{ border-bottom:3px solid var(--r-legendary); }
+.item-pill.legendary .art{ color:var(--r-legendary); }
+.item-pill.relic{ border-bottom:3px solid var(--r-relic); }
+.item-pill.relic .art{ color:var(--r-relic); }
+.eq-slot.legendary{ border-color:rgba(211,173,92,.55); }
+.eq-slot.legendary .art{ color:var(--r-legendary); }
+.eq-slot.relic{ border-color:rgba(193,97,58,.6); }
+.eq-slot.relic .art{ color:var(--r-relic); }
+
+/* ---- paperdoll: condition sits under the name, clear of the slot label ---- */
+
+.eq-slot .eq-wear{ position:static; margin-top:-2px; font-size:10px; }
+
+/* ---- the bench: recipe columns sized for a full-width card ---- */
+
+.recipe{ grid-template-columns:22px minmax(140px, 260px) minmax(0, 1fr) auto; }
+
+/* ---- clickable gear and tools ---- */
+
+.eq-slot[data-slot], .tool-slot[data-skill]{ cursor:pointer; transition:border-color 150ms, background 150ms; }
+.eq-slot[data-slot]:hover, .tool-slot[data-skill]:hover{ border-color:var(--violet-dim); background:var(--panel-deep); }
+
+/* ---- modals scroll instead of clipping when tall ---- */
+
+.modal-wrap{ align-items:flex-start; }
+.modal-wrap > .modal{ margin:auto; }
+.pop-wrap{ align-items:flex-start; overflow-y:auto; }
+.pop-wrap > .pop{ margin:auto; }
+
+/* ---- item popup ---- */
+
+.item-modal{ position:relative; max-width:440px; padding:18px; }
+.modal-x{
+  position:absolute; top:12px; right:12px; width:30px; height:30px; border-radius:7px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:20px; line-height:1; color:var(--bone-faint); border:1px solid transparent;
+}
+.modal-x:hover{ color:var(--bone); background:var(--panel-raised); border-color:var(--line); }
+
+.item-modal .ip-head{ display:flex; align-items:center; gap:12px; margin:0 36px 12px 0; }
+.item-modal .ip-art{
+  width:52px; height:52px; border-radius:9px; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--panel-raised); border:1px solid var(--line); color:var(--violet);
+}
+.item-modal .ip-art .ico{ color:inherit; }
+.item-modal .ip-art.rar-uncommon, .item-modal .ip-name.rar-uncommon{ color:var(--r-uncommon); }
+.item-modal .ip-art.rar-rare, .item-modal .ip-name.rar-rare{ color:var(--r-rare); }
+.item-modal .ip-art.rar-epic, .item-modal .ip-name.rar-epic{ color:var(--r-epic); }
+.item-modal .ip-art.rar-legendary, .item-modal .ip-name.rar-legendary{ color:var(--r-legendary); }
+.item-modal .ip-art.rar-relic, .item-modal .ip-name.rar-relic{ color:var(--r-relic); }
+.ip-titles{ min-width:0; }
+.item-modal .ip-name{ font-family:var(--font-display); font-size:18px; line-height:1.2; }
+.item-modal .ip-sub{ margin-top:3px; }
+.ip-desc{ font-size:12.5px; line-height:1.55; color:var(--bone-dim); margin-bottom:10px; }
+.item-modal .ip-stats{ gap:0; margin-bottom:12px; }
+.item-modal .ip-effect{ margin:0 0 12px; }
+.ip-sources{
+  display:flex; flex-direction:column; gap:6px; padding:10px 12px; margin-bottom:12px;
+  background:var(--panel-deep); border:1px solid var(--line); border-radius:8px;
+}
+.ip-source{ display:grid; grid-template-columns:78px 1fr; gap:10px; font-size:11.5px; line-height:1.45; }
+.ip-source .l{ color:var(--bone-faint); }
+.ip-source .v{ color:var(--bone-dim); }
+.ip-compare{ font-size:11.5px; color:var(--bone-faint); margin-bottom:12px; }
+.item-modal .ip-actions{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:0; }
+.item-modal .ip-actions .btn{ width:100%; }
+.item-modal .ip-actions .wide{ grid-column:1 / -1; }
+
+/* ---- forecast (Sky) ---- */
+
+.forecast{ grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); }
+.fc-day{ display:flex; flex-direction:column; gap:6px; padding:12px; }
+.fc-day.past{ opacity:.45; }
+.fc-head{ display:flex; align-items:center; gap:7px; }
+.fc-ico{ display:flex; color:var(--gold); }
+.fc-name{ margin:0; }
+.fc-mods{ margin-top:0; }
+.fc-bonus{ padding-top:6px; border-top:1px solid var(--line); font-size:10.5px; font-weight:600; color:var(--gold); }
+
+/* ---- requisitions ---- */
+
+.agent-deploy{ width:100%; margin-top:8px; }
+.req-grid > .muted{ grid-column:1 / -1; }
+
+/* ---- narrower screens ---- */
+/* The older responsive rules sit above the rules they override, so they
+   never applied. Repeated here, last, so they win. */
+
+@media (max-width:1180px){
+  .split-layout{ grid-template-columns:minmax(0, 1fr); }
+  .split-right{ position:static; }
+  .pill-grid{ grid-template-columns:repeat(4, 1fr); }
+}
+@media (max-width:760px){
+  .pill-grid{ grid-template-columns:repeat(3, 1fr); }
+  .tb-stats{ flex-wrap:wrap; flex-shrink:1; min-width:0; }
+  .tabs{ flex-wrap:wrap; }
+}
