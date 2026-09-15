@@ -225,7 +225,6 @@
             </div>
             <div class="grid-cap" id="eqCap"></div>
             <div class="pill-grid" id="eqGrid"></div>
-            <div class="detail" id="eqDetail"></div>
           </div>
 
           <div class="split-right">
@@ -268,7 +267,6 @@
             </div>
             <div class="grid-cap" id="campCap"></div>
             <div class="pill-grid" id="campGrid"></div>
-            <div class="detail" id="campDetail"></div>
           </div>
 
           <div class="split-right">
@@ -336,6 +334,17 @@
         <div class="log-list" id="eventLog"></div>
       </div>
     </main>
+  </div>
+</div>
+
+<!-- ================= ITEM POPUP MODAL ================= -->
+<div class="modal-wrap" id="itemModal" hidden>
+  <div class="modal item-popup-modal">
+    <h2 class="modal-title" id="ipTitle">Item Details</h2>
+    <div class="item-popup-grid" id="ipContent"></div>
+    <div class="modal-section" style="padding-bottom:0; border:none;">
+      <button class="btn btn-quiet" onclick="el('itemModal').hidden = true;">Close</button>
+    </div>
   </div>
 </div>
 
