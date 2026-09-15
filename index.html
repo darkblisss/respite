@@ -86,10 +86,7 @@
         <div class="pill-body" id="navField"></div>
       </div>
 
-      <div class="bank-side">
-        <div class="bank-note">Bank isn't a page &mdash; it's a tab inside Equipment &amp; Pack and Camp Stores. Same 50 slots either way in.</div>
-        <div class="bank-tag" id="spoilsTag" hidden></div>
-      </div>
+      <button type="button" class="side-panel spoils-side" id="spoilsTag" hidden></button>
 
       <div class="side-panel weather-panel">
         <div class="tag" id="weatherTag"></div>
@@ -144,6 +141,12 @@
         <div class="hero">
           <div class="hero-top">
             <div class="region-tag" id="skHeroTag"></div>
+            <div class="tip" id="skMastery" hidden>
+              <button type="button" class="tip-btn" aria-describedby="skMasteryTip">
+                <span class="tip-i" id="skMasteryIcon"></span><span id="skMasteryLabel">Mastery</span>
+              </button>
+              <div class="tip-panel" id="skMasteryTip" role="tooltip"></div>
+            </div>
           </div>
           <div class="hero-body">
             <div class="hero-art" id="skHeroIcon"></div>
@@ -156,31 +159,14 @@
           </div>
         </div>
 
-        <div class="content-grid">
-          <div class="card">
-            <div class="card-head"><div class="label" id="skWorkLabel"></div></div>
-            <div id="skWorkBody"></div>
-          </div>
-          <div class="rail-stack">
-            <div class="card" id="skRailA">
-              <div class="card-head"><div class="label" id="skRailALabel"></div></div>
-              <div id="skRailABody"></div>
-            </div>
-            <div class="card">
-              <div class="card-head"><div class="label">Mastery</div></div>
-              <div id="skMasteryBody"></div>
-            </div>
-          </div>
-        </div>
-
         <div class="card">
-          <div class="card-head"><div class="label">Level Milestones</div></div>
-          <div class="milestone-track" id="skMilestones"></div>
+          <div class="card-head"><div class="label" id="skWorkLabel"></div></div>
+          <div id="skWorkBody"></div>
         </div>
 
-        <div class="row-3">
+        <div class="card-row">
           <div class="card" id="skYield">
-            <div class="card-head"><div class="label">Yield Table</div></div>
+            <div class="card-head"><div class="label" id="skYieldLabel">Yield Table</div></div>
             <div id="skYieldBody"></div>
           </div>
           <div class="card" id="skSeams">
@@ -199,19 +185,19 @@
             <div class="muted tiny" id="skSpoilsCount"></div>
           </div>
           <div class="spoil-list" id="skSpoilsBody"></div>
-          <div class="btnrow" id="skSpoilsActions" style="margin-top:12px;">
-            <button class="btn btn-primary" id="spoilsClaimAll">Claim all</button>
-            <button class="btn btn-gold" id="spoilsSellAll">Sell all where they lie</button>
+          <div class="btnrow spoil-actions" id="skSpoilsActions">
+            <button type="button" class="btn btn-primary" id="spoilsClaimAll">Claim all</button>
+            <button type="button" class="btn btn-gold" id="spoilsSellAll">Sell all where they lie</button>
           </div>
         </div>
       </section>
-
+      
       <!-- ---- EQUIPMENT & PACK ---- -->
       <section class="page" data-page="equipment" hidden>
         <div class="split-layout">
           <div class="split-left card">
             <div class="tabs">
-              <button class="tab-btn active" data-scope="eq" data-tab="pack">The Pack</button>
+              <button class="tab-btn active" data-scope="eq" data-tab="pack">Inventory</button>
               <button class="tab-btn" data-scope="eq" data-tab="bank">Bank</button>
             </div>
             <div class="grid-toolbar">
