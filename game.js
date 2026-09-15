@@ -1408,4 +1408,554 @@ function renderFieldBody(region) {
   const chips = document.createElement("div"); chips.className = "stat-chips";
   const atk = attackPower(), avg = Math.max(1, (atk * 0.55 + atk) / 2 - live.defence * 0.35);
   const killMs = (live.hp / avg) * PLAYER_SWING_MS + RESPAWN_MS, incoming = Math.max(1, (live.attack * 0.55 + live.attack) / 2 - defencePower() * 0.4), survive = maxHp() / (incoming / live.speed * 1000);
-  chips.innerHTML = `<div class="chip">${fmt(live.hp)} HP</div><div class="chip">${fmt(live.attack)} attack</div><div class="
+  chips.innerHTML = `<div class="chip">${fmt(live.hp)} HP</div><div class="chip">${fmt(live.attack)} attack</div>` +
+    `<div class="chip">${fmt(live.xp)} XP</div>` +
+    `<div class="chip${survive < 30 ? " warn" : ""}">~${fmtTime(killMs)} a kill</div>` +
+    `<div class="chip${survive < 30 ? " warn" : " good"}">${survive < 30 ? "You will not last here" : "Survivable"}</div>`;
+  info.appendChild(chips);
+
+  const bar = document.createElement("div"); bar.className = "node-progress";
+  bar.innerHTML = '<div class="bar mob"><i style="width:100%"></i></div><div class="meta"><span></span><b></b></div>';
+  info.appendChild(bar);
+
+  const btn = document.createElement("button"); btn.className = "btn btn-primary node-btn";
+  btn.textContent = recovering() ? "Recovering" : engaged ? (t.queued === "stop" ? "Pulling back after this" : "Pull back") : "Take the field";
+  btn.disabled = recovering(); btn.onclick = () => engageRegion(tier);
+  info.appendChild(btn);
+
+  card.appendChild(info); box.appendChild(card);
+  liveRefs.monster = { tier, bar: bar.querySelector("i"), left: bar.querySelector("span"), right: bar.querySelector("b") };
+
+  // Threat Block
+  const threat = threatIn(tier);
+  const tr = document.createElement("div"); tr.className = "threat-block";
+  tr.innerHTML = '<div class="threat-head"><span class="label">Regional Threat</span><span class="threat-num"></span></div>' +
+    '<div class="bar threat"><i></i></div><div class="threat-note"></div>';
+  tr.querySelector(".threat-num").textContent = `${threat} / ${THREAT_CAP}`;
+  tr.querySelector("i").style.width = (threat / THREAT_CAP) * 100 + "%";
+  tr.querySelector(".threat-note").textContent = threat >= THREAT_CAP ? `${rankOf(tier, "boss").name} is waiting.` : `At ${THREAT_CAP}, ${rankOf(tier, "boss").name} comes out.`;
+  box.appendChild(tr);
+
+  // Roster Rail
+  el("skRailA").hidden = false; el("skRailALabel").textContent = "Regional Roster";
+  const rail = el("skRailABody"); rail.innerHTML = "";
+  rosterFor(tier).forEach((m) => {
+    const row = document.createElement("div"); row.className = "roster-row" + (m.id === live.id ? " on" : "");
+    row.innerHTML = `<div class="left">${icon(m.icon, "ico-sm")}<div><div class="rname"></div><div class="rsub"></div></div></div><div class="rrank ${m.rank}"></div>`;
+    row.querySelector(".rname").textContent = m.name; row.querySelector(".rsub").textContent = `${fmt(m.hp)} HP · ${fmt(m.xp)} XP`;
+    row.querySelector(".rrank").textContent = m.rank === "grunt" ? "80%" : m.rank === "elite" ? "20%" : "Threat " + THREAT_CAP;
+    rail.appendChild(row);
+  });
+
+  // Yield
+  el("skYield").hidden = false; el("skYieldBody").innerHTML = "";
+  live.drops.forEach(([k, qty, chance]) => {
+    const row = document.createElement("div"); row.className = "yield-item";
+    row.innerHTML = `<div class="left">${icon(itemDef(k).icon, "ico-sm")}<span></span></div><div class="chance"></div>`;
+    row.querySelector("span").textContent = itemName(k); row.querySelector(".chance").textContent = `${Math.round(chance * 100)}% · ${qty}`;
+    el("skYieldBody").appendChild(row);
+  });
+  if (live.rank === "boss") {
+    const row = document.createElement("div"); row.className = "yield-item";
+    row.innerHTML = '<div class="left"><span class="rar-epic">Epic component</span></div><div class="chance">Guaranteed</div>';
+    el("skYieldBody").appendChild(row);
+  }
+
+  renderSpoils();
+
+  // Other Ground
+  el("skSeams").hidden = false; el("skSeamsLabel").textContent = "Other Ground";
+  const seams = el("skSeamsBody"); seams.innerHTML = "";
+  REGIONS.forEach((r) => {
+    if (r.tier === tier) return;
+    const unlocked = state.travel.unlocked.includes(r.id), grunt = rankOf(r.tier, "grunt");
+    const row = document.createElement("button"); row.className = "seam-row";
+    row.innerHTML = '<div class="name"></div><div class="region"></div>';
+    row.children[0].textContent = grunt.name; row.children[1].textContent = `Lv ${grunt.level} · ${r.name}${unlocked ? "" : ` · ${fmt(r.toll)}g`}`;
+    row.onclick = () => travelTo(r.id);
+    seams.appendChild(row);
+  });
+}
+
+const regionOfTier = (tier) => REGIONS.find((r) => r.tier === tier);
+
+function renderToolPanel(skillId) {
+  el("skRailA").hidden = false; el("skRailALabel").textContent = "Tool in Hand";
+  const box = el("skRailABody"); box.innerHTML = "";
+  const tool = toolFor(skillId); const card = document.createElement("div"); card.className = "tool-card";
+  if (tool) {
+    card.innerHTML = `<div class="tool-icon">${icon(tool.icon)}</div><div><div class="tool-name"></div><div class="tool-sub"></div></div>`;
+    card.querySelector(".tool-name").textContent = tool.name;
+    card.querySelector(".tool-sub").textContent = `+${Math.round(tool.speed * 100)}% ${skillName(skillId)} speed · Tier ${tool.tier}`;
+    const off = document.createElement("button"); off.className = "minibtn"; off.textContent = "Stow";
+    off.onclick = () => unequipTool(skillId); card.appendChild(off);
+  } else {
+    card.innerHTML = `<div class="tool-icon empty">${icon(GATHER_SKILLS.find(s=>s.id===skillId).matIcon)}</div><div><div class="tool-name">Bare hands</div><div class="tool-sub">Forge a tool for more speed.</div></div>`;
+  }
+  box.appendChild(card);
+}
+
+function renderYieldTable(def, skillId) {
+  el("skYield").hidden = false; const box = el("skYieldBody"); box.innerHTML = "";
+  const mainKey = Object.keys(def.out)[0], rows = [[mainKey, "Every action"]];
+  const dbl = doubleChance(skillId); if (dbl > 0) rows.push([mainKey, `${Math.round(dbl * 100)}% doubled`]);
+  if (def.reagentId) rows.push([def.reagentId, `${Math.round(def.reagentChance * 100)}% chance`]);
+  const rich = richFind(def); if (rich) rows.push([rich, `${(RICH_FIND_CHANCE * 100).toFixed(1)}% rich find`]);
+
+  rows.forEach(([k, label]) => {
+    const row = document.createElement("div"); row.className = "yield-item";
+    row.innerHTML = `<div class="left">${icon(itemDef(k).icon, "ico-sm")}<span></span></div><div class="chance"></div>`;
+    row.querySelector("span").textContent = itemName(k); row.querySelector(".chance").textContent = label;
+    box.appendChild(row);
+  });
+}
+
+function renderOtherSeams(skillId) {
+  el("skSeams").hidden = false; el("skSeamsLabel").textContent = `Other ${skillName(skillId)} Grounds`;
+  const box = el("skSeamsBody"); box.innerHTML = ""; const lvl = skillLevel(skillId);
+  GATHER_ACTIONS[skillId].forEach((def) => {
+    if (def.tier === currentRegion().tier) return;
+    const r = regionOfTier(def.tier), unlocked = state.travel.unlocked.includes(r.id);
+    const row = document.createElement("button"); row.className = "seam-row" + (lvl < def.level ? " dim" : "");
+    row.innerHTML = `<div class="name"></div><div class="region"></div>`;
+    row.children[0].textContent = titleCase(def.name); row.children[1].textContent = `Lv ${def.level} · ${r.name}${unlocked ? "" : ` · ${fmt(r.toll)}g toll`}`;
+    row.onclick = () => travelTo(r.id); box.appendChild(row);
+  });
+}
+
+function renderSpoils() {
+  const box = el("skSpoils"); if (!box) return; box.hidden = false;
+  const list = el("skSpoilsBody"); list.innerHTML = "";
+  el("skSpoilsCount").textContent = state.spoils.length ? `${state.spoils.length} lots waiting` : "";
+  if (!state.spoils.length) { list.innerHTML = '<div class="muted tiny">Nothing on the field.</div>'; el("skSpoilsActions").hidden = true; return; }
+  el("skSpoilsActions").hidden = false;
+  state.spoils.slice().reverse().forEach((s, i) => {
+    const idx = state.spoils.length - 1 - i, d = itemDef(s.key), row = document.createElement("div"); row.className = "spoil-row";
+    row.innerHTML = `<div class="left">${icon(d.icon, "ico-sm")}<span></span></div><div class="sp-qty"></div>`;
+    const nm = row.querySelector("span"); nm.textContent = itemName(s.key);
+    if (d.rarity && d.rarity !== "common") nm.classList.add("rar-" + d.rarity);
+    row.querySelector(".sp-qty").textContent = "×" + fmt(s.qty);
+    const take = document.createElement("button"); take.className = "minibtn"; take.textContent = "Take"; take.onclick = () => claimSpoil(idx); row.appendChild(take);
+    const sellB = document.createElement("button"); sellB.className = "minibtn"; sellB.textContent = fmt(d.value * s.qty) + "g"; sellB.onclick = () => sellSpoil(idx); row.appendChild(sellB);
+    list.appendChild(row);
+  });
+}
+
+function renderMastery(skillId) {
+  const lvl = skillLevel(skillId), box = el("skMasteryBody"); box.innerHTML = ""; const m = mastery(skillId);
+  const head = document.createElement("div"); head.className = "mastery-summary";
+  head.textContent = (m.speed || m.double) ? `+${Math.round(m.speed * 100)}% speed · +${Math.round(m.double * 100)}% double yield` : "No mastery earned yet.";
+  box.appendChild(head);
+  MASTERY_TRACK.forEach((step) => {
+    const done = lvl >= step.level, row = document.createElement("div"); row.className = "mastery-row";
+    row.innerHTML = `<div class="name"><span class="glyph${done ? " on" : ""}"></span><span></span></div><div class="val"></div>`;
+    row.querySelector(".glyph").textContent = done ? "✓" : "·"; row.querySelectorAll("span")[1].textContent = step.label;
+    const val = row.querySelector(".val"); val.textContent = done ? step.desc : "Lv " + step.level; if (done) val.classList.add("on");
+    box.appendChild(row);
+  });
+}
+
+function renderMilestones(skillId, lvl) {
+  const box = el("skMilestones"); box.innerHTML = "";
+  const marks = [{ level: 1, desc: "Ground opened" }].concat(MASTERY_TRACK.map((m) => ({ level: m.level, desc: m.label })));
+  marks.forEach((m) => {
+    const d = document.createElement("div"); d.className = "milestone" + (lvl >= m.level ? " done" : "");
+    d.innerHTML = '<div class="lv"></div><div class="desc"></div>';
+    d.children[0].textContent = "Lv " + m.level; d.children[1].textContent = m.desc; box.appendChild(d);
+  });
+}
+
+function renderYieldFeed() {
+  const box = el("skYieldFeed"); box.innerHTML = "";
+  if (!state.yields.length) { box.innerHTML = '<div class="log-item muted">Nothing yet.</div>'; return; }
+  state.yields.slice().reverse().forEach((y) => {
+    const d = document.createElement("div"); d.className = "log-item"; d.innerHTML = '<span class="t"></span><span></span>';
+    const ago = Date.now() - y.t; d.children[0].textContent = ago < 4000 ? "now" : fmtTime(ago); d.children[1].textContent = y.m; box.appendChild(d);
+  });
+}
+
+function updateLive() {
+  const n = liveRefs.node;
+  if (n) {
+    const t = state.tasks.skilling, active = t && t.skillId === n.skillId && t.actionId === n.def.id, time = actionTime(n.def);
+    if (active) {
+      const pct = clamp((t.progress / time) * 100, 0, 100); n.bar.classList.toggle("nojump", pct < 6); n.bar.style.width = pct + "%";
+      const plan = skillPlan(); n.left.textContent = `${fmt(plan.done)} / ${fmt(plan.target)} actions`; n.right.textContent = fmtTime(plan.timeLeft) + " left";
+    } else {
+      n.bar.style.width = "0"; const per12 = Math.floor(IDLE_CAP_MS / time);
+      n.left.textContent = `${fmt(per12)} actions per 12h idle`; n.right.textContent = fmt(per12 * n.def.xp * xpMult()) + " XP";
+    }
+  }
+  const m = liveRefs.monster;
+  if (m) {
+    const t = state.tasks.combat, active = t && t.tier === m.tier;
+    if (active) {
+      m.bar.style.width = clamp(t.respawn > 0 ? 0 : (t.mobHp / t.mobMax) * 100, 0, 100) + "%";
+      const plan = combatPlan(); m.left.textContent = `${fmt(plan.done)} / ${fmt(plan.target)} kills`; m.right.textContent = fmtTime(plan.timeLeft) + " left";
+    } else { m.bar.style.width = "100%"; m.left.textContent = "Not engaged"; m.right.textContent = ""; }
+  }
+}
+
+function renderCharacter() {
+  el("chName").textContent = state.meta.name || "Commander"; el("chTags").innerHTML = `<span>Commander</span><span>${currentRegion().name}</span>`; el("chRegionTag").textContent = `In ${currentRegion().name}`; el("chTotal").textContent = "Lv " + totalLevel();
+  const b = state.bounty; el("chBounty").innerHTML = b ? `Bounty <b>${fmt(Math.min(b.progress, b.amount))} / ${fmt(b.amount)}</b> · resets in ${fmtTime(windowEndsIn())}` : "";
+  const sp = skillPlan(), labour = el("chLabour"); labour.innerHTML = "";
+  if (sp) {
+    labour.innerHTML = `<div class="task-name">${icon(sp.def.icon, "ico-sm")}<span></span></div><div class="bar"><i></i></div><div class="task-meta"><span></span><b></b></div>`;
+    labour.querySelector("span").textContent = titleCase(sp.def.name); labour.querySelector("i").style.width = sp.pct + "%";
+    labour.querySelectorAll(".task-meta span")[0].textContent = `${fmt(sp.done)} / ${fmt(sp.target)} actions`; labour.querySelector("b").textContent = fmtTime(sp.timeLeft) + " left";
+  } else {
+    labour.innerHTML = '<div class="idle-block"><div class="big">No crews tasked</div><div>Your people are standing around.</div><button class="btn" onclick="go(\'skill\', \'delving\')">Open Delving</button></div>';
+  }
+  const cp = combatPlan(), field = el("chField"); field.innerHTML = "";
+  if (cp) {
+    field.innerHTML = `<div class="task-name">${icon(cp.mob.icon, "ico-sm")}<span></span></div><div class="bar mob"><i></i></div><div class="task-meta"><span></span><b></b></div>`;
+    field.querySelector("span").textContent = cp.mob.name; field.querySelector("i").style.width = cp.pct + "%";
+    field.querySelectorAll(".task-meta span")[0].textContent = `${fmt(cp.done)} / ${fmt(cp.target)} kills`; field.querySelector("b").textContent = fmtTime(cp.timeLeft) + " left";
+  } else {
+    field.innerHTML = `<div class="idle-block"><div class="big">${recovering() ? "Recovering" : "No quarry chosen"}</div><div>${recovering() ? `Back in ${fmtTime(state.player.recoveryUntil - Date.now())}.` : "Take the field yourself."}</div><button class="btn" onclick="go('skill', 'warfare')">Open The Field</button></div>`;
+  }
+  const strip = el("chStats"); strip.innerHTML = "";
+  [["Health", maxHp()], ["Attack", Math.round(attackPower())], ["Defence", Math.round(defencePower())], ["Kills", fmt(state.stats.kills)], ["Deaths", fmt(state.stats.deaths)], ["Gold Earned", fmt(state.stats.goldEarned)]].forEach(([l, v]) => {
+    const d = document.createElement("div"); d.className = "stat-box"; d.innerHTML = '<div class="v"></div><div class="l"></div>';
+    d.children[0].textContent = v; d.children[1].textContent = l; strip.appendChild(d);
+  });
+  const grid = el("chSkills"); grid.innerHTML = "";
+  SKILLS.forEach((s) => {
+    const lvl = skillLevel(s.id), xp = state.skills[s.id] || 0, base = XP_TABLE[lvl], next = XP_TABLE[Math.min(lvl + 1, MAX_LEVEL)];
+    const card = document.createElement("button"); card.className = "skill-card";
+    card.innerHTML = `<div class="top"><div class="name">${icon(s.icon, "ico-sm")}<span></span></div><div class="lvl"></div></div><div class="xp"></div><div class="bar"><i></i></div>`;
+    card.querySelector(".name span").textContent = s.name; card.querySelector(".lvl").textContent = "Lv " + lvl;
+    card.querySelector(".xp").textContent = lvl >= MAX_LEVEL ? "Mastered" : `${fmt(xp)} / ${fmt(next)} XP`;
+    card.querySelector("i").style.width = clamp(lvl >= MAX_LEVEL ? 100 : ((xp - base) / (next - base)) * 100, 0, 100) + "%";
+    card.onclick = () => go("skill", s.id); grid.appendChild(card);
+  });
+}
+
+const FILTERS = [
+  { id: "all",       label: "ALL",  test: () => true },
+  { id: "gear",      label: "Gear", icon: "blade", test: (d) => d.kind === "gear" },
+  { id: "material",  label: "Mats", icon: "ore",   test: (d) => d.kind === "material" && !d.heal && !d.forSkill },
+  { id: "provision", label: "Food", icon: "ration", test: (d) => !!d.heal },
+  { id: "tool",      label: "Tools", icon: "pick", test: (d) => d.kind === "tool" },
+];
+
+function scopeTab(scope) { return scope === "eq" ? eqTab : campTab; }
+function scopeStore(scope) { const tab = scopeTab(scope); if (tab === "bank") return "vault"; return scope === "eq" ? "inv" : "bank"; }
+
+function renderStorePage(scope) {
+  storeView = scopeStore(scope); const s = store(storeView), ids = sortedKeys(storeView);
+  const pre = scope === "eq" ? "eq" : "camp";
+  document.querySelectorAll(`.tab-btn[data-scope="${scope}"]`).forEach((b) => b.classList.toggle("active", b.dataset.tab === scopeTab(scope)));
+  el(pre + "Cap").textContent = `Capacity ${slotsUsed(storeView)} / ${slotCap(storeView)}`;
+  renderFilters(pre); renderPillGrid(el(pre + "Grid"), ids);
+  if (scope === "eq") renderPaperdoll(); else renderLedger();
+}
+
+function sortedKeys(w) {
+  let ids = orderedKeys(w); const f = FILTERS.find((x) => x.id === gridFilter) || FILTERS[0];
+  ids = ids.filter((k) => { const d = itemDef(k); return d && f.test(d); });
+  if (gridSort === "rarity") {
+    const order = { epic: 0, rare: 1, uncommon: 2, common: 3 };
+    ids.sort((a, bb) => {
+      const da = itemDef(a), db = itemDef(bb);
+      const ra = order[da.rarity] != null ? order[da.rarity] : 4, rb = order[db.rarity] != null ? order[db.rarity] : 4;
+      return ra - rb || itemName(a).localeCompare(itemName(bb));
+    });
+  } else if (gridSort === "name") { ids.sort((a, bb) => itemName(a).localeCompare(itemName(bb))); }
+  return ids;
+}
+
+function renderFilters(pre) {
+  const box = el(pre + "Filters"); box.innerHTML = "";
+  FILTERS.forEach((f) => {
+    const b = document.createElement("button"); b.className = "ficon" + (gridFilter === f.id ? " active" : "");
+    b.innerHTML = f.icon ? icon(f.icon, "ico-sm") : f.label; b.title = f.label;
+    b.onclick = () => { gridFilter = f.id; keys.store = ""; renderStorePage(pre === "eq" ? "eq" : "camp"); };
+    box.appendChild(b);
+  });
+  const sel = el(pre + "Sort"); if (sel && sel.value !== gridSort) sel.value = gridSort;
+}
+
+function itemKindLabel(d) {
+  if (d.kind === "gear") return rarityDef(d.rarity).name;
+  if (d.kind === "tool") return "Tool";
+  if (d.heal) return "Provision";
+  if (d.chest) return "Component";
+  return "Material";
+}
+
+function reorder(fromKey, toKey) {
+  const ids = orderedKeys(storeView); const a = ids.indexOf(fromKey), b = ids.indexOf(toKey);
+  if (a < 0 || b < 0) return; ids.splice(a, 1); ids.splice(b, 0, fromKey);
+  store(storeView).order = ids; gridSort = "custom"; keys.store = ""; renderAll();
+}
+
+function renderPillGrid(grid, ids) {
+  grid.innerHTML = ""; const cap = slotCap(storeView), s = store(storeView);
+  for (let i = 0; i < cap; i++) {
+    const key = ids[i], cell = document.createElement("div");
+    if (!key) {
+      cell.className = "item-pill empty"; cell.innerHTML = '<div class="art"></div><div class="info"><div class="n">Empty</div><div class="r">Empty Slot</div></div>';
+      grid.appendChild(cell); continue;
+    }
+    const d = itemDef(key);
+    cell.className = `item-pill ${d.rarity || "common"}`; cell.tabIndex = 0;
+    cell.innerHTML = `<div class="qty">${fmt(s.items[key])}</div><div class="art">${icon(d.icon, "ico-lg")}</div><div class="info"><div class="n"></div><div class="r"></div></div>`;
+    cell.querySelector(".n").textContent = itemName(key); cell.querySelector(".r").textContent = itemKindLabel(d);
+    cell.title = `${itemName(key)} × ${s.items[key]}`;
+    cell.draggable = true;
+    cell.onclick = () => showItemPopup(key, storeView);
+    cell.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); cell.onclick(); } };
+    cell.ondragstart = (e) => e.dataTransfer.setData("text/plain", key);
+    cell.ondragover = (e) => { e.preventDefault(); cell.classList.add("dragover"); };
+    cell.ondragleave = () => cell.classList.remove("dragover");
+    cell.ondrop = (e) => { e.preventDefault(); cell.classList.remove("dragover"); const from = e.dataTransfer.getData("text/plain"); if (from && from !== key) reorder(from, key); };
+    grid.appendChild(cell);
+  }
+}
+
+function buildItemCol(key, isEquipped = false) {
+  const d = itemDef(key), qty = isEquipped ? 1 : qtyIn(storeView, key);
+  const col = document.createElement("div"); col.className = "ip-col" + (isEquipped ? " equipped" : "");
+  col.innerHTML = `<div class="ip-compare-label">${isEquipped ? "Currently Equipped" : "Selected Item"}</div>` +
+    `<div class="ip-head"><div class="ico-lg">${icon(d.icon, "ico-lg")}</div><div><div class="ip-name ${d.rarity ? 'rar-'+d.rarity : ''}"></div><div class="ip-sub"></div></div></div>` +
+    `<div class="ip-stats"></div><div class="ip-actions"></div>`;
+  col.querySelector(".ip-name").textContent = itemName(key);
+  col.querySelector(".ip-sub").textContent = `${itemKindLabel(d)} ${isEquipped ? "" : `· ×${fmt(qty)}`} · ${fmt(d.value)}g each`;
+  
+  const stats = col.querySelector(".ip-stats");
+  const addStat = (label, val, diffClass = "") => {
+    const r = document.createElement("div"); r.className = `ip-stat-row ${diffClass}`;
+    r.innerHTML = `<span>${label}</span><b>${val}</b>`; stats.appendChild(r);
+  };
+
+  if (d.attack) addStat("Attack Power", `+${d.attack}`);
+  if (d.defence) addStat("Defence", `+${d.defence}`);
+  if (d.health) addStat("Max Health", `+${d.health}`);
+  if (d.heal) addStat("Restores", fmt(d.heal));
+  if (d.speed) addStat(`${skillName(d.forSkill)} Speed`, `+${Math.round(d.speed * 100)}%`);
+  if (d.twoHanded) addStat("Type", "Two-Handed");
+  if (d.maxDur) addStat("Durability", `${d.maxDur} / ${d.maxDur}`);
+  if (d.chest) addStat("Store Slots", `+${d.chest}`);
+
+  // Actions
+  if (!isEquipped) {
+    const acts = col.querySelector(".ip-actions");
+    const btn = (lbl, fn, cls) => { const b = document.createElement("button"); b.className = "btn " + (cls||"btn-quiet"); b.textContent = lbl; b.onclick = fn; acts.appendChild(b); };
+    
+    if (d.slot) btn(`Equip · ${SLOT_LABELS[d.slot]}`, () => equip(key), "btn-primary");
+    if (d.kind === "tool") btn(`Take up · ${skillName(d.forSkill)}`, () => equip(key), "btn-primary");
+    if (d.chest) btn("Open chest", () => useChest(key));
+
+    const pools = [["inv", "Pack"], ["bank", "Stores"], ["vault", "Bank"]];
+    pools.forEach(([w, lbl]) => {
+      if (w !== storeView) btn(`Move to ${lbl}`, () => moveTo(key, w, false));
+    });
+
+    const sv = salvageValue(key);
+    if (sv) btn(`Break down for ${sv.qty}× ${itemName(sv.mat)}`, () => salvage(key));
+    
+    btn(`Sell 1 (${fmt(d.value)}g)`, () => sell(key, false));
+    if (qty > 1) btn(`Sell all (${fmt(d.value * qty)}g)`, () => sell(key, true));
+  }
+  return col;
+}
+
+function showItemPopup(key, view) {
+  storeView = view;
+  const modal = el("itemModal"), content = el("ipContent");
+  content.innerHTML = "";
+  const d = itemDef(key);
+  
+  content.appendChild(buildItemCol(key, false));
+  
+  if (d && d.slot && state.equipment[d.slot]) {
+    content.appendChild(buildItemCol(state.equipment[d.slot], true));
+  } else if (d && d.kind === "tool" && state.tools[d.forSkill]) {
+    content.appendChild(buildItemCol(state.tools[d.forSkill], true));
+  }
+  modal.hidden = false;
+}
+
+function renderPaperdoll() {
+  const twoH = state.equipment.weapon && itemDef(state.equipment.weapon).twoHanded;
+  const grid = el("dollGrid"); grid.innerHTML = "";
+  DOLL_ORDER.forEach((slot) => {
+    if (slot === "offhand" && twoH) return;
+    const key = state.equipment[slot], d = key ? itemDef(key) : null, box = document.createElement("div");
+    box.className = `eq-slot slot-${slot} ` + (key ? (d.rarity || "common") : "empty") + (slot === "weapon" && twoH ? " merged" : "");
+    box.innerHTML = `<span class="type">${SLOT_LABELS[slot]}</span><div class="art">${icon(d ? d.icon : slotGlyph(slot), twoH && slot === "weapon" ? "ico-xl" : "ico-lg")}</div><div class="name"></div>`;
+    box.querySelector(".name").textContent = key ? itemName(key) : "Empty";
+    if (key) {
+      const pct = wearPct(key);
+      if (pct !== null) { const w = document.createElement("div"); w.className = "eq-wear " + (pct > 60 ? "fine" : pct > 25 ? "worn" : "bad"); w.textContent = pct + "%"; box.appendChild(w); }
+      const bar = document.createElement("div"); bar.className = "eq-actions";
+      const cost = repairCost(key);
+      if (cost) {
+        const fix = document.createElement("button"); fix.className = "minibtn"; fix.textContent = `Fix ${cost.qty}×`; fix.disabled = haveQty(cost.mat) < cost.qty; fix.title = `Uses ${cost.qty} ${itemName(cost.mat)}`; fix.onclick = (e) => { e.stopPropagation(); repairItem(key); }; bar.appendChild(fix);
+      }
+      const off = document.createElement("button"); off.className = "minibtn"; off.textContent = "Remove"; off.onclick = (e) => { e.stopPropagation(); unequip(slot); }; bar.appendChild(off); box.appendChild(bar);
+    }
+    grid.appendChild(box);
+  });
+  el("dollName").textContent = state.meta.name || "Commander"; el("dollSub").textContent = `Commander · ${currentRegion().name}`;
+  const stand = el("dollStanding"); stand.innerHTML = "";
+  [["Health", fmt(maxHp())], ["Attack Power", Math.round(attackPower()), "gold"], ["Defence", Math.round(defencePower())], ["Combat", "Lv " + skillLevel("warfare"), "good"], ["Pack Space", `${slotsUsed("inv")} / ${packSlots()}`]].forEach(([l, v, cls]) => {
+    const r = document.createElement("div"); r.className = "stat-row"; r.innerHTML = '<div class="l"></div><div class="v"></div>';
+    r.children[0].textContent = l; r.children[1].textContent = v; if (cls) r.children[1].classList.add(cls); stand.appendChild(r);
+  });
+}
+
+function renderLedger() {
+  const tools = el("dollTools"); tools.innerHTML = "";
+  GATHER_SKILLS.forEach((s) => {
+    const tool = toolFor(s.id), box = document.createElement("div"); box.className = "tool-slot" + (tool ? " filled" : "");
+    box.innerHTML = `<span class="type">${skillName(s.id)}</span><div class="art">${icon(tool ? tool.icon : s.matIcon, "ico-lg")}</div><div class="name"></div>`;
+    box.querySelector(".name").textContent = tool ? tool.name : "Bare hands";
+    if (tool) { const off = document.createElement("button"); off.className = "minibtn"; off.textContent = "Stow"; off.onclick = () => unequipTool(s.id); box.appendChild(off); }
+    tools.appendChild(box);
+  });
+  const res = document.createElement("div"); res.className = "tool-slot reserved"; res.innerHTML = '<span class="type">Reserved</span>' + `<div class="art">${icon("unknown", "ico-lg")}</div><div class="name">Scavenging</div>`; tools.appendChild(res);
+  const list = el("dollLedger"); list.innerHTML = "";
+  const addRow = (l, v, cls) => { const r = document.createElement("div"); r.className = "stat-row"; r.innerHTML = '<div class="l"></div><div class="v"></div>'; r.children[0].textContent = l; r.children[1].textContent = v; if (cls) r.children[1].classList.add(cls); list.appendChild(r); };
+  addRow("Total Level", totalLevel(), "good"); addRow("Gold on Hand", fmt(state.player.gold), "gold"); addRow("Camp Stores", `${slotsUsed("bank")} / ${slotCap("bank")}`); addRow("Bank", `${slotsUsed("vault")} / ${slotCap("vault")}`); addRow("Actions Worked", fmt(state.stats.actions)); addRow("Sovereigns Felled", fmt(state.stats.bosses || 0));
+}
+
+function slotGlyph(slot) { return { weapon: "blade", offhand: "ward", head: "cowl", chest: "plate", hands: "gauntlets", feet: "treads", neck: "charm", ring: "band" }[slot] || "unknown"; }
+
+function renderAtlas() {
+  const box = el("atlasList"); box.innerHTML = "";
+  REGIONS.forEach((r) => {
+    const unlocked = state.travel.unlocked.includes(r.id), here = state.region === r.id, card = document.createElement("button");
+    card.className = "atlas-card" + (here ? " on" : "") + (unlocked ? "" : " locked");
+    card.innerHTML = `<div class="atlas-top">${icon("atlas", "ico-lg")}<div><div class="atlas-name"></div><div class="atlas-tier"></div></div></div><div class="atlas-note"></div><div class="atlas-foot"></div>`;
+    card.querySelector(".atlas-name").textContent = r.name; card.querySelector(".atlas-tier").textContent = `Tier ${r.tier} · gear around Lv ${r.level}`; card.querySelector(".atlas-note").textContent = r.note;
+    const foot = card.querySelector(".atlas-foot");
+    if (here) { foot.className = "atlas-foot here"; foot.textContent = "You are here"; } else if (unlocked) { foot.className = "atlas-foot open"; foot.textContent = "Road open"; } else { foot.className = "atlas-foot cost" + (state.player.gold < r.toll ? " cant" : ""); foot.textContent = `Toll ${fmt(r.toll)} gold`; }
+    card.onclick = () => travelTo(r.id); box.appendChild(card);
+  });
+}
+
+function renderShop() {
+  el("smugglerTimer").textContent = `Moves on in ${fmtTime(windowEndsIn())}`;
+  const stock = el("shopStock"); stock.innerHTML = "";
+  shopStock().forEach((entry) => {
+    const d = itemDef(entry.key), card = document.createElement("div"); card.className = "shop-card";
+    card.innerHTML = `<div class="shop-ico">${icon(d.icon, "ico-lg")}</div><div class="shop-body"><div class="shop-name"></div><div class="shop-sub"></div></div>`;
+    card.querySelector(".shop-name").textContent = d.name; card.querySelector(".shop-sub").textContent = `Restores ${fmt(d.heal)} HP · ${fmt(entry.price)}g each`;
+    const row = document.createElement("div"); row.className = "btnrow";
+    [1, 10, 50].forEach((n) => {
+      const b = document.createElement("button"); b.className = "btn btn-gold"; b.textContent = `${n} · ${fmt(entry.price * n)}g`;
+      b.disabled = state.player.gold < entry.price * n; b.onclick = () => buyShop(entry.key, entry.price * n, n); row.appendChild(b);
+    });
+    card.appendChild(row); stock.appendChild(card);
+  });
+  const sm = el("smugglerStock"); sm.innerHTML = "";
+  smugglerStock().forEach((entry) => {
+    const d = itemDef(entry.key), bought = !!state.smugglerBought[`${currentWindow()}_${entry.slot}`], card = document.createElement("div");
+    card.className = "shop-card"; card.innerHTML = `<div class="shop-ico">${icon(d.icon, "ico-lg")}</div><div class="shop-body"><div class="shop-name"></div><div class="shop-sub"></div></div>`;
+    card.querySelector(".shop-name").textContent = `${entry.qty}× ${d.name}`; card.querySelector(".shop-sub").textContent = `Tier ${d.tier} · ${fmt(entry.price)}g the lot`;
+    const b = document.createElement("button"); b.className = "btn btn-gold"; b.textContent = bought ? "Dealt" : `Buy · ${fmt(entry.price)}g`;
+    b.disabled = bought || state.player.gold < entry.price; b.onclick = () => buySmuggler(entry); card.appendChild(b); sm.appendChild(card);
+  });
+}
+
+function renderBounty() {
+  refreshBounty(); el("bountyTimer").textContent = `New posting in ${fmtTime(windowEndsIn())}`; const b = state.bounty, box = el("bountyBox"); box.innerHTML = ""; if (!b) return;
+  const card = document.createElement("div"); card.className = "bounty-card";
+  card.innerHTML = '<h3 class="bounty-title"></h3><div class="muted tiny"></div><div class="bar"><i></i></div><div class="bounty-reward"></div>';
+  card.querySelector(".bounty-title").textContent = b.label; card.querySelector(".tiny").textContent = `Posted for ${regionById(b.region).name}.`;
+  card.querySelector("i").style.width = clamp((b.progress / b.amount) * 100, 0, 100) + "%";
+  card.querySelector(".bounty-reward").textContent = `${fmt(Math.min(b.progress, b.amount))} of ${fmt(b.amount)} · pays ${fmt(b.gold)} gold and an hour double XP.`;
+  const btn = document.createElement("button"); btn.className = "btn btn-gold";
+  btn.textContent = b.claimed ? "Paid out" : (b.progress >= b.amount ? "Claim" : "Not finished"); btn.disabled = b.claimed || b.progress < b.amount;
+  btn.onclick = claimBounty; card.appendChild(btn); box.appendChild(card);
+}
+
+function renderKennel() {
+  const box = el("petList"); box.innerHTML = "";
+  PETS.forEach((pet) => {
+    const owned = state.pets[pet.id], card = document.createElement("div"); card.className = "pet-card" + (owned ? " owned" : "");
+    card.innerHTML = `<div class="pet-art">${icon(pet.icon, "ico-xl")}</div><div class="pet-body"><div class="pet-name"></div><div class="pet-note"></div><div class="pet-effect"></div></div>`;
+    card.querySelector(".pet-name").textContent = pet.name; card.querySelector(".pet-note").textContent = pet.note; card.querySelector(".pet-effect").textContent = pet.effect;
+    const b = document.createElement("button"); b.className = "btn " + (owned ? "btn-quiet" : "btn-gold");
+    b.textContent = owned ? "In the kennel" : `Buy · ${fmt(pet.cost)}g`; b.disabled = owned || state.player.gold < pet.cost;
+    b.onclick = () => buyPet(pet.id); card.appendChild(b); box.appendChild(card);
+  });
+  el("kennelNote").textContent = Object.values(state.pets).some(Boolean) ? "Bound to the camp permanently." : "Nothing bound yet.";
+}
+
+function renderLog() {
+  const box = el("eventLog"); box.innerHTML = "";
+  state.log.slice(-8).forEach((e) => {
+    const d = document.createElement("div"); d.className = "log-item"; d.innerHTML = '<span class="t"></span><span></span>';
+    const ago = Date.now() - e.t; d.children[0].textContent = ago < 4000 ? "now" : fmtTime(ago); d.children[1].textContent = e.m; box.appendChild(d);
+  });
+}
+
+/* ================= WIRING & BOOT ================= */
+
+el("brandMark").innerHTML = `<img class="mark-img" src="assets/respite-logo.webp" alt="Respite">`;
+el("coinIcon").innerHTML = icon("coin", "ico-sm");
+
+document.querySelectorAll(".icon-btn").forEach((b) => { b.onclick = () => go(b.dataset.page); });
+document.querySelectorAll(".pill-head").forEach((b) => { b.onclick = () => toggleNav(b.dataset.nav); });
+document.querySelectorAll(".tab-btn").forEach((b) => {
+  b.onclick = () => {
+    if (b.dataset.scope === "eq") eqTab = b.dataset.tab; else campTab = b.dataset.tab;
+    selected = null; keys.store = ""; renderAll();
+  };
+});
+
+["eqSort", "campSort"].forEach((id) => {
+  const sel = el(id); if (sel) sel.onchange = () => { gridSort = sel.value; keys.store = ""; renderAll(); };
+});
+
+el("spoilsClaimAll").onclick = claimAllSpoils;
+el("spoilsSellAll").onclick = () => { for (let i = state.spoils.length - 1; i >= 0; i--) sellSpoil(i); toast("Spoils sold"); };
+
+el("tbTradesClear").onclick = () => { const t = state.tasks.skilling; if (!t) return; t.queued = t.queued === "stop" ? null : "stop"; say(t.queued ? "Crews will stand down once this action finishes." : "Stand-down cancelled."); render(); };
+el("tbFieldClear").onclick = () => { const t = state.tasks.combat; if (!t) return; t.queued = t.queued === "stop" ? null : "stop"; say(t.queued ? "Pulling back once this fight finishes." : "Pull-back cancelled."); render(); };
+
+el("settingsBtn").onclick = () => { refreshAccountUi(); el("settingsModal").hidden = false; };
+el("settingsClose").onclick = () => { el("settingsModal").hidden = true; };
+
+function refreshAccountUi() {
+  const a = state.meta.account, cloud = !!sb;
+  el("acctStatus").textContent = !cloud ? "Cloud not configured." : a ? `Signed in as ${a}.` : "Not signed in.";
+  el("acctFields").hidden = !!a; el("acctCreate").hidden = !!a; el("acctLogin").hidden = !!a; el("acctLogout").hidden = !a;
+  el("nameField").value = state.meta.name || "Commander";
+}
+
+el("acctCreate").onclick = async () => { el("acctCreate").disabled = true; el("acctNote").textContent = "Working..."; const err = await createAccount(el("acctUser").value, el("acctPass").value); el("acctCreate").disabled = false; el("acctNote").textContent = err || `Signed in.`; if (!err) { el("acctPass").value = ""; refreshAccountUi(); render(); } };
+el("acctLogin").onclick = async () => { el("acctLogin").disabled = true; el("acctNote").textContent = "Working..."; const err = await loginAccount(el("acctUser").value, el("acctPass").value); el("acctLogin").disabled = false; el("acctNote").textContent = err || `Signed in.`; if (!err) { el("acctPass").value = ""; refreshAccountUi(); } };
+el("acctLogout").onclick = async () => { await logoutAccount(); refreshAccountUi(); };
+el("nameSave").onclick = async () => { const v = (el("nameField").value || "").trim().slice(0, 18); if (v) { state.meta.name = v; await save(); toast("Name set"); render(); } };
+el("saveBtn").onclick = async () => { toast((await save()) ? "Saved" : "Save failed"); };
+el("wipeBtn").onclick = async () => { if (!confirm("Reset character completely?")) return; await resetCharacter(); toast("Character reset"); };
+
+const away = bootLoad(); if (away) catchUp(away);
+refreshBounty();
+if (state.log.length === 0) say("You take command of a ruin.");
+route = parseHash();
+render();
+resumeCloudSession();
+
+let lastTick = Date.now();
+function loop() {
+  const now = Date.now(), dt = now - lastTick; lastTick = now;
+  if (dt > 0) { tick(Math.min(dt, 60000)); state.meta.playtimeMs += Math.min(dt, 60000); }
+  renderTopbar();
+  if (route.page === "skill") updateLive();
+  if (route.page === "character") renderCharacter();
+  if (route.page === "equipment") renderStorePage("eq");
+  if (route.page === "camp") renderStorePage("camp");
+  renderSidebar(); renderLog();
+}
+
+setInterval(loop, 60);
+setInterval(() => { if (route.page === "skill") renderYieldFeed(); }, 2000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { lastTick = Date.now(); render(); } });
+setInterval(save, 10000);
+window.addEventListener("beforeunload", save);
