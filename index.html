@@ -27,27 +27,27 @@
       <div class="tb-block">
         <div class="row1">
           <div><span class="eyebrow">Trades</span><span class="name" id="tbTradesName">Idle</span></div>
-          <button class="refresh" id="tbTradesClear" title="Finish this action, then stand down">&#8635;</button>
+          <button class="refresh" id="tbTradesClear" title="Stand the crews down" aria-label="Stand the crews down">&#8635;</button>
         </div>
         <div class="tb-bar"><i id="tbTradesBar"></i></div>
-        <div class="tb-meta" id="tbTradesMeta">No crews tasked.</div>
+        <div class="tb-meta" id="tbTradesMeta">No crews at work.</div>
       </div>
       <div class="tb-div"></div>
       <div class="tb-block">
         <div class="row1">
-          <div><span class="eyebrow">The Field</span><span class="name" id="tbFieldName">Idle</span></div>
-          <button class="refresh" id="tbFieldClear" title="Finish this fight, then pull back">&#8635;</button>
+          <div><span class="eyebrow">The Hunt</span><span class="name" id="tbFieldName">Idle</span></div>
+          <button class="refresh" id="tbFieldClear" title="Pull back after this fight" aria-label="Pull back after this fight">&#8635;</button>
         </div>
         <div class="tb-bar mob"><i id="tbFieldBar"></i></div>
-        <div class="tb-meta" id="tbFieldMeta">Take the field from any region.</div>
+        <div class="tb-meta" id="tbFieldMeta">Nobody is hunting.</div>
       </div>
     </div>
 
     <div class="tb-stats">
       <div class="pill gold"><span id="coinIcon"></span><b id="goldText">0</b></div>
       <div class="pill">HP <span class="hp-mini"><i id="hpFill"></i></span> <b id="hpText">20/20</b></div>
-      <div class="pill clock" title="World clock — bounties and the smuggler run on this"><b id="clockText"></b></div>
-      <button class="gear-btn" id="settingsBtn">&#9881;</button>
+      <div class="pill clock" title="World clock. Bounties and the smuggler run on this."><b id="clockText"></b></div>
+      <button class="gear-btn" id="settingsBtn" title="Settings" aria-label="Settings">&#9881;</button>
     </div>
   </header>
 
@@ -122,7 +122,7 @@
             <div id="chLabour"></div>
           </div>
           <div class="card">
-            <div class="card-head"><div class="label">The Field</div></div>
+            <div class="card-head"><div class="label">The Hunt</div></div>
             <div id="chField"></div>
           </div>
         </div>
@@ -159,24 +159,26 @@
           </div>
         </div>
 
-        <div class="card">
-          <div class="card-head"><div class="label" id="skWorkLabel"></div></div>
+        <div class="card" id="skWork">
+          <div class="card-head">
+            <div class="label" id="skWorkLabel"></div>
+            <div class="stat-chips head-chips" id="skWorkChips"></div>
+          </div>
           <div id="skWorkBody"></div>
         </div>
 
-        <div class="card-row">
-          <div class="card" id="skYield">
-            <div class="card-head"><div class="label" id="skYieldLabel">Yield Table</div></div>
-            <div id="skYieldBody"></div>
+        <div class="card" id="skCamp" hidden>
+          <div class="card-head">
+            <div class="label">The Camp</div>
+            <div class="muted tiny" id="skCampMeta"></div>
           </div>
-          <div class="card" id="skSeams">
-            <div class="card-head"><div class="label" id="skSeamsLabel"></div></div>
-            <div id="skSeamsBody"></div>
-          </div>
-          <div class="card">
-            <div class="card-head"><div class="label">Recent Yields</div></div>
-            <div class="log-list" id="skYieldFeed"></div>
-          </div>
+          <div class="camp-scene" id="skCampScene"></div>
+          <div class="camp-foot"><b id="skCampNow"></b><span id="skCampNext"></span></div>
+        </div>
+
+        <div class="card" id="skQuarry" hidden>
+          <div class="card-head"><div class="label">Quarry</div></div>
+          <div id="skQuarryBody"></div>
         </div>
 
         <div class="card" id="skSpoils" hidden>
@@ -192,13 +194,13 @@
         </div>
       </section>
       
-      <!-- ---- EQUIPMENT & PACK ---- -->
-      <section class="page" data-page="equipment" hidden>
+      <!-- ---- ARMAMENTS ---- -->
+      <section class="page" data-page="armaments" hidden>
         <div class="split-layout">
           <div class="split-left card">
             <div class="tabs">
-              <button class="tab-btn active" data-scope="eq" data-tab="pack">Inventory</button>
-              <button class="tab-btn" data-scope="eq" data-tab="bank">Bank</button>
+              <button class="tab-btn active" data-scope="eq" data-tab="pack">Belongings</button>
+              <button class="tab-btn" data-scope="eq" data-tab="vault">Vault</button>
             </div>
             <div class="grid-toolbar">
               <div class="filter-icons" id="eqFilters"></div>
@@ -234,13 +236,13 @@
         </div>
       </section>
 
-      <!-- ---- CAMP STORES ---- -->
-      <section class="page" data-page="camp" hidden>
+      <!-- ---- PROVISIONS ---- -->
+      <section class="page" data-page="provisions" hidden>
         <div class="split-layout">
           <div class="split-left card">
             <div class="tabs">
-              <button class="tab-btn active" data-scope="camp" data-tab="stores">Camp Stores</button>
-              <button class="tab-btn" data-scope="camp" data-tab="bank">Bank</button>
+              <button class="tab-btn active" data-scope="camp" data-tab="stores">Provisions</button>
+              <button class="tab-btn" data-scope="camp" data-tab="vault">Vault</button>
             </div>
             <div class="grid-toolbar">
               <div class="filter-icons" id="campFilters"></div>
@@ -269,12 +271,15 @@
         </div>
       </section>
 
-      <!-- ---- KENNEL ---- -->
-      <section class="page" data-page="kennel" hidden>
+      <!-- ---- COMPANIONS ---- -->
+      <section class="page" data-page="companions" hidden>
         <div class="card">
-          <div class="card-head"><div class="label">The Kennel</div></div>
-          <p class="panel-caption" id="kennelNote"></p>
-          <div class="pet-list" id="petList"></div>
+          <div class="card-head">
+            <div class="label">Companions</div>
+            <div class="muted tiny" id="compActive"></div>
+          </div>
+          <p class="panel-caption">One companion walks with you at a time. Its Bond grows for every minute it spends at your side while you work or hunt. Now and then another of a kind you own turns up, and each one raises its Rank.</p>
+          <div class="comp-list" id="compList"></div>
         </div>
       </section>
 
@@ -290,8 +295,8 @@
       <!-- ---- SHOP ---- -->
       <section class="page" data-page="shop" hidden>
         <div class="card">
-          <div class="card-head"><div class="label">Provisioner</div></div>
-          <p class="panel-caption">Always open. Provisions are eaten automatically when you drop low in the field.</p>
+          <div class="card-head"><div class="label">Apothecary</div></div>
+          <p class="panel-caption">Always open. Remedies are taken automatically when you drop low on the hunt.</p>
           <div class="shop-list" id="shopStock"></div>
         </div>
         <div class="card">
@@ -304,7 +309,7 @@
         </div>
       </section>
 
-      <!-- ---- BOUNTY ---- -->
+      <!-- ---- REQUISITIONS ---- -->
       <section class="page" data-page="requisitions" hidden>
         <div class="card">
           <div class="card-head">
@@ -323,6 +328,7 @@
         </div>
       </section>
 
+      <!-- ---- SKY ---- -->
       <section class="page" data-page="forecast" hidden>
         <div class="card">
           <div class="card-head">
@@ -334,10 +340,11 @@
         </div>
       </section>
 
-      <section class="page" data-page="bounty" hidden>
+      <!-- ---- BOUNTIES ---- -->
+      <section class="page" data-page="bounties" hidden>
         <div class="card">
           <div class="card-head">
-            <div class="label">Bounty Board</div>
+            <div class="label">Bounties</div>
             <div class="muted tiny" id="bountyTimer"></div>
           </div>
           <p class="panel-caption">Posted on the world clock every twelve hours, against the ground you're standing on.</p>
@@ -353,7 +360,35 @@
   </div>
 </div>
 
-<!-- ================= ITEM POPUP MODAL ================= -->
+<!-- ================= ACTION POPUP ================= -->
+<div class="modal-wrap" id="actionModal" hidden>
+  <div class="modal item-modal action-modal" role="dialog" aria-modal="true" aria-labelledby="amName">
+    <button type="button" class="modal-x" id="amClose" aria-label="Close">&times;</button>
+    <div class="ip-head">
+      <div class="ip-art" id="amArt"></div>
+      <div class="ip-titles">
+        <div class="ip-name" id="amName"></div>
+        <div class="ip-sub" id="amSub"></div>
+      </div>
+    </div>
+    <p class="ip-desc" id="amDesc"></p>
+    <div class="stat-chips am-chips" id="amChips"></div>
+    <div class="ip-stats" id="amStats"></div>
+    <div class="am-list" id="amListWrap">
+      <div class="am-label" id="amListLabel"></div>
+      <div id="amList"></div>
+    </div>
+    <div class="am-run" id="amRun" hidden>
+      <div class="bar"><i id="amRunBar"></i></div>
+      <div class="meta"><span id="amRunLeft"></span><b id="amRunRight"></b></div>
+    </div>
+    <div class="am-qty" id="amQty"></div>
+    <div class="am-plan" id="amPlan"></div>
+    <div class="ip-actions" id="amActions"></div>
+  </div>
+</div>
+
+<!-- ================= ITEM POPUP ================= -->
 <div class="modal-wrap" id="itemModal" hidden>
   <div class="modal item-modal" role="dialog" aria-modal="true" aria-labelledby="ipName">
     <button type="button" class="modal-x" id="ipClose" aria-label="Close">&times;</button>
@@ -365,74 +400,73 @@
       </div>
     </div>
     <p class="ip-desc" id="ipDesc"></p>
+    <p class="ip-note" id="ipNote" hidden></p>
     <div class="ip-stats" id="ipStats"></div>
     <div class="ip-effect" id="ipEffect" hidden></div>
     <div class="ip-sources" id="ipSources"></div>
     <div class="ip-compare" id="ipCompare" hidden></div>
+    <div class="ip-qty" id="ipQty" hidden></div>
     <div class="ip-actions" id="ipActions"></div>
   </div>
 </div>
-  
+
 <!-- ================= SETTINGS ================= -->
 <div class="modal-wrap" id="settingsModal" hidden>
-  <div class="modal">
-    <h2 class="modal-title">Settings</h2>
+  <div class="modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <button type="button" class="modal-x" id="settingsClose" aria-label="Close">&times;</button>
+    <h2 class="modal-title" id="settingsTitle">Settings</h2>
 
-    <div class="modal-section">
-      <h3 class="modal-h3">Commander</h3>
-      <div class="fieldrow">
-        <input class="field" id="nameField" maxlength="18" placeholder="Name">
-        <button class="btn" id="nameSave">Set</button>
+    <section class="set-section">
+      <div class="set-head">
+        <h3 class="modal-h3">Account</h3>
+        <span class="set-status" id="acctStatus"></span>
       </div>
-    </div>
+      <div class="set-fields" id="acctFields">
+        <label class="set-field"><span>Username</span><input class="field" id="acctUser" autocomplete="username" spellcheck="false"></label>
+        <label class="set-field"><span>Password</span><input class="field" id="acctPass" type="password" autocomplete="current-password"></label>
+      </div>
+      <div class="set-actions">
+        <button type="button" class="btn btn-primary" id="acctLogin">Log in</button>
+        <button type="button" class="btn" id="acctCreate">Create account</button>
+        <button type="button" class="btn" id="acctLogout" hidden>Log out</button>
+      </div>
+      <p class="set-note" id="acctNote"></p>
+    </section>
 
-    <div class="modal-section">
-      <h3 class="modal-h3">Account</h3>
-      <p class="muted tiny" id="acctStatus"></p>
-      <div class="fieldrow" id="acctFields">
-        <input class="field" id="acctUser" placeholder="Username" autocomplete="username">
-        <input class="field" id="acctPass" type="password" placeholder="Password" autocomplete="current-password">
+    <section class="set-section">
+      <div class="set-head"><h3 class="modal-h3">Saving</h3></div>
+      <p class="set-copy">While you are signed in, progress saves to the cloud as you play.</p>
+      <div class="set-actions">
+        <button type="button" class="btn" id="saveBtn">Save now</button>
       </div>
-      <div class="btnrow">
-        <button class="btn" id="acctCreate">Create</button>
-        <button class="btn" id="acctLogin">Log in</button>
-        <button class="btn btn-quiet" id="acctLogout" hidden>Log out</button>
-      </div>
-      <p class="muted tiny" id="acctNote"></p>
-    </div>
+    </section>
 
-    <div class="modal-section">
-      <div class="btnrow">
-        <button class="btn" id="saveBtn">Save now</button>
-        <button class="btn btn-danger" id="wipeBtn">Reset character</button>
-        <button class="btn btn-quiet" id="settingsClose">Close</button>
+    <section class="set-section">
+      <div class="set-head"><h3 class="modal-h3">Start over</h3></div>
+      <p class="set-copy">Wipes this character back to a ruin. Skills, gear, gold and companions are all lost.</p>
+      <div class="set-actions">
+        <button type="button" class="btn btn-danger" id="wipeBtn">Reset character</button>
       </div>
-      <p class="muted tiny">Saves to the cloud automatically as you play.</p>
-    </div>
+    </section>
   </div>
 </div>
 
-<div class="pop-wrap" id="taskPop" hidden>
-  <div class="pop">
-    <div class="pop-head">
-      <div class="pop-art" id="taskPopArt"></div>
-      <div>
-        <div class="pop-title" id="taskPopTitle"></div>
-        <div class="pop-sub" id="taskPopSub"></div>
-      </div>
-    </div>
-    <div class="pop-stats" id="taskPopStats"></div>
-    <div class="pop-actions">
-      <button class="btn btn-primary" id="taskPopGo">Start</button>
-      <button class="btn btn-quiet" id="taskPopCancel">Cancel</button>
+<!-- ================= CONFIRM ================= -->
+<div class="modal-wrap confirm-wrap" id="confirmModal" hidden>
+  <div class="modal confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="cfTitle" aria-describedby="cfBody">
+    <h2 class="modal-title" id="cfTitle"></h2>
+    <p class="cf-body" id="cfBody"></p>
+    <div class="cf-actions">
+      <button type="button" class="btn btn-quiet" id="cfCancel">Cancel</button>
+      <button type="button" class="btn btn-danger" id="cfOk">Confirm</button>
     </div>
   </div>
 </div>
 
 <div class="pop-wrap" id="classPop" hidden>
-  <div class="pop" style="max-width:620px;">
+  <div class="pop class-pop">
     <div class="pop-title">Choose your discipline</div>
-    <div class="pop-sub">Set once, at Combat level 5. It decides your bulk, your speed, and what happens when the Veil fills.</div>
+    <div class="pop-sub">Set once, at Hunt level 5. It decides your bulk, your speed, and what happens when the Veil fills.</div>
     <div class="class-grid" id="classGrid"></div>
   </div>
 </div>

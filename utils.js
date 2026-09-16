@@ -1,5 +1,5 @@
 /* ============================================================
-   Respite — utils.js · The Toolbox
+   Respite · utils.js · The Toolbox
    ------------------------------------------------------------
    Small helpers that never read or write the save: DOM lookups,
    number and time formatting, seeded randomness, and the icon set.
@@ -39,11 +39,30 @@ function fmtTime(ms) {
   return `${Math.floor(h / 24)}d ${h % 24}h`;
 }
 
+// Gold with its unit: "1,600g", "44,800g", "1.25M gold". Never "44.8Kg".
+function fmtGold(n) {
+  n = Math.floor(n);
+  return Math.abs(n) < 1e6 ? `${n.toLocaleString()}g` : `${fmt(n)} gold`;
+}
+
+// How long ago something happened: "Just now", "2m ago", "4h ago", "3d ago".
+function fmtAgo(ms) {
+  const m = Math.floor(Math.max(0, ms) / 60000);
+  if (m < 1) return "Just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
 // 18 -> "+18%", -18 -> "−18%" (true minus sign).
 function signedPct(n) {
   if (!n) return "0%";
   return `${n > 0 ? "+" : "−"}${Math.abs(n)}%`;
 }
+
+// 0.0125 -> "1.25%", 0.5 -> "50%".
+const chancePct = (chance) => `${+(chance * 100).toFixed(2)}%`;
 
 function serverClock() {
   const d = new Date();
@@ -69,10 +88,23 @@ function seedFrom(n) {
   return x - Math.floor(x);
 }
 
+// randInt(min, max), but seeded: the same seed always gives the same whole number.
+function seededInt(seed, min, max) {
+  return min + Math.floor(seedFrom(seed) * (max - min + 1));
+}
+
 function rollRarity() {
   let r = Math.random();
   for (const rar of RARITIES) { if (r < rar.chance) return rar.key; r -= rar.chance; }
   return "common";
+}
+
+// A rarity of Uncommon or better, weighted the same way rollRarity() is.
+function rollFineRarity() {
+  const fine = RARITIES.filter((rar) => rar.key !== "common");
+  let r = Math.random() * fine.reduce((n, rar) => n + rar.chance, 0);
+  for (const rar of fine) { if (r < rar.chance) return rar.key; r -= rar.chance; }
+  return "uncommon";
 }
 
 function rollPrefix(baseId) {
@@ -92,6 +124,13 @@ function rollAgentRarity() {
 function levelFromXp(xp) {
   let lvl = 1;
   while (lvl < MAX_LEVEL && xp >= XP_TABLE[lvl + 1]) lvl++;
+  return lvl;
+}
+
+// Bond level from bond earned. Thresholds live in data.js (bondXpFor).
+function bondLevelFrom(bond) {
+  let lvl = 1;
+  while (lvl < COMPANION_MAX_BOND && bond >= bondXpFor(lvl + 1)) lvl++;
   return lvl;
 }
 
@@ -139,6 +178,13 @@ const ICONS = {
   horror:  '<path d="M12 3c5 0 9 4 9 9s-4 9-9 9-9-4-9-9 4-9 9-9Z"/><path d="M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8Z"/><path d="M12 11.5a.5.5 0 1 1 0 1 .5.5 0 0 1 0-1Z"/>',
   drakeMob:'<path d="M3 10c4-4 8-4 10-1 2-3 6-3 8 1-2 1-3 3-4 6-2 4-6 5-10 2 2-1 3-3 3-5-3 0-5-1-7-3Z"/>',
 
+  // companions
+  rat:      '<path d="M3 15c0-4 4-7 9-7 3 0 5 1 6.5 3l2.5 1-1.5 2.5c-1 1.5-3 2.5-5.5 2.5H8"/><circle cx="16.5" cy="11.5" r=".6"/><path d="M14 8.5a2 2 0 1 1 3-1.5"/><path d="M8 17.5c-3 0-5 .5-5 2.5"/><path d="M9 17.5 8 20M13 17.5l1 2.5"/>',
+  crow:     '<path d="M4 13c3-5 8-7 13-6l3 1-3 2c-1 3-4 6-9 6l-4 4 1-5-1-2Z"/><circle cx="16" cy="9" r=".6"/><path d="M9 12c2 0 4-1 5-2"/>',
+  marshcat: '<path d="M6 21v-7c0-3 2-5 5-5h2c3 0 5 2 5 5v7"/><path d="M7 10 6 4l4 3M17 10l1-6-4 3"/><path d="M10 12.5h.01M14 12.5h.01M11 15h2"/><path d="M18 18c2 0 3-1 3-3"/>',
+  hound:    '<path d="M4 20v-6l2-5 3-2h3l2-3 1 3 3 1 3 3-1 2h-4l-2 2v5"/><circle cx="15.5" cy="8.5" r=".6"/><path d="M8 14v6M12 16v4"/>',
+  stag:     '<path d="M9 21v-6l-2-3h10l-2 3v6"/><path d="M10.5 12 9 8M13.5 12 15 8"/><path d="M9 8 6 6M9 8 8 4M9 8 5 9M15 8l3-2M15 8l1-4M15 8l4 1"/><path d="M11 15h.01M13 15h.01"/>',
+
   // ui
   atlas:  '<path d="M9 4 3 7v13l6-3 6 3 6-3V4l-6 3-6-3Z"/><path d="M9 4v13M15 7v13"/>',
   shop:   '<path d="M4 8h16l-1 12H5L4 8Z"/><path d="M4 8 6 4h12l2 4"/><path d="M9 12a3 3 0 0 0 6 0"/>',
@@ -148,6 +194,7 @@ const ICONS = {
   paw:    '<circle cx="7" cy="9" r="2"/><circle cx="12" cy="6.5" r="2"/><circle cx="17" cy="9" r="2"/><path d="M12 11c3 0 5 2.5 5 5a3 3 0 0 1-3 3h-4a3 3 0 0 1-3-3c0-2.5 2-5 5-5Z"/>',
   swords: '<path d="m4 4 9 9M14 14l6 6M18 4l-9 9M10 14l-6 6"/>',
   info:   '<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.6h.01"/>',
+  lock:   '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
 
   // weather
   rain:   '<path d="M7 15a4 4 0 0 1 .5-8 5.5 5.5 0 0 1 10.5 2A3.5 3.5 0 0 1 17 15H7Z"/><path d="M8 18v2M12 18v3M16 18v2"/>',

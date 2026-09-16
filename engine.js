@@ -1,9 +1,10 @@
 /* ============================================================
-   Respite — engine.js · The Brains
+   Respite · engine.js · The Brains
    ------------------------------------------------------------
    The save (state), the tick loop, and everything that changes
    what the player has: storage, gathering and crafting, weather,
-   bounties, requisitions, the shop, travel and equipment.
+   companions, bounties, requisitions, the shop, travel and
+   equipment.
    ============================================================ */
 
 /* ================= 1. STATE ================= */
@@ -16,7 +17,7 @@ function freshState() {
 
   return {
     schema: SCHEMA,
-    meta: { createdAt: Date.now(), lastSeen: Date.now(), playtimeMs: 0, account: null, userId: null, name: "Commander" },
+    meta: { createdAt: Date.now(), lastSeen: Date.now(), playtimeMs: 0, account: null, userId: null },
     player: { gold: 0, hp: 20, recoveryUntil: 0, klass: null },
     skills,
     inv:   { slots: PACK_SLOTS,   items: {}, order: [] },
@@ -30,7 +31,7 @@ function freshState() {
     tasks: { skilling: null, combat: null },
     region: "region_1",
     travel: { unlocked: ["region_1"] },
-    pets: { golem: false, sprite: false, mule: false },
+    companions: { owned: {}, active: null },   // owned[id] = { bond, rank, dupes }
     threat: {},
     agents: [],        // hired requisition agents
     requisitions: [],  // deployments awaiting the daily reset
@@ -38,7 +39,6 @@ function freshState() {
     bounty: null,
     buff: null,
     smugglerBought: {},
-    yields: [],
     stats: { kills: 0, actions: 0, deaths: 0, crafted: 0, epics: 0, goldEarned: 0 },
     log: [],
   };
@@ -69,25 +69,20 @@ function say(msg) {
   if (state.log.length > 60) state.log.shift();
 }
 
-function logYield(text) {
-  state.yields.push({ t: Date.now(), m: text });
-  if (state.yields.length > 12) state.yields.shift();
-}
-
 function addGold(n) {
   state.player.gold += n;
   state.stats.goldEarned += n;
 }
 
 /* ================= 3. STORAGE ================= */
-/* Three pools: "inv" is the Pack, "bank" is Camp Stores, "vault" is the Bank. */
+/* Three pools: "inv" is Belongings, "bank" is Provisions, "vault" is the Vault. */
 
 function store(w) {
   return w === "vault" ? state.vault : w === "bank" ? state.bank : state.inv;
 }
 
 function packSlots() {
-  return PACK_SLOTS + (state.pets.mule ? 8 : 0);
+  return PACK_SLOTS;
 }
 
 function slotCap(w) {
@@ -153,6 +148,14 @@ function payCost(cost) {
   if (cost) Object.keys(cost).forEach((k) => spend(k, cost[k]));
 }
 
+// Whether what an action makes has somewhere to go. Rolled gear always
+// needs a free slot, because it might not stack.
+function roomFor(def) {
+  const pools = ["bank", "vault", "inv"];
+  if (def.craftGear) return pools.some((w) => !storeFull(w));
+  return Object.keys(def.out || {}).every((k) => pools.some((w) => store(w).items[k] || !storeFull(w)));
+}
+
 function orderedKeys(w) {
   const s = store(w);
   const have = Object.keys(s.items);
@@ -176,7 +179,7 @@ function makeKey(base, rarity, prefix) {
 /* ================= 4. WEATHER ================= */
 /* Deterministic from the UTC day number, so the sky is the same for
    everyone. Weeks start on Sunday: that is when the next seven days are
-   revealed. Tables and the effect formula live in data.js, section 11. */
+   revealed. Tables live in data.js, section 12. */
 
 const dayIndex = () => Math.floor(Date.now() / DAY_MS);
 
@@ -188,18 +191,15 @@ const weekStartOf = (dayNum) => dayNum - weekdayOf(dayNum);
 
 const isBountiful = (dayNum) => BOUNTIFUL_WEEKDAYS.includes(weekdayOf(dayNum));
 
-// Gathering and artisan skills. Combat is not a trade.
-const isTrade = (skillId) => GATHER_SKILLS.some((s) => s.id === skillId) || PROFESSIONS.some((p) => p.id === skillId);
+const isGather = (skillId) => GATHER_SKILLS.some((s) => s.id === skillId);
 
-// Effect = 5% + (roll - 1) × 1.67%, rounded to a whole percent.
-function weatherEffect(roll) {
-  return Math.round(WEATHER_EFFECT_BASE + (roll - 1) * WEATHER_EFFECT_STEP);
-}
+// Gathering and artisan skills. The hunt is not a trade.
+const isTrade = (skillId) => isGather(skillId) || PROFESSIONS.some((p) => p.id === skillId);
 
 function weatherForDay(dayNum) {
   const type = WEATHER_TYPES[Math.floor(seedFrom(dayNum * 12.9898 + 78.233) * WEATHER_TYPES.length)];
-  const roll = 1 + Math.floor(seedFrom(dayNum * 39.3468 + 11.1351) * 10);   // 1-10, never shown
-  const effect = weatherEffect(roll);
+  // randInt(5, 20), seeded by the day so every player sees the same sky.
+  const effect = seededInt(dayNum * 39.3468 + 11.1351, WEATHER_EFFECT_MIN, WEATHER_EFFECT_MAX);
   const severity = WEATHER_SEVERITIES.find((s) => effect >= s.min && effect <= s.max) || WEATHER_SEVERITIES[0];
 
   return {
@@ -244,7 +244,7 @@ function bountifulXpMult(skillId) {
 /* ================= 5. MASTERY, TOOLS & SPEED ================= */
 
 function mastery(skillId) {
-  // Gathering only — artisan benches get nothing from this.
+  // Gathering only. Artisan benches get nothing from this.
   if (!GATHER_ACTIONS[skillId]) return { double: 0 };
   const lvl = skillLevel(skillId);
   let dbl = 0;
@@ -257,12 +257,12 @@ function toolFor(skillId) {
   return id ? TOOLS[id] : null;
 }
 
-// Speed comes from tools and the golem only. Weather is XP, mastery is yield.
+// Speed comes from tools and companions. Weather is XP, mastery is yield.
 function speedMod(skillId) {
   let m = 1;
   const tool = toolFor(skillId);
   if (tool) m *= (1 - tool.speed);
-  if (state.pets && state.pets.golem && GATHER_SKILLS.some((s) => s.id === skillId)) m *= 0.9;
+  m *= 1 - companionBonus("speed", skillId);
   return Math.max(0.35, m);
 }
 
@@ -271,21 +271,25 @@ function actionTime(def) {
 }
 
 function doubleChance(skillId) {
-  let c = mastery(skillId).double;
-  if (state.pets && state.pets.golem && GATHER_SKILLS.some((s) => s.id === skillId)) c += 0.1;
-  return Math.min(0.75, c);
+  if (!GATHER_ACTIONS[skillId]) return 0;
+  return Math.min(0.75, mastery(skillId).double + companionBonus("double", skillId));
 }
 
 /* ================= 6. PROGRESSION ================= */
 
 function xpMult(skillId) {
-  let m = skillId ? weatherXpMult(skillId) * bountifulXpMult(skillId) : 1;
+  let m = skillId ? weatherXpMult(skillId) * bountifulXpMult(skillId) * (1 + companionBonus("xp", skillId)) : 1;
   if (state.buff && state.buff.until > Date.now()) m *= state.buff.mult;
   return m;
 }
 
+// What one action or kill actually grants, after every multiplier.
+function xpEach(skillId, amount) {
+  return Math.max(1, Math.round(amount * xpMult(skillId)));
+}
+
 function grantXp(skillId, amount) {
-  const gain = Math.max(1, Math.round(amount * xpMult(skillId)));
+  const gain = xpEach(skillId, amount);
   const before = skillLevel(skillId);
   state.skills[skillId] = (state.skills[skillId] || 0) + gain;
   const after = skillLevel(skillId);
@@ -295,8 +299,8 @@ function grantXp(skillId, amount) {
     if (skillId === "warfare" && canPickClass()) setTimeout(maybeOfferClass, 60);
     if (skillId === "warfare") state.player.hp = maxHp();
     const hit = GATHER_ACTIONS[skillId] ? MASTERY_TRACK.find((m) => m.level === after) : null;
-    if (hit) toast(`${skillName(skillId)} ${after} — ${hit.label}`);
-    else if (after % 10 === 0) toast(`${skillName(skillId)} — level ${after}`);
+    if (hit) toast(`${skillName(skillId)} ${after}: ${hit.label}`);
+    else if (after % 10 === 0) toast(`${skillName(skillId)} reaches level ${after}`);
   }
 }
 
@@ -304,9 +308,16 @@ function grantXp(skillId, amount) {
 
 function tick(dt) {
   resolveRequisitions();
+  if (state.tasks.skilling || state.tasks.combat) companionBond(dt);
   if (state.tasks.skilling) skillTick(dt);
   if (state.tasks.combat) combatTick(dt);
   if (state.buff && state.buff.until <= Date.now()) state.buff = null;
+}
+
+function stopSkilling(line, note) {
+  say(line);
+  toast(note);
+  state.tasks.skilling = null;
 }
 
 function skillTick(dt) {
@@ -319,20 +330,17 @@ function skillTick(dt) {
 
   const time = actionTime(def);
   task.progress += dt;
+  task.elapsed = (task.elapsed || 0) + dt;
   let guard = 0;
 
   while (task.progress >= time && guard++ < 200000) {
     if (!canAfford(def.cost)) {
-      say(`Work stopped — no materials left for ${def.name.toLowerCase()}.`);
-      toast("Out of materials");
-      state.tasks.skilling = null;
+      stopSkilling(`Work stopped. No materials left for ${titleCase(def.name)}.`, "Out of materials");
       return;
     }
 
-    if (storeFull("bank") && storeFull("inv")) {
-      say("Work stopped — camp stores and pack are both full.");
-      toast("Nowhere to put anything");
-      state.tasks.skilling = null;
+    if (!roomFor(def)) {
+      stopSkilling("Work stopped. Belongings, Provisions and the Vault are all full.", "Nowhere to put anything");
       return;
     }
 
@@ -343,6 +351,12 @@ function skillTick(dt) {
     task.done++;
     state.stats.actions++;
     bountyProgress("gather", def);
+    companionFind(task.skillId);
+
+    if (task.limit != null && task.done >= task.limit) {
+      stopSkilling(`Batch finished: ${fmt(task.done)} × ${titleCase(def.name)}.`, "Batch finished");
+      return;
+    }
 
     if (task.queued) {
       const q = task.queued;
@@ -350,41 +364,41 @@ function skillTick(dt) {
         state.tasks.skilling = null;
         return;
       }
-      state.tasks.skilling = newSkillTask(q.skillId, q.actionId);
-      say(`Crews moved to ${findAction(q.skillId, q.actionId).name.toLowerCase()}.`);
+      state.tasks.skilling = newSkillTask(q.skillId, q.actionId, null);
+      say(`Crews moved to ${titleCase(findAction(q.skillId, q.actionId).name)}.`);
       return;
     }
+  }
+
+  if (task.elapsed >= IDLE_CAP_MS) {
+    stopSkilling("Twelve hours at the same work. The crews stand down.", "Crews stood down");
   }
 }
 
 function produce(def) {
   if (def.out) {
+    const gathering = !!GATHER_ACTIONS[def.skillId];
+
     Object.keys(def.out).forEach((k) => {
       let qty = def.out[k];
-      if (GATHER_ACTIONS[def.skillId] && Math.random() < doubleChance(def.skillId)) {
-        qty *= 2;
-      }
+      if (gathering && Math.random() < doubleChance(def.skillId)) qty *= 2;
 
-      let deposited = false;
       const d = itemDef(k);
+      const placed = d && d.kind === "tool"
+        ? addTo("bank", k, qty) || addTo("vault", k, qty) || addTo("inv", k, qty)
+        : deposit(k, qty);
 
-      if (d && d.kind === "tool") {
-        deposited = addTo("bank", k, qty) || addTo("vault", k, qty) || addTo("inv", k, qty);
-      } else {
-        deposited = deposit(k, qty);
-      }
-
-      if (deposited) {
-        logYield(`+${qty} ${itemName(k)}`);
-      } else {
-        say(`Nowhere to put ${itemName(k)}.`);
-      }
+      if (!placed) say(`Nowhere to put ${itemName(k)}.`);
     });
 
-    if (def.reagentId && Math.random() < def.reagentChance) {
-      if (deposit(def.reagentId, 1)) {
-        logYield(`+1 ${itemName(def.reagentId)}`);
-      }
+    const reagentBonus = gathering ? companionBonus("reagent", def.skillId) : 0;
+    if (def.reagentId && Math.random() < def.reagentChance * (1 + reagentBonus)) {
+      deposit(def.reagentId, 1);
+    }
+    // On dedicated reagent ground the companion bonus is a chance of one extra.
+    const reagentNode = REAGENTS.find((r) => def.out[r.id]);
+    if (reagentNode && reagentBonus && Math.random() < reagentBonus) {
+      deposit(reagentNode.id, 1);
     }
   }
 
@@ -393,19 +407,13 @@ function produce(def) {
     const key = makeKey(def.craftGear, rarity);
     const d = itemDef(key);
 
-    // Weapons/gear prefer inventory -> bank -> vault. Tools prefer bank.
-    let deposited = false;
-    if (d && d.kind === "gear") {
-      deposited = addTo("inv", key, 1) || addTo("bank", key, 1) || addTo("vault", key, 1);
-    } else if (d && d.kind === "tool") {
-      deposited = addTo("bank", key, 1) || addTo("vault", key, 1) || addTo("inv", key, 1);
-    } else {
-      deposited = deposit(key, 1);
-    }
+    // Gear prefers Belongings, then Provisions, then the Vault.
+    const placed = d && d.kind === "gear"
+      ? addTo("inv", key, 1) || addTo("bank", key, 1) || addTo("vault", key, 1)
+      : deposit(key, 1);
 
-    if (deposited) {
+    if (placed) {
       state.stats.crafted++;
-      logYield(`+1 ${itemName(key)}`);
       bountyProgress("craft", def);
 
       // Only genuinely rare outcomes are worth a log line; the rest toast.
@@ -420,33 +428,51 @@ function produce(def) {
         toast(`${rarityDef(rarity).name}: ${itemName(key)}`);
       }
     } else {
-      say(`Nowhere to put the ${GEAR[def.craftGear].name.toLowerCase()}.`);
+      say(`Nowhere to put the ${GEAR[def.craftGear].name}.`);
     }
   }
 }
 
 /* ================= 8. TASKS ================= */
+/* A task runs `limit` actions, or with no limit (null) until the stock or
+   storage runs out or twelve hours pass, whichever comes first. */
 
-function newSkillTask(skillId, actionId) {
-  return { skillId, actionId, progress: 0, done: 0, startedAt: Date.now(), queued: null };
+function newSkillTask(skillId, actionId, limit) {
+  return { skillId, actionId, progress: 0, done: 0, elapsed: 0, limit: limit == null ? null : limit, startedAt: Date.now(), queued: null };
 }
 
-function selectSkillAction(skillId, actionId) {
+function startSkillTask(skillId, actionId, limit) {
   const def = findAction(skillId, actionId);
-  if (!def || skillLevel(skillId) < def.level) return;
-  const t = state.tasks.skilling;
-  if (!t) {
-    state.tasks.skilling = newSkillTask(skillId, actionId);
-    render();
-    return;
-  }
+  if (!def || skillLevel(skillId) < def.level) return false;
 
-  if (t.skillId === skillId && t.actionId === actionId) {
-    state.tasks.skilling = null;          // clicking the live action stops it, now
-  } else {
-    state.tasks.skilling = newSkillTask(skillId, actionId);   // instant switch
-  }
+  const n = limit == null ? null : Math.max(1, Math.floor(limit));
+  const old = state.tasks.skilling;
+  const task = newSkillTask(skillId, actionId, n);
+
+  // The same work again keeps the action that is already underway.
+  if (old && old.skillId === skillId && old.actionId === actionId) task.progress = old.progress;
+
+  state.tasks.skilling = task;
   render();
+  return true;
+}
+
+function stopSkillTask() {
+  if (!state.tasks.skilling) return false;
+  state.tasks.skilling = null;
+  render();
+  return true;
+}
+
+// How many times the stock on hand pays for an action.
+function stockCovers(def) {
+  if (!def.cost) return Infinity;
+  return Object.keys(def.cost).reduce((n, k) => Math.min(n, Math.floor(haveQty(k) / def.cost[k])), Infinity);
+}
+
+// The most a fresh task could run: twelve hours of it, or what the stock covers.
+function actionMax(def) {
+  return Math.min(Math.floor(IDLE_CAP_MS / actionTime(def)), stockCovers(def));
 }
 
 function skillPlan() {
@@ -456,21 +482,21 @@ function skillPlan() {
   if (!def) return null;
 
   const time = actionTime(def);
-  const windowLeft = Math.max(0, IDLE_CAP_MS - (Date.now() - t.startedAt));
-  let remaining = Math.floor(windowLeft / time);
-  let capped = null;
+  const windowLeft = Math.max(0, IDLE_CAP_MS - (t.elapsed || 0));
+  const byTime = Math.floor((windowLeft + t.progress) / time);
+  const byStock = stockCovers(def);
+  const byLimit = t.limit == null ? Infinity : Math.max(0, t.limit - t.done);
+  const remaining = Math.min(byTime, byStock, byLimit);
 
-  if (def.cost) {
-    let byMats = Infinity;
-    Object.keys(def.cost).forEach((k) => {
-      byMats = Math.min(byMats, Math.floor(haveQty(k) / def.cost[k]));
-    });
-    if (byMats < remaining) {
-      remaining = byMats;
-      capped = true;
-    }
-  }
-  return { def, time, done: t.done, target: t.done + remaining, timeLeft: remaining * time - t.progress, capped, pct: clamp((t.progress / time) * 100, 0, 100) };
+  let capped = "time";
+  if (remaining === byLimit && byLimit <= byTime) capped = "limit";
+  else if (remaining === byStock && byStock < byTime) capped = "stock";
+
+  return {
+    def, time, done: t.done, limit: t.limit, remaining, target: t.done + remaining,
+    timeLeft: Math.max(0, remaining * time - t.progress), capped,
+    pct: clamp((t.progress / time) * 100, 0, 100),
+  };
 }
 
 /* ================= 9. BOUNTY ================= */
@@ -537,7 +563,7 @@ function hireAgent() {
   const pool = AGENT_NAMES.filter((n) => !used.includes(n));
   const name = pool.length ? pool[randInt(0, pool.length - 1)] : AGENT_NAMES[randInt(0, AGENT_NAMES.length - 1)];
   state.agents.push({ id: "agent_" + (state.uid++), name, rarity });
-  say(`${name} signs on — ${agentRarityDef(rarity).name}.`);
+  say(`${name} signs on (${agentRarityDef(rarity).name}).`);
   toast(`Agent hired: ${name}`);
   render();
 }
@@ -588,10 +614,10 @@ function requisitionTargets() {
   return out;
 }
 
-/* ================= 11. SHOP, PETS & TRAVEL ================= */
+/* ================= 11. SHOP & TRAVEL ================= */
 
 function shopStock() {
-  return RATIONS.map((r) => ({ key: r.id, price: Math.round(r.value * 1.6) }));
+  return REMEDIES.map((r) => ({ key: r.id, price: Math.round(r.value * 1.6) }));
 }
 
 function smugglerStock() {
@@ -606,19 +632,20 @@ function smugglerStock() {
   return picks;
 }
 
+// Remedies go to Provisions first, where the camp keeps its stores.
 function buyShop(key, price, qty) {
   if (state.player.gold < price) {
     say("Not enough gold.");
     render();
     return;
   }
-  if (!addTo("inv", key, qty) && !addTo("bank", key, qty)) {
+  if (!addTo("bank", key, qty) && !addTo("inv", key, qty) && !addTo("vault", key, qty)) {
     say("Nowhere to put it.");
     render();
     return;
   }
   state.player.gold -= price;
-  say(`Bought ${qty} ${itemName(key).toLowerCase()}.`);
+  say(`Bought ${fmt(qty)} × ${itemName(key)}.`);
   render();
 }
 
@@ -637,22 +664,7 @@ function buySmuggler(entry) {
   }
   state.player.gold -= entry.price;
   state.smugglerBought[tag] = true;
-  say(`Bought ${entry.qty} ${itemName(entry.key)}.`);
-  render();
-}
-
-function buyPet(id) {
-  const pet = PETS.find((p) => p.id === id);
-  if (!pet || state.pets[id]) return;
-  if (state.player.gold < pet.cost) {
-    say("Not enough gold.");
-    render();
-    return;
-  }
-  state.player.gold -= pet.cost;
-  state.pets[id] = true;
-  say(`${pet.name} joins.`);
-  toast(`${pet.name} acquired`);
+  say(`Bought ${fmt(entry.qty)} × ${itemName(entry.key)}.`);
   render();
 }
 
@@ -674,13 +686,139 @@ function travelTo(regionId) {
   render();
 }
 
-/* ================= 12. ITEMS & EQUIPMENT ================= */
+/* ================= 12. COMPANIONS ================= */
+/* Tables live in data.js, section 16. One companion is active at a time.
+   Bond is earned by the minute while any work or hunt is running; Rank is
+   earned from duplicates that turn up on their own. */
+
+function companionOf(id) {
+  return (state.companions && state.companions.owned[id]) || null;
+}
+
+function activeCompanion() {
+  const id = state.companions && state.companions.active;
+  return id && companionOf(id) ? companionDef(id) : null;
+}
+
+// Does a trait's skill list cover this skill? No list means it always applies.
+function companionCovers(skills, skillId) {
+  if (!skills) return true;
+  return skills.some((s) => s === "all" || s === skillId ||
+    (s === "gather" && isGather(skillId)) || (s === "trade" && isTrade(skillId)));
+}
+
+function traitValue(def, rank) {
+  return def.trait.base + def.trait.perRank * (rank - 1);
+}
+
+// Everything a companion gives, where it stands: the main trait at its Rank,
+// plus each unlock it has reached.
+function companionInfo(id) {
+  const def = companionDef(id);
+  const c = companionOf(id);
+  const bond = c ? c.bond : 0;
+  const rank = c ? c.rank : 1;
+  const level = bondLevelFrom(bond);
+  const maxed = level >= COMPANION_MAX_BOND;
+  return {
+    def, owned: !!c, active: !!c && state.companions.active === id,
+    rank, dupes: c ? c.dupes : 0, needDupes: rank < COMPANION_MAX_RANK ? RANK_DUPES[rank + 1] : 0,
+    bond, level, maxed,
+    bondInto: maxed ? 0 : bond - bondXpFor(level),
+    bondSpan: maxed ? 0 : bondXpFor(level + 1) - bondXpFor(level),
+    trait: traitValue(def, rank),
+    unlocks: def.unlocks.map((u) => Object.assign({}, u, { open: !!c && (u.bond ? level >= u.bond : rank >= u.rank) })),
+  };
+}
+
+function companionBonus(kind, skillId) {
+  const def = activeCompanion();
+  if (!def) return 0;
+  const info = companionInfo(def.id);
+  let total = 0;
+  if (def.trait.kind === kind && companionCovers(def.trait.skills, skillId)) total += info.trait;
+  info.unlocks.forEach((u) => {
+    if (u.open && u.kind === kind && companionCovers(u.skills, skillId)) total += u.value;
+  });
+  return total;
+}
+
+function companionBond(dt) {
+  const def = activeCompanion();
+  if (!def) return;
+  const c = companionOf(def.id);
+  const cap = bondXpFor(COMPANION_MAX_BOND);
+  if (c.bond >= cap) return;
+
+  const before = bondLevelFrom(c.bond);
+  c.bond = Math.min(cap, c.bond + dt / BOND_MS);
+  const after = bondLevelFrom(c.bond);
+  if (after <= before) return;
+
+  say(`${def.name} reaches Bond ${after}.`);
+  def.unlocks
+    .filter((u) => u.bond && u.bond > before && u.bond <= after)
+    .forEach((u) => toast(`${def.name}: ${u.text}`));
+}
+
+// Does this companion turn up while doing this skill?
+function companionSource(def, skillId) {
+  if (def.source === "any") return true;
+  if (def.source === "gather") return isGather(skillId);
+  if (def.source === "hunt") return skillId === "warfare";
+  return def.source === skillId;
+}
+
+// Rolled once per finished action or kill, for every kind you own.
+function companionFind(skillId) {
+  COMPANIONS.forEach((def) => {
+    const c = companionOf(def.id);
+    if (!c || c.rank >= COMPANION_MAX_RANK || !companionSource(def, skillId)) return;
+    if (Math.random() >= def.findChance) return;
+
+    c.dupes++;
+    const need = RANK_DUPES[c.rank + 1];
+    if (c.dupes >= need) {
+      c.dupes -= need;
+      c.rank++;
+      say(`A second ${def.name} has been trailing you. ${def.name} rises to Rank ${RANK_NUMERALS[c.rank]}.`);
+      toast(`${def.name}: Rank ${RANK_NUMERALS[c.rank]}`);
+    } else {
+      say(`A second ${def.name} has been trailing you. ${c.dupes} of ${need} toward Rank ${RANK_NUMERALS[c.rank + 1]}.`);
+      toast(`${def.name} found`);
+    }
+  });
+}
+
+function buyCompanion(id) {
+  const def = companionDef(id);
+  if (!def || companionOf(id)) return false;
+  if (state.player.gold < def.cost) return refuse("Not enough gold.");
+  state.player.gold -= def.cost;
+  state.companions.owned[id] = { bond: 0, rank: 1, dupes: 0 };
+  if (!activeCompanion()) state.companions.active = id;
+  say(`${def.name} joins the camp.`);
+  toast(`${def.name} joins you`);
+  render();
+  return true;
+}
+
+// Pass null to leave everyone at camp.
+function setCompanion(id) {
+  if (id && !companionOf(id)) return false;
+  state.companions.active = id || null;
+  if (id) say(`${companionDef(id).name} walks with you now.`);
+  render();
+  return true;
+}
+
+/* ================= 13. ITEMS & EQUIPMENT ================= */
 /* `from` is the pool an item sits in: "inv", "bank" or "vault".
    Every action returns true when it went through and calls render(),
    which also refreshes or closes the item popup. */
 
-// Puts an item somewhere: the preferred pool first, then Pack, Stores, Bank.
-// Returns the pool it landed in, or null if everything is full.
+// Puts an item somewhere: the preferred pool first, then Belongings,
+// Provisions, the Vault. Returns the pool it landed in, or null.
 function stow(key, preferred) {
   const order = [preferred, "inv", "bank", "vault"].filter((w, i, all) => w && all.indexOf(w) === i);
   return order.find((w) => addTo(w, key, 1)) || null;
@@ -740,7 +878,7 @@ function equipItem(key, from) {
   return true;
 }
 
-// Worn gear comes off into the Pack first.
+// Worn gear comes off into Belongings first.
 function unequip(slot) {
   const key = state.equipment[slot];
   if (!key) return false;
@@ -750,7 +888,7 @@ function unequip(slot) {
   return true;
 }
 
-// Tools go back to Camp Stores first, where the crews keep them.
+// Tools go back to Provisions first, where the crews keep them.
 function unequipTool(skillId) {
   const id = state.tools[skillId];
   if (!id) return false;
@@ -785,10 +923,10 @@ function sellItem(key, from, qty) {
 
 function useChest(key, from) {
   if (parseKey(key).base !== "vault_chest" || qtyIn(from, key) <= 0) return false;
-  if (state.bank.slots >= BANK_MAX) return refuse("Stores are full depth.");
+  if (state.bank.slots >= BANK_MAX) return refuse("Provisions can't be widened any further.");
   removeFrom(from, key, 1);
   state.bank.slots = Math.min(BANK_MAX, state.bank.slots + MATERIALS.vault_chest.chest);
-  say(`Stores widened to ${state.bank.slots} slots.`);
+  say(`Provisions widened to ${state.bank.slots} slots.`);
   render();
   return true;
 }
@@ -817,7 +955,7 @@ function salvage(key, from) {
   return true;
 }
 
-/* ================= 13. THE LOOP ================= */
+/* ================= 14. THE LOOP ================= */
 
 let lastTick = Date.now();
 let loopTimer = null;

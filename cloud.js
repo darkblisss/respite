@@ -1,5 +1,5 @@
 /* ============================================================
-   Respite — cloud.js · The Backend
+   Respite · cloud.js · The Backend
    ------------------------------------------------------------
    Supabase accounts and cloud saves, save migration, and the
    silent offline catch-up that runs when a save is loaded.
@@ -123,7 +123,7 @@ function migrate(loaded) {
   const m = Object.assign(freshState(), loaded);
   m.schema = SCHEMA;
 
-  ["meta", "player", "skills", "equipment", "tasks", "travel", "pets", "stats"].forEach((k) => {
+  ["meta", "player", "skills", "equipment", "tasks", "travel", "stats"].forEach((k) => {
     m[k] = Object.assign(base[k], loaded[k] || {});
   });
 
@@ -136,13 +136,80 @@ function migrate(loaded) {
       order: (src.order || []).slice(),
     };
   });
+  m.inv.slots = PACK_SLOTS;
 
   m.wear = Object.assign({}, loaded.wear || {});
   m.tools = Object.assign({}, loaded.tools || {});
-  m.yields = (loaded.yields || []).slice(-12);
   m.log = (loaded.log || []).slice(-60).map((e) => (typeof e === "string" ? { t: Date.now(), m: e } : e));
+  delete m.yields;
+  delete m.pets;
+
+  const lastSeen = (loaded.meta && loaded.meta.lastSeen) || Date.now();
+  migrateTasks(m, lastSeen);
+  migrateCompanions(m, loaded);
+  settleBelongings(m);
+  m.log = m.log.slice(-60);
 
   return m;
+}
+
+// Tasks from older saves have no batch limit (they run until stopped) and
+// no running clock, so the clock is rebuilt from when they started.
+function migrateTasks(m, lastSeen) {
+  ["skilling", "combat"].forEach((k) => {
+    const t = m.tasks[k];
+    if (!t || typeof t !== "object") {
+      m.tasks[k] = null;
+      return;
+    }
+    if (t.limit === undefined) t.limit = null;
+    if (typeof t.elapsed !== "number") t.elapsed = clamp(lastSeen - (t.startedAt || lastSeen), 0, IDLE_CAP_MS);
+  });
+}
+
+function migrateCompanions(m, loaded) {
+  const src = loaded.companions || {};
+  const owned = {};
+  Object.keys(src.owned || {}).forEach((id) => {
+    const c = src.owned[id];
+    if (!c || !companionDef(id)) return;
+    owned[id] = {
+      bond: clamp(Number(c.bond) || 0, 0, bondXpFor(COMPANION_MAX_BOND)),
+      rank: clamp(Math.floor(Number(c.rank) || 1), 1, COMPANION_MAX_RANK),
+      dupes: Math.max(0, Math.floor(Number(c.dupes) || 0)),
+    };
+  });
+  m.companions = { owned, active: owned[src.active] ? src.active : null };
+
+  // The old kennel's golem, sprite and mule are retired. Owners get their gold back.
+  const pets = loaded.pets || {};
+  const refund = Object.keys(RETIRED_PETS).filter((id) => pets[id]).reduce((n, id) => n + RETIRED_PETS[id], 0);
+  if (refund) {
+    m.player.gold += refund;
+    m.log.push({ t: Date.now(), m: `Your old animals have left the camp. ${fmt(refund)} gold was paid back for them.` });
+  }
+}
+
+// Belongings hold ten slots now. Anything past that moves to Provisions,
+// then the Vault. Whatever still has nowhere to go stays put.
+function settleBelongings(m) {
+  const keys = m.inv.order.filter((k) => m.inv.items[k] != null);
+  Object.keys(m.inv.items).forEach((k) => { if (!keys.includes(k)) keys.push(k); });
+
+  let moved = 0;
+  keys.slice(PACK_SLOTS).forEach((k) => {
+    const dest = ["bank", "vault"].find((w) => m[w].items[k] != null || Object.keys(m[w].items).length < m[w].slots);
+    if (!dest) return;
+    m[dest].items[k] = (m[dest].items[k] || 0) + m.inv.items[k];
+    if (!m[dest].order.includes(k)) m[dest].order.push(k);
+    delete m.inv.items[k];
+    moved++;
+  });
+  m.inv.order = m.inv.order.filter((k) => m.inv.items[k] != null);
+
+  if (moved) {
+    m.log.push({ t: Date.now(), m: `Belongings now hold ${PACK_SLOTS} slots. ${moved} stack${moved === 1 ? " was" : "s were"} moved into camp storage.` });
+  }
 }
 
 function applyLoadedRow(row, username, userId) {

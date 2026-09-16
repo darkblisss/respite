@@ -1,5 +1,5 @@
 /* ============================================================
-   Respite — ui.js · The Paintbrush
+   Respite · ui.js · The Paintbrush
    ------------------------------------------------------------
    Everything that touches the screen: routing, rendering, popups
    and button wiring. Loaded last, so it also boots the game.
@@ -13,31 +13,42 @@
 /* ================= 1. VIEW STATE ================= */
 
 let route = { page: "character", arg: null };
-let eqTab = "pack";          // Equipment & Pack page: "pack" | "bank"
-let campTab = "stores";      // Camp Stores page: "stores" | "bank"
+let eqTab = "pack";          // Armaments page: "pack" (Belongings) | "vault"
+let campTab = "stores";      // Provisions page: "stores" (Provisions) | "vault"
 let gridFilter = "all";
 let gridSort = "custom";
 let navOpen = { vanguard: true, camp: true, trades: true, workshops: true, field: true };
 
-let craftTierTab = 1;
-let craftTierTabSkill = null;
-let craftCatTab = "all";
+let benchTab = "components"; // Artisan pages: "components" | "wares"
+let benchTier = 1;
+let benchTierSkill = null;
 
-let pendingTask = null;      // { skillId, actionId } waiting on the task popup
-let popItem = null;          // { key, from } shown in the item popup
-let popReturnFocus = null;   // whatever had focus before the popup opened
+let popItem = null;          // { key, from, pick } shown in the item popup
+let popAction = null;        // { kind, skillId, actionId, tier, monsterId, pick } in the action popup
+let lastPick = {};           // the amount last chosen for each skill, this session only
 
 let keys = {};               // render signatures, cleared by render()
-let liveRefs = { nodes: [], recipes: [], monster: null };
+let liveRefs = { nodes: [], recipes: [], hunt: null };
 let navRefs = {};
+let floatSeq = 0;
 
 /* ================= 2. ROUTING ================= */
 
-const PAGES = ["character", "equipment", "camp", "kennel", "atlas", "shop", "bounty", "skill", "requisitions", "forecast"];
+const PAGES = ["character", "armaments", "provisions", "companions", "atlas", "shop", "bounties", "skill", "requisitions", "forecast"];
+
+// Old links still land on the right page.
+const PAGE_ALIASES = { equipment: "armaments", camp: "provisions", kennel: "companions", bounty: "bounties" };
+
+const PAGE_TITLES = {
+  character: "Character", armaments: "Armaments", provisions: "Provisions", companions: "Companions",
+  atlas: "Atlas", shop: "Shop", bounties: "Bounties", requisitions: "Requisitions", forecast: "Sky",
+};
 
 function parseHash() {
   const raw = (location.hash || "").replace(/^#\/?/, "");
-  const [page, arg] = raw.split("/");
+  const parts = raw.split("/");
+  const page = PAGE_ALIASES[parts[0]] || parts[0];
+  const arg = parts[1];
   if (!PAGES.includes(page)) return { page: "character", arg: null };
   if (page === "skill" && !skillDef(arg)) return { page: "skill", arg: "delving" };
   return { page, arg: arg || null };
@@ -58,9 +69,10 @@ function go(page, arg) {
 // Full redraw. Call after anything the player does.
 function render() {
   keys = {};
-  liveRefs = { nodes: [], recipes: [], monster: null };
+  liveRefs = { nodes: [], recipes: [], hunt: null };
   renderAll();
   refreshItemPopup();
+  refreshActionPopup();
   scheduleSave();
 }
 
@@ -76,12 +88,15 @@ function renderFrame() {
   renderTopbar();
   if (route.page === "skill") renderSkill();
   if (route.page === "character") renderCharacter();
-  if (route.page === "equipment") renderStorePage("eq");
-  if (route.page === "camp") renderStorePage("camp");
-  if (route.page === "bounty") renderBounty();
+  if (route.page === "armaments") renderStorePage("eq");
+  if (route.page === "provisions") renderStorePage("camp");
+  if (route.page === "companions") renderCompanions();
+  if (route.page === "bounties") renderBounty();
   if (route.page === "shop") setText(el("smugglerTimer"), `Moves on in ${fmtTime(windowEndsIn())}`);
   renderSidebar();
   renderLog();
+  if (popAction) updateActionPopup();
+  drainCombatFx();
 }
 
 function toast(msg) {
@@ -94,6 +109,9 @@ function toast(msg) {
   stack.appendChild(t);
   setTimeout(() => { if (t.parentNode) t.remove(); }, 7000);
 }
+
+// "12 / 200" for a batch, "12 / ∞" for an open-ended task.
+const countOf = (done, limit) => `${fmt(done)} / ${limit == null ? "∞" : fmt(limit)}`;
 
 /* ================= 4. TOPBAR ================= */
 
@@ -113,17 +131,13 @@ function renderTopbar() {
     sBar.classList.toggle("nojump", sp.pct < 6);
     sBar.style.width = sp.pct + "%";
 
-    let line = `${fmt(sp.done)} / ${fmt(sp.target)} acts · ${fmtTime(sp.timeLeft)}`;
-    if (sp.capped) line += " (stock)";
-    if (state.tasks.skilling.queued) line += state.tasks.skilling.queued === "stop" ? " · stopping" : " · switching";
-
+    let line = `${countOf(sp.done, sp.limit)} · ${fmtTime(sp.timeLeft)} left`;
+    if (sp.capped === "stock") line += " · stock runs out";
     setText(el("tbTradesMeta"), line);
-    el("tbTradesClear").classList.toggle("queued", !!state.tasks.skilling.queued);
   } else {
     setText(el("tbTradesName"), "Idle");
     sBar.style.width = "0";
-    setText(el("tbTradesMeta"), "No crews tasked.");
-    el("tbTradesClear").classList.remove("queued");
+    setText(el("tbTradesMeta"), "No crews at work.");
   }
 
   const cp = combatPlan();
@@ -133,16 +147,16 @@ function renderTopbar() {
     setText(el("tbFieldName"), cp.mob.name);
     cBar.style.width = cp.pct + "%";
 
-    let line = `${fmt(cp.done)} / ${fmt(cp.target)} kills · ${fmtTime(cp.timeLeft)}`;
-    line += cp.food ? ` · food ${fmt(cp.foodHave)}/${fmt(cp.foodNeed)}` : " · no food";
-    if (state.tasks.combat.queued) line += " · changing";
+    let line = `${countOf(cp.done, cp.limit)} kills · ${fmtTime(cp.timeLeft)} left`;
+    line += cp.food ? ` · remedies ${fmt(cp.foodHave)}/${fmt(cp.foodNeed)}` : " · no remedies";
+    if (state.tasks.combat.queued === "stop") line += " · pulling back";
 
     setText(el("tbFieldMeta"), line);
-    el("tbFieldClear").classList.toggle("queued", !!state.tasks.combat.queued);
+    el("tbFieldClear").classList.toggle("queued", state.tasks.combat.queued === "stop");
   } else {
     setText(el("tbFieldName"), recovering() ? "Recovering" : "Idle");
     cBar.style.width = "0";
-    setText(el("tbFieldMeta"), recovering() ? `Back in ${fmtTime(state.player.recoveryUntil - Date.now())}.` : "Take the field.");
+    setText(el("tbFieldMeta"), recovering() ? `Back in ${fmtTime(state.player.recoveryUntil - Date.now())}.` : "Nobody is hunting.");
     el("tbFieldClear").classList.remove("queued");
   }
 }
@@ -190,17 +204,17 @@ function buildSidebar() {
   const van = el("navVanguard");
   van.innerHTML = "";
   van.appendChild(mkItem({ label: "Character", page: "character", active: route.page === "character" }));
-  const eqItem = mkItem({ label: "Equipment & Pack", page: "equipment", active: route.page === "equipment" });
-  navRefs.pack = eqItem.children[1];
-  van.appendChild(eqItem);
+  const armItem = mkItem({ label: "Armaments", page: "armaments", active: route.page === "armaments" });
+  navRefs.pack = armItem.children[1];
+  van.appendChild(armItem);
 
   const camp = el("navCamp");
   camp.innerHTML = "";
-  const storesItem = mkItem({ label: "Camp Stores", page: "camp", active: route.page === "camp" });
+  const storesItem = mkItem({ label: "Provisions", page: "provisions", active: route.page === "provisions" });
   navRefs.stores = storesItem.children[1];
   camp.appendChild(storesItem);
-  camp.appendChild(mkItem({ label: "The Kennel", page: "kennel", active: route.page === "kennel" }));
-  const boardItem = mkItem({ label: "The Board", page: "bounty", active: route.page === "bounty" });
+  camp.appendChild(mkItem({ label: "Companions", page: "companions", active: route.page === "companions" }));
+  const boardItem = mkItem({ label: "Bounties", page: "bounties", active: route.page === "bounties" });
   navRefs.board = boardItem.children[1];
   camp.appendChild(boardItem);
   const reqItem = mkItem({ label: "Requisitions", page: "requisitions", active: route.page === "requisitions" });
@@ -284,27 +298,30 @@ function renderPage() {
 
   if (route.page === "character") renderCharacter();
   if (route.page === "skill") renderSkill();
-  if (route.page === "equipment") renderStorePage("eq");
-  if (route.page === "camp") renderStorePage("camp");
-  if (route.page === "kennel") renderKennel();
+  if (route.page === "armaments") renderStorePage("eq");
+  if (route.page === "provisions") renderStorePage("camp");
+  if (route.page === "companions") renderCompanions();
   if (route.page === "atlas") renderAtlas();
   if (route.page === "shop") renderShop();
   if (route.page === "requisitions") renderRequisitions();
   if (route.page === "forecast") renderForecast();
-  if (route.page === "bounty") renderBounty();
+  if (route.page === "bounties") renderBounty();
 }
 
 function crumbText() {
   const r = currentRegion();
   if (route.page === "skill") {
     const s = skillDef(route.arg);
-    const group = s.kind === "gather" ? "Gathering" : s.kind === "craft" ? "Crafting" : "The Field";
+    const group = s.kind === "gather" ? "Trades" : s.kind === "craft" ? "Artisans" : "The Field";
     return `Respite &nbsp;/&nbsp; ${group} &nbsp;/&nbsp; <b>${s.name}</b>`;
   }
-  return `Respite &nbsp;/&nbsp; ${r.name} &nbsp;/&nbsp; <b>${titleCase(route.page)}</b>`;
+  return `Respite &nbsp;/&nbsp; ${r.name} &nbsp;/&nbsp; <b>${PAGE_TITLES[route.page]}</b>`;
 }
 
-/* ================= 7. SKILL PAGE ================= */
+/* ================= 7. SKILL PAGES ================= */
+/* Gathering: resource pills and the camp. Artisans: the bench, in pills.
+   Hunt: the arena and the regional quarry. Every pill opens the action
+   popup (section 14), which is where work is started. */
 
 function renderSkill() {
   const s = skillDef(route.arg) || skillDef("delving");
@@ -314,38 +331,34 @@ function renderSkill() {
   const sig = skillSig(s, region);
   if (keys.skill !== sig) {
     keys.skill = sig;
-    liveRefs = { nodes: [], recipes: [], monster: null };
+    liveRefs = { nodes: [], recipes: [], hunt: null };
     keys.spoils = null;
+    keys.skillChips = null;
 
-    el("skYield").hidden = s.kind === "craft";
-    el("skSeams").hidden = s.kind === "craft";
+    el("skCamp").hidden = s.kind !== "gather";
+    el("skQuarry").hidden = s.kind !== "war";
     el("skSpoils").hidden = s.kind !== "war";
 
     renderMasteryTip(s);
-    if (s.kind === "war") renderFieldBody(region);
+    if (s.kind === "war") renderHuntBody(region);
     else if (s.kind === "gather") renderGatherBody(s, region);
-    else renderCraftBody(s);
-    renderYieldFeed();
+    else renderBenchBody(s);
   }
 
+  renderSkillChips(s);
   if (s.kind === "war") renderSpoils();
   updateLive();
 }
 
-// Everything that changes what the skill page's buttons and chips say.
+// Everything that changes which pills and panels the skill page shows.
 function skillSig(s, region) {
   const t = state.tasks.skilling;
-  const c = state.tasks.combat;
-  const parts = [
-    s.id, skillLevel(s.id), region.id, dayIndex(), state.travel.unlocked.length,
-    t ? `${t.skillId}:${t.actionId}:${t.queued ? "q" : ""}` : "-",
-    state.tools[s.id] || "-", state.pets.golem ? "golem" : "-",
-  ];
+  const parts = [s.id, skillLevel(s.id), region.id, t ? `${t.skillId}:${t.actionId}` : "-"];
+  if (s.kind === "craft") parts.push(benchTab, benchTier);
   if (s.kind === "war") {
-    parts.push(c ? `${c.tier}:${c.monsterId}:${c.queued ? "q" : ""}` : "-", recovering(),
-      JSON.stringify(state.equipment), state.player.klass || "-");
+    const c = state.tasks.combat;
+    parts.push(c ? c.tier : "-", recovering(), state.player.klass || "-");
   }
-  if (s.kind === "craft") parts.push(craftTierTab, craftCatTab);
   return parts.join("|");
 }
 
@@ -424,375 +437,167 @@ function renderMasteryTip(s) {
   panel.appendChild(foot);
 }
 
-// Weather and Bountiful Weekend chips. Nothing shows when nothing applies.
-function xpChips(skillId) {
-  let html = "";
+// Everything bending a skill's XP right now. Nothing shows when nothing applies.
+function xpMods(skillId) {
+  const out = [];
   const w = currentWeather();
   const pct = w.mods[skillId];
-  if (pct) html += `<div class="chip ${pct > 0 ? "good" : "warn"}">${signedPct(pct)} XP · ${w.label}</div>`;
-  if (w.bountiful && isTrade(skillId)) html += `<div class="chip good">+${Math.round(BOUNTIFUL_XP * 100)}% XP · Bountiful Weekend</div>`;
-  return html;
+  if (pct) out.push({ good: pct > 0, text: `${signedPct(pct)} XP · ${w.label}` });
+  if (w.bountiful && isTrade(skillId)) out.push({ good: true, text: `+${Math.round(BOUNTIFUL_XP * 100)}% XP · Bountiful Weekend` });
+  const comp = activeCompanion();
+  const bonus = companionBonus("xp", skillId);
+  if (comp && bonus) out.push({ good: true, text: `+${Math.round(bonus * 100)}% XP · ${comp.name}` });
+  if (state.buff && state.buff.until > Date.now()) out.push({ good: true, text: `×${state.buff.mult} XP · Bounty reward` });
+  return out;
 }
 
-const chancePct = (chance) => `${+(chance * 100).toFixed(2)}%`;
+function fillChips(box, mods) {
+  box.innerHTML = "";
+  mods.forEach((m) => {
+    const chip = document.createElement("div");
+    chip.className = "chip " + (m.good ? "good" : "warn");
+    chip.textContent = m.text;
+    box.appendChild(chip);
+  });
+}
+
+function renderSkillChips(s) {
+  const mods = xpMods(s.id);
+  const sig = s.id + JSON.stringify(mods);
+  if (keys.skillChips === sig) return;
+  keys.skillChips = sig;
+  fillChips(el("skWorkChips"), mods);
+}
+
+// A big clickable pill: art, name and one quiet status line.
+function actionPill(def, locked, extraClass) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "node-pill" + (extraClass ? " " + extraClass : "") + (locked ? " locked" : "");
+  b.dataset.action = def.id;
+  b.innerHTML =
+    `<span class="np-art">${icon(def.icon, "ico-lg")}</span>` +
+    '<span class="np-body"><span class="np-name"></span><span class="np-state"></span></span>' +
+    '<span class="np-bar"><i></i></span>';
+  b.querySelector(".np-name").textContent = titleCase(def.name);
+  return b;
+}
 
 function renderGatherBody(s, region) {
   const defs = GATHER_ACTIONS[s.id].filter((a) => a.tier === region.tier);
   const lvl = skillLevel(s.id);
-  const t = state.tasks.skilling;
 
   el("skWorkLabel").textContent = `Working · ${region.name}`;
   const box = el("skWorkBody");
   box.innerHTML = "";
 
-  if (!defs.length) {
-    box.innerHTML = `<div class="muted">No ground here for ${s.name}.</div>`;
-    el("skYield").hidden = true;
-    renderOtherSeams(s.id);
-    return;
-  }
-
   const grid = document.createElement("div");
-  grid.className = "node-grid";
+  grid.className = "node-pills";
 
   defs.forEach((def) => {
-    const active = !!(t && t.skillId === s.id && t.actionId === def.id);
     const locked = lvl < def.level;
-    const dbl = doubleChance(s.id);
-
-    const card = document.createElement("div");
-    card.className = "node-card" + (active ? " active" : "");
-    card.innerHTML = `<div class="node-icon">${icon(def.icon, "ico-lg")}</div>`;
-
-    const info = document.createElement("div");
-    info.className = "node-info";
-
-    const h = document.createElement("h3");
-    h.textContent = titleCase(def.name);
-    info.appendChild(h);
-
-    const chips = document.createElement("div");
-    chips.className = "stat-chips";
-    chips.innerHTML =
-      `<div class="chip">${(actionTime(def) / 1000).toFixed(1)}s / action</div>` +
-      `<div class="chip">${fmt(def.xp)} XP base</div>` +
-      xpChips(s.id) +
-      (dbl > 0 ? `<div class="chip good">${Math.round(dbl * 100)}% double yield</div>` : "") +
-      (locked ? `<div class="chip warn">Needs Lv ${def.level}</div>` : "");
-    info.appendChild(chips);
-
-    const prog = document.createElement("div");
-    prog.className = "node-progress";
-    prog.innerHTML = '<div class="bar"><i></i></div><div class="meta"><span></span><b></b></div>';
-    info.appendChild(prog);
-
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "btn btn-primary node-btn";
-    btn.textContent = active ? (t.queued === "stop" ? "Stopping..." : "Stop working") : "Put crews to work";
-    btn.disabled = locked;
-    btn.onclick = () => {
-      const live = state.tasks.skilling;
-      if (live && live.skillId === s.id && live.actionId === def.id) selectSkillAction(s.id, def.id);   // stop, no ceremony
-      else openTaskPop(s.id, def.id);
-    };
-    info.appendChild(btn);
-
-    card.appendChild(info);
-    grid.appendChild(card);
-
-    liveRefs.nodes.push({ def, skillId: s.id, bar: prog.querySelector("i"), left: prog.querySelector("span"), right: prog.querySelector("b") });
+    const pill = actionPill(def, locked, "");
+    grid.appendChild(pill);
+    liveRefs.nodes.push({ def, skillId: s.id, locked, pill, status: pill.querySelector(".np-state"), bar: pill.querySelector(".np-bar i") });
   });
 
   box.appendChild(grid);
-  renderYieldTable(defs, s.id);
-  renderOtherSeams(s.id);
+  renderCampScene(s);
 }
 
-function renderCraftBody(s) {
+function renderBenchBody(s) {
   const lvl = skillLevel(s.id);
+  const all = actionsFor(s.id);
+  const tiers = [...new Set(all.map((a) => a.tier))].sort((a, b) => a - b);
+
+  if (benchTierSkill !== s.id) {
+    benchTierSkill = s.id;
+    benchTier = tiers.reduce((best, i) => (TIERS[i - 1].level <= lvl ? i : best), tiers[0]);
+  }
+
   el("skWorkLabel").textContent = "The Bench";
   const box = el("skWorkBody");
   box.innerHTML = "";
 
-  const availableTiers = [...new Set(actionsFor(s.id).map((a) => a.tier))].sort((a, b) => a - b);
-  if (craftTierTabSkill !== s.id) {
-    craftTierTabSkill = s.id;
-    craftTierTab = availableTiers.reduce((best, i) => (TIERS[i - 1].level <= lvl ? i : best), availableTiers[0]);
-  }
+  // ---- the two tabs and the tier pills ----
+  const bar = document.createElement("div");
+  bar.className = "bench-bar";
 
+  const inTier = all.filter((a) => a.tier === benchTier);
   const tabs = document.createElement("div");
-  tabs.className = "tabs craft-tier-tabs";
-  availableTiers.forEach((i) => {
-    const tier = TIERS[i - 1];
+  tabs.className = "pill-tabs";
+  BENCH_TABS.forEach((tab) => {
+    const count = inTier.filter((d) => benchGroupOf(d).tab === tab.id).length;
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "tab-btn" + (craftTierTab === i ? " active" : "") + (lvl < tier.level ? " locked" : "");
-    b.textContent = "Lv." + tier.level;
-    b.title = stratumOf(i).name;
-    b.onclick = () => { craftTierTab = i; keys.skill = ""; renderSkill(); };
+    b.className = "pill-tab big" + (benchTab === tab.id ? " active" : "");
+    b.dataset.benchTab = tab.id;
+    b.innerHTML = '<span></span><span class="count"></span>';
+    b.children[0].textContent = tab.label;
+    b.children[1].textContent = count;
     tabs.appendChild(b);
   });
-  box.appendChild(tabs);
+  bar.appendChild(tabs);
 
-  // Second row: what kind of thing you're making, so the bench isn't a wall.
-  const inTier = actionsFor(s.id).filter((a) => a.tier === craftTierTab);
-  const catOf = (def) => {
-    if (def.craftGear) {
-      const g = GEAR[def.craftGear];
-      return (g && (g.slot === "weapon" || g.slot === "offhand")) ? "weapons" : "armour";
-    }
-    if (def.out && TOOLS[Object.keys(def.out)[0]]) return "tools";
-    const outId = def.out ? Object.keys(def.out)[0] : null;
-    const cat = outId && MATERIALS[outId] ? MATERIALS[outId].category : null;
-    if (cat && ["Bars", "Planks", "Weave", "Leather", "Inlays"].includes(cat)) return "refined";
-    return "components";
-  };
-
-  const cats = [
-    { id: "all", label: "All" },
-    { id: "refined", label: "Refined" },
-    { id: "components", label: "Components" },
-    { id: "weapons", label: "Weapons" },
-    { id: "armour", label: "Armour" },
-    { id: "tools", label: "Tools" },
-  ].filter((c) => c.id === "all" || inTier.some((d) => catOf(d) === c.id));
-
-  if (!cats.some((c) => c.id === craftCatTab)) craftCatTab = "all";
-
-  const catTabs = document.createElement("div");
-  catTabs.className = "tabs craft-cat-tabs";
-  cats.forEach((c) => {
+  const tierRow = document.createElement("div");
+  tierRow.className = "pill-tabs";
+  tiers.forEach((i) => {
+    const tier = TIERS[i - 1];
+    const locked = lvl < tier.level;
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "tab-btn" + (craftCatTab === c.id ? " active" : "");
-    b.textContent = c.label;
-    b.onclick = () => { craftCatTab = c.id; keys.skill = ""; renderSkill(); };
-    catTabs.appendChild(b);
+    b.className = "pill-tab" + (benchTier === i ? " active" : "") + (locked ? " locked" : "");
+    b.dataset.benchTier = i;
+    b.title = `${stratumOf(i).name}, tier ${i}`;
+    b.innerHTML = (locked ? icon("lock", "ico-sm") : "") + "<span></span>";
+    b.querySelector("span").textContent = "Lv " + tier.level;
+    tierRow.appendChild(b);
   });
-  box.appendChild(catTabs);
+  bar.appendChild(tierRow);
+  box.appendChild(bar);
 
-  const list = document.createElement("div");
-  list.className = "recipe-list";
-  const t = state.tasks.skilling;
+  // ---- recipes, grouped ----
+  const tab = BENCH_TABS.find((t) => t.id === benchTab) || BENCH_TABS[0];
+  let shown = 0;
 
-  inTier.filter((a) => craftCatTab === "all" || catOf(a) === craftCatTab).forEach((def) => {
-    const locked = lvl < def.level;
-    const active = !!(t && t.skillId === s.id && t.actionId === def.id);
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = "recipe" + (locked ? " locked" : "") + (active ? " active" : "");
-    row.disabled = locked;
+  tab.groups.forEach((group) => {
+    const defs = inTier.filter((d) => {
+      const g = benchGroupOf(d);
+      return g.tab === tab.id && g.group === group;
+    });
+    if (!defs.length) return;
 
-    row.innerHTML = `<span class="r-ico">${icon(def.icon, "ico-sm")}</span><span class="r-name"></span><span class="r-cost"></span><span class="r-meta"></span>`;
-    row.children[1].textContent = titleCase(def.name);
-    row.children[3].textContent = `${(actionTime(def) / 1000).toFixed(0)}s · ${fmt(def.xp)} XP`;
-    row.onclick = () => {
-      const live = state.tasks.skilling;
-      if (live && live.skillId === s.id && live.actionId === def.id) selectSkillAction(s.id, def.id);
-      else openTaskPop(s.id, def.id);
-    };
-    list.appendChild(row);
+    const section = document.createElement("div");
+    section.className = "bench-group";
+    const label = document.createElement("div");
+    label.className = "bench-group-label";
+    label.textContent = group;
+    section.appendChild(label);
 
-    const names = {};
-    Object.keys(def.cost || {}).forEach((k) => { names[k] = itemName(k); });
-    liveRefs.recipes.push({ def, locked, names, cost: row.children[2] });
+    const grid = document.createElement("div");
+    grid.className = "node-pills";
+    defs.forEach((def) => {
+      const locked = lvl < def.level;
+      const pill = actionPill(def, locked, "craft");
+      grid.appendChild(pill);
+      const names = {};
+      Object.keys(def.cost || {}).forEach((k) => { names[k] = itemName(k); });
+      liveRefs.recipes.push({ def, skillId: s.id, locked, names, pill, status: pill.querySelector(".np-state"), bar: pill.querySelector(".np-bar i") });
+      shown++;
+    });
+    section.appendChild(grid);
+    box.appendChild(section);
   });
-  box.appendChild(list);
 
-  const activeDef = t && t.skillId === s.id ? findAction(t.skillId, t.actionId) : null;
-  if (activeDef) {
-    const prog = document.createElement("div");
-    prog.className = "node-progress craft-progress";
-    prog.innerHTML = '<div class="bar"><i></i></div><div class="meta"><span></span><b></b></div>';
-    box.appendChild(prog);
-    liveRefs.nodes.push({ def: activeDef, skillId: s.id, bar: prog.querySelector("i"), left: prog.querySelector("span"), right: prog.querySelector("b") });
+  if (!shown) {
+    const empty = document.createElement("div");
+    empty.className = "muted tiny";
+    empty.textContent = "Nothing to make here at this tier.";
+    box.appendChild(empty);
   }
 
-  // Picking a default tab above can change the signature; record the final one.
+  // Picking a default tier above can change the signature; record the final one.
   keys.skill = skillSig(s, currentRegion());
-}
-
-function renderFieldBody(region) {
-  const tier = region.tier;
-  const t = state.tasks.combat;
-  const engaged = !!(t && t.tier === tier);
-  const live = (engaged && getMonster(t.monsterId)) || rankOf(tier, "grunt");
-
-  el("skWorkLabel").textContent = `The Field · ${region.name}`;
-  const box = el("skWorkBody");
-  box.innerHTML = "";
-
-  const grid = document.createElement("div");
-  grid.className = "node-grid";
-
-  // ---- the quarry ----
-  const card = document.createElement("div");
-  card.className = "node-card" + (engaged ? " active" : "");
-  card.innerHTML = `<div class="node-icon war">${icon(live.icon, "ico-lg")}</div>`;
-
-  const info = document.createElement("div");
-  info.className = "node-info";
-
-  const h = document.createElement("h3");
-  h.textContent = live.name;
-  if (live.rank !== "grunt") {
-    const tag = document.createElement("span");
-    tag.className = "rank-tag " + live.rank;
-    tag.textContent = live.rank === "boss" ? "Sovereign" : "Elite";
-    h.appendChild(tag);
-  }
-  info.appendChild(h);
-
-  const sub = document.createElement("div");
-  sub.className = "node-sub";
-  sub.textContent = recovering() ? "Recovering..." : "Lead the vanguard.";
-  info.appendChild(sub);
-
-  const chips = document.createElement("div");
-  chips.className = "stat-chips";
-  const atk = attackPower();
-  const avg = Math.max(1, (atk * 0.55 + atk) / 2 - live.defence * 0.35);
-  const killMs = (live.hp / avg) * swingSpeed() + RESPAWN_MS;
-  const incoming = Math.max(1, (live.attack * 0.55 + live.attack) / 2 - defencePower() * 0.4);
-  const survive = maxHp() / (incoming / live.speed * 1000);
-
-  chips.innerHTML =
-    `<div class="chip">${fmt(live.hp)} HP</div>` +
-    `<div class="chip">${fmt(live.attack)} attack</div>` +
-    `<div class="chip">${fmt(live.xp)} XP</div>` +
-    `<div class="chip${survive < 30 ? " warn" : ""}">~${fmtTime(killMs)} a kill</div>` +
-    `<div class="chip${survive < 30 ? " warn" : " good"}">${survive < 30 ? "You will not last here" : "Survivable"}</div>`;
-  info.appendChild(chips);
-
-  const bar = document.createElement("div");
-  bar.className = "node-progress";
-  bar.innerHTML = '<div class="bar mob"><i></i></div><div class="meta"><span></span><b></b></div>';
-  info.appendChild(bar);
-
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "btn btn-primary node-btn";
-  btn.textContent = recovering() ? "Recovering" : engaged ? (t.queued === "stop" ? "Pulling back after this" : "Pull back") : "Take the field";
-  btn.disabled = recovering();
-  btn.onclick = () => engageRegion(tier);
-  info.appendChild(btn);
-
-  card.appendChild(info);
-  grid.appendChild(card);
-
-  // ---- threat and the regional roster ----
-  const side = document.createElement("div");
-  side.className = "node-card node-stack";
-  side.innerHTML =
-    '<div class="threat-block">' +
-      '<div class="threat-head"><span class="label">Regional Threat</span><span class="threat-num"></span></div>' +
-      '<div class="bar threat"><i></i></div><div class="threat-note"></div>' +
-    '</div>' +
-    '<div class="roster"><div class="label">Regional Roster</div></div>';
-
-  const roster = side.querySelector(".roster");
-  rosterFor(tier).forEach((m) => {
-    const row = document.createElement("div");
-    row.className = "roster-row" + (m.id === live.id ? " on" : "");
-    row.innerHTML =
-      `<div class="left">${icon(m.icon, "ico-sm")}<div><div class="rname"></div><div class="rsub"></div></div></div>` +
-      `<div class="rrank ${m.rank}"></div>`;
-    row.querySelector(".rname").textContent = m.name;
-    row.querySelector(".rsub").textContent = `${fmt(m.hp)} HP · ${fmt(m.xp)} XP`;
-    row.querySelector(".rrank").textContent = m.rank === "grunt" ? "80%" : m.rank === "elite" ? "20%" : "Threat " + THREAT_CAP;
-    roster.appendChild(row);
-  });
-  grid.appendChild(side);
-  box.appendChild(grid);
-
-  liveRefs.monster = {
-    tier,
-    bar: bar.querySelector("i"),
-    left: bar.querySelector("span"),
-    right: bar.querySelector("b"),
-    threatNum: side.querySelector(".threat-num"),
-    threatBar: side.querySelector(".bar.threat i"),
-    threatNote: side.querySelector(".threat-note"),
-  };
-
-  // ---- drops ----
-  el("skYieldLabel").textContent = "Drops";
-  const drops = el("skYieldBody");
-  drops.innerHTML = "";
-  live.drops.forEach(([k, qty, chance]) => drops.appendChild(yieldRow(k, `${Math.round(chance * 100)}% · ${qty}`)));
-  if (live.rank === "boss") {
-    const row = document.createElement("div");
-    row.className = "yield-item";
-    row.innerHTML = '<span class="left"><span class="rar-epic">Epic gear</span></span><span class="chance">Guaranteed</span>';
-    drops.appendChild(row);
-  }
-
-  // ---- other ground ----
-  el("skSeamsLabel").textContent = "Other Ground";
-  const seams = el("skSeamsBody");
-  seams.innerHTML = "";
-
-  REGIONS.forEach((r) => {
-    if (r.tier === tier) return;
-    const unlocked = state.travel.unlocked.includes(r.id);
-    const grunt = rankOf(r.tier, "grunt");
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = "seam-row";
-    row.innerHTML = '<div class="name"></div><div class="region"></div>';
-    row.children[0].textContent = grunt.name;
-    row.children[1].textContent = `Lv ${grunt.level} · ${r.name}${unlocked ? "" : ` · ${fmt(r.toll)}g`}`;
-    row.onclick = () => travelTo(r.id);
-    seams.appendChild(row);
-  });
-}
-
-// One clickable line in a yield or drop table. Opens the item's details.
-function yieldRow(key, label) {
-  const row = document.createElement("button");
-  row.type = "button";
-  row.className = "yield-item";
-  row.innerHTML = `<span class="left">${icon(itemDef(key).icon, "ico-sm")}<span></span></span><span class="chance"></span>`;
-  row.querySelector(".left span").textContent = itemName(key);
-  row.querySelector(".chance").textContent = label;
-  row.onclick = () => openItemPopup(key, "view");
-  return row;
-}
-
-function renderYieldTable(defs, skillId) {
-  el("skYieldLabel").textContent = "Yield Table";
-  const box = el("skYieldBody");
-  box.innerHTML = "";
-
-  const dbl = doubleChance(skillId);
-  defs.forEach((def) => {
-    const mainKey = Object.keys(def.out)[0];
-    box.appendChild(yieldRow(mainKey, "Every action"));
-    if (dbl > 0) box.appendChild(yieldRow(mainKey, `${Math.round(dbl * 100)}% doubled`));
-    if (def.reagentId) box.appendChild(yieldRow(def.reagentId, `${chancePct(def.reagentChance)} chance`));
-  });
-}
-
-function renderOtherSeams(skillId) {
-  el("skSeamsLabel").textContent = `Other ${skillName(skillId)} Grounds`;
-  const box = el("skSeamsBody");
-  box.innerHTML = "";
-  const lvl = skillLevel(skillId);
-
-  GATHER_ACTIONS[skillId].forEach((def) => {
-    if (def.tier === currentRegion().tier) return;
-    const r = regionOfTier(def.tier);
-    const unlocked = state.travel.unlocked.includes(r.id);
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = "seam-row" + (lvl < def.level ? " dim" : "");
-    row.innerHTML = '<div class="name"></div><div class="region"></div>';
-    row.children[0].textContent = titleCase(def.name);
-    row.children[1].textContent = `Lv ${def.level} · ${r.name}${unlocked ? "" : ` · ${fmt(r.toll)}g toll`}`;
-    row.onclick = () => travelTo(r.id);
-    box.appendChild(row);
-  });
 }
 
 // Rebuilds only when a new kind of loot lands; counts update in place.
@@ -807,7 +612,7 @@ function renderSpoils() {
     list.innerHTML = "";
 
     if (!state.spoils.length) {
-      list.innerHTML = '<div class="muted tiny">Nothing on the field.</div>';
+      list.innerHTML = '<div class="muted tiny">Nothing left where they fell.</div>';
       return;
     }
 
@@ -832,98 +637,539 @@ function renderSpoils() {
     const s = state.spoils.find((x) => x.key === row.dataset.key);
     if (!s) return;
     setText(row.querySelector(".sp-qty"), "×" + fmt(s.qty));
-    setText(row.querySelector(".sp-sell"), fmt(itemDef(s.key).value * s.qty) + "g");
+    setText(row.querySelector(".sp-sell"), fmtGold(itemDef(s.key).value * s.qty));
   });
 }
 
-function renderYieldFeed() {
-  const box = el("skYieldFeed");
-  box.innerHTML = "";
-  if (!state.yields.length) {
-    box.innerHTML = '<div class="log-item muted">Nothing yet.</div>';
-    return;
-  }
-
-  state.yields.slice().reverse().forEach((y) => {
-    const d = document.createElement("div");
-    d.className = "log-item";
-    d.innerHTML = '<span class="t"></span><span></span>';
-    const ago = Date.now() - y.t;
-    d.children[0].textContent = ago < 4000 ? "now" : fmtTime(ago);
-    d.children[1].textContent = y.m;
-    box.appendChild(d);
-  });
+// Missing components, by name, for a recipe that can't be paid for once.
+function missingFor(def, names) {
+  const cost = def.cost || {};
+  return Object.keys(cost).filter((k) => haveQty(k) < cost[k]).map((k) => names[k] || itemName(k));
 }
 
 function updateLive() {
   const t = state.tasks.skilling;
 
-  liveRefs.nodes.forEach((n) => {
-    const active = t && t.skillId === n.skillId && t.actionId === n.def.id;
-    const time = actionTime(n.def);
+  const paintPill = (n, extraShort) => {
+    const active = !!(t && t.skillId === n.skillId && t.actionId === n.def.id);
+    n.pill.classList.toggle("active", active);
 
     if (active) {
-      const pct = clamp((t.progress / time) * 100, 0, 100);
+      const pct = clamp((t.progress / actionTime(n.def)) * 100, 0, 100);
       n.bar.classList.toggle("nojump", pct < 6);
       n.bar.style.width = pct + "%";
-      const plan = skillPlan();
-      setText(n.left, `${fmt(plan.done)} / ${fmt(plan.target)} actions`);
-      setText(n.right, fmtTime(plan.timeLeft) + " left");
-    } else {
-      n.bar.style.width = "0";
-      const per12 = Math.floor(IDLE_CAP_MS / time);
-      setText(n.left, `${fmt(per12)} actions per 12h`);
-      setText(n.right, fmt(per12 * n.def.xp * xpMult(n.skillId)) + " XP");
-    }
-  });
-
-  liveRefs.recipes.forEach((r) => {
-    if (r.locked) {
-      setText(r.cost, `Needs Lv ${r.def.level}`);
+      setText(n.status, countOf(t.done, t.limit));
+      n.status.classList.remove("short");
       return;
     }
-    const cost = r.def.cost || {};
-    const ids = Object.keys(cost);
-    setText(r.cost, ids.map((k) => `${cost[k]}× ${r.names[k]} (${fmt(haveQty(k))})`).join(", "));
-    r.cost.classList.toggle("short", ids.some((k) => haveQty(k) < cost[k]));
-  });
 
-  const m = liveRefs.monster;
-  if (m) {
-    const c = state.tasks.combat;
-    const plan = c && c.tier === m.tier ? combatPlan() : null;
-
-    if (plan) {
-      m.bar.style.width = clamp(c.respawn > 0 ? 0 : (c.mobHp / c.mobMax) * 100, 0, 100) + "%";
-      setText(m.left, `${fmt(plan.done)} / ${fmt(plan.target)} kills`);
-      setText(m.right, fmtTime(plan.timeLeft) + " left");
-    } else {
-      m.bar.style.width = "100%";
-      setText(m.left, "Not engaged");
-      setText(m.right, "");
+    n.bar.style.width = "0";
+    if (n.locked) {
+      setText(n.status, `Needs Lv ${n.def.level}`);
+      n.status.classList.remove("short");
+      return;
     }
+    extraShort(n);
+  };
 
-    const threat = threatIn(m.tier);
-    const boss = rankOf(m.tier, "boss").name;
-    setText(m.threatNum, `${threat} / ${THREAT_CAP}`);
-    m.threatBar.style.width = (threat / THREAT_CAP) * 100 + "%";
-    setText(m.threatNote, threat >= THREAT_CAP ? `${boss} is waiting.` : `At ${THREAT_CAP}, ${boss} comes out.`);
-  }
+  liveRefs.nodes.forEach((n) => paintPill(n, () => {
+    setText(n.status, "");
+    n.status.classList.remove("short");
+  }));
+
+  liveRefs.recipes.forEach((r) => paintPill(r, () => {
+    const missing = missingFor(r.def, r.names);
+    setText(r.status, missing.length ? `Missing ${missing.join(", ")}` : `${(actionTime(r.def) / 1000).toFixed(0)}s · ${fmt(xpEach(r.skillId, r.def.xp))} XP`);
+    r.status.classList.toggle("short", missing.length > 0);
+  }));
+
+  if (liveRefs.hunt) updateHunt();
 }
 
-/* ================= 8. CHARACTER ================= */
+/* ================= 8. THE CAMP ================= */
+/* A drawn scene under each gathering page. It gains a piece each time the
+   skill reaches a new tier: the first at Lv 1, the last at Lv 80. */
+
+const CAMP_STAGES = [
+  "A lean-to and a fire",
+  "A tent for the crew",
+  "Crates and barrels",
+  "A proper work site",
+  "A second crew and a cart",
+  "A palisade",
+  "A watchtower",
+  "Banners and lanterns",
+  "The great hall",
+];
+
+function campStage(skillId) {
+  return TIERS.filter((t) => t.level <= skillLevel(skillId)).length;
+}
+
+// A cloaked worker standing on ground line y, holding the tool of the trade.
+function campFigure(x, y, skillId) {
+  const hand = `${x + 5} ${y - 22}`;
+  const tools = {
+    delving:    `<path class="c-tool" d="M${hand} L${x + 15} ${y - 39}"/><path class="c-tool" d="M${x + 8} ${y - 41} Q${x + 15} ${y - 41} ${x + 21} ${y - 34}"/>`,
+    felling:    `<path class="c-tool" d="M${hand} L${x + 15} ${y - 39}"/><path class="c-toolhead" d="M${x + 12} ${y - 42} l8 2 -2 8Z"/>`,
+    harvesting: `<path class="c-tool" d="M${hand} L${x + 11} ${y - 33}"/><path class="c-tool" d="M${x + 11} ${y - 33} q10 -4 9 8"/>`,
+    flaying:    `<path class="c-tool" d="M${hand} L${x + 12} ${y - 28}"/><path class="c-toolhead" d="M${x + 11} ${y - 27} l7 -5 1 2Z"/>`,
+    dredging:   `<path class="c-tool" d="M${x + 4} ${y - 20} L${x + 30} ${y - 58}"/>`,
+  };
+  return `<g class="c-fig"><circle cx="${x}" cy="${y - 34}" r="4.5"/>` +
+    `<path d="M${x - 6} ${y - 28} H${x + 6} L${x + 8} ${y - 12} H${x + 4} L${x + 3} ${y} H${x + 0.5} L${x} ${y - 9} L${x - 0.5} ${y} H${x - 3} L${x - 4} ${y - 12} H${x - 8}Z"/></g>` +
+    (tools[skillId] || "");
+}
+
+// The part of the camp that belongs to the trade. Returns its drawing and
+// where the first worker stands.
+function campWorksite(skillId, big) {
+  if (skillId === "delving") {
+    const heap = '<path class="c-dark" d="M612 186 L630 172 L642 177 L656 166 L674 180 L684 186Z"/><path class="c-rim" d="M630 172 L642 177 L656 166"/>';
+    if (!big) return { svg: heap, worker: [700, 186] };
+    return {
+      svg: '<path class="c-hill-mid" d="M690 186 C720 152 770 124 830 124 C890 124 940 150 980 186Z"/>' +
+        '<path class="c-void" d="M810 186 V160 Q835 140 860 160 V186Z"/>' +
+        '<path class="c-wood" d="M804 186 V154 H866 V186"/><circle class="c-lamp-glow" cx="804" cy="150" r="9"/><circle class="c-lamp" cx="804" cy="150" r="3"/>' +
+        heap +
+        '<path class="c-sil" d="M730 166 H768 L762 180 H736Z"/><path class="c-dark" d="M734 166 L742 158 L750 162 L758 156 L766 166Z"/>' +
+        '<circle class="c-wheel" cx="742" cy="182" r="5"/><circle class="c-wheel" cx="758" cy="182" r="5"/>',
+      worker: [786, 186],
+    };
+  }
+
+  if (skillId === "felling") {
+    const stump = '<path class="c-sil" d="M620 186 V170 H648 V186Z"/><ellipse class="c-dark" cx="634" cy="170" rx="14" ry="4"/>' +
+      '<path class="c-wood thin" d="M640 170 L654 150"/><path class="c-toolhead" d="M650 147 l10 3 -3 8Z"/>';
+    const log = '<rect class="c-sil" x="664" y="176" width="70" height="10" rx="5"/><circle class="c-rim" cx="669" cy="181" r="3"/>';
+    if (!big) return { svg: stump + log, worker: [752, 186] };
+    let pile = "";
+    [[0, 3], [1, 2], [2, 1]].forEach(([row, count]) => {
+      for (let i = 0; i < count; i++) {
+        const cx = 830 + row * 10 + i * 20;
+        const cy = 177 - row * 17;
+        pile += `<circle class="c-sil" cx="${cx}" cy="${cy}" r="9"/><circle class="c-rim" cx="${cx}" cy="${cy}" r="3.5"/>`;
+      }
+    });
+    return {
+      svg: stump + log + pile + '<path class="c-wood thin" d="M742 186 L756 164 M770 186 L756 164 M736 166 H790"/>' +
+        '<rect class="c-sil" x="728" y="156" width="74" height="9" rx="4.5"/>',
+      worker: [704, 186],
+    };
+  }
+
+  if (skillId === "harvesting") {
+    const sheaf = (x) => `<path class="c-herb" d="M${x} 186 L${x + 7} 150 L${x + 14} 186Z"/><path class="c-wood thin" d="M${x + 1} 172 H${x + 13}"/>`;
+    const small = sheaf(630) + sheaf(652) + '<path class="c-sil" d="M676 172 H700 L696 186 H680Z"/>';
+    if (!big) return { svg: small, worker: [720, 186] };
+    let bundles = "";
+    for (let x = 770; x <= 910; x += 20) bundles += `<path class="c-herb" d="M${x} 142 l-5 18 h10Z"/>`;
+    return {
+      svg: small + '<path class="c-wood thin" d="M750 186 L764 138 L778 186 M902 186 L916 138 L930 186"/><path class="c-rope" d="M764 140 H916"/>' + bundles,
+      worker: [724, 186],
+    };
+  }
+
+  if (skillId === "flaying") {
+    const frame = (x) => `<path class="c-wood thin" d="M${x} 186 V146 M${x + 50} 186 V146 M${x - 4} 150 H${x + 54}"/>` +
+      `<path class="c-hide" d="M${x + 6} 153 C${x + 18} 151 ${x + 32} 151 ${x + 44} 153 C${x + 46} 167 ${x + 42} 177 ${x + 25} 183 C${x + 8} 177 ${x + 4} 167 ${x + 6} 153Z"/>`;
+    if (!big) return { svg: frame(640), worker: [720, 186] };
+    return {
+      svg: frame(640) + frame(760) + frame(880) + '<path class="c-sil" d="M712 186 V176 H736 V186Z"/><ellipse class="c-dark" cx="724" cy="176" rx="12" ry="3"/>',
+      worker: [742, 186],
+    };
+  }
+
+  // dredging
+  const water = '<path class="c-water" d="M560 220 C588 202 610 193 642 189 C700 183 780 186 1000 180 V220Z"/><path class="c-shine" d="M630 202 H690 M730 208 H810 M850 199 H940"/>';
+  if (!big) {
+    return {
+      svg: water + '<path class="c-wood thin" d="M664 190 L700 140"/><path class="c-rim" d="M700 140 Q716 158 706 180"/><path class="c-sil" d="M612 176 H636 L632 188 H616Z"/>',
+      worker: [648, 188],
+    };
+  }
+  return {
+    svg: water + '<path class="c-plank" d="M640 179 H900"/><path class="c-wood thin" d="M660 181 V204 M730 181 V204 M800 181 V204 M870 181 V204"/>' +
+      '<path class="c-wood thin" d="M886 176 V126 M884 128 H934 M930 128 V158"/><path class="c-rim" d="M890 132 L930 156 M930 132 L890 156 M890 144 H930"/>' +
+      '<path class="c-sil" d="M612 176 H636 L632 188 H616Z"/>',
+    worker: [800, 176],
+  };
+}
+
+function campScene(skillId, stage) {
+  const has = (n) => stage >= n;
+  const out = [];
+
+  out.push(
+    '<defs>' +
+      '<linearGradient id="campSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1e1629"/><stop offset="1" stop-color="#0d0a12"/></linearGradient>' +
+      '<radialGradient id="campGlow"><stop offset="0" stop-color="#c1613a" stop-opacity=".5"/><stop offset="1" stop-color="#c1613a" stop-opacity="0"/></radialGradient>' +
+      '<linearGradient id="campFog" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8d6fd1" stop-opacity="0"/><stop offset="1" stop-color="#8d6fd1" stop-opacity=".08"/></linearGradient>' +
+      '<linearGradient id="campHorizon" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8d6fd1" stop-opacity="0"/><stop offset=".7" stop-color="#8d6fd1" stop-opacity=".1"/><stop offset="1" stop-color="#8d6fd1" stop-opacity="0"/></linearGradient>' +
+    '</defs>',
+    '<rect width="1000" height="220" fill="url(#campSky)"/>',
+    '<rect y="96" width="1000" height="60" fill="url(#campHorizon)"/>',
+    '<path class="c-star" d="M120 58h1.5M236 76h1.5M388 52h1.5M548 66h1.5M702 50h1.5M942 82h1.5M60 90h1.5M640 88h1.5"/>',
+    '<circle class="c-moon-glow" cx="860" cy="74" r="22"/><circle class="c-moon" cx="860" cy="74" r="9"/>',
+    '<path class="c-hill-far" d="M0 142 C110 112 210 128 320 118 C430 108 520 134 640 122 C760 110 880 126 1000 112 V220 H0Z"/>',
+    '<path class="c-tree" d="M168 122 V100 M168 108 L158 98 M168 104 L177 94 M724 116 V92 M724 102 L713 91 M724 98 L734 88 M724 108 L733 101 M930 112 V94 M930 102 L921 94"/>',
+    '<path class="c-hill-near" d="M0 170 C140 156 260 168 400 160 C540 152 660 166 800 158 C880 154 950 158 1000 156 V220 H0Z"/>'
+  );
+
+  if (has(6)) {
+    let stakes = "";
+    for (let x = 6; x < 1000; x += 15) {
+      const top = 138 + ((x * 7) % 11);
+      stakes += `M${x} 178 V${top + 6} L${x + 4} ${top} L${x + 8} ${top + 6} V178Z `;
+    }
+    out.push(`<path class="c-stake" d="${stakes}"/><path class="c-wood thin" d="M0 160 H1000"/>`);
+  }
+
+  out.push('<rect class="c-ground" y="186" width="1000" height="34"/>');
+
+  if (has(7)) {
+    out.push(
+      '<path class="c-wood" d="M70 186 L82 92 M114 186 L102 92 M76 150 H108 M80 118 H104 M76 150 L104 118 M108 150 L80 118"/>' +
+      '<rect class="c-sil" x="70" y="80" width="44" height="14"/><path class="c-sil" d="M64 80 L92 58 L120 80Z"/>' +
+      '<rect class="c-light" x="88" y="83" width="8" height="8"/>'
+    );
+  }
+
+  if (has(9)) {
+    out.push(
+      '<path class="c-dark" d="M136 186 V142 L230 102 L324 142 V186Z"/><path class="c-rim" d="M126 146 L230 98 L334 146"/>' +
+      '<path class="c-wood thin" d="M230 98 V84 M220 92 L230 80 L240 92"/>' +
+      '<rect class="c-light" x="156" y="152" width="10" height="14"/><rect class="c-light" x="196" y="152" width="10" height="14"/>'
+    );
+  }
+
+  const site = campWorksite(skillId, has(4));
+  out.push(site.svg);
+
+  if (has(2)) {
+    out.push(
+      '<path class="c-sil" d="M455 186 L500 124 L545 186Z"/><path class="c-rim" d="M500 124 L545 186"/>' +
+      '<path class="c-door" d="M491 186 L500 150 L509 186Z"/><path class="c-wood thin" d="M500 124 V112"/>'
+    );
+  }
+
+  out.push('<path class="c-sil" d="M270 186 L322 128 L350 186Z"/><path class="c-wood thin" d="M262 186 L326 122"/><path class="c-rim" d="M322 128 L350 186"/>');
+
+  if (has(8)) {
+    let lamps = '<path class="c-rope" d="M326 124 Q413 150 500 116"/>';
+    [[369, 133], [413, 136], [457, 130]].forEach(([x, y]) => {
+      lamps += `<circle class="c-lamp-glow" cx="${x}" cy="${y + 5}" r="8"/><rect class="c-lamp" x="${x - 2}" y="${y + 2}" width="4" height="6"/>`;
+    });
+    out.push(lamps);
+  }
+
+  if (has(3)) {
+    out.push(
+      '<rect class="c-sil" x="352" y="168" width="20" height="18"/><rect class="c-sil" x="370" y="174" width="14" height="12"/>' +
+      '<path class="c-rim" d="M352 168 L372 186 M372 168 L352 186"/>' +
+      '<rect class="c-sil" x="560" y="170" width="14" height="16" rx="3"/><path class="c-rim" d="M560 175 H574 M560 181 H574"/>'
+    );
+  }
+
+  out.push(
+    '<ellipse cx="413" cy="182" rx="84" ry="30" fill="url(#campGlow)"/>' +
+    '<path class="c-wood" d="M398 188 L428 180 M400 180 L428 188"/>' +
+    '<g class="camp-fire"><path class="c-ember" d="M413 184 C402 174 414 166 410 152 C424 162 426 174 413 184Z"/>' +
+    '<path class="c-flame" d="M413 184 C407 178 413 173 412 165 C419 171 420 178 413 184Z"/></g>'
+  );
+
+  if (has(5)) {
+    out.push(
+      '<path class="c-sil" d="M150 164 H206 L200 180 H156Z"/><path class="c-dark" d="M156 164 L166 152 L178 158 L190 150 L204 164Z"/>' +
+      '<path class="c-wood thin" d="M206 168 L230 160"/><circle class="c-wheel" cx="166" cy="182" r="6"/><circle class="c-wheel" cx="192" cy="182" r="6"/>' +
+      campFigure(240, 186, skillId)
+    );
+  }
+
+  out.push(campFigure(site.worker[0], site.worker[1], skillId));
+
+  if (has(8)) {
+    out.push(
+      (has(7) ? '<path class="c-wood thin" d="M92 58 V36"/><path class="c-cloth" d="M92 37 H114 L107 44 L114 51 H92Z"/>' : "") +
+      '<path class="c-wood thin" d="M590 186 V120"/><path class="c-cloth" d="M590 122 H612 L605 130 L612 138 H590Z"/>'
+    );
+  }
+
+  out.push('<rect y="140" width="1000" height="80" fill="url(#campFog)"/>');
+  return out.join("");
+}
+
+function renderCampScene(s) {
+  const stage = campStage(s.id);
+  setText(el("skCampMeta"), `Tier ${stage} of ${TIERS.length}`);
+  el("skCampScene").innerHTML =
+    `<svg viewBox="0 34 1000 186" preserveAspectRatio="xMidYMax slice" role="img" aria-label="The ${s.name} camp">${campScene(s.id, stage)}</svg>`;
+  setText(el("skCampNow"), CAMP_STAGES[stage - 1]);
+  setText(el("skCampNext"), stage < TIERS.length
+    ? `Next at Lv ${TIERS[stage].level}: ${CAMP_STAGES[stage].toLowerCase()}`
+    : "Nothing left to build.");
+}
+
+/* ================= 9. THE HUNT ================= */
+/* The arena: your commander on the left, the quarry on the right, chunky
+   health bars, and every blow floating up off whoever took it. */
+
+const MONSTER_ART = {
+  beast:
+    '<path class="m-body" d="M26 78 C30 58 48 46 70 46 C90 46 104 58 108 76 C110 86 106 96 100 100 V108 H92 L90 96 C78 100 58 100 48 96 L44 108 H36 V94 C30 92 26 86 26 78Z"/>' +
+    '<path class="m-body" d="M48 50 L50 36 L57 48 M62 46 L66 32 L71 46 M76 46 L82 34 L85 48 M90 52 L99 42 L99 57"/>' +
+    '<path class="m-body" d="M32 70 C22 63 12 66 8 74 C6 80 10 84 16 86 L30 90 C35 84 35 76 32 70Z"/>' +
+    '<path class="m-body" d="M24 66 L19 51 L32 64Z"/>' +
+    '<path class="m-edge" d="M106 80 C116 76 118 64 112 56"/><path class="m-bone" d="M10 81 L12 86 L14 81 M16 83 L18 88 L20 83"/>' +
+    '<circle class="m-eye" cx="17" cy="74" r="2.4"/>',
+  man:
+    '<path class="m-body" d="M60 18 C44 18 36 32 36 46 C36 54 38 58 42 62 C30 72 24 88 22 110 H98 C96 88 90 72 78 62 C82 58 84 54 84 46 C84 32 76 18 60 18Z"/>' +
+    '<path class="m-void" d="M48 44 C48 36 53 31 60 31 C67 31 72 36 72 44 C72 53 66 59 60 59 C54 59 48 53 48 44Z"/>' +
+    '<circle class="m-eye" cx="55" cy="45" r="1.9"/><circle class="m-eye" cx="65" cy="45" r="1.9"/>' +
+    '<path class="m-edge" d="M40 82 Q60 88 80 82"/>' +
+    '<path class="m-steel" d="M30 92 L8 58 L12 55 L34 88Z"/><path class="m-edge" d="M26 90 L38 82"/>',
+  golemMob:
+    '<path class="m-body" d="M22 58 L8 70 L10 98 L22 96Z M98 58 L112 70 L110 98 L98 96Z"/>' +
+    '<path class="m-body" d="M30 40 H90 L98 60 V84 L90 92 V110 H72 V94 H48 V110 H30 V92 L22 84 V60Z"/>' +
+    '<path class="m-body" d="M46 16 H74 V38 H46Z"/><path class="m-eye" d="M50 25 H70 V30 H50Z"/>' +
+    '<path class="m-crack" d="M40 50 L52 62 L48 76 M78 48 L70 64 L74 74 M58 96 V104"/>',
+  horror:
+    '<path class="m-body" d="M60 14 C90 14 106 38 104 62 C102 80 92 90 96 108 C84 104 80 96 72 100 C68 112 54 112 50 100 C42 96 38 104 26 108 C30 90 18 80 16 62 C14 38 30 14 60 14Z"/>' +
+    '<ellipse class="m-void" cx="58" cy="54" rx="20" ry="14"/><circle class="m-eye" cx="54" cy="54" r="7"/><ellipse class="m-void" cx="54" cy="54" rx="2" ry="5"/>' +
+    '<circle class="m-eye" cx="36" cy="34" r="2"/><circle class="m-eye" cx="82" cy="31" r="2"/><circle class="m-eye" cx="88" cy="70" r="1.6"/>' +
+    '<path class="m-edge" d="M38 80 Q58 92 78 80"/><path class="m-bone" d="M46 84 V89 M54 86 V92 M62 86 V92 M70 84 V89"/>',
+  drakeMob:
+    '<path class="m-body" d="M84 54 L97 45 L93 58 M95 65 L109 58 L103 71 M103 79 L117 74 L109 87"/>' +
+    '<path class="m-body" d="M116 118 C110 86 100 66 84 54 C74 46 62 42 50 44 L26 50 C16 52 12 58 16 62 L36 64 L22 72 C18 76 22 80 28 78 L52 72 C64 74 72 82 78 94 C84 106 86 114 86 118Z"/>' +
+    '<path class="m-body" d="M68 46 L88 24 L78 48Z M58 44 L66 20 L64 46Z"/>' +
+    '<circle class="m-eye" cx="44" cy="52" r="2.7"/><path class="m-bone" d="M24 62 L26 66 L28 62 M30 63 L32 67"/>',
+};
+
+function monsterArt(mob) {
+  return `<svg class="m-art ${mob.rank}" viewBox="0 0 120 120" aria-hidden="true">${MONSTER_ART[mob.icon] || MONSTER_ART.horror}</svg>`;
+}
+
+const RANK_NAMES = { grunt: "Common", elite: "Elite", boss: "Sovereign" };
+
+function renderHuntBody(region) {
+  const tier = region.tier;
+  el("skWorkLabel").textContent = `The Hunt · ${region.name}`;
+  const box = el("skWorkBody");
+  box.innerHTML = "";
+
+  const arena = document.createElement("div");
+  arena.className = "arena";
+  arena.innerHTML =
+    '<div class="arena-side you">' +
+      '<div class="fx-layer"></div>' +
+      '<div class="arena-art"><img src="assets/commander-default.webp" alt=""></div>' +
+      '<div class="arena-name"></div>' +
+      '<div class="hpbar"><i></i><span></span></div>' +
+      '<div class="veilbar" title="The Veil"><i></i></div>' +
+    '</div>' +
+    '<div class="arena-mid"><div class="arena-vs">VS</div><div class="arena-status"></div></div>' +
+    '<div class="arena-side foe">' +
+      '<div class="fx-layer"></div>' +
+      '<button type="button" class="arena-art" data-hunt="open"></button>' +
+      '<div class="arena-name"><span class="fn"></span><span class="rank-tag"></span></div>' +
+      '<div class="hpbar foe"><i></i><span></span></div>' +
+      '<div class="veilbar blank"></div>' +
+    '</div>';
+  box.appendChild(arena);
+
+  const foot = document.createElement("div");
+  foot.className = "arena-foot";
+  foot.innerHTML =
+    '<div class="arena-count"><b></b><span></span></div>' +
+    '<div class="btnrow"><button type="button" class="btn" data-hunt="pull"></button><button type="button" class="btn btn-primary" data-hunt="open"></button></div>';
+  box.appendChild(foot);
+
+  const you = arena.querySelector(".you");
+  const foe = arena.querySelector(".foe");
+  liveRefs.hunt = {
+    tier, monsterId: null,
+    youSide: you, youArt: you.querySelector(".arena-art"), youName: you.querySelector(".arena-name"),
+    youHp: you.querySelector(".hpbar i"), youHpText: you.querySelector(".hpbar span"),
+    veil: you.querySelector(".veilbar i"), youFx: you.querySelector(".fx-layer"),
+    foeSide: foe, foeArt: foe.querySelector(".arena-art"), foeName: foe.querySelector(".fn"), foeRank: foe.querySelector(".rank-tag"),
+    foeHp: foe.querySelector(".hpbar i"), foeHpText: foe.querySelector(".hpbar span"), foeFx: foe.querySelector(".fx-layer"),
+    status: arena.querySelector(".arena-status"),
+    countMain: foot.querySelector(".arena-count b"), countSub: foot.querySelector(".arena-count span"),
+    pull: foot.querySelector('[data-hunt="pull"]'), open: foot.querySelector(".btn-primary"),
+  };
+
+  renderQuarry(region);
+}
+
+function renderQuarry(region) {
+  const body = el("skQuarryBody");
+  body.innerHTML = "";
+
+  const pills = document.createElement("div");
+  pills.className = "node-pills";
+  rosterFor(region.tier).forEach((m) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "node-pill war";
+    b.dataset.monster = m.id;
+    b.innerHTML =
+      `<span class="np-art">${icon(m.icon, "ico-lg")}</span>` +
+      '<span class="np-body"><span class="np-name"></span><span class="np-state"></span></span>';
+    b.querySelector(".np-name").textContent = m.name;
+    b.querySelector(".np-state").textContent =
+      m.rank === "grunt" ? "Most of what turns up" : m.rank === "elite" ? "One spawn in five" : `Comes out at ${THREAT_CAP} threat`;
+    pills.appendChild(b);
+  });
+  body.appendChild(pills);
+
+  const threat = document.createElement("div");
+  threat.className = "threat-block";
+  threat.innerHTML =
+    '<div class="threat-head"><span class="label">Regional Threat</span><span class="threat-num"></span></div>' +
+    '<div class="bar threat"><i></i></div><div class="threat-note"></div>';
+  body.appendChild(threat);
+
+  Object.assign(liveRefs.hunt, {
+    quarry: pills,
+    threatNum: threat.querySelector(".threat-num"),
+    threatBar: threat.querySelector(".bar.threat i"),
+    threatNote: threat.querySelector(".threat-note"),
+  });
+}
+
+function updateHunt() {
+  const h = liveRefs.hunt;
+  const c = state.tasks.combat;
+  const here = !!(c && c.tier === h.tier);
+  const mob = (here && getMonster(c.monsterId)) || rankOf(h.tier, "grunt");
+
+  if (h.monsterId !== mob.id) {
+    h.monsterId = mob.id;
+    h.foeArt.innerHTML = monsterArt(mob);
+    h.foeArt.setAttribute("aria-label", `${mob.name}: details`);
+    setText(h.foeName, mob.name);
+    h.foeRank.className = "rank-tag " + mob.rank;
+    setText(h.foeRank, mob.rank === "grunt" ? "" : RANK_NAMES[mob.rank]);
+    h.foeRank.hidden = mob.rank === "grunt";
+    h.quarry.querySelectorAll("[data-monster]").forEach((p) => p.classList.toggle("active", here && p.dataset.monster === mob.id));
+  }
+
+  // ---- you ----
+  setText(h.youName, commanderName());
+  const max = maxHp();
+  const hp = clamp(Math.ceil(state.player.hp), 0, max);
+  h.youHp.style.width = (hp / max) * 100 + "%";
+  setText(h.youHpText, `${fmt(hp)} / ${fmt(max)}`);
+  h.veil.style.width = (here ? clamp((c.veil || 0) / VEIL_MAX, 0, 1) * 100 : 0) + "%";
+  h.youSide.classList.toggle("down", recovering());
+
+  // ---- the quarry ----
+  const respawning = here && c.respawn > 0;
+  const foeMax = here ? c.mobMax : mob.hp;
+  const foeHp = here ? (respawning ? 0 : clamp(Math.ceil(c.mobHp), 0, foeMax)) : mob.hp;
+  h.foeHp.style.width = (foeHp / foeMax) * 100 + "%";
+  setText(h.foeHpText, `${fmt(foeHp)} / ${fmt(foeMax)}`);
+  h.foeSide.classList.toggle("dead", respawning);
+  h.foeSide.classList.toggle("idle", !here);
+
+  let status = "Not hunting";
+  if (recovering()) status = `Recovering. Back in ${fmtTime(state.player.recoveryUntil - Date.now())}.`;
+  else if (respawning) status = c.queued === "stop" ? "Pulling back" : "Something else stirs";
+  else if (here) status = c.queued === "stop" ? "Pulling back after this fight" : "On the hunt";
+  else if (c) status = `Hunting in ${regionOfTier(c.tier).name}`;
+  setText(h.status, status);
+
+  if (here) {
+    const plan = combatPlan();
+    setText(h.countMain, `${countOf(c.done, c.limit)} kills`);
+    setText(h.countSub, plan ? `${fmtTime(plan.timeLeft)} left` : "");
+  } else {
+    setText(h.countMain, "No hunt underway");
+    setText(h.countSub, "Choose how many to hunt, or hunt until you pull back.");
+  }
+
+  h.pull.hidden = !here;
+  setText(h.pull, here && c.queued === "stop" ? "Keep hunting" : "Pull back");
+  h.open.disabled = recovering();
+  setText(h.open, recovering() ? "Recovering" : here ? "Change hunt" : "Hunt");
+
+  const threat = threatIn(h.tier);
+  const boss = rankOf(h.tier, "boss").name;
+  setText(h.threatNum, `${threat} / ${THREAT_CAP}`);
+  h.threatBar.style.width = (threat / THREAT_CAP) * 100 + "%";
+  setText(h.threatNote, threat >= THREAT_CAP ? `${boss} is waiting.` : `At ${THREAT_CAP}, ${boss} comes out.`);
+}
+
+const FLOAT_TEXT = {
+  hit: (n) => fmt(n),
+  crit: (n) => `${fmt(n)}!`,
+  veil: (n) => fmt(n),
+  bleed: (n) => fmt(n),
+  thorns: (n) => fmt(n),
+  hurt: (n) => fmt(n),
+  block: (n) => `Blocked ${fmt(n)}`,
+  dodge: () => "Dodged",
+  heal: (n) => `+${fmt(n)}`,
+};
+
+function spawnFloat(h, ev) {
+  const onFoe = ev.who === "foe";
+  const art = onFoe ? h.foeArt : h.youArt;
+
+  if (["hit", "crit", "veil", "hurt", "block", "kill"].includes(ev.kind)) {
+    art.classList.remove("struck");
+    void art.offsetWidth;   // restart the animation
+    art.classList.add("struck");
+  }
+
+  const text = FLOAT_TEXT[ev.kind];
+  if (!text) return;
+  const f = document.createElement("span");
+  f.className = `float ${ev.kind} lane${floatSeq++ % 3}`;
+  f.textContent = text(ev.amount);
+  (onFoe ? h.foeFx : h.youFx).appendChild(f);
+  setTimeout(() => f.remove(), 1000);
+}
+
+// Shows what the fight did since the last frame, when the arena is on screen.
+function drainCombatFx() {
+  if (!combatFx.length) return;
+  const events = combatFx.splice(0);
+  const h = liveRefs.hunt;
+  const c = state.tasks.combat;
+  if (!h || route.page !== "skill" || document.hidden || !c || c.tier !== h.tier) return;
+  const now = Date.now();
+  events.forEach((ev) => { if (now - ev.t < 1500) spawnFloat(h, ev); });
+}
+
+/* ================= 10. CHARACTER ================= */
+
+// Your account name, or "Commander" until you sign in.
+function commanderName() {
+  const a = state.meta.account;
+  return a ? a.charAt(0).toUpperCase() + a.slice(1) : "Commander";
+}
 
 function renderCharacter() {
   const region = currentRegion();
-  setText(el("chName"), state.meta.name || "Commander");
+  const name = commanderName();
+  setText(el("chName"), name);
+  setText(el("chPortrait"), name.charAt(0));
   setText(el("chRegionTag"), `In ${region.name}`);
   setText(el("chTotal"), "Lv " + totalLevel());
 
-  if (keys.chTags !== region.id) {
-    keys.chTags = region.id;
+  const kls = myClass();
+  const comp = activeCompanion();
+  const tagSig = [region.id, kls ? kls.id : "-", comp ? comp.id : "-"].join("|");
+  if (keys.chTags !== tagSig) {
+    keys.chTags = tagSig;
     const tags = el("chTags");
-    tags.innerHTML = "<span>Commander</span><span></span>";
-    tags.children[1].textContent = region.name;
+    tags.innerHTML = "";
+    [kls && kls.name, region.name, comp && comp.name].filter(Boolean).forEach((text) => {
+      const span = document.createElement("span");
+      span.textContent = text;
+      tags.appendChild(span);
+    });
   }
 
   const b = state.bounty;
@@ -967,12 +1213,12 @@ function renderCharacterLabour() {
     box.innerHTML = "";
     box.appendChild(sp
       ? taskBlock(sp.def.icon, titleCase(sp.def.name), false)
-      : idleBlock("No crews tasked", "Your people are standing around.", "Open Delving", () => go("skill", "delving")));
+      : idleBlock("No crews at work", "Your people are standing around.", "Open Delving", () => go("skill", "delving")));
   }
 
   if (sp) {
     box.querySelector(".bar i").style.width = sp.pct + "%";
-    setText(box.querySelector(".task-meta span"), `${fmt(sp.done)} / ${fmt(sp.target)} actions`);
+    setText(box.querySelector(".task-meta span"), `${countOf(sp.done, sp.limit)} actions`);
     setText(box.querySelector(".task-meta b"), fmtTime(sp.timeLeft) + " left");
   }
 }
@@ -986,13 +1232,13 @@ function renderCharacterField() {
     keys.chField = sig;
     box.innerHTML = "";
     if (cp) box.appendChild(taskBlock(cp.mob.icon, cp.mob.name, true));
-    else if (recovering()) box.appendChild(idleBlock("Recovering", "", "Open The Field", () => go("skill", "warfare")));
-    else box.appendChild(idleBlock("No quarry chosen", "Take the field yourself.", "Open The Field", () => go("skill", "warfare")));
+    else if (recovering()) box.appendChild(idleBlock("Recovering", "", "Open the Hunt", () => go("skill", "warfare")));
+    else box.appendChild(idleBlock("Nothing hunted", "Take up the hunt yourself.", "Open the Hunt", () => go("skill", "warfare")));
   }
 
   if (cp) {
     box.querySelector(".bar i").style.width = cp.pct + "%";
-    setText(box.querySelector(".task-meta span"), `${fmt(cp.done)} / ${fmt(cp.target)} kills`);
+    setText(box.querySelector(".task-meta span"), `${countOf(cp.done, cp.limit)} kills`);
     setText(box.querySelector(".task-meta b"), fmtTime(cp.timeLeft) + " left");
   } else if (recovering()) {
     setText(box.querySelector(".idle-block .sub"), `Back in ${fmtTime(state.player.recoveryUntil - Date.now())}.`);
@@ -1050,24 +1296,23 @@ function renderCharacterSkills() {
   });
 }
 
-/* ================= 9. STORES (Pack, Camp Stores, Bank) ================= */
+/* ================= 11. STORES (Belongings, Provisions, Vault) ================= */
 
 const FILTERS = [
-  { id: "all",       label: "ALL",  test: () => true },
-  { id: "gear",      label: "Gear", icon: "blade", test: (d) => d.kind === "gear" },
-  { id: "material",  label: "Mats", icon: "ore",   test: (d) => d.kind === "material" && !d.heal && !d.forSkill },
-  { id: "provision", label: "Food", icon: "ration", test: (d) => !!d.heal },
-  { id: "tool",      label: "Tools", icon: "pick", test: (d) => d.kind === "tool" },
+  { id: "all",       label: "All",       test: () => true },
+  { id: "gear",      label: "Gear",      icon: "blade",  test: (d) => d.kind === "gear" },
+  { id: "material",  label: "Materials", icon: "ore",    test: (d) => d.kind === "material" && !d.heal && !d.forSkill },
+  { id: "provision", label: "Remedies",  icon: "ration", test: (d) => !!d.heal },
+  { id: "tool",      label: "Tools",     icon: "pick",   test: (d) => d.kind === "tool" },
 ];
 
 function scopeTab(scope) {
   return scope === "eq" ? eqTab : campTab;
 }
 
-// Which pool a page is showing: its own (Pack / Camp Stores) or the shared Bank.
+// Which pool a page is showing: its own (Belongings or Provisions) or the shared Vault.
 function scopeStore(scope) {
-  const tab = scopeTab(scope);
-  if (tab === "bank") return "vault";
+  if (scopeTab(scope) === "vault") return "vault";
   return scope === "eq" ? "inv" : "bank";
 }
 
@@ -1127,8 +1372,9 @@ function renderFilters(scope) {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "ficon" + (gridFilter === f.id ? " active" : "");
-    b.innerHTML = f.icon ? icon(f.icon, "ico-sm") : f.label;
+    b.innerHTML = f.icon ? icon(f.icon, "ico-sm") : f.label.toUpperCase();
     b.title = f.label;
+    b.setAttribute("aria-label", f.label);
     b.dataset.filter = f.id;
     box.appendChild(b);
   });
@@ -1137,7 +1383,7 @@ function renderFilters(scope) {
 function itemKindLabel(d) {
   if (d.kind === "gear") return `${rarityDef(d.rarity).name} ${SLOT_LABELS[d.slot]}`;
   if (d.kind === "tool") return "Tool";
-  if (d.heal) return "Provision";
+  if (d.heal) return "Remedy";
   if (d.chest) return "Container";
   return d.category || "Material";
 }
@@ -1175,7 +1421,7 @@ function renderPillGrid(scope, w) {
 
       if (!key) {
         cell.className = "item-pill empty";
-        cell.innerHTML = '<div class="art"></div><div class="info"><div class="n">Empty</div><div class="r">Empty Slot</div></div>';
+        cell.innerHTML = '<div class="art"></div><div class="info"><div class="n">Empty</div><div class="r">Empty slot</div></div>';
         grid.appendChild(cell);
         continue;
       }
@@ -1238,8 +1484,9 @@ function renderPaperdoll() {
     });
   }
 
-  setText(el("dollName"), state.meta.name || "Commander");
-  setText(el("dollSub"), `Commander · ${currentRegion().name}`);
+  const kls = myClass();
+  setText(el("dollName"), commanderName());
+  setText(el("dollSub"), [kls && kls.name, currentRegion().name].filter(Boolean).join(" · "));
 }
 
 function renderStatRows(boxId, rows) {
@@ -1263,7 +1510,7 @@ function renderStatRows(boxId, rows) {
 function renderStanding() {
   const kls = myClass();
   renderStatRows("dollStanding", [
-    ["Discipline", kls ? kls.name : (canPickClass() ? "Choose one" : `Combat ${CLASS_PICK_LEVEL}`), kls ? "good" : "gold"],
+    ["Discipline", kls ? kls.name : (canPickClass() ? "Choose one" : `Unlocks at Hunt ${CLASS_PICK_LEVEL}`), kls ? "good" : "gold"],
     ["Health", fmt(maxHp())],
     ["Attack Power", Math.round(attackPower()), "gold"],
     ["Defence", Math.round(defencePower())],
@@ -1273,8 +1520,8 @@ function renderStanding() {
     ["Block", Math.round(blockChance() * 100) + "%"],
     ["Dodge", Math.round(dodgeChance() * 100) + "%"],
     ["Defence Pen.", Math.round(defencePen() * 100) + "%"],
-    ["Combat", "Lv " + skillLevel("warfare"), "good"],
-    ["Pack Space", `${slotsUsed("inv")} / ${packSlots()}`],
+    ["Hunt", "Lv " + skillLevel("warfare"), "good"],
+    ["Belongings", `${slotsUsed("inv")} / ${packSlots()}`],
   ]);
 }
 
@@ -1309,24 +1556,104 @@ function renderLedger() {
   renderStatRows("dollLedger", [
     ["Total Level", totalLevel(), "good"],
     ["Gold on Hand", fmt(state.player.gold), "gold"],
-    ["Camp Stores", `${slotsUsed("bank")} / ${slotCap("bank")}`],
-    ["Bank", `${slotsUsed("vault")} / ${slotCap("vault")}`],
+    ["Provisions", `${slotsUsed("bank")} / ${slotCap("bank")}`],
+    ["Vault", `${slotsUsed("vault")} / ${slotCap("vault")}`],
     ["Actions Worked", fmt(state.stats.actions)],
     ["Sovereigns Felled", fmt(state.stats.bosses || 0)],
   ]);
 }
 
-/* ================= 10. ITEM POPUP ================= */
+/* ================= 12. QUANTITY PICKER ================= */
+/* One control for every "how many": Min, −, a box you can type in, +, Max,
+   and ∞ where no limit makes sense. `pick` is { n, inf } and belongs to the
+   caller, so the choice survives the popup being redrawn. */
+
+function qtyPicker(pick, opts) {
+  const wrap = document.createElement("div");
+  wrap.className = "qty-pick" + (opts.allowInf ? "" : " no-inf");
+  wrap.innerHTML =
+    '<button type="button" class="qty-btn" data-q="min">Min</button>' +
+    '<button type="button" class="qty-btn" data-q="dec" aria-label="One fewer">−</button>' +
+    '<input class="qty-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="Amount">' +
+    '<button type="button" class="qty-btn" data-q="inc" aria-label="One more">+</button>' +
+    '<button type="button" class="qty-btn" data-q="max">Max</button>' +
+    (opts.allowInf ? '<button type="button" class="qty-btn qty-inf" data-q="inf" aria-label="No limit" title="No limit">∞</button>' : "");
+
+  const input = wrap.querySelector(".qty-input");
+  const infBtn = wrap.querySelector(".qty-inf");
+  const cap = () => Math.max(1, Math.floor(opts.max()));
+
+  // Clamp, then show. `notify` is false for redraws, so they never loop back.
+  const show = (notify, keepTyping) => {
+    if (!opts.allowInf) pick.inf = false;
+    pick.n = clamp(Math.floor(pick.n) || 1, 1, cap());
+    if (!keepTyping) input.value = pick.inf ? "∞" : String(pick.n);
+    input.classList.toggle("inf", pick.inf);
+    if (infBtn) {
+      infBtn.classList.toggle("active", pick.inf);
+      infBtn.setAttribute("aria-pressed", String(pick.inf));
+    }
+    if (notify && opts.onChange) opts.onChange();
+  };
+
+  wrap.addEventListener("click", (e) => {
+    const b = e.target.closest(".qty-btn");
+    if (!b) return;
+    const q = b.dataset.q;
+    if (q === "min") { pick.inf = false; pick.n = 1; }
+    if (q === "dec") { pick.n = (pick.inf ? cap() : pick.n) - 1; pick.inf = false; }
+    if (q === "inc" && !pick.inf) pick.n += 1;
+    if (q === "max") { pick.inf = false; pick.n = cap(); }
+    if (q === "inf") pick.inf = true;
+    show(true, false);
+  });
+
+  input.addEventListener("focus", () => input.select());
+  input.addEventListener("input", () => {
+    const digits = input.value.replace(/[^0-9]/g, "");
+    if (digits !== input.value) input.value = digits;
+    const n = parseInt(digits, 10);
+    if (!digits || n < 1) return;   // let the box sit empty while they type
+    pick.inf = false;
+    pick.n = n;
+    const over = n > cap();
+    show(true, !over);              // a number past the most possible snaps to it
+  });
+  input.addEventListener("blur", () => show(true, false));
+  input.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    show(true, false);
+    if (opts.onEnter) opts.onEnter();
+  });
+
+  show(false, false);
+
+  return {
+    node: wrap,
+    // The most possible can change underneath (stock used up); keep the box honest.
+    refresh() {
+      if (document.activeElement === input) return;
+      show(false, false);
+    },
+  };
+}
+
+/* ================= 13. ITEM POPUP ================= */
 /* One popup for every item. `from` says where the item is:
      "inv" | "bank" | "vault"  in storage: equip, move, sell, break down
      "equip:<slot>"            worn: unequip, repair
      "tool:<skillId>"          in the tool rack: stow
-     "view"                    just looking (yield tables, drops, spoils) */
+     "view"                    just looking (costs, drops, spoils) */
+
+let itemReturnFocus = null;
 
 function openItemPopup(key, from) {
   if (!itemDef(key)) return;
-  if (el("itemModal").hidden) popReturnFocus = document.activeElement;
-  popItem = { key, from };
+  if (el("itemModal").hidden) itemReturnFocus = document.activeElement;
+  // The amount starts at the whole stack: moving everything is the usual ask.
+  const whole = STORE_NAMES[from] ? qtyIn(from, key) : 1;
+  popItem = { key, from, pick: { n: whole, inf: false }, picker: null, pickerSig: null, labels: [], sellSome: null };
   fillItemPopup();
   el("itemModal").hidden = false;
   el("ipClose").focus({ preventScroll: true });
@@ -1335,8 +1662,8 @@ function openItemPopup(key, from) {
 function closeItemPopup() {
   el("itemModal").hidden = true;
   popItem = null;
-  if (popReturnFocus && popReturnFocus.isConnected && popReturnFocus.focus) popReturnFocus.focus({ preventScroll: true });
-  popReturnFocus = null;
+  if (itemReturnFocus && itemReturnFocus.isConnected && itemReturnFocus.focus) itemReturnFocus.focus({ preventScroll: true });
+  itemReturnFocus = null;
 }
 
 function itemStillThere(p) {
@@ -1366,23 +1693,12 @@ function displacedBy(d) {
   return out.filter(Boolean);
 }
 
-function describeItem(d) {
-  const maker = (MADE_BY[d.base] || [])[0];
-  const makerName = maker ? skillName(maker.skillId) : null;
-
-  if (d.kind === "gear") {
-    return `Made by the ${skillName(d.prof)}.${d.twoHanded ? " Takes both hands." : ""} ` +
-      `Wears down in the field and is repaired with ${itemName(d.repairMat)}.`;
-  }
-  if (d.kind === "tool") {
-    return `Makes every ${skillName(d.forSkill)} action ${Math.round(d.speed * 100)}% quicker while it's in hand.`;
-  }
-  if (d.heal) return "Eaten automatically when you drop low in the field.";
-  if (d.chest) return `Open it to widen Camp Stores by ${d.chest} slots, up to ${BANK_MAX}.`;
-  if (d.reagent) return "A reagent. Most recipes take one for each tier they belong to.";
-  if (GATHERED_BY[d.base] && d.category) return `Raw ${d.category.toLowerCase()} from ${regionOfTier(d.tier).name}.`;
-  if (["Bars", "Planks", "Weave", "Leather", "Inlays"].includes(d.category) && makerName) return `Refined by the ${makerName}.`;
-  if (makerName) return `A component, made by the ${makerName}.`;
+// The practical line under an item's description.
+function itemNote(d) {
+  if (d.kind === "gear") return `${d.twoHanded ? "Takes both hands. " : ""}Wears down on the hunt and is repaired with ${itemName(d.repairMat)}.`;
+  if (d.heal) return "Taken automatically when you drop low on the hunt.";
+  if (d.chest) return `Open it to widen Provisions by ${d.chest} slots, up to ${BANK_MAX}.`;
+  if (d.reagent) return "Recipes take one for each tier they belong to.";
   return "";
 }
 
@@ -1395,25 +1711,42 @@ function itemSubline(d, from, qty) {
   return parts.join(" · ");
 }
 
+// Where a thing comes from and who works with it, by skill rather than recipe.
 function itemSourceRows(d) {
   const rows = [];
+  const skillsOf = (actions) => [...new Set((actions || []).map((a) => a.skillId))].map(skillName);
 
-  const gathered = GATHERED_BY[d.base] || [];
-  if (gathered.length) {
-    const lv = Math.min(...gathered.map((a) => a.level));
-    rows.push(["Gathered", `${skillName(gathered[0].skillId)} · from Lv ${lv}`]);
-  }
+  const gathered = skillsOf(GATHERED_BY[d.base]);
+  if (gathered.length) rows.push(["Gathered", gathered.join(", ")]);
 
-  const made = MADE_BY[d.base] || [];
-  if (made.length) rows.push(["Made by", `${skillName(made[0].skillId)} · Lv ${made[0].level}`]);
+  const made = skillsOf(MADE_BY[d.base]);
+  if (made.length) rows.push(["Made by", made.join(", ")]);
 
-  const used = [...new Set((USED_IN[d.base] || []).map((a) => titleCase(a.name)))];
-  if (used.length) rows.push(["Used in", used.slice(0, 4).join(", ") + (used.length > 4 ? ` +${used.length - 4} more` : "")]);
+  const users = PROFESSIONS.filter((p) => (USED_IN[d.base] || []).some((a) => a.skillId === p.id)).map((p) => p.name);
+  if (users.length) rows.push(["Used by", users.join(", ")]);
 
   const drops = [...new Set((DROPPED_BY[d.base] || []).map((m) => m.name))];
   if (drops.length) rows.push(["Dropped by", drops.join(", ")]);
 
   return rows;
+}
+
+function statRowInto(box, label, value, delta, cls) {
+  const r = document.createElement("div");
+  r.className = "pop-stat";
+  r.innerHTML = '<div class="l"></div><div class="v"><span></span></div>';
+  r.children[0].textContent = label;
+  const v = r.querySelector(".v span");
+  v.textContent = value;
+  if (cls) v.className = cls;
+  if (delta) {
+    const chip = document.createElement("span");
+    chip.className = "delta " + (delta > 0 ? "up" : "down");
+    chip.textContent = delta > 0 ? `+${fmt(delta)}` : `−${fmt(-delta)}`;
+    r.children[1].appendChild(chip);
+  }
+  box.appendChild(r);
+  return v;
 }
 
 function fillItemPopup() {
@@ -1432,9 +1765,12 @@ function fillItemPopup() {
   name.textContent = itemName(key);
   el("ipSub").textContent = itemSubline(d, from, qty);
 
-  const desc = describeItem(d);
-  el("ipDesc").textContent = desc;
-  el("ipDesc").hidden = !desc;
+  const lore = itemLore(d);
+  el("ipDesc").textContent = lore;
+  el("ipDesc").hidden = !lore;
+  const note = itemNote(d);
+  el("ipNote").textContent = note;
+  el("ipNote").hidden = !note;
 
   // ---- stats, with the change against what it would replace ----
   const stats = el("ipStats");
@@ -1442,45 +1778,30 @@ function fillItemPopup() {
   const displaced = worn ? [] : displacedBy(d);
   const sum = (stat) => displaced.reduce((n, k) => n + (itemDef(k)[stat] || 0), 0);
 
-  const statRow = (label, value, delta) => {
-    const r = document.createElement("div");
-    r.className = "pop-stat";
-    r.innerHTML = '<div class="l"></div><div class="v"><span></span></div>';
-    r.children[0].textContent = label;
-    r.querySelector(".v span").textContent = value;
-    if (delta) {
-      const chip = document.createElement("span");
-      chip.className = "delta " + (delta > 0 ? "up" : "down");
-      chip.textContent = delta > 0 ? `+${fmt(delta)}` : `−${fmt(-delta)}`;
-      r.children[1].appendChild(chip);
-    }
-    stats.appendChild(r);
-  };
-
   if (d.kind === "gear") {
     const cmp = displaced.length > 0;
     [["attack", "Attack"], ["defence", "Defence"], ["health", "Max Health"]].forEach(([stat, label]) => {
-      if (d[stat] || (cmp && sum(stat))) statRow(label, `+${fmt(d[stat])}`, cmp ? d[stat] - sum(stat) : 0);
+      if (d[stat] || (cmp && sum(stat))) statRowInto(stats, label, `+${fmt(d[stat])}`, cmp ? d[stat] - sum(stat) : 0);
     });
-    if (d.slot === "weapon") statRow("Grip", d.twoHanded ? "Two-handed" : "One-handed");
-    if (from.startsWith("equip:")) statRow("Condition", `${wearPct(key)}%`);
-    else statRow("Durability", fmt(d.maxDur));
+    if (d.slot === "weapon") statRowInto(stats, "Grip", d.twoHanded ? "Two-handed" : "One-handed");
+    if (from.startsWith("equip:")) statRowInto(stats, "Condition", `${wearPct(key)}%`);
+    else statRowInto(stats, "Durability", fmt(d.maxDur));
   }
   if (d.kind === "tool") {
     const pct = Math.round(d.speed * 100);
     const oldPct = displaced.length ? Math.round(itemDef(displaced[0]).speed * 100) : null;
-    statRow(`${skillName(d.forSkill)} speed`, `+${pct}%`, oldPct === null ? 0 : pct - oldPct);
+    statRowInto(stats, `${skillName(d.forSkill)} speed`, `+${pct}%`, oldPct === null ? 0 : pct - oldPct);
   }
-  if (d.heal) statRow("Restores", `${fmt(d.heal)} HP`);
-  if (d.chest) statRow("Camp Stores", `+${d.chest} slots`);
-  statRow("Value", qty > 1 ? `${fmt(d.value)}g each · ${fmt(d.value * qty)}g` : `${fmt(d.value)}g`);
-  if (inStore && haveQty(key) > qty) statRow("Held in all", fmt(haveQty(key)));
+  if (d.heal) statRowInto(stats, "Restores", `${fmt(d.heal)} HP`);
+  if (d.chest) statRowInto(stats, "Provisions", `+${d.chest} slots`);
+  statRowInto(stats, "Value", qty > 1 ? `${fmtGold(d.value)} each · ${fmtGold(d.value * qty)}` : fmtGold(d.value));
+  if (inStore && haveQty(key) > qty) statRowInto(stats, "Held in all", fmt(haveQty(key)));
 
   const effect = el("ipEffect");
   effect.hidden = !d.effect;
   effect.textContent = d.effect ? `${prefixDef(d.prefix).name}: ${d.effect}` : "";
 
-  // ---- where it comes from and what it feeds ----
+  // ---- where it comes from and who works with it ----
   const sources = el("ipSources");
   sources.innerHTML = "";
   itemSourceRows(d).forEach(([label, value]) => {
@@ -1498,7 +1819,7 @@ function fillItemPopup() {
   const weapon = state.equipment.weapon;
   const blocked = d.kind === "gear" && d.slot === "offhand" && weapon && itemDef(weapon).twoHanded;
   let line = "";
-  if (!worn && (d.kind === "gear" || d.kind === "tool")) {
+  if (!worn && inStore && (d.kind === "gear" || d.kind === "tool")) {
     if (blocked) line = `Your ${itemName(weapon)} takes both hands.`;
     else if (displaced.length) line = `Replaces ${displaced.map((k) => itemName(k)).join(" and ")}.`;
     else line = d.kind === "gear" ? `Your ${SLOT_LABELS[d.slot].toLowerCase()} slot is empty.` : `No ${skillName(d.forSkill)} tool in hand.`;
@@ -1511,7 +1832,16 @@ function fillItemPopup() {
 
 function fillItemActions(d, key, from, qty, blocked) {
   const box = el("ipActions");
+  const qtyBox = el("ipQty");
   box.innerHTML = "";
+  popItem.labels = [];
+
+  if (from === "view") {
+    box.hidden = true;
+    qtyBox.hidden = true;
+    return;
+  }
+  box.hidden = false;
 
   const add = (label, cls, onClick, opts) => {
     const o = opts || {};
@@ -1523,13 +1853,10 @@ function fillItemActions(d, key, from, qty, blocked) {
     if (o.title) b.title = o.title;
     b.onclick = onClick;
     box.appendChild(b);
+    return b;
   };
 
-  if (from === "view") {
-    box.hidden = true;
-    return;
-  }
-  box.hidden = false;
+  if (from.startsWith("equip:") || from.startsWith("tool:")) qtyBox.hidden = true;
 
   if (from.startsWith("equip:")) {
     const slot = from.slice(6);
@@ -1544,35 +1871,456 @@ function fillItemActions(d, key, from, qty, blocked) {
   }
 
   if (from.startsWith("tool:")) {
-    add("Stow in Camp Stores", "btn-primary", () => unequipTool(from.slice(5)), { wide: true });
+    add("Stow in Provisions", "btn-primary", () => unequipTool(from.slice(5)), { wide: true });
     return;
   }
 
-  // In storage.
+  // ---- in storage ----
   if (d.kind === "gear") {
     add(`Equip · ${SLOT_LABELS[d.slot]}`, "btn-primary", () => equipItem(key, from),
       { wide: true, disabled: blocked, title: blocked ? "Your weapon takes both hands" : "" });
   }
   if (d.kind === "tool") add(`Take up · ${skillName(d.forSkill)}`, "btn-primary", () => equipItem(key, from), { wide: true });
   if (d.chest) {
-    add(`Open · +${d.chest} Camp Stores slots`, "btn-primary", () => useChest(key, from),
+    add(`Open · +${d.chest} Provisions slots`, "btn-primary", () => useChest(key, from),
       { wide: true, disabled: state.bank.slots >= BANK_MAX });
   }
 
+  // An amount is only worth asking for when there is more than one.
+  const many = qty > 1;
+  qtyBox.hidden = !many;
+  if (many) {
+    const sig = `${key}|${from}`;
+    const typing = qtyBox.contains(document.activeElement);
+    if (popItem.pickerSig !== sig || !popItem.picker || !qtyBox.contains(popItem.picker.node)) {
+      popItem.pickerSig = sig;
+      qtyBox.innerHTML = "";
+      popItem.picker = qtyPicker(popItem.pick, {
+        max: () => (popItem ? qtyIn(popItem.from, popItem.key) : 1),
+        allowInf: false,
+        onChange: updateItemAmountLabels,
+      });
+      qtyBox.appendChild(popItem.picker.node);
+    } else if (!typing) {
+      popItem.picker.refresh();
+    }
+  }
+
+  const amount = () => (many ? clamp(popItem.pick.n, 1, qtyIn(from, key)) : 1);
+
   ["inv", "bank", "vault"].filter((w) => w !== from).forEach((w) => {
     const full = !store(w).items[key] && storeFull(w);
-    add(`${qty > 1 ? "Move all" : "Move"} to ${STORE_NAMES[w]}`, "", () => moveItem(key, from, w),
-      { disabled: full, title: full ? `${STORE_NAMES[w]} is full` : "" });
+    const b = add("", "", () => moveItem(key, from, w, amount()), { disabled: full, title: full ? `${STORE_NAMES[w]} is full` : "" });
+    popItem.labels.push([b, () => (many ? `Move ${fmt(amount())} to ${STORE_NAMES[w]}` : `Move to ${STORE_NAMES[w]}`)]);
   });
 
-  add(`Sell 1 · ${fmt(d.value)}g`, "btn-gold", () => sellItem(key, from, 1), { wide: qty <= 1 });
-  if (qty > 1) add(`Sell all · ${fmt(d.value * qty)}g`, "btn-gold", () => sellItem(key, from));
+  popItem.sellSome = null;
+  if (many) {
+    // "Sell 12" only shows for an amount that Sell 1 and Sell all don't already cover.
+    const sellSome = add("", "btn-gold", () => sellItem(key, from, amount()), { wide: true });
+    popItem.labels.push([sellSome, () => `Sell ${fmt(amount())} · ${fmtGold(d.value * amount())}`]);
+    popItem.sellSome = sellSome;
+    add(`Sell 1 · ${fmtGold(d.value)}`, "btn-gold", () => sellItem(key, from, 1));
+    add(`Sell all · ${fmtGold(d.value * qty)}`, "btn-gold", () => sellItem(key, from));
+  } else {
+    add(`Sell · ${fmtGold(d.value)}`, "btn-gold", () => sellItem(key, from, 1), { wide: true });
+  }
 
   const sv = salvageValue(key);
   if (sv) add(`Break down · ${sv.qty}× ${itemName(sv.mat)}`, "btn-quiet", () => salvage(key, from), { wide: true });
+
+  updateItemAmountLabels();
 }
 
-/* ================= 11. ATLAS, SHOP, BOARD, KENNEL, LOG ================= */
+// The amount buttons say what they'll do with the number in the box.
+function updateItemAmountLabels() {
+  if (!popItem) return;
+  popItem.labels.forEach(([b, text]) => setText(b, text()));
+  if (popItem.sellSome) {
+    const n = popItem.pick.n;
+    popItem.sellSome.hidden = n <= 1 || n >= qtyIn(popItem.from, popItem.key);
+  }
+}
+
+/* ================= 14. ACTION POPUP ================= */
+/* Opens from any resource, recipe or monster pill. Shows what one action
+   or kill is worth and what it costs, takes an amount, and starts the work.
+   The start button carries the skill's verb: Delve, Forge, Hunt. */
+
+let actionReturnFocus = null;
+
+function openActionPopup(spec) {
+  if (el("actionModal").hidden) actionReturnFocus = document.activeElement;
+  const memo = lastPick[spec.kind === "hunt" ? "warfare" : spec.skillId];
+  popAction = Object.assign({}, spec, { pick: memo ? { n: memo.n, inf: memo.inf } : { n: 1, inf: true }, sig: null });
+  buildActionPopup();
+  el("actionModal").hidden = false;
+  el("amClose").focus({ preventScroll: true });
+}
+
+function closeActionPopup() {
+  el("actionModal").hidden = true;
+  popAction = null;
+  if (actionReturnFocus && actionReturnFocus.isConnected && actionReturnFocus.focus) actionReturnFocus.focus({ preventScroll: true });
+  actionReturnFocus = null;
+}
+
+// Runs at the end of every render().
+function refreshActionPopup() {
+  if (!popAction) return;
+  if (el("actionModal").hidden) {
+    closeActionPopup();
+    return;
+  }
+  popAction.sig = null;
+  updateActionPopup();
+}
+
+// What changes the popup's shape, rather than just its numbers.
+function actionSig(a) {
+  if (a.kind === "hunt") {
+    const c = state.tasks.combat;
+    return ["hunt", a.tier, a.monsterId, recovering(), !!(c && c.tier === a.tier), companionSig()].join("|");
+  }
+  const t = state.tasks.skilling;
+  const def = findAction(a.skillId, a.actionId);
+  return [a.kind, a.skillId, a.actionId, skillLevel(a.skillId) < def.level,
+    !!(t && t.skillId === a.skillId && t.actionId === a.actionId), toolFor(a.skillId) ? toolFor(a.skillId).id : "-", companionSig()].join("|");
+}
+
+function companionSig() {
+  const def = activeCompanion();
+  if (!def) return "-";
+  const i = companionInfo(def.id);
+  return `${def.id}:${i.rank}:${i.level}`;
+}
+
+function updateActionPopup() {
+  const a = popAction;
+  if (!a) return;
+  if (a.sig !== actionSig(a)) {
+    buildActionPopup();
+    return;
+  }
+  if (a.kind === "hunt") updateHuntPopup(a);
+  else updateWorkPopup(a);
+}
+
+function buildActionPopup() {
+  const a = popAction;
+  a.sig = actionSig(a);
+  a.refs = {};
+
+  el("amStats").innerHTML = "";
+  el("amList").innerHTML = "";
+  el("amActions").innerHTML = "";
+  el("amPlan").innerHTML = '<span></span> <span class="warn"></span>';
+
+  if (a.kind === "hunt") buildHuntPopup(a);
+  else buildWorkPopup(a);
+
+  const qtyBox = el("amQty");
+  qtyBox.innerHTML = "";
+  a.picker = qtyPicker(a.pick, {
+    max: () => actionPopupMax(a),
+    allowInf: true,
+    onChange: () => updateActionPopup(),
+    onEnter: startFromPopup,
+  });
+  qtyBox.appendChild(a.picker.node);
+
+  if (a.kind === "hunt") updateHuntPopup(a);
+  else updateWorkPopup(a);
+}
+
+function actionPopupMax(a) {
+  if (a.kind === "hunt") {
+    const mob = getMonster(a.monsterId) || rankOf(a.tier, "grunt");
+    return Math.floor(IDLE_CAP_MS / fightOdds(mob).killMs);
+  }
+  return actionMax(findAction(a.skillId, a.actionId));
+}
+
+// A clickable line in the popup's list: an item, and a value on the right.
+function actionListRow(key, label) {
+  const row = document.createElement("div");
+  row.className = "am-row";
+  row.innerHTML = '<button type="button" class="am-item"></button><span class="am-val"></span>';
+  const b = row.querySelector(".am-item");
+  if (key) {
+    b.dataset.key = key;
+    b.innerHTML = `${icon(itemDef(key).icon, "ico-sm")}<span></span>`;
+    b.querySelector("span").textContent = label || itemName(key);
+  } else {
+    b.disabled = true;
+    b.innerHTML = "<span></span>";
+    b.querySelector("span").textContent = label;
+  }
+  el("amList").appendChild(row);
+  return row.querySelector(".am-val");
+}
+
+function setActionHead(artHtml, artClass, name, sub, desc) {
+  const art = el("amArt");
+  art.className = "ip-art" + (artClass ? " " + artClass : "");
+  art.innerHTML = artHtml;
+  el("amName").textContent = name;
+  el("amSub").textContent = sub;
+  el("amDesc").textContent = desc;
+  el("amDesc").hidden = !desc;
+}
+
+function buildWorkPopup(a) {
+  const def = findAction(a.skillId, a.actionId);
+  const s = skillDef(a.skillId);
+  const craft = s.kind === "craft";
+  const outKey = actionOutput(def);
+  const locked = skillLevel(a.skillId) < def.level;
+  const t = state.tasks.skilling;
+  const active = !!(t && t.skillId === a.skillId && t.actionId === a.actionId);
+
+  setActionHead(icon(def.icon, "ico-lg"), craft ? "craft" : "", titleCase(def.name),
+    [s.name, `Tier ${def.tier}`, craft ? null : regionOfTier(def.tier).name].filter(Boolean).join(" · "),
+    itemLore(itemDef(outKey)));
+  fillChips(el("amChips"), xpMods(a.skillId));
+
+  const stats = el("amStats");
+  if (locked) statRowInto(stats, "Needs", `${s.name} Lv ${def.level}`, 0, "warn");
+  statRowInto(stats, "Time", `${(actionTime(def) / 1000).toFixed(1)}s each`);
+  statRowInto(stats, "Experience", `${fmt(xpEach(a.skillId, def.xp))} XP each`);
+
+  if (def.craftGear) {
+    statRowInto(stats, "Makes", `${GEAR[def.craftGear].name}, rarity rolled`);
+  } else if (craft) {
+    statRowInto(stats, "Makes", `${def.out[outKey]} × ${itemName(outKey)}`);
+  } else {
+    statRowInto(stats, "Yield", `${def.out[outKey]} × ${itemName(outKey)}`);
+    const dbl = doubleChance(a.skillId);
+    if (dbl) statRowInto(stats, "Double yield", chancePct(dbl));
+  }
+  if (!def.craftGear) a.refs.held = statRowInto(stats, "Held", fmt(haveQty(outKey)));
+
+  // ---- costs for recipes, side finds for resources ----
+  const label = el("amListLabel");
+  a.refs.costs = [];
+  if (craft) {
+    label.textContent = "Needs";
+    Object.keys(def.cost || {}).forEach((k) => a.refs.costs.push({ key: k, need: def.cost[k], val: actionListRow(k) }));
+  } else {
+    label.textContent = "Also turns up";
+    const bonus = companionBonus("reagent", a.skillId);
+    if (def.reagentId) actionListRow(def.reagentId).textContent = `${chancePct(Math.min(1, def.reagentChance * (1 + bonus)))} each`;
+    else if (bonus && REAGENTS.some((r) => r.id === outKey)) actionListRow(outKey, `Extra ${itemName(outKey)}`).textContent = `${chancePct(bonus)} each`;
+  }
+  el("amListWrap").hidden = !el("amList").children.length;
+
+  // ---- buttons ----
+  const box = el("amActions");
+  if (active) {
+    const stop = document.createElement("button");
+    stop.type = "button";
+    stop.className = "btn";
+    stop.textContent = "Stop";
+    stop.onclick = () => { stopSkillTask(); closeActionPopup(); };
+    box.appendChild(stop);
+  }
+  const startBtn = document.createElement("button");
+  startBtn.type = "button";
+  startBtn.className = "btn btn-primary" + (active ? "" : " wide");
+  startBtn.onclick = startFromPopup;
+  box.appendChild(startBtn);
+  a.refs.go = startBtn;
+  a.refs.verb = s.verb;
+  a.refs.locked = locked;
+}
+
+function updateWorkPopup(a) {
+  const def = findAction(a.skillId, a.actionId);
+  const craft = skillDef(a.skillId).kind === "craft";
+  const time = actionTime(def);
+  const xp = xpEach(a.skillId, def.xp);
+  const t = state.tasks.skilling;
+  const active = !!(t && t.skillId === a.skillId && t.actionId === a.actionId);
+  const stock = stockCovers(def);
+  const n = a.pick.inf ? null : a.pick.n;
+
+  a.picker.refresh();
+  if (a.refs.held) setText(a.refs.held, fmt(haveQty(actionOutput(def))));
+
+  a.refs.costs.forEach((c) => {
+    const have = haveQty(c.key);
+    const need = c.need * (n || 1);
+    setText(c.val, n && n > 1 ? `${fmt(need)} for ${fmt(n)} · ${fmt(have)} held` : `${fmt(c.need)} each · ${fmt(have)} held`);
+    c.val.classList.toggle("short", have < need);
+  });
+
+  // ---- running now ----
+  const run = el("amRun");
+  run.hidden = !active;
+  if (active) {
+    const plan = skillPlan();
+    el("amRunBar").style.width = clamp((t.progress / time) * 100, 0, 100) + "%";
+    setText(el("amRunLeft"), `Underway · ${countOf(t.done, t.limit)}`);
+    setText(el("amRunRight"), plan ? `${fmtTime(plan.timeLeft)} left` : "");
+  }
+
+  // ---- what the chosen amount comes to ----
+  const plan = el("amPlan");
+  const per12 = Math.floor(IDLE_CAP_MS / time);
+  let text;
+  let warn = "";
+  if (n) {
+    text = `${fmt(n)} × ${titleCase(def.name)} · ${fmtTime(n * time)} · ${fmt(n * xp)} XP`;
+    if (craft && stock < n) warn = `Stock covers ${fmt(stock)}.`;
+    else if (n > per12) warn = "Stops at twelve hours.";
+  } else {
+    text = craft && stock < per12
+      ? `No limit · stock covers ${fmt(stock)}`
+      : `No limit · up to ${fmt(per12)} in twelve hours`;
+  }
+  setText(plan.children[0], text);
+  setText(plan.children[1], warn);
+
+  // ---- start ----
+  const startBtn = a.refs.go;
+  if (a.refs.locked) {
+    startBtn.disabled = true;
+    setText(startBtn, `Needs Lv ${def.level}`);
+  } else if (craft && stock < 1) {
+    startBtn.disabled = true;
+    setText(startBtn, "Missing materials");
+  } else {
+    startBtn.disabled = false;
+    setText(startBtn, a.refs.verb);
+  }
+}
+
+function buildHuntPopup(a) {
+  const mob = getMonster(a.monsterId) || rankOf(a.tier, "grunt");
+  const odds = fightOdds(mob);
+  const c = state.tasks.combat;
+  const engaged = !!(c && c.tier === a.tier);
+
+  const desc = mob.rank === "grunt"
+    ? "The usual. Most of what the hunt turns up here."
+    : mob.rank === "elite"
+      ? "Turns up in one spawn in five. Hits harder, and pays for it."
+      : `Comes out when threat reaches ${THREAT_CAP}. Always leaves a piece of epic gear.`;
+  setActionHead(monsterArt(mob), "war", mob.name, `${RANK_NAMES[mob.rank]} · Lv ${mob.level} · ${regionOfTier(mob.tier).name}`, desc);
+  fillChips(el("amChips"), xpMods("warfare"));
+
+  const stats = el("amStats");
+  statRowInto(stats, "Health", fmt(mob.hp));
+  statRowInto(stats, "Attack", fmt(mob.attack));
+  statRowInto(stats, "Defence", fmt(mob.defence));
+  statRowInto(stats, "Swings every", `${(mob.speed / 1000).toFixed(1)}s`);
+  statRowInto(stats, "Experience", `${fmt(xpEach("warfare", mob.xp))} XP a kill`);
+  const goldMult = 1 + companionBonus("gold");
+  statRowInto(stats, "Gold", `${fmt(Math.round(mob.gold[0] * goldMult))} to ${fmt(Math.round(mob.gold[1] * goldMult))}`);
+  statRowInto(stats, "A kill takes", `about ${fmtTime(odds.killMs)}`);
+  statRowInto(stats, "Survival", odds.survivable ? "Survivable" : "You will not last here", 0, odds.survivable ? "good" : "warn");
+  a.refs.food = statRowInto(stats, "Remedies", "");
+
+  el("amListLabel").textContent = "Drops";
+  const dropMult = 1 + companionBonus("drops");
+  mob.drops.forEach(([k, qty, chance]) => {
+    actionListRow(k, `${itemName(k)} ×${qty}`).textContent = chancePct(Math.min(1, chance * dropMult));
+  });
+  if (mob.rank === "boss") actionListRow(null, "Epic gear").textContent = "Always";
+  const rare = companionBonus("rare");
+  if (rare) actionListRow(null, "Finer gear").textContent = chancePct(rare);
+  el("amListWrap").hidden = false;
+
+  const box = el("amActions");
+  if (engaged) {
+    const pull = document.createElement("button");
+    pull.type = "button";
+    pull.className = "btn";
+    pull.onclick = () => { pullBack(); };
+    box.appendChild(pull);
+    a.refs.pull = pull;
+  }
+  const startBtn = document.createElement("button");
+  startBtn.type = "button";
+  startBtn.className = "btn btn-primary" + (engaged ? "" : " wide");
+  startBtn.onclick = startFromPopup;
+  box.appendChild(startBtn);
+  a.refs.go = startBtn;
+  a.refs.killMs = odds.killMs;
+}
+
+function updateHuntPopup(a) {
+  const c = state.tasks.combat;
+  const engaged = !!(c && c.tier === a.tier);
+  const n = a.pick.inf ? null : a.pick.n;
+
+  a.picker.refresh();
+
+  const food = bestFood();
+  setText(a.refs.food, food ? `${fmt(haveQty(food))} × ${itemName(food)}` : "None");
+  a.refs.food.className = food ? "" : "warn";
+
+  const run = el("amRun");
+  run.hidden = !engaged;
+  if (engaged) {
+    const plan = combatPlan();
+    el("amRunBar").style.width = (c.respawn > 0 ? 0 : clamp((c.mobHp / c.mobMax) * 100, 0, 100)) + "%";
+    setText(el("amRunLeft"), `Underway · ${countOf(c.done, c.limit)} kills`);
+    setText(el("amRunRight"), plan ? `${fmtTime(plan.timeLeft)} left` : "");
+  }
+
+  const plan = el("amPlan");
+  setText(plan.children[0], n
+    ? `${fmt(n)} kills · about ${fmtTime(n * a.refs.killMs)}`
+    : "No limit · until you pull back or twelve hours pass");
+  setText(plan.children[1], n && n * a.refs.killMs > IDLE_CAP_MS ? "Stops at twelve hours." : "");
+
+  if (a.refs.pull) setText(a.refs.pull, c && c.queued === "stop" ? "Keep hunting" : "Pull back");
+  a.refs.go.disabled = recovering();
+  setText(a.refs.go, recovering() ? "Recovering" : "Hunt");
+}
+
+function startFromPopup() {
+  const a = popAction;
+  if (!a || (a.refs.go && a.refs.go.disabled)) return;
+  const limit = a.pick.inf ? null : a.pick.n;
+  lastPick[a.kind === "hunt" ? "warfare" : a.skillId] = { n: a.pick.n, inf: a.pick.inf };
+  const started = a.kind === "hunt" ? startHunt(a.tier, limit) : startSkillTask(a.skillId, a.actionId, limit);
+  if (started) closeActionPopup();
+}
+
+/* ================= 15. CONFIRM DIALOG ================= */
+/* The game's own "are you sure", in place of the browser's. Resolves true
+   or false. */
+
+let confirmResolve = null;
+let confirmReturnFocus = null;
+
+function confirmDialog({ title, body, confirmLabel, danger }) {
+  return new Promise((resolve) => {
+    if (confirmResolve) confirmResolve(false);
+    confirmResolve = resolve;
+    confirmReturnFocus = document.activeElement;
+    el("cfTitle").textContent = title;
+    el("cfBody").textContent = body;
+    const ok = el("cfOk");
+    ok.textContent = confirmLabel || "Confirm";
+    ok.className = "btn " + (danger ? "btn-danger" : "btn-primary");
+    el("confirmModal").hidden = false;
+    el("cfCancel").focus({ preventScroll: true });
+  });
+}
+
+function closeConfirm(result) {
+  el("confirmModal").hidden = true;
+  const resolve = confirmResolve;
+  confirmResolve = null;
+  if (confirmReturnFocus && confirmReturnFocus.isConnected && confirmReturnFocus.focus) confirmReturnFocus.focus({ preventScroll: true });
+  confirmReturnFocus = null;
+  if (resolve) resolve(result);
+}
+
+/* ================= 16. ATLAS, SHOP, BOUNTIES, COMPANIONS, LOG ================= */
 
 function renderAtlas() {
   const box = el("atlasList");
@@ -1616,7 +2364,7 @@ function renderShop() {
     card.className = "shop-card";
     card.innerHTML = `<div class="shop-ico">${icon(d.icon, "ico-lg")}</div><div class="shop-body"><div class="shop-name"></div><div class="shop-sub"></div></div>`;
     card.querySelector(".shop-name").textContent = d.name;
-    card.querySelector(".shop-sub").textContent = `Restores ${fmt(d.heal)} HP · ${fmt(entry.price)}g each`;
+    card.querySelector(".shop-sub").textContent = `Restores ${fmt(d.heal)} HP · ${fmtGold(entry.price)} each`;
 
     const row = document.createElement("div");
     row.className = "btnrow";
@@ -1624,7 +2372,7 @@ function renderShop() {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "btn btn-gold";
-      b.textContent = `${n} · ${fmt(entry.price * n)}g`;
+      b.textContent = `${n} · ${fmtGold(entry.price * n)}`;
       b.disabled = state.player.gold < entry.price * n;
       b.onclick = () => buyShop(entry.key, entry.price * n, n);
       row.appendChild(b);
@@ -1643,12 +2391,12 @@ function renderShop() {
     card.className = "shop-card";
     card.innerHTML = `<div class="shop-ico">${icon(d.icon, "ico-lg")}</div><div class="shop-body"><div class="shop-name"></div><div class="shop-sub"></div></div>`;
     card.querySelector(".shop-name").textContent = `${entry.qty}× ${d.name}`;
-    card.querySelector(".shop-sub").textContent = `Tier ${d.tier} · ${fmt(entry.price)}g the lot`;
+    card.querySelector(".shop-sub").textContent = `Tier ${d.tier} · ${fmtGold(entry.price)} the lot`;
 
     const b = document.createElement("button");
     b.type = "button";
     b.className = "btn btn-gold";
-    b.textContent = bought ? "Dealt" : `Buy · ${fmt(entry.price)}g`;
+    b.textContent = bought ? "Dealt" : `Buy · ${fmtGold(entry.price)}`;
     b.disabled = bought || state.player.gold < entry.price;
     b.onclick = () => buySmuggler(entry);
     card.appendChild(b);
@@ -1681,42 +2429,117 @@ function renderBounty() {
   const card = box.querySelector(".bounty-card");
   if (!b || !card) return;
   card.querySelector(".bar i").style.width = clamp((b.progress / b.amount) * 100, 0, 100) + "%";
-  setText(card.querySelector(".bounty-reward"), `${fmt(Math.min(b.progress, b.amount))} of ${fmt(b.amount)} · pays ${fmt(b.gold)} gold and an hour double XP.`);
+  setText(card.querySelector(".bounty-reward"), `${fmt(Math.min(b.progress, b.amount))} of ${fmt(b.amount)} · pays ${fmt(b.gold)} gold and an hour of double XP.`);
   const btn = card.querySelector("button");
   const done = b.progress >= b.amount;
   setText(btn, b.claimed ? "Paid out" : (done ? "Claim" : "Not finished"));
   btn.disabled = b.claimed || !done;
 }
 
-function renderKennel() {
-  const box = el("petList");
-  box.innerHTML = "";
+let compRefs = [];
 
-  PETS.forEach((pet) => {
-    const owned = state.pets[pet.id];
-    const card = document.createElement("div");
-    card.className = "pet-card" + (owned ? " owned" : "");
-    card.innerHTML = `<div class="pet-art">${icon(pet.icon, "ico-xl")}</div><div class="pet-body"><div class="pet-name"></div><div class="pet-note"></div><div class="pet-effect"></div></div>`;
-    card.querySelector(".pet-name").textContent = pet.name;
-    card.querySelector(".pet-note").textContent = pet.note;
-    card.querySelector(".pet-effect").textContent = pet.effect;
+const pctText = (v) => `${+(v * 100).toFixed(1)}%`;
 
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "btn " + (owned ? "btn-quiet" : "btn-gold");
-    b.textContent = owned ? "In the kennel" : `Buy · ${fmt(pet.cost)}g`;
-    b.disabled = owned || state.player.gold < pet.cost;
-    b.onclick = () => buyPet(pet.id);
-    card.appendChild(b);
-    box.appendChild(card);
+// Cards rebuild when something you can act on changes; Bond ticks in place.
+function renderCompanions() {
+  const active = activeCompanion();
+  setText(el("compActive"), active ? `${active.name} walks with you` : "Nobody walks with you");
+
+  const sig = JSON.stringify(COMPANIONS.map((def) => {
+    const i = companionInfo(def.id);
+    return [i.owned, i.active, i.rank, i.dupes, i.level, state.player.gold >= def.cost];
+  }));
+  if (keys.companions !== sig) {
+    keys.companions = sig;
+    buildCompanions();
+  }
+
+  compRefs.forEach((r) => {
+    const i = companionInfo(r.id);
+    if (!i.owned) return;
+    setText(r.bondNum, i.maxed ? "Fully bonded" : `${fmt(i.bondInto)} / ${fmt(i.bondSpan)}`);
+    r.bondBar.style.width = (i.maxed ? 100 : clamp((i.bondInto / i.bondSpan) * 100, 0, 100)) + "%";
   });
-
-  el("kennelNote").textContent = Object.values(state.pets).some(Boolean) ? "Bound to the camp permanently." : "Nothing bound yet.";
 }
 
+function buildCompanions() {
+  const list = el("compList");
+  list.innerHTML = "";
+  compRefs = [];
+
+  COMPANIONS.forEach((def) => {
+    const i = companionInfo(def.id);
+    const card = document.createElement("div");
+    card.className = "comp-card" + (i.owned ? " owned" : "") + (i.active ? " active" : "");
+    card.innerHTML =
+      '<div class="comp-top">' +
+        `<div class="comp-art">${icon(def.icon, "ico-xl")}</div>` +
+        '<div class="comp-titles"><div class="comp-name"></div><div class="comp-sub"></div></div>' +
+        '<span class="comp-badge">At your side</span>' +
+      '</div>' +
+      '<p class="comp-blurb"></p>' +
+      '<div class="comp-trait"><span class="t-name"></span><span class="t-val"></span></div>' +
+      '<div class="comp-meter"><div class="comp-row"><span class="b-lvl"></span><span class="b-num"></span></div><div class="bar"><i></i></div></div>' +
+      '<div class="comp-rank"></div>' +
+      '<ul class="comp-unlocks"></ul>' +
+      '<div class="comp-actions"></div>';
+
+    card.querySelector(".comp-name").textContent = def.name;
+    card.querySelector(".comp-sub").textContent = i.owned ? `Rank ${RANK_NUMERALS[i.rank]} · Bond ${i.level}` : `${def.cost.toLocaleString()} gold`;
+    card.querySelector(".comp-badge").hidden = !i.active;
+    card.querySelector(".comp-blurb").textContent = def.blurb;
+    card.querySelector(".t-name").textContent = def.trait.name;
+    card.querySelector(".t-val").textContent = `+${pctText(i.trait)} ${def.trait.text}`;
+
+    const meter = card.querySelector(".comp-meter");
+    meter.hidden = !i.owned;
+    card.querySelector(".b-lvl").textContent = `Bond ${i.level}`;
+
+    const rank = card.querySelector(".comp-rank");
+    if (!i.owned) rank.textContent = `Once it is yours, more turn up ${def.sourceText}. Each one raises its Rank.`;
+    else if (i.rank >= COMPANION_MAX_RANK) rank.textContent = `Rank ${RANK_NUMERALS[i.rank]}. Nothing more to find.`;
+    else rank.textContent = `${i.dupes} of ${i.needDupes} found toward Rank ${RANK_NUMERALS[i.rank + 1]}. More turn up ${def.sourceText}.`;
+
+    const unlocks = card.querySelector(".comp-unlocks");
+    i.unlocks.forEach((u) => {
+      const li = document.createElement("li");
+      li.className = u.open ? "open" : "";
+      li.innerHTML = '<span class="g"></span><span class="req"></span><span class="txt"></span>';
+      li.children[0].textContent = u.open ? "✓" : "·";
+      li.children[1].textContent = u.bond ? `Bond ${u.bond}` : `Rank ${RANK_NUMERALS[u.rank]}`;
+      li.children[2].textContent = u.text;
+      unlocks.appendChild(li);
+    });
+
+    const actions = card.querySelector(".comp-actions");
+    const b = document.createElement("button");
+    b.type = "button";
+    b.dataset.comp = def.id;
+    if (!i.owned) {
+      b.className = "btn btn-gold";
+      b.dataset.do = "buy";
+      b.textContent = `Buy · ${fmtGold(def.cost)}`;
+      b.disabled = state.player.gold < def.cost;
+    } else if (i.active) {
+      b.className = "btn btn-quiet";
+      b.dataset.do = "rest";
+      b.textContent = "Leave at camp";
+    } else {
+      b.className = "btn btn-primary";
+      b.dataset.do = "take";
+      b.textContent = "Take along";
+    }
+    actions.appendChild(b);
+
+    list.appendChild(card);
+    compRefs.push({ id: def.id, bondNum: card.querySelector(".b-num"), bondBar: meter.querySelector(".bar i") });
+  });
+}
+
+// Relative times ("2m ago") only move by the minute, so the log redraws twice a minute.
 function renderLog() {
   const last = state.log[state.log.length - 1];
-  const sig = `${state.log.length}|${last ? last.t : 0}|${Math.floor(Date.now() / 1000)}`;
+  const sig = `${state.log.length}|${last ? last.t : 0}|${Math.floor(Date.now() / 30000)}`;
   if (keys.log === sig) return;
   keys.log = sig;
 
@@ -1727,74 +2550,13 @@ function renderLog() {
     const d = document.createElement("div");
     d.className = "log-item";
     d.innerHTML = '<span class="t"></span><span></span>';
-    const ago = Date.now() - e.t;
-    d.children[0].textContent = ago < 4000 ? "now" : fmtTime(ago);
+    d.children[0].textContent = fmtAgo(Date.now() - e.t);
     d.children[1].textContent = e.m;
     box.appendChild(d);
   });
 }
 
-/* ================= 12. TASK CONFIRM POPUP ================= */
-/* Before committing crews, show exactly what 12 hours of it buys. */
-
-function openTaskPop(skillId, actionId) {
-  const def = findAction(skillId, actionId);
-  if (!def) return;
-  pendingTask = { skillId, actionId };
-
-  const time = actionTime(def);
-  const per12 = Math.floor(IDLE_CAP_MS / time);
-
-  el("taskPopArt").innerHTML = icon(def.icon, "ico-lg");
-  el("taskPopTitle").textContent = titleCase(def.name);
-  el("taskPopSub").textContent = `${skillName(skillId)} · ${(time / 1000).toFixed(0)}s an action`;
-
-  const stats = el("taskPopStats");
-  stats.innerHTML = "";
-  const row = (l, v) => {
-    const r = document.createElement("div");
-    r.className = "pop-stat";
-    r.innerHTML = '<div class="l"></div><div class="v"></div>';
-    r.children[0].textContent = l;
-    r.children[1].textContent = v;
-    stats.appendChild(r);
-  };
-
-  // Materials cap the run before the clock does, quite often.
-  let capped = per12;
-  if (def.cost) {
-    Object.keys(def.cost).forEach((k) => {
-      capped = Math.min(capped, Math.floor(haveQty(k) / def.cost[k]));
-    });
-  }
-
-  row("Actions in 12 hours", fmt(per12));
-  if (def.cost && capped < per12) row("Your stock covers", fmt(capped) + " actions");
-  row("Experience", fmt(Math.round(per12 * def.xp * xpMult(skillId))) + " XP");
-
-  if (def.out) {
-    Object.keys(def.out).forEach((k) => {
-      const dbl = GATHER_ACTIONS[skillId] ? (1 + doubleChance(skillId)) : 1;
-      row(itemName(k), "~" + fmt(Math.round(per12 * def.out[k] * dbl)));
-    });
-  }
-  if (def.craftGear) row(GEAR[def.craftGear].name, fmt(per12));
-  if (def.reagentId) row(itemName(def.reagentId), "~" + fmt(Math.round(per12 * def.reagentChance)));
-  if (def.cost) {
-    Object.keys(def.cost).forEach((k) => {
-      row("Consumes " + itemName(k), `${fmt(def.cost[k] * Math.min(per12, capped))} (have ${fmt(haveQty(k))})`);
-    });
-  }
-
-  el("taskPop").hidden = false;
-}
-
-function closeTaskPop() {
-  el("taskPop").hidden = true;
-  pendingTask = null;
-}
-
-/* ================= 13. CLASS PICKER ================= */
+/* ================= 17. CLASS PICKER ================= */
 
 function maybeOfferClass() {
   if (!canPickClass()) return;
@@ -1819,7 +2581,7 @@ function renderClassPicker() {
     [`${c.health} health`, `${c.attack} attack`, `${c.defence} defence`,
      `${(c.speed / 1000).toFixed(1)}s swing`, `${Math.round(c.crit * 100)}% crit`]
       .forEach((txt) => { const s = document.createElement("span"); s.textContent = txt; st.appendChild(s); });
-    card.querySelector(".cc-veil").textContent = `Veil — ${c.veilName}: ${c.veilNote}`;
+    card.querySelector(".cc-veil").textContent = `Veil technique: ${c.veilName}. ${c.veilNote}`;
     card.onclick = () => pickClass(c.id);
     grid.appendChild(card);
   });
@@ -1834,7 +2596,7 @@ function pickClass(id) {
   render();
 }
 
-/* ================= 14. FORECAST (Sky) ================= */
+/* ================= 18. FORECAST (Sky) ================= */
 
 const utcDateLabel = (dayNum) => new Date(dayNum * DAY_MS).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
 
@@ -1874,7 +2636,7 @@ function renderForecast() {
   });
 }
 
-/* ================= 15. REQUISITIONS ================= */
+/* ================= 19. REQUISITIONS ================= */
 
 function renderRequisitions() {
   const key = JSON.stringify(state.agents) + JSON.stringify(state.requisitions) + state.player.gold;
@@ -1894,7 +2656,7 @@ function renderRequisitions() {
       row.className = "req-row";
       row.innerHTML = '<div class="r-who"></div><div class="r-what"></div>';
       row.children[0].textContent = r.agentName;
-      row.children[1].textContent = `${fmt(r.qty)} × ${itemName(r.itemKey)} — returns at reset`;
+      row.children[1].textContent = `${fmt(r.qty)} × ${itemName(r.itemKey)}, back at the daily reset`;
       pend.appendChild(row);
     });
   }
@@ -1902,11 +2664,11 @@ function renderRequisitions() {
   const roster = el("agentRoster");
   roster.innerHTML = "";
   const hire = el("hireAgentBtn");
-  hire.textContent = `Hire an Agent · ${fmt(AGENT_HIRE_COST)}g`;
+  hire.textContent = `Hire an Agent · ${fmtGold(AGENT_HIRE_COST)}`;
   hire.disabled = state.player.gold < AGENT_HIRE_COST || state.agents.length >= AGENT_ROSTER_MAX;
 
   if (!state.agents.length) {
-    roster.innerHTML = '<div class="muted tiny">No Agents on the books. Hiring is a gamble — rarity is rolled.</div>';
+    roster.innerHTML = '<div class="muted tiny">No Agents on the books. Hiring is a gamble: every hire rolls its own rarity.</div>';
     return;
   }
 
@@ -1947,21 +2709,20 @@ function renderRequisitions() {
   });
 }
 
-/* ================= 16. SETTINGS & ACCOUNT ================= */
+/* ================= 20. SETTINGS & ACCOUNT ================= */
 
 function refreshAccountUi() {
   const a = state.meta.account;
   const cloud = !!sb;
 
-  el("acctStatus").textContent = !cloud ? "Cloud not configured." : a ? `Signed in as ${a}.` : "Not signed in.";
+  el("acctStatus").textContent = !cloud ? "Cloud saves are not set up" : a ? `Signed in as ${a}` : "Not signed in";
   el("acctFields").hidden = !!a;
   el("acctCreate").hidden = !!a;
   el("acctLogin").hidden = !!a;
   el("acctLogout").hidden = !a;
-  el("nameField").value = state.meta.name || "Commander";
 }
 
-/* ================= 17. WIRING & BOOT ================= */
+/* ================= 21. WIRING & BOOT ================= */
 
 el("brandMark").innerHTML = `<img class="mark-img" src="assets/respite-logo.webp" alt="Respite">`;
 el("coinIcon").innerHTML = icon("coin", "ico-sm");
@@ -1970,6 +2731,7 @@ el("skMasteryIcon").innerHTML = icon("info", "ico-sm");
 window.addEventListener("hashchange", () => {
   route = parseHash();
   closeItemPopup();
+  if (popAction) closeActionPopup();
   render();
 });
 
@@ -1981,7 +2743,7 @@ document.querySelectorAll(".pill-head").forEach((b) => {
   b.onclick = () => toggleNav(b.dataset.nav);
 });
 
-// The Pack / Bank and Camp Stores / Bank tabs.
+// The Belongings / Vault and Provisions / Vault tabs.
 document.querySelectorAll(".tab-btn[data-scope]").forEach((b) => {
   b.onclick = () => {
     if (b.dataset.scope === "eq") eqTab = b.dataset.tab;
@@ -2072,6 +2834,42 @@ const openTool = (e) => {
 el("dollTools").addEventListener("click", openTool);
 el("dollTools").addEventListener("keydown", (e) => { if (pressed(e) && openTool(e)) e.preventDefault(); });
 
+// Skill pages: resource and recipe pills, bench tabs, the arena's buttons.
+el("skWorkBody").addEventListener("click", (e) => {
+  const s = skillDef(route.arg);
+  if (!s) return;
+
+  const tab = e.target.closest("[data-bench-tab]");
+  if (tab) {
+    benchTab = tab.dataset.benchTab;
+    keys.skill = "";
+    renderSkill();
+    return;
+  }
+  const tier = e.target.closest("[data-bench-tier]");
+  if (tier) {
+    benchTier = Number(tier.dataset.benchTier);
+    keys.skill = "";
+    renderSkill();
+    return;
+  }
+  const pill = e.target.closest("[data-action]");
+  if (pill) {
+    openActionPopup({ kind: s.kind === "craft" ? "craft" : "gather", skillId: s.id, actionId: pill.dataset.action });
+    return;
+  }
+  const hunt = e.target.closest("[data-hunt]");
+  if (hunt && liveRefs.hunt) {
+    if (hunt.dataset.hunt === "pull") pullBack();
+    else openActionPopup({ kind: "hunt", tier: liveRefs.hunt.tier, monsterId: liveRefs.hunt.monsterId });
+  }
+});
+
+el("skQuarryBody").addEventListener("click", (e) => {
+  const pill = e.target.closest("[data-monster]");
+  if (pill && liveRefs.hunt) openActionPopup({ kind: "hunt", tier: liveRefs.hunt.tier, monsterId: pill.dataset.monster });
+});
+
 // Unclaimed spoils: the row's key is looked up at click time, so new loot
 // landing mid-click can't shift which lot you take.
 el("skSpoilsBody").addEventListener("click", (e) => {
@@ -2088,50 +2886,64 @@ el("spoilsClaimAll").onclick = claimAllSpoils;
 el("spoilsSellAll").onclick = sellAllSpoils;
 el("spoilsTag").onclick = () => go("skill", "warfare");
 
-// Trades stop the moment you ask — crews down tools immediately.
-el("tbTradesClear").onclick = () => {
-  if (!state.tasks.skilling) return;
-  state.tasks.skilling = null;
-  render();
-};
+el("compList").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-comp]");
+  if (!b || b.disabled) return;
+  if (b.dataset.do === "buy") buyCompanion(b.dataset.comp);
+  else if (b.dataset.do === "take") setCompanion(b.dataset.comp);
+  else setCompanion(null);
+});
 
-// You can't walk out mid-swing — combat disengages after the current fight.
+// Trades stop the moment you ask: crews down tools immediately.
+el("tbTradesClear").onclick = () => stopSkillTask();
+
+// The hunt ends after the current fight.
 el("tbFieldClear").onclick = () => {
-  const t = state.tasks.combat;
-  if (!t) return;
-  t.queued = t.queued === "stop" ? null : "stop";
-  toast(t.queued ? "Pulling back after this fight" : "Pull-back cancelled");
-  render();
+  if (!pullBack()) return;
+  toast(state.tasks.combat.queued ? "Pulling back after this fight" : "The hunt goes on");
 };
 
 // Item popup.
 el("ipClose").onclick = closeItemPopup;
 el("itemModal").addEventListener("click", (e) => { if (e.target === el("itemModal")) closeItemPopup(); });
 
-el("taskPopGo").onclick = () => {
-  if (pendingTask) selectSkillAction(pendingTask.skillId, pendingTask.actionId);
-  closeTaskPop();
-};
-el("taskPopCancel").onclick = closeTaskPop;
-el("taskPop").onclick = (e) => { if (e.target === el("taskPop")) closeTaskPop(); };
+// Action popup. Items named in its lists open their own details on top.
+el("amClose").onclick = closeActionPopup;
+el("actionModal").addEventListener("click", (e) => {
+  if (e.target === el("actionModal")) {
+    closeActionPopup();
+    return;
+  }
+  const item = e.target.closest(".am-item[data-key]");
+  if (item) openItemPopup(item.dataset.key, "view");
+});
+
+el("cfOk").onclick = () => closeConfirm(true);
+el("cfCancel").onclick = () => closeConfirm(false);
+el("confirmModal").addEventListener("click", (e) => { if (e.target === el("confirmModal")) closeConfirm(false); });
+
 el("classPop").onclick = (e) => { if (e.target === el("classPop")) el("classPop").hidden = true; };
 el("hireAgentBtn").onclick = hireAgent;
 
+// Escape closes whatever is on top.
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
-  if (!el("itemModal").hidden) closeItemPopup();
-  else if (!el("taskPop").hidden) closeTaskPop();
+  if (!el("confirmModal").hidden) closeConfirm(false);
+  else if (!el("itemModal").hidden) closeItemPopup();
+  else if (!el("actionModal").hidden) closeActionPopup();
   else if (!el("settingsModal").hidden) el("settingsModal").hidden = true;
 });
 
 el("settingsBtn").onclick = () => {
   refreshAccountUi();
+  el("acctNote").textContent = "";
   el("settingsModal").hidden = false;
 };
 
 el("settingsClose").onclick = () => {
   el("settingsModal").hidden = true;
 };
+el("settingsModal").addEventListener("click", (e) => { if (e.target === el("settingsModal")) el("settingsModal").hidden = true; });
 
 el("acctCreate").onclick = async () => {
   el("acctCreate").disabled = true;
@@ -2161,16 +2973,7 @@ el("acctLogin").onclick = async () => {
 el("acctLogout").onclick = async () => {
   await logoutAccount();
   refreshAccountUi();
-};
-
-el("nameSave").onclick = async () => {
-  const v = (el("nameField").value || "").trim().slice(0, 18);
-  if (v) {
-    state.meta.name = v;
-    await save();
-    toast("Name set");
-    render();
-  }
+  el("acctNote").textContent = "Signed out.";
 };
 
 el("saveBtn").onclick = async () => {
@@ -2178,7 +2981,13 @@ el("saveBtn").onclick = async () => {
 };
 
 el("wipeBtn").onclick = async () => {
-  if (!confirm("Reset character completely?")) return;
+  const ok = await confirmDialog({
+    title: "Reset your character?",
+    body: "Every skill, item, companion and coin is gone for good. There is no getting it back.",
+    confirmLabel: "Reset character",
+    danger: true,
+  });
+  if (!ok) return;
   await resetCharacter();
   toast("Character reset");
 };
@@ -2198,10 +3007,6 @@ route = parseHash();
 render();
 resumeCloudSession();
 startLoop();
-
-setInterval(() => {
-  if (route.page === "skill") renderYieldFeed();
-}, 2000);
 
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) {

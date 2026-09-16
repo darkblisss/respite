@@ -1,16 +1,16 @@
 /* ============================================================
-   Respite — data.js · The Encyclopedia
+   Respite · data.js · The Encyclopedia
    ------------------------------------------------------------
    Constants, static tables, and everything generated from them.
    Nothing in this file reads or writes the save.
 
    Load order (index.html):
-   data.js → utils.js → cloud.js → combat.js → engine.js → ui.js
+   data.js, utils.js, cloud.js, combat.js, engine.js, ui.js
    ============================================================ */
 
 /* ================= 1. CONSTANTS ================= */
 
-const SCHEMA = 6;
+const SCHEMA = 7;
 const IDLE_CAP_MS = 12 * 60 * 60 * 1000;
 const WINDOW_MS = 12 * 60 * 60 * 1000;      // bounty + smuggler refresh, on world clock
 const DAY_MS = 24 * 60 * 60 * 1000;         // weather window
@@ -18,11 +18,11 @@ const WEEK_MS = 7 * DAY_MS;
 const MAX_LEVEL = 99;
 const PLAYER_SWING_MS = 2400;
 const RESPAWN_MS = 2000;
-const PACK_SLOTS = 18;
-const STORES_SLOTS = 30;   // camp stores
-const BANK_SLOTS = 50;     // shared bank, reachable from either page
+const PACK_SLOTS = 10;     // Belongings
+const STORES_SLOTS = 30;   // Provisions
+const BANK_SLOTS = 50;     // the Vault, reachable from either page
 const BANK_MAX = 200;
-const RECOVERY_MS = 5 * 60 * 1000;   // knocked out of the fight after a death
+const RECOVERY_MS = 5 * 60 * 1000;   // knocked out of the hunt after a death
 const DEATH_WEAR = 25;               // extra durability every worn piece loses on death
 const THREAT_CAP = 100;
 const SPOILS_CAP = 40;
@@ -33,8 +33,8 @@ const REQUISITIONS_PER_DAY = 3;
 const AGENT_HIRE_COST = 2500;
 const AGENT_ROSTER_MAX = 12;
 
-// What each storage pool is called on screen.
-const STORE_NAMES = { inv: "Pack", bank: "Camp Stores", vault: "Bank" };
+// What each storage pool is called on screen. The ids never change: saves use them.
+const STORE_NAMES = { inv: "Belongings", bank: "Provisions", vault: "Vault" };
 
 /* ================= 2. EQUIPMENT SLOTS ================= */
 
@@ -66,7 +66,7 @@ const RARITIES = [
 const rarityDef = (k) => RARITIES.find((r) => r.key === k) || RARITIES[0];
 
 /* Relics roll a prefix on top of Legendary stats. The prefix becomes part
-   of the item's name — "Echoing Slag Sword" — and carries one effect. */
+   of the item's name, as in "Echoing Slag Sword", and carries one effect. */
 const WEAPON_PREFIXES = [
   { id: "echoing",     name: "Echoing",      effect: "Chance to strike twice" },
   { id: "sundering",   name: "Sundering",    effect: "Ignores some Defence" },
@@ -124,9 +124,9 @@ const slug = (s) => s.toLowerCase().replace(/[^a-z]/g, "");
 
 /* ================= 6. SKILLS ================= */
 
-/* Five reagents, global — one per gathering skill, no tier prefix.
-   Recipes ask for "T reagent", meaning tier-many of them: a T9 bar needs
-   9 Coal. Dedicated nodes exist in T1 and T2; from T3 on they drop
+/* Five reagents shared by every region, one per gathering skill, with no
+   tier prefix. Recipes ask for "T reagent", meaning tier-many of them: a T9
+   bar needs 9 Coal. Dedicated nodes exist in T1 and T2; from T3 on they drop
    alongside the main resource at an increasing chance. */
 const REAGENTS = [
   { id: "coal",       name: "Coal",       icon: "coalIco",   skill: "delving",    category: "Reagent" },
@@ -137,38 +137,39 @@ const REAGENTS = [
 ];
 const reagentOf = (skillId) => REAGENTS.find((r) => r.skill === skillId);
 
-/* `note` is the quiet caption under the skill's XP bar.
+/* `verb` is the start button in the action popup.
+   `note` is the quiet caption under the skill's XP bar.
    `lore` is the bullet list in the Mastery tooltip on gathering pages. */
 const GATHER_SKILLS = [
-  { id: "delving",    name: "Delving",    icon: "pick",   mat: "delve",   resource: "Ore",    reagent: "coal",       matIcon: "ore",
+  { id: "delving",    name: "Delving",    verb: "Delve",   icon: "pick",   mat: "delve",   resource: "Ore",    reagent: "coal",       matIcon: "ore",
     note: "Ore and coal, hauled up by lamplight.",
     lore: [
       "Gather ore and coal for Delving XP.",
       "The Forgemaster smelts ore into bars for plate, blades and tools.",
       "Pickaxes from the Forgemaster make crews faster.",
     ] },
-  { id: "felling",    name: "Felling",    icon: "axe",    mat: "fell",    resource: "Timber", reagent: "resin",      matIcon: "log",
+  { id: "felling",    name: "Felling",    verb: "Fell",    icon: "axe",    mat: "fell",    resource: "Timber", reagent: "resin",      matIcon: "log",
     note: "Timber and resin from trees that fought back.",
     lore: [
       "Gather timber and resin for Felling XP.",
       "The Woodwright cuts timber into planks for bows, shields and hafts.",
       "Axes from the Woodwright make crews faster.",
     ] },
-  { id: "harvesting", name: "Harvesting", icon: "sickle", mat: "harvest", resource: "Fibre",  reagent: "pulp",       matIcon: "fibre",
+  { id: "harvesting", name: "Harvesting", verb: "Harvest", icon: "sickle", mat: "harvest", resource: "Fibre",  reagent: "pulp",       matIcon: "fibre",
     note: "Fibre and pulp from ground that grows too well.",
     lore: [
       "Gather fibre and pulp for Harvesting XP.",
       "The Weaver spins fibre into weave for robes, bowstrings and tomes.",
       "Sickles from the Weaver make crews faster.",
     ] },
-  { id: "flaying",    name: "Flaying",    icon: "knife",  mat: "flay",    resource: "Hides",  reagent: "tallow",     matIcon: "hide",
+  { id: "flaying",    name: "Flaying",    verb: "Flay",    icon: "knife",  mat: "flay",    resource: "Hides",  reagent: "tallow",     matIcon: "hide",
     note: "Hides and tallow. Nothing is wasted.",
     lore: [
       "Gather hides and tallow for Flaying XP.",
       "The Tanner cures hides into leather for jackets, grips and bindings.",
       "Knives from the Tanner make crews faster.",
     ] },
-  { id: "dredging",   name: "Dredging",   icon: "net",    mat: "dredge",  resource: "Finds",  reagent: "veil_shard", matIcon: "gem",
+  { id: "dredging",   name: "Dredging",   verb: "Dredge",  icon: "net",    mat: "dredge",  resource: "Finds",  reagent: "veil_shard", matIcon: "gem",
     note: "Finds and veil shards, pulled from black water.",
     lore: [
       "Gather finds and veil shards for Dredging XP.",
@@ -178,22 +179,22 @@ const GATHER_SKILLS = [
 ];
 
 const PROFESSIONS = [
-  { id: "forgemaster", name: "Forgemaster", icon: "plate",  weight: "Heavy",
+  { id: "forgemaster", name: "Forgemaster", verb: "Forge", icon: "plate",  weight: "Heavy",
     note: "Heavy plate and weapons from Delving. Slow, unglamorous, and holds a line." },
-  { id: "woodwright",  name: "Woodwright",  icon: "ward",   weight: "Heavy",
+  { id: "woodwright",  name: "Woodwright",  verb: "Carve", icon: "ward",   weight: "Heavy",
     note: "Bows, shields, and timber crafts from Felling." },
-  { id: "tanner",      name: "Tanner",      icon: "treads", weight: "Medium",
+  { id: "tanner",      name: "Tanner",      verb: "Tan",   icon: "treads", weight: "Medium",
     note: "Medium leather and grips from Flaying. Quick, quiet, always wearing out." },
-  { id: "weaver",      name: "Weaver",      icon: "cowl",   weight: "Light",
+  { id: "weaver",      name: "Weaver",      verb: "Weave", icon: "cowl",   weight: "Light",
     note: "Light woven cloth from Harvesting. Almost no defence, carries the life in it." },
-  { id: "artificer",   name: "Artificer",   icon: "charm",  weight: "Relic",
+  { id: "artificer",   name: "Artificer",   verb: "Craft", icon: "charm",  weight: "Relic",
     note: "Magical cores, staves, and tomes from Dredging." },
 ];
 
 const SKILLS = []
-  .concat(GATHER_SKILLS.map((s) => ({ id: s.id, name: s.name, icon: s.icon, kind: "gather", note: s.note })))
-  .concat(PROFESSIONS.map((p) => ({ id: p.id, name: p.name, icon: p.icon, kind: "craft", note: p.note })))
-  .concat([{ id: "warfare", name: "Combat", icon: "swords", kind: "war", note: "You take the vanguard." }]);
+  .concat(GATHER_SKILLS.map((s) => ({ id: s.id, name: s.name, verb: s.verb, icon: s.icon, kind: "gather", note: s.note })))
+  .concat(PROFESSIONS.map((p) => ({ id: p.id, name: p.name, verb: p.verb, icon: p.icon, kind: "craft", note: p.note })))
+  .concat([{ id: "warfare", name: "Hunt", verb: "Hunt", icon: "swords", kind: "war", note: "You take the vanguard." }]);
 
 const skillDef = (id) => SKILLS.find((s) => s.id === id);
 const skillName = (id) => (skillDef(id) ? skillDef(id).name : id);
@@ -209,8 +210,8 @@ const CRAFT_ACTIONS = { forgemaster: [], woodwright: [], tanner: [], weaver: [],
 
 const matId = (tier, type) => `${slug(basePrefix(tier[type]))}_${type}`;
 
-// Provisions
-const PROVISION_SPEC = [
+// Remedies: taken automatically in the field. Ids keep their old "provision" name for saves.
+const REMEDY_SPEC = [
   { tier: 1, name: "Bitter-Ash Salve",     heal: 25,   price: 50 },
   { tier: 3, name: "Gravemoss Poultice",   heal: 70,   price: 150 },
   { tier: 4, name: "Corpse-Marrow Draught",heal: 180,  price: 450 },
@@ -219,11 +220,11 @@ const PROVISION_SPEC = [
   { tier: 9, name: "Godsbane Elixir",      heal: 1800, price: 12000, smuggler: true },
 ];
 
-const RATIONS = PROVISION_SPEC.map((p) => ({
+const REMEDIES = REMEDY_SPEC.map((p) => ({
   id: `provision_t${p.tier}`, name: p.name, icon: "ration", kind: "material",
   tier: p.tier, heal: p.heal, value: Math.round(p.price * 0.4), price: p.price, smuggler: !!p.smuggler,
 }));
-RATIONS.forEach((r) => { MATERIALS[r.id] = r; });
+REMEDIES.forEach((r) => { MATERIALS[r.id] = r; });
 
 MATERIALS.vault_chest = { id: "vault_chest", name: "Banded Chest", icon: "crate", kind: "material", value: 600, chest: 5, tier: 2 };
 
@@ -277,7 +278,7 @@ TIERS.forEach((t) => {
   const tFlay = basePrefix(t.flay);
   const tDred = basePrefix(t.dredge);
 
-  // 1. RAW MATERIALS & GATHER ACTIONS
+  // 1. RAW MATERIALS & GATHER ACTIONS (an action is named after what it yields)
   GATHER_SKILLS.forEach((s) => {
     const rawId = matId(t, s.mat);
     const reag = MATERIALS[s.reagent];
@@ -286,19 +287,19 @@ TIERS.forEach((t) => {
     if (!GATHER_ACTIONS[s.id]) GATHER_ACTIONS[s.id] = [];
 
     if (tier === 1 || tier === 2) {
-      // Dedicated reagent ground. Same level as the tier — never gated
-      // behind extra levels, so it's workable the moment you arrive.
+      // Dedicated reagent ground, at the tier's own level so it is
+      // workable the moment you arrive.
       GATHER_ACTIONS[s.id].push({
-        id: `${s.id}_t${tier}_raw`, skillId: s.id, tier, name: `Gather ${t[s.mat]}`, icon: s.matIcon,
+        id: `${s.id}_t${tier}_raw`, skillId: s.id, tier, name: t[s.mat], icon: s.matIcon,
         level: t.level, time: t.time, xp: t.xp, out: { [rawId]: 1 }
       });
       GATHER_ACTIONS[s.id].push({
-        id: `${s.id}_t${tier}_reag`, skillId: s.id, tier, name: `Gather ${reag.name}`, icon: reag.icon,
+        id: `${s.id}_t${tier}_reag`, skillId: s.id, tier, name: reag.name, icon: reag.icon,
         level: t.level, time: t.time, xp: t.xp, out: { [s.reagent]: 1 }
       });
     } else {
       GATHER_ACTIONS[s.id].push({
-        id: `${s.id}_t${tier}`, skillId: s.id, tier, name: `Gather ${t[s.mat]}`, icon: s.matIcon,
+        id: `${s.id}_t${tier}`, skillId: s.id, tier, name: t[s.mat], icon: s.matIcon,
         level: t.level, time: t.time, xp: t.xp, out: { [rawId]: 1 },
         reagentId: s.reagent, reagentChance: REAGENT_CHANCES[tier]
       });
@@ -525,10 +526,16 @@ function findAction(skillId, actionId) {
   return actionsFor(skillId).find((a) => a.id === actionId) || null;
 }
 
+// The item an action is about: what a node yields or a recipe makes.
+function actionOutput(def) {
+  if (def.craftGear) return def.craftGear;
+  return def.out ? Object.keys(def.out)[0] : null;
+}
+
 /* ================= 9. REGIONS & MONSTERS ================= */
 
 const REGION_NAMES = [
-  ["The Ashen Verge", "Dead ground at the camp's edge. Everything here is already picked over — which is why it's safe."],
+  ["The Ashen Verge", "Dead ground at the camp's edge. Everything here is already picked over, which is why it's safe."],
   ["Gallowmoor", "Peat and gibbets. The iron in the bog came from something, and nobody asks what."],
   ["The Cold Warrens", "Tunnels under the moor. Cold enough that the bodies down there never went off."],
   ["Graveshelf", "A shelf of pine and cairns above the treeline. The cairns are recent."],
@@ -587,7 +594,7 @@ const getMonster = (id) => MONSTERS.find((m) => m.id === id) || null;
 
 /* ================= 10. ITEM SOURCES ================= */
 /* Built once from the tables above so the item popup can say where a thing
-   comes from and what it feeds. Keyed by base id. */
+   comes from and who works with it. Keyed by base id. */
 
 const GATHERED_BY = {};   // base id -> [gather action]
 const MADE_BY = {};       // base id -> [craft action]
@@ -614,15 +621,33 @@ MONSTERS.forEach((m) => {
   m.drops.forEach(([k]) => pushTo(DROPPED_BY, k, m));
 });
 
-/* ================= 11. WEATHER ================= */
-/* Weather touches XP only, never speed. Each day draws one weather and a
-   hidden roll of 1-10. The roll sets one effect size that favours one trade
-   and hinders another by the same amount:
+/* ================= 11. THE BENCH ================= */
+/* Artisan recipes sit under two tabs. Components are what other recipes
+   eat (refined stock and parts); Wares are what leaves the bench for good. */
 
-     Effect = 5% + (Roll - 1) × 1.67%, rounded → 5, 7, 8, 10, 12, 13, 15, 17, 18, 20
+const BENCH_TABS = [
+  { id: "components", label: "Components", groups: ["Refined", "Parts"] },
+  { id: "wares",      label: "Wares",      groups: ["Weapons", "Armour", "Tools", "Supplies"] },
+];
 
-   The week's forecast is revealed every Sunday at 00:00 UTC. The maths
-   lives in engine.js. */
+function benchGroupOf(def) {
+  if (def.craftGear) {
+    const g = GEAR[def.craftGear];
+    return { tab: "wares", group: (g.slot === "weapon" || g.slot === "offhand") ? "Weapons" : "Armour" };
+  }
+  const outId = actionOutput(def);
+  if (TOOLS[outId]) return { tab: "wares", group: "Tools" };
+  if (outId === "vault_chest") return { tab: "wares", group: "Supplies" };
+  const cat = MATERIALS[outId] ? MATERIALS[outId].category : null;
+  if (["Bars", "Planks", "Weave", "Leather", "Inlays"].includes(cat)) return { tab: "components", group: "Refined" };
+  return { tab: "components", group: "Parts" };
+}
+
+/* ================= 12. WEATHER ================= */
+/* Weather touches XP only, never speed. Each day draws one weather and an
+   effect between 5% and 20% that favours one trade and hinders another by
+   the same amount. The week's forecast is revealed every Sunday at 00:00
+   UTC. The maths lives in engine.js. */
 
 const WEATHER_TYPES = [
   { id: "aridity", name: "Aridity", icon: "sun",   favoured: "delving",    hindered: "dredging" },
@@ -632,8 +657,8 @@ const WEATHER_TYPES = [
   { id: "frost",   name: "Frost",   icon: "frost", favoured: "harvesting", hindered: "delving" },
 ];
 
-const WEATHER_EFFECT_BASE = 5;      // % at roll 1
-const WEATHER_EFFECT_STEP = 1.67;   // % per roll above 1
+const WEATHER_EFFECT_MIN = 5;    // %
+const WEATHER_EFFECT_MAX = 20;   // %
 
 const WEATHER_SEVERITIES = [
   { name: "Faint",      min: 5,  max: 9 },
@@ -647,7 +672,7 @@ const BOUNTIFUL_XP = 0.20;
 const BOUNTIFUL_WEEKDAYS = [6, 0];
 const WEEKDAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-/* ================= 12. MASTERY ================= */
+/* ================= 13. MASTERY ================= */
 /* Gathering only. Each step adds to the chance an action yields double. */
 
 const MASTERY_TRACK = [
@@ -662,9 +687,9 @@ const MASTERY_TRACK = [
   { level: 90, double: 0.02, label: "Peerless" },
 ];
 
-/* ================= 13. CLASSES ================= */
-/* Chosen once, at Combat level 5. Each shapes the same combat loop rather
-   than forking it: different base stats, different swing speed, and a
+/* ================= 14. CLASSES ================= */
+/* Chosen once, at Hunt level 5. Each shapes the same fight rather than
+   forking it: different base stats, different swing speed, and a
    different thing to do when the Veil fills. */
 
 const CLASSES = [
@@ -687,9 +712,9 @@ const CLASSES = [
 
 const classDef = (id) => CLASSES.find((c) => c.id === id) || null;
 
-/* ================= 14. REQUISITION AGENTS ================= */
+/* ================= 15. REQUISITION AGENTS ================= */
 /* A roster of Agents you send out for a chosen resource. Three deployments
-   a day, resolved at the daily reset — a supplement to gathering, never a
+   a day, resolved at the daily reset. A supplement to gathering, never a
    replacement for it. */
 
 const AGENT_RARITIES = [
@@ -708,10 +733,244 @@ const AGENT_NAMES = [
   "Greave", "Silt", "Marrow Jack", "Ashen Nell", "Corvin Rue",
 ];
 
-/* ================= 15. PETS ================= */
+/* ================= 16. COMPANIONS ================= */
+/* Each kind is bought once. One walks with you at a time: its Bond grows
+   for every minute it spends beside you while you work or hunt, and Bond
+   milestones unlock extra traits. Now and then a second of a kind you own
+   turns up while you work or hunt. Duplicates raise Rank, which strengthens
+   the main trait and unlocks one more.
 
-const PETS = [
-  { id: "golem",  name: "Stone Golem",    icon: "golemMob", cost: 4000, note: "Works the seam.", effect: "Gathering 10% faster, +10% double yield." },
-  { id: "sprite", name: "Looting Sprite", icon: "horror", cost: 7500, note: "Flits around.", effect: "Field loot overflowing pack goes to stores." },
-  { id: "mule",   name: "Pack Mule",      icon: "beast", cost: 2500, note: "Carries stuff.", effect: "Eight more slots in your pack." },
+   Effect kinds and what they touch (engine.js, companionBonus):
+     xp       XP multiplier for the listed skills
+     double   added double-yield chance (gathering)
+     reagent  more reagents found alongside a resource
+     speed    shorter action time (gathering and artisans)
+     gold     more gold from kills
+     drops    spoils drop more often
+     rare     chance a kill turns up a piece of uncommon-or-better gear
+   Skill lists may use "gather", "trade" (gathering and artisans) or "all". */
+
+const COMPANION_MAX_BOND = 20;
+const COMPANION_MAX_RANK = 5;
+const RANK_NUMERALS = ["", "I", "II", "III", "IV", "V"];
+const RANK_DUPES = [0, 0, 1, 2, 3, 4];   // duplicates spent to reach each rank
+
+// Bond needed to reach a bond level: 0 at 1, 30 at 2, 90 at 3 … 5,700 at 20.
+// One point of Bond for each minute of shared work.
+const bondXpFor = (level) => 15 * (level - 1) * level;
+const BOND_MS = 60 * 1000;
+
+const COMPANIONS = [
+  {
+    id: "rat", name: "Tunnel Rat", icon: "rat", cost: 1500,
+    source: "delving", sourceText: "while Delving", findChance: 1 / 1200,
+    blurb: "Thin, clever and always the first to smell a fresh seam.",
+    trait: { name: "Seam Sense", kind: "xp", skills: ["delving"], base: 0.08, perRank: 0.02, text: "Delving XP" },
+    unlocks: [
+      { bond: 5,  kind: "double",  skills: ["delving"], value: 0.02, text: "+2% Delving double yield" },
+      { bond: 10, kind: "reagent", skills: ["delving"], value: 0.25, text: "+25% Coal found alongside ore" },
+      { bond: 20, kind: "speed",   skills: ["delving"], value: 0.05, text: "Delving actions 5% quicker" },
+      { rank: 3,  kind: "double",  skills: ["delving"], value: 0.03, text: "+3% Delving double yield" },
+    ],
+  },
+  {
+    id: "crow", name: "Carrion Crow", icon: "crow", cost: 2500,
+    source: "gather", sourceText: "while gathering", findChance: 1 / 1500,
+    blurb: "It watches every crew from the ridgeline and screams when something moves.",
+    trait: { name: "Far Sight", kind: "xp", skills: ["gather"], base: 0.04, perRank: 0.01, text: "gathering XP" },
+    unlocks: [
+      { bond: 5,  kind: "double",  skills: ["gather"], value: 0.01, text: "+1% double yield on all gathering" },
+      { bond: 10, kind: "reagent", skills: ["gather"], value: 0.15, text: "+15% reagents found while gathering" },
+      { bond: 20, kind: "speed",   skills: ["gather"], value: 0.03, text: "Gathering actions 3% quicker" },
+      { rank: 3,  kind: "double",  skills: ["gather"], value: 0.02, text: "+2% double yield on all gathering" },
+    ],
+  },
+  {
+    id: "marshcat", name: "Marshcat", icon: "marshcat", cost: 3000,
+    source: "harvesting", sourceText: "while Harvesting", findChance: 1 / 1200,
+    blurb: "Wet-furred and silent. It walks the rushes ahead of the sickles.",
+    trait: { name: "Reedstalker", kind: "xp", skills: ["harvesting"], base: 0.08, perRank: 0.02, text: "Harvesting XP" },
+    unlocks: [
+      { bond: 5,  kind: "double",  skills: ["harvesting"], value: 0.02, text: "+2% Harvesting double yield" },
+      { bond: 10, kind: "reagent", skills: ["harvesting"], value: 0.25, text: "+25% Pulp found alongside fibre" },
+      { bond: 20, kind: "speed",   skills: ["harvesting"], value: 0.05, text: "Harvesting actions 5% quicker" },
+      { rank: 3,  kind: "double",  skills: ["harvesting"], value: 0.03, text: "+3% Harvesting double yield" },
+    ],
+  },
+  {
+    id: "hound", name: "Veil Hound", icon: "hound", cost: 4000,
+    source: "hunt", sourceText: "while hunting", findChance: 1 / 1500,
+    blurb: "Lean, grey and patient. It can follow a blood trail through a week of rain.",
+    trait: { name: "Bloodhound", kind: "xp", skills: ["warfare"], base: 0.08, perRank: 0.02, text: "Hunt XP" },
+    unlocks: [
+      { bond: 5,  kind: "gold",  value: 0.10, text: "+10% gold from kills" },
+      { bond: 10, kind: "drops", value: 0.10, text: "Spoils drop 10% more often" },
+      { bond: 20, kind: "rare",  value: 0.01, text: "+1% rare find chance on kills" },
+      { rank: 3,  kind: "rare",  value: 0.01, text: "+1% rare find chance on kills" },
+    ],
+  },
+  {
+    id: "stag", name: "Veil Stag", icon: "stag", cost: 10000,
+    source: "any", sourceText: "whatever you are doing", findChance: 1 / 3000,
+    blurb: "It appears at the treeline at dusk and the crews work quieter for it.",
+    trait: { name: "Pathfinder", kind: "xp", skills: ["all"], base: 0.03, perRank: 0.01, text: "XP to every skill" },
+    unlocks: [
+      { bond: 5,  kind: "double", skills: ["gather"], value: 0.01, text: "+1% double yield on all gathering" },
+      { bond: 10, kind: "speed",  skills: ["trade"],  value: 0.02, text: "Trade actions 2% quicker" },
+      { bond: 20, kind: "rare",   value: 0.01, text: "+1% rare find chance on kills" },
+      { rank: 3,  kind: "gold",   value: 0.05, text: "+5% gold from kills" },
+    ],
+  },
 ];
+
+const companionDef = (id) => COMPANIONS.find((c) => c.id === id) || null;
+
+// The old pets were retired in favour of companions. Saves that owned them get the price back.
+const RETIRED_PETS = { golem: 4000, sprite: 7500, mule: 2500 };
+
+/* ================= 17. ITEM LORE ================= */
+/* What the item popup says about a thing. Written by hand for anything you
+   gather, dig up, buy or brew; written per type for everything crafted. */
+
+const ITEM_LORE = {
+  // Reagents
+  coal: "A vital fuel dug from the same seams as ore. Every forge in camp burns through it, and no bar is smelted without it.",
+  resin: "Sap bled from wounded trees and boiled down thick. It seals planks and hafts so they never split in the damp.",
+  pulp: "Stems and leaves beaten into a grey mash. It sets woven fibre and binds the pages of every tome.",
+  tallow: "Rendered fat, pale and rank. Worked into hides, it keeps leather supple long after the beast is gone.",
+  veil_shard: "Splinters of something that was never quite stone. They hold a charge, and every inlay and staff needs one.",
+
+  // Ore
+  slag_delve: "Dull, pitted ore raked from the spoil heaps at the camp's edge. Poor stuff, but it melts.",
+  bog_delve: "Rust-red lumps pulled from the peat of Gallowmoor. It smells of standing water long after it dries.",
+  cold_delve: "Ore from the Warrens that never warms in the hand. Frost forms on it even beside the fire.",
+  cairn_delve: "Old steel prised from the cairns on Graveshelf. Nobody asks who laid it there.",
+  crucible_delve: "Steel that pools in the Sallow Fen, as if something smelted it long ago and left in a hurry.",
+  star_delve: "Fallen iron from Umberdeep, still faintly warm. The trees grew around it rather than through it.",
+  wyrm_delve: "A dense, heat-soaked core from Wyrmreach. It hums when struck, like something answering.",
+  void_delve: "A core of dark metal from The Fade. It weighs more than it should and casts no shadow.",
+  titan_delve: "Metal from the roots of Godsdown, heavy as a debt. Only the best forges can bear its heat.",
+
+  // Timber
+  bitter_fell: "Tough, thorned brush that grows where nothing else will. It burns bitter and splits badly.",
+  blood_fell: "Ash wood from Gallowmoor with sap the colour of a fresh wound. It stains every hand that cuts it.",
+  iron_fell: "Bark so hard it blunts axes. The trees of the Warrens grow slow and stubborn in the cold.",
+  barrow_fell: "Pine from the barrow slopes of Graveshelf. Its roots go down into the old graves.",
+  sallow_fell: "Pale, waterlogged timber hauled out of the Sallow Fen. It dries hard and never loses the smell.",
+  umber_fell: "Dark heartwood from the old growth of Umberdeep, the rings so tight they look like writing.",
+  wyrm_fell: "Warm, twisting root dug from under Wyrmreach. It flexes like sinew and remembers its shape.",
+  void_fell: "Root from The Fade that grows away from the light. Cut it quickly and do not look at it for long.",
+  godsdown_fell: "A knot from the roots at Godsdown, wide as a cart. No saw in camp was made for it.",
+
+  // Fibre
+  stink_harvest: "Rank, stringy weed that thrives on ash. The fibres are coarse, but they hold.",
+  grave_harvest: "Grey moss scraped from the gibbets and stones of Gallowmoor. Soft, damp and strangely warm.",
+  pale_harvest: "Colourless rushes from the underground streams of the Warrens. They grow without ever seeing sun.",
+  corpse_harvest: "A fleshy flower that opens over fresh cairns on Graveshelf. Its fibres are strong and its scent is worse.",
+  widows_harvest: "A black-petalled bloom from the Sallow Fen. The old wives say it only flowers after a drowning.",
+  dragon_harvest: "A red, scaled flower from Umberdeep that crackles when crushed. Its fibre takes dye like blood.",
+  moon_harvest: "Silver fronds from Wyrmreach that curl shut by day. Cloth woven from them glows faintly at night.",
+  fade_harvest: "Fronds from The Fade, thin as breath. Hold one too long and your fingers go numb.",
+  godsbane_harvest: "Fronds from the roots of Godsdown that wilt anything planted beside them. The finest fibre there is.",
+
+  // Hides
+  mangy_flay: "A patchy pelt from the scavengers of the Verge. Thin, flea-bitten and better than nothing.",
+  bristle_flay: "A coarse, bristled hide from the bog beasts of Gallowmoor. It sheds water and little else.",
+  dire_flay: "A heavy pelt from the things that den in the Warrens. The fur is thick enough to stop a knife.",
+  cured_flay: "Hide from Graveshelf that comes off the body already stiff. The cold there does half the tanner's work.",
+  scaled_flay: "Scaled skin from whatever moves under the Sallow Fen. It turns a blade and slips a grip.",
+  chitin_flay: "Plated hide from the husks of Umberdeep. Light, hard and cracked like old pottery.",
+  drake_flay: "A carapace shed by the wyrmkin of Wyrmreach, still warm at the seams.",
+  leviathan_flay: "Shell plate from something vast that died in The Fade. Each piece is the size of a door.",
+  demon_flay: "Carapace from the spawn of Godsdown. It never rots, and it never stops smelling of smoke.",
+
+  // Finds
+  mud_dredge: "Smooth pebbles sifted from the muck of the Verge. Most are worthless. Some are not.",
+  river_dredge: "Amber pulled from the drowned channels of Gallowmoor. Some pieces hold insects. Some hold worse.",
+  cave_dredge: "Banded agate from the black pools of the Warrens. The bands shift if you watch them long enough.",
+  mourning_dredge: "Cloudy quartz dredged from the tarns under Graveshelf. It weeps water in a warm hand.",
+  ghost_dredge: "Opal from the Sallow Fen that shows faces in its fire. The crews try not to look.",
+  blood_dredge: "Deep red stones from the sunken streams of Umberdeep. Always slightly wet, and never with water.",
+  abyssal_dredge: "Coral hauled from the warm deeps of Wyrmreach, sharp enough to open a thumb.",
+  leviathan_dredge: "Bone from The Fade, polished by currents that should not exist. It rings like a bell.",
+  void_dredge: "A sapphire from the waters of Godsdown, so dark it seems to swallow the lamp.",
+
+  // Remedies
+  provision_t1: "A grey paste of ash and bitter herbs smeared into a wound. It stings, then it holds.",
+  provision_t3: "Warm moss packed against a wound and bound tight. It draws out the rot before it sets in.",
+  provision_t4: "A thick draught boiled from marrow. Nobody asks whose, and nobody refuses it.",
+  provision_t6: "A metallic tonic that burns going down and knits flesh while you fight.",
+  provision_t7: "Dark blood bottled from something vast. One swallow and wounds close like shutters.",
+  provision_t9: "An elixir brewed from the roots at Godsdown. It drags you back from the edge and leaves you shaking.",
+
+  // Supplies
+  vault_chest: "A heavy chest bound in black iron. It holds far more than it looks like it should.",
+};
+
+// Crafted things share a line per type. `t` is the item's row in TIERS.
+const TYPE_LORE = {
+  // refined
+  bar: (t) => `${t.delve} smelted with coal and poured into a bar the Forgemaster can work.`,
+  plank: (t) => `${t.fell} sawn, dried and sealed with resin into planks that keep their shape.`,
+  weave: (t) => `${t.harvest} spun and set with pulp into a tough, coarse cloth.`,
+  leather: (t) => `${t.flay} scraped, tallowed and cured into supple leather.`,
+  inlay: (t) => `${t.dredge} cut down and set with veil shards so it holds a charge.`,
+
+  // parts
+  blade: () => "A forged blade, sharp but bare. It needs a handle before it is a weapon.",
+  handle: () => "A hilt of plank wrapped in leather, shaped for a sword or a dagger.",
+  score: () => "Planks banded with metal, the heavy heart of a shield.",
+  bind: () => "Strips of cured leather used to lash parts together and keep them there.",
+  stave: () => "A long, seasoned stave that bends without breaking.",
+  string: () => "Twisted weave, waxed and stretched to take a bow's full draw.",
+  grip: () => "Leather wound tight around the middle of a bow for a steady hand.",
+  shaft: () => "A straight, sealed shaft cut to carry a staff head.",
+  head: () => "A metal head set with an inlay. The part of a staff that does the work.",
+  gblade: () => "A blade too long for one hand, waiting on its grip.",
+  ggrip: () => "A long grip of plank and leather, made for two hands.",
+  book: () => "Blank pages of bound weave, waiting to become a grimoire.",
+  clasp: () => "A small inlaid clasp that keeps a grimoire shut.",
+
+  // weapons
+  sword: () => "A plain one-handed sword. Honest work for dishonest times.",
+  dagger: () => "Short and quick, made for work up close.",
+  shield: () => "A banded shield that takes the blows meant for you.",
+  bow: () => "A two-handed bow for keeping the dead at a distance.",
+  staff: () => "A two-handed staff that draws the Veil through its head.",
+  greatsword: () => "A two-handed blade that ends fights and arguments alike.",
+  grimoire: () => "An offhand tome, heavy with things better left unread.",
+
+  // heavy armour
+  helm: () => "A heavy plate helm. It narrows the world to a slit and keeps your skull whole.",
+  chest: () => "Heavy plate that holds a line when nothing else will.",
+  hboots: () => "Heavy plated boots. Loud, slow and hard to knock down.",
+  hgaunts: () => "Plated gauntlets that turn a fist into a hammer.",
+
+  // medium armour
+  hood_medium: () => "A leather hood that keeps off the rain and the worst of a glancing blow.",
+  jacket: () => "A cured leather jacket, light enough to move in and tough enough to matter.",
+  mboots: () => "Leather boots made for long marches over bad ground.",
+  mgloves: () => "Leather gloves that keep a grip steady and hands whole.",
+
+  // light armour
+  hood_light: () => "A woven hood. Little protection, but it carries the life in it.",
+  robe: () => "A woven robe. Almost no defence, and more life in it than plate will ever hold.",
+  lboots: () => "Light woven boots, quiet on stone.",
+  lgloves: () => "Woven gloves, thin enough to feel the Veil through.",
+
+  // tools
+  pick: () => "A pickaxe for the seams. While it is in hand, every Delving action goes quicker.",
+  axe: () => "A felling axe. While it is in hand, every Felling action goes quicker.",
+  sickle: () => "A curved sickle. While it is in hand, every Harvesting action goes quicker.",
+  knife: () => "A flaying knife. While it is in hand, every Flaying action goes quicker.",
+  net: () => "A weighted dredging net. While it is in hand, every Dredging action goes quicker.",
+};
+
+function itemLore(d) {
+  if (!d) return "";
+  if (ITEM_LORE[d.base]) return ITEM_LORE[d.base];
+  const type = d.base.slice(d.base.indexOf("_") + 1);
+  const key = type === "hood" ? (d.prof === "weaver" ? "hood_light" : "hood_medium") : type;
+  const line = TYPE_LORE[key];
+  return line ? line(TIERS[(d.tier || 1) - 1]) : "";
+}

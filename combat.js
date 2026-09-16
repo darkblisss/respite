@@ -1,8 +1,10 @@
 /* ============================================================
-   Respite — combat.js · The Battlefield
+   Respite · combat.js · The Battlefield
    ------------------------------------------------------------
-   Combat maths only: derived stats, class and relic effects, the
-   Veil, spawns and threat, the fight tick, spoils, durability.
+   The hunt, maths only: derived stats, class and relic effects,
+   the Veil, spawns and threat, the fight tick, spoils and
+   durability. Every blow is also reported to combatFx so the
+   arena on the Hunt page can show it.
    ============================================================ */
 
 /* ================= 1. STATS ================= */
@@ -65,38 +67,55 @@ function rollSpawn(tier) {
   return rankOf(tier, Math.random() < 0.2 ? "elite" : "grunt");
 }
 
-/* ================= 3. TAKING THE FIELD ================= */
+/* ================= 3. TAKING UP THE HUNT ================= */
+/* A hunt runs `limit` kills, or with no limit (null) until you pull back,
+   fall, or twelve hours pass. */
 
-function newCombatTask(tier) {
+function newCombatTask(tier, limit) {
   const mob = rollSpawn(tier);
   return { tier, monsterId: mob.id, mobHp: mob.hp, mobMax: mob.hp,
     playerTimer: swingSpeed(), mobTimer: mob.speed, respawn: 0, done: 0,
+    elapsed: 0, limit: limit == null ? null : limit,
     startedAt: Date.now(), queued: null, veil: 0, streak: 0, bleed: 0, bleedTimer: 0 };
 }
 
-function engageRegion(tier) {
-  if (recovering()) {
-    say("You're still recovering.");
-    render();
-    return;
-  }
+function startHunt(tier, limit) {
+  if (recovering()) return refuse("You're still recovering.");
+  const n = limit == null ? null : Math.max(1, Math.floor(limit));
   const t = state.tasks.combat;
-  if (!t) {
-    state.tasks.combat = newCombatTask(tier);
-    state.player.hp = maxHp();
-    render();
-    return;
-  }
 
-  if (t.tier === tier) {
-    t.queued = t.queued === "stop" ? null : "stop";
+  if (t && t.tier === tier) {
+    // Already out on this ground: the fight carries on, the count starts again.
+    t.limit = n;
+    t.done = 0;
+    t.elapsed = 0;
+    t.queued = null;
   } else {
-    // INSTANT switch
-    state.tasks.combat = newCombatTask(tier);
+    state.tasks.combat = newCombatTask(tier, n);
     state.player.hp = maxHp();
-    say(`Moved to new ground in ${regionById(`region_${tier}`).name}.`);
+    if (t) say(`The hunt moves to ${regionOfTier(tier).name}.`);
   }
   render();
+  return true;
+}
+
+// You can't walk out mid-swing: the hunt ends after the current fight.
+function pullBack() {
+  const t = state.tasks.combat;
+  if (!t) return false;
+  t.queued = t.queued === "stop" ? null : "stop";
+  render();
+  return true;
+}
+
+// Rough numbers for planning: how long a kill takes and whether you last.
+function fightOdds(mob) {
+  const atk = attackPower();
+  const avgHit = Math.max(1, (atk * 0.55 + atk) / 2 - mob.defence * 0.35);
+  const killMs = (mob.hp / avgHit) * swingSpeed() + RESPAWN_MS;
+  const incoming = Math.max(1, (mob.attack * 0.55 + mob.attack) / 2 - defencePower() * 0.4);
+  const surviveSecs = maxHp() / (incoming / mob.speed * 1000);
+  return { killMs, incoming, surviveSecs, survivable: surviveSecs >= 30 };
 }
 
 function combatPlan() {
@@ -105,16 +124,16 @@ function combatPlan() {
   const mob = getMonster(t.monsterId);
   if (!mob) return null;
 
-  const atk = attackPower();
-  const avgHit = Math.max(1, (atk * 0.55 + atk) / 2 - mob.defence * 0.35);
-  const killMs = (mob.hp / avgHit) * swingSpeed() + RESPAWN_MS;
-  const windowLeft = Math.max(0, IDLE_CAP_MS - (Date.now() - t.startedAt));
-  const remaining = Math.floor(windowLeft / killMs);
-  const incoming = Math.max(1, (mob.attack * 0.55 + mob.attack) / 2 - defencePower() * 0.4);
+  const { killMs, incoming } = fightOdds(mob);
+  const windowLeft = Math.max(0, IDLE_CAP_MS - (t.elapsed || 0));
+  const byTime = Math.floor(windowLeft / killMs);
+  const byLimit = t.limit == null ? Infinity : Math.max(0, t.limit - t.done);
+  const remaining = Math.min(byTime, byLimit);
+  const planMs = remaining * killMs;
   const food = bestFood();
-  const foodNeed = food ? Math.ceil((incoming / mob.speed * windowLeft) / itemDef(food).heal) : null;
+  const foodNeed = food ? Math.ceil((incoming / mob.speed * planMs) / itemDef(food).heal) : null;
 
-  return { mob, done: t.done, target: t.done + remaining, timeLeft: remaining * killMs, killMs, pct: t.respawn > 0 ? 0 : clamp((t.mobHp / t.mobMax) * 100, 0, 100), food, foodNeed, foodHave: food ? haveQty(food) : 0 };
+  return { mob, done: t.done, limit: t.limit, target: t.done + remaining, timeLeft: planMs, killMs, pct: t.respawn > 0 ? 0 : clamp((t.mobHp / t.mobMax) * 100, 0, 100), food, foodNeed, foodHave: food ? haveQty(food) : 0 };
 }
 
 function bestFood() {
@@ -136,6 +155,17 @@ function bestFood() {
 
 /* ================= 4. THE FIGHT ================= */
 
+// What just happened, for the arena. Never saved; the UI drains it.
+//   who:  "foe" (shown over the monster) or "you" (shown over the commander)
+//   kind: hit, crit, veil, bleed, thorns, hurt, block, dodge, heal, kill, spawn, fall
+let combatFx = [];
+let swingCrit = false;
+
+function fx(who, kind, amount) {
+  combatFx.push({ t: Date.now(), who, kind, amount: amount || 0 });
+  if (combatFx.length > 40) combatFx.shift();
+}
+
 function combatTick(dt) {
   const c = state.tasks.combat;
   const mob = getMonster(c.monsterId);
@@ -143,6 +173,12 @@ function combatTick(dt) {
   if (!mob) {
     state.tasks.combat = null;
     return;
+  }
+
+  c.elapsed = (c.elapsed || 0) + dt;
+  if (c.elapsed >= IDLE_CAP_MS && c.queued !== "stop") {
+    c.queued = "stop";
+    say("Twelve hours on the hunt. You pull back after this fight.");
   }
 
   if (c.respawn > 0) {
@@ -153,7 +189,7 @@ function combatTick(dt) {
         return;
       }
       if (c.queued) {
-        state.tasks.combat = newCombatTask(c.queued);
+        state.tasks.combat = newCombatTask(c.queued, c.limit);
         return;
       }
 
@@ -163,6 +199,7 @@ function combatTick(dt) {
       c.mobMax = next.hp;
       c.mobTimer = next.speed;
       c.playerTimer = swingSpeed();
+      fx("foe", "spawn");
 
       if (next.rank === "boss") {
         say(`${next.name} comes up out of the dark.`);
@@ -176,6 +213,7 @@ function combatTick(dt) {
   c.playerTimer -= dt;
   if (c.playerTimer <= 0) {
     c.playerTimer += swingSpeed();
+    swingCrit = false;
     let dmg = rollPlayerHit(mob, false);
 
     // Echoing relics sometimes land a second blow.
@@ -191,15 +229,19 @@ function combatTick(dt) {
     // Wounding leaves something behind.
     if (hasPrefix("wounding") && Math.random() < 0.2) c.bleed = (c.bleed || 0) + Math.max(1, Math.round(dmg * 0.15));
 
+    const crit = swingCrit;
     c.veil = Math.min(VEIL_MAX, (c.veil || 0) + VEIL_PER_HIT);
 
-    // Veil full — spend it on the class technique.
+    // A full Veil is spent at once on the class technique.
+    let veil = 0;
     if (c.veil >= VEIL_MAX) {
       c.veil = 0;
-      dmg += veilTechnique(mob);
+      veil = veilTechnique(mob);
     }
 
-    c.mobHp -= dmg;
+    c.mobHp -= dmg + veil;
+    fx("foe", crit ? "crit" : "hit", dmg);
+    if (veil) fx("foe", "veil", veil);
     if (c.mobHp <= 0) { killMob(mob); return; }
   }
 
@@ -209,6 +251,7 @@ function combatTick(dt) {
     if (c.bleedTimer >= 1000) {
       c.bleedTimer = 0;
       c.mobHp -= c.bleed;
+      fx("foe", "bleed", c.bleed);
       c.bleed = Math.max(0, c.bleed - 1);
       if (c.mobHp <= 0) { killMob(mob); return; }
     }
@@ -221,13 +264,20 @@ function combatTick(dt) {
 
     if (Math.random() < dodgeChance()) {
       c.streak = c.streak || 0;
+      fx("you", "dodge");
     } else {
       let dmg = randInt(Math.max(1, Math.floor(mob.attack * 0.55)), mob.attack);
       dmg = Math.max(1, Math.round(dmg - defencePower() * 0.4));
-      if (Math.random() < blockChance()) dmg = Math.round(dmg * 0.5);
+      const blocked = Math.random() < blockChance();
+      if (blocked) dmg = Math.round(dmg * 0.5);
       if (hasPrefix("resilient") && state.player.hp < maxHp() * 0.35) dmg = Math.round(dmg * 0.8);
       state.player.hp -= dmg;
-      if (hasPrefix("thorned")) c.mobHp -= Math.max(1, Math.round(dmg * 0.15));
+      fx("you", blocked ? "block" : "hurt", dmg);
+      if (hasPrefix("thorned")) {
+        const thorns = Math.max(1, Math.round(dmg * 0.15));
+        c.mobHp -= thorns;
+        fx("foe", "thorns", thorns);
+      }
       if (hasPrefix("furious")) c.streak = 0;
 
       if (c.mobHp <= 0) { killMob(mob); return; }
@@ -238,7 +288,9 @@ function combatTick(dt) {
       if (food) {
         spend(food, 1);
         const heal = itemDef(food).heal * (hasPrefix("vital") ? 1.2 : 1);
+        const before = state.player.hp;
         state.player.hp = Math.min(maxHp(), state.player.hp + heal);
+        fx("you", "heal", Math.round(state.player.hp - before));
       }
     }
 
@@ -252,7 +304,10 @@ function rollPlayerHit(mob, guaranteedCrit) {
   let dmg = randInt(Math.max(1, Math.floor(atk * 0.55)), Math.ceil(atk));
   const effDef = mob.defence * (1 - defencePen());
   dmg = Math.max(1, Math.round(dmg - effDef * 0.35));
-  if (guaranteedCrit || Math.random() < critChance()) dmg = Math.round(dmg * critDamage());
+  if (guaranteedCrit || Math.random() < critChance()) {
+    dmg = Math.round(dmg * critDamage());
+    swingCrit = true;
+  }
   return dmg;
 }
 
@@ -278,27 +333,40 @@ function die(mob) {
   state.tasks.combat = null;
   state.stats.deaths++;
   state.player.recoveryUntil = Date.now() + RECOVERY_MS;
+  fx("you", "fall");
 
   EQUIP_SLOTS.forEach((slot) => {
     const key = state.equipment[slot];
     if (key && itemDef(key).maxDur) damageItem(key, DEATH_WEAR);
   });
 
-  say(`The ${mob.name.toLowerCase()} put you down. Recovering for five minutes.`);
+  const who = /^(The|What) /.test(mob.name) ? mob.name : `The ${mob.name}`;
+  say(`${who} put you down. Recovering for five minutes.`);
   toast("You fell.");
 }
 
 function killMob(mob) {
   const c = state.tasks.combat;
   grantXp("warfare", mob.xp);
-  addGold(randInt(mob.gold[0], mob.gold[1]));
+  addGold(Math.round(randInt(mob.gold[0], mob.gold[1]) * (1 + companionBonus("gold"))));
   state.stats.kills++;
   c.done++;
   bountyProgress("slay", mob);
+  fx("foe", "kill");
 
+  const dropBonus = 1 + companionBonus("drops");
   mob.drops.forEach(([k, qty, chance]) => {
-    if (Math.random() < chance) addSpoil(k, qty);
+    if (Math.random() < chance * dropBonus) addSpoil(k, qty);
   });
+
+  // Companions with a nose for it turn up a finer piece now and then.
+  const rare = companionBonus("rare");
+  if (rare && Math.random() < rare) {
+    const pool = Object.values(GEAR).filter((g) => g.tier === mob.tier);
+    const key = makeKey(pool[randInt(0, pool.length - 1)].id, rollFineRarity());
+    addSpoil(key, 1);
+    toast(`Found: ${itemName(key)}`);
+  }
 
   if (mob.rank === "boss") {
     state.threat[mob.tier] = 0;
@@ -308,7 +376,7 @@ function killMob(mob) {
     addSpoil(key, 1);
     state.stats.epics++;
     say(`${mob.name} is down.`);
-    toast(`Sovereign felled · ${itemName(key)}`);
+    toast(`Sovereign felled: ${itemName(key)}`);
   } else {
     state.threat[mob.tier] = Math.min(THREAT_CAP, threatIn(mob.tier) + 1);
     if (threatIn(mob.tier) === THREAT_CAP) {
@@ -316,12 +384,20 @@ function killMob(mob) {
       toast("Threat at boiling point");
     }
   }
+
+  companionFind("warfare");
   applyWear();
   c.respawn = RESPAWN_MS;
+
+  if (c.limit != null && c.done >= c.limit && c.queued !== "stop") {
+    c.queued = "stop";
+    say(`Hunt finished: ${fmt(c.done)} kills.`);
+    toast("Hunt finished");
+  }
 }
 
 /* ================= 5. SPOILS ================= */
-/* Battlefield loot waits on the field, outside your pack, until claimed. */
+/* Loot waits where it fell, outside your storage, until claimed. */
 
 function addSpoil(key, qty) {
   const existing = stacks(key) ? state.spoils.find((s) => s.key === key) : null;
@@ -334,14 +410,19 @@ function addSpoil(key, qty) {
       state.spoils.shift();
     }
   }
-  logYield(`+${qty} ${itemName(key)} (spoils)`);
+}
+
+// Gear goes to Belongings first; hides, ore and finds to Provisions first.
+function stashSpoil(s) {
+  const d = itemDef(s.key);
+  const order = d && d.kind === "gear" ? ["inv", "bank", "vault"] : ["bank", "vault", "inv"];
+  return order.some((w) => addTo(w, s.key, s.qty));
 }
 
 function claimSpoil(index) {
   const s = state.spoils[index];
   if (!s) return;
-  const target = state.pets.sprite ? "bank" : "inv";
-  if (!addTo(target, s.key, s.qty) && !addTo("inv", s.key, s.qty) && !addTo("vault", s.key, s.qty)) {
+  if (!stashSpoil(s)) {
     say("Nowhere to put it.");
     toast("Nowhere to put it");
     render();
@@ -354,16 +435,11 @@ function claimSpoil(index) {
 function claimAllSpoils() {
   let stuck = 0;
   for (let i = state.spoils.length - 1; i >= 0; i--) {
-    const s = state.spoils[i];
-    const target = state.pets.sprite ? "bank" : "inv";
-    if (addTo(target, s.key, s.qty) || addTo("inv", s.key, s.qty) || addTo("vault", s.key, s.qty)) {
-      state.spoils.splice(i, 1);
-    } else {
-      stuck++;
-    }
+    if (stashSpoil(state.spoils[i])) state.spoils.splice(i, 1);
+    else stuck++;
   }
   if (stuck) {
-    say(`${stuck} lot${stuck > 1 ? "s" : ""} left on the field.`);
+    say(`${stuck} lot${stuck > 1 ? "s" : ""} left where they fell.`);
     toast("Not everything fit");
   }
   render();
