@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>Respite</title>
 <link rel="icon" type="image/webp" href="assets/respite-logo.webp">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16,6 +16,7 @@
   <!-- ================= TOPBAR ================= -->
   <header class="topbar">
     <div class="tb-brand">
+      <button type="button" class="menu-btn" id="menuBtn" aria-label="Menu" aria-controls="sidebar" aria-expanded="false"></button>
       <div class="mark" id="brandMark"></div>
       <div>
         <h1>RESPITE</h1>
@@ -36,7 +37,7 @@
       <div class="tb-block">
         <div class="row1">
           <div><span class="eyebrow">The Hunt</span><span class="name" id="tbFieldName">Idle</span></div>
-          <button class="refresh" id="tbFieldClear" title="Pull back after this fight" aria-label="Pull back after this fight">&#8635;</button>
+          <button class="refresh" id="tbFieldClear" title="Pull back" aria-label="Pull back">&#8635;</button>
         </div>
         <div class="tb-bar mob"><i id="tbFieldBar"></i></div>
         <div class="tb-meta" id="tbFieldMeta">Nobody is hunting.</div>
@@ -54,7 +55,7 @@
   <div class="layout">
 
     <!-- ================= SIDEBAR ================= -->
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
       <div class="icon-row">
         <button class="icon-btn" data-page="atlas">Atlas</button>
         <button class="icon-btn" data-page="shop">Shop</button>
@@ -86,8 +87,6 @@
         <div class="pill-body" id="navField"></div>
       </div>
 
-      <button type="button" class="side-panel spoils-side" id="spoilsTag" hidden></button>
-
       <div class="side-panel weather-panel">
         <div class="tag" id="weatherTag"></div>
         <p id="weatherNote"></p>
@@ -95,6 +94,7 @@
         <div class="w-next" id="weatherNext"></div>
       </div>
     </aside>
+    <div class="side-backdrop" id="sideBackdrop" hidden></div>
 
     <!-- ================= MAIN ================= -->
     <main class="main">
@@ -176,21 +176,14 @@
           <div class="camp-foot"><b id="skCampNow"></b><span id="skCampNext"></span></div>
         </div>
 
-        <div class="card" id="skQuarry" hidden>
-          <div class="card-head"><div class="label">Quarry</div></div>
-          <div id="skQuarryBody"></div>
+        <div class="card" id="skZones" hidden>
+          <div class="card-head"><div class="label">Zones</div></div>
+          <div id="skZonesBody"></div>
         </div>
 
-        <div class="card" id="skSpoils" hidden>
-          <div class="card-head">
-            <div class="label">Unclaimed Spoils</div>
-            <div class="muted tiny" id="skSpoilsCount"></div>
-          </div>
-          <div class="spoil-list" id="skSpoilsBody"></div>
-          <div class="btnrow spoil-actions" id="skSpoilsActions">
-            <button type="button" class="btn btn-primary" id="spoilsClaimAll">Claim all</button>
-            <button type="button" class="btn btn-gold" id="spoilsSellAll">Sell all where they lie</button>
-          </div>
+        <div class="card" id="skFoes" hidden>
+          <div class="card-head"><div class="label">Quarry</div></div>
+          <div id="skFoesBody"></div>
         </div>
       </section>
       
@@ -296,7 +289,7 @@
       <section class="page" data-page="shop" hidden>
         <div class="card">
           <div class="card-head"><div class="label">Apothecary</div></div>
-          <p class="panel-caption">Always open. Remedies are taken automatically when you drop low on the hunt.</p>
+          <p class="panel-caption">Always open. On the hunt a remedy is taken whenever your health falls to 45% or less, the strongest first.</p>
           <div class="shop-list" id="shopStock"></div>
         </div>
         <div class="card">
@@ -466,7 +459,7 @@
 <div class="pop-wrap" id="classPop" hidden>
   <div class="pop class-pop">
     <div class="pop-title">Choose your discipline</div>
-    <div class="pop-sub">Set once, at Hunt level 5. It decides your bulk, your speed, and what happens when the Veil fills.</div>
+    <div class="pop-sub">Set once, at Hunt level 5. It opens the Veil and decides your bulk, your speed, and what the Veil does when it fills.</div>
     <div class="class-grid" id="classGrid"></div>
   </div>
 </div>

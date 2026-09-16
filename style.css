@@ -501,21 +501,6 @@ body{
 .tool-slot .name{ font-size:10.5px; font-weight:500; color:var(--bone); line-height:1.25; }
 .tool-slot.reserved{ opacity:.4; border-style:dashed; }
 
-/* ---- spoils + threat + roster ---- */
-
-.spoil-list{ display:flex; flex-direction:column; max-height:260px; overflow-y:auto; }
-.spoil-row{ display:flex; align-items:center; gap:9px; padding:8px 0; border-bottom:1px solid var(--line); font-size:12.5px; }
-.spoil-row:last-child{ border-bottom:none; }
-.spoil-row .left{ display:flex; align-items:center; gap:9px; flex:1; min-width:0; color:var(--bone-dim); }
-.spoil-row .left .ico{ color:var(--violet); }
-.spoil-row .sp-qty{ font-variant-numeric:tabular-nums; color:var(--bone-faint); font-size:11.5px; }
-
-.threat-block{ margin-top:16px; padding-top:14px; border-top:1px solid var(--line); }
-.threat-head{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:7px; }
-.threat-head .label{ font-size:10px; letter-spacing:.13em; text-transform:uppercase; color:var(--bone-faint); font-weight:600; }
-.threat-num{ font-size:12px; color:var(--gold); font-variant-numeric:tabular-nums; font-weight:600; }
-.bar.threat i{ background:linear-gradient(90deg,#7d3a2c,var(--ember)); }
-.threat-note{ font-size:11px; color:var(--bone-faint); margin-top:7px; line-height:1.5; }
 
 .rank-tag{
   font-size:9px; letter-spacing:.09em; text-transform:uppercase; font-weight:700;
@@ -629,9 +614,6 @@ html{ background:var(--bg); }
 
 /* ---- skill page ---- */
 
-.spoil-actions{ margin-top:var(--gap-in); }
-.spoil-row .sp-open{ text-align:left; }
-.spoil-row .sp-open:hover{ color:var(--bone); }
 
 /* ---- mastery tooltip (gathering heroes) ---- */
 
@@ -680,8 +662,6 @@ html{ background:var(--bg); }
 
 /* ---- sidebar ---- */
 
-.spoils-side{ width:100%; text-align:left; font-size:11.5px; font-weight:600; color:var(--gold); }
-.spoils-side:hover{ border-color:rgba(211,173,92,.35); }
 .weather-panel p .up{ color:var(--good); }
 .weather-panel p .down{ color:var(--ember); }
 
@@ -990,7 +970,6 @@ html{ background:var(--bg); }
 .arena-count b{ font-size:13px; font-weight:600; color:var(--bone); font-variant-numeric:tabular-nums; }
 .arena-count span{ font-size:11.5px; color:var(--bone-faint); }
 .arena-foot .btn{ min-width:112px; height:36px; }
-#skQuarryBody .threat-block{ margin-top:var(--gap); padding-top:var(--gap); border-top:1px solid var(--line); }
 
 .m-art{ display:block; }
 .m-body{ fill:#120d16; stroke:#7a4030; stroke-width:1.6; stroke-linejoin:round; }
@@ -1158,4 +1137,147 @@ html{ background:var(--bg); }
   .qty-btn{ padding:0 9px; }
   .set-fields{ grid-template-columns:1fr; }
   .arena-vs{ font-size:15px; letter-spacing:.14em; }
+}
+
+/* ================= THE HUNT: ZONES, FOES & THE DRAWER ================= */
+/* Overrides the arena rules above. */
+
+/* ---- arena: you, the fight, up to three foes ---- */
+
+.arena{ grid-template-columns:minmax(0, 1fr) auto minmax(0, 1.25fr); align-items:center; }
+.arena-mid{ padding-bottom:0; }
+.arena-timer{ margin-top:4px; font-size:11px; color:var(--bone-faint); font-variant-numeric:tabular-nums; min-height:14px; }
+.veilbar.locked{ opacity:.35; }
+.veil-note{ min-height:14px; font-size:10.5px; letter-spacing:.04em; color:var(--violet); text-align:center; }
+.veilbar.locked + .veil-note{ color:var(--bone-faint); }
+
+.arena-foes{ display:flex; flex-direction:column; justify-content:center; gap:8px; min-width:0; min-height:160px; }
+.foe-card{
+  position:relative; display:grid; grid-template-columns:58px minmax(0, 1fr); align-items:center; gap:10px;
+  padding:8px 10px 8px 8px; border-radius:10px; border:1px solid #33262a; background:rgba(20,13,17,.72);
+  transition:opacity 600ms ease-out, transform 600ms ease-out, border-color 200ms;
+  animation:foe-in 380ms ease-out;
+}
+.foe-card.target{ border-color:#5e3325; }
+.foe-card.elite{ border-color:rgba(106,143,196,.45); }
+.foe-card.sovereign{ border-color:rgba(168,119,201,.6); background:rgba(28,16,32,.78); }
+.foe-card.gone{ opacity:0; transform:translateX(14px); pointer-events:none; }
+@keyframes foe-in{ from{ opacity:0; transform:translateX(16px); } to{ opacity:1; transform:none; } }
+.foe-art{
+  width:58px; height:58px; padding:0; border-radius:9px; overflow:hidden;
+  display:flex; align-items:center; justify-content:center;
+  background:radial-gradient(circle at 50% 40%, #3a211c, #140e12 75%); border:1px solid #5e3325;
+  transition:border-color 150ms;
+}
+.foe-art:hover{ border-color:var(--ember); }
+.foe-art .m-art{ width:88%; height:88%; }
+.foe-art.struck{ animation:struck 260ms ease-out; }
+.foe-body{ min-width:0; }
+.foe-name{ display:flex; align-items:center; gap:6px; min-width:0; font-family:var(--font-display); font-size:14.5px; font-weight:600; }
+.foe-name .fn{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.foe-name .rank-tag{ margin-left:0; flex-shrink:0; }
+.foe-card .hpbar{ max-width:none; height:16px; margin-top:6px; }
+.foe-card .hpbar span{ font-size:10px; }
+.foe-card .fx-layer{ left:8px; right:auto; top:6px; width:58px; }
+.foe-card .float{ top:14px; font-size:19px; }
+.foe-card .float.crit, .foe-card .float.strike, .foe-card .float.ambush, .foe-card .float.empowered{ font-size:24px; }
+.foe-empty{
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; min-height:130px;
+  padding:14px; border-radius:10px; border:1px dashed #33262a; text-align:center;
+}
+.fe-title{ font-family:var(--font-display); font-size:15px; font-weight:600; color:var(--bone-dim); }
+.fe-sub{ font-size:11.5px; color:var(--bone-faint); line-height:1.45; }
+.m-art.sovereign .m-body{ stroke:#a877c9; }
+
+/* ---- floating numbers for the new blows ---- */
+
+.float.strike, .float.ambush, .float.empowered{ font-size:30px; color:#b9a2ef; }
+.float.volley{ font-size:26px; color:#b9a2ef; }
+.float.ambushed{ font-size:30px; color:var(--ember); }
+.float.glance, .float.join, .float.enrage{
+  font-family:var(--font-ui); font-size:11px; font-weight:600; letter-spacing:.1em; text-transform:uppercase;
+}
+.float.glance{ color:var(--bone-faint); }
+.float.join, .float.enrage{ color:var(--ember); }
+
+/* ---- under the arena ---- */
+
+.arena-foot{ align-items:stretch; }
+.arena-stats{ flex:1 1 360px; display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:8px; min-width:0; }
+.arena-stat{
+  display:flex; flex-direction:column; gap:3px; min-width:0; padding:8px 10px; border-radius:8px;
+  background:var(--panel-deep); border:1px solid var(--line);
+}
+.arena-stat .l{ font-size:9.5px; font-weight:600; letter-spacing:.11em; text-transform:uppercase; color:var(--bone-faint); }
+.arena-stat b{ font-size:13px; font-weight:600; color:var(--bone); font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.arena-hint{ flex:1 1 260px; align-self:center; font-size:12px; line-height:1.5; color:var(--bone-faint); }
+.arena-actions{ display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:10px 14px; margin-left:auto; }
+.hide-toggle{ display:flex; align-items:center; gap:8px; font-size:12px; color:var(--bone-dim); cursor:pointer; user-select:none; }
+.hide-toggle input{ width:16px; height:16px; margin:0; accent-color:var(--violet); cursor:pointer; }
+
+/* ---- zone pills: the bottom edge is the zone's Threat ---- */
+
+.zone-pills{ grid-template-columns:repeat(auto-fill, minmax(min(220px, 100%), 1fr)); }
+.node-pill.zone .np-bar{ height:4px; background:rgba(193,97,58,.12); }
+.node-pill.zone .np-bar i{ background:linear-gradient(90deg,#7d3a2c,var(--ember)); }
+.node-pill.war.sovereign .np-art{ color:var(--r-epic); border-color:rgba(168,119,201,.45); background:linear-gradient(155deg,#35243f,#170f1c); }
+.item-modal .ip-art.war.zone{ background:linear-gradient(155deg,#4a2a22,#1d1216); }
+.am-item[data-monster]:hover{ color:var(--bone); }
+.am-item[data-monster] .ico{ color:var(--ember); }
+
+/* ---- the sidebar drawer on narrow screens ---- */
+
+.menu-btn{
+  display:none; width:36px; height:36px; flex-shrink:0; align-items:center; justify-content:center;
+  border-radius:8px; border:1px solid var(--line); background:var(--panel-raised); color:var(--bone-dim);
+}
+.menu-btn:hover{ color:var(--bone); border-color:var(--violet-dim); }
+.menu-btn .ico{ width:20px; height:20px; }
+.side-backdrop{ display:none; }
+
+@media (max-width:900px){
+  .menu-btn{ display:flex; }
+  .sidebar{
+    position:fixed; top:0; bottom:0; left:0; z-index:70; width:min(300px, 86vw);
+    padding:14px 12px calc(14px + env(safe-area-inset-bottom)); overflow-y:auto; overscroll-behavior:contain;
+    background:var(--bg); border-right:1px solid var(--line); box-shadow:12px 0 40px rgba(0,0,0,.55);
+    transform:translateX(-105%); visibility:hidden; transition:transform 220ms ease-out, visibility 0s linear 220ms;
+  }
+  body.nav-open .sidebar{ transform:none; visibility:visible; transition:transform 220ms ease-out, visibility 0s; }
+  .side-backdrop{ display:block; position:fixed; inset:0; z-index:65; background:rgba(5,4,8,.6); }
+  .side-backdrop[hidden]{ display:none !important; }
+  body.nav-open{ overflow:hidden; }
+  .sidebar > *{ flex-shrink:0; }   /* the drawer scrolls; its groups never squeeze */
+
+  /* Sixteen pixels or more, so phones never zoom in on a focused box. */
+  input, select, textarea, .field, .qty-input, .sort-sel{ font-size:16px; }
+}
+
+@media (max-width:760px){
+  /* One column: you in a strip, what's happening, then the foes at full width. */
+  .arena{ grid-template-columns:minmax(0, 1fr); gap:10px; padding:12px 10px; }
+  .arena-side.you{
+    display:grid; grid-template-columns:72px minmax(0, 1fr); column-gap:12px; row-gap:6px; align-items:center;
+    grid-template-areas:"art name" "art hp" "art veil" "art note";
+  }
+  .arena-side.you .arena-art{ grid-area:art; width:72px; align-self:start; }
+  .arena-side.you .arena-name{ grid-area:name; justify-content:flex-start; font-size:15px; }
+  .arena-side.you .hpbar{ grid-area:hp; max-width:none; }
+  .arena-side.you .veilbar{ grid-area:veil; max-width:none; }
+  .arena-side.you .veil-note{ grid-area:note; text-align:left; }
+  .arena-side.you .fx-layer{ right:auto; width:72px; }
+  .arena-side.you .float{ top:24px; font-size:18px; }
+  .arena-mid{ display:flex; align-items:baseline; justify-content:center; gap:10px; padding:0; }
+  .arena-vs{ display:none; }
+  .arena-status{ max-width:none; margin:0; }
+  .arena-timer{ margin:0; }
+  .arena-foes{ min-height:0; }
+  .foe-empty{ min-height:84px; }
+  .foe-card{ grid-template-columns:46px minmax(0, 1fr); gap:8px; padding:6px 8px 6px 6px; }
+  .foe-art{ width:46px; height:46px; }
+  .foe-card .fx-layer{ left:6px; width:46px; }
+  .foe-name{ font-size:13px; }
+  .foe-card .hpbar{ height:14px; margin-top:4px; }
+  .arena-stats{ grid-template-columns:repeat(2, minmax(0, 1fr)); flex-basis:100%; }
+  .arena-actions{ width:100%; justify-content:space-between; margin-left:0; }
 }

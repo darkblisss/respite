@@ -123,7 +123,7 @@ function migrate(loaded) {
   const m = Object.assign(freshState(), loaded);
   m.schema = SCHEMA;
 
-  ["meta", "player", "skills", "equipment", "tasks", "travel", "stats"].forEach((k) => {
+  ["meta", "player", "skills", "equipment", "tasks", "travel", "stats", "settings"].forEach((k) => {
     m[k] = Object.assign(base[k], loaded[k] || {});
   });
 
@@ -145,12 +145,103 @@ function migrate(loaded) {
   delete m.pets;
 
   const lastSeen = (loaded.meta && loaded.meta.lastSeen) || Date.now();
+  migrateEconomy(m, loaded, lastSeen);
   migrateTasks(m, lastSeen);
-  migrateCompanions(m, loaded);
-  settleBelongings(m);
+  migrateHunt(m, loaded, lastSeen);
+  migrateCompanions(m, loaded, lastSeen);
+  settleBelongings(m, lastSeen);
   m.log = m.log.slice(-60);
 
   return m;
+}
+
+// Schema 8 struck new coin: prices and purses are a fifth of what they were.
+function migrateEconomy(m, loaded, stamp) {
+  if ((loaded.schema || 0) >= 8) return;
+  m.player.gold = Math.floor((Number(m.player.gold) || 0) / 5);
+  m.stats.goldEarned = Math.floor((Number(m.stats.goldEarned) || 0) / 5);
+  m.bounty = null;
+  m.log.push({ t: stamp, m: "The camp struck new coin. Purses and prices are a fifth of what they were." });
+}
+
+// Puts a stack straight into a save that is still being migrated.
+function migrateStash(m, key, qty) {
+  const pools = ["inv", "vault", "bank"];
+  const where = pools.find((w) => m[w].items[key] != null) ||
+    pools.find((w) => Object.keys(m[w].items).length < (w === "inv" ? PACK_SLOTS : m[w].slots));
+  if (!where) return false;
+  m[where].items[key] = (m[where].items[key] || 0) + qty;
+  if (!m[where].order.includes(key)) m[where].order.push(key);
+  return true;
+}
+
+/* Schema 8 reworked the hunt: zones, Threat by zone, loot straight into
+   storage, and recovery counted in game time. */
+function migrateHunt(m, loaded, lastSeen) {
+  const p = loaded.player || {};
+  if (typeof p.recoveryLeft !== "number") {
+    m.player.recoveryLeft = clamp((Number(p.recoveryUntil) || 0) - lastSeen, 0, RECOVERY_MS);
+  }
+  delete m.player.recoveryUntil;
+  m.settings = { hideSovereign: !!(m.settings && m.settings.hideSovereign) };
+
+  if ((loaded.schema || 0) < 8) {
+    m.threat = {};
+
+    // Unclaimed spoils are carried in, or sold where they lie.
+    let carried = 0;
+    let sold = 0;
+    (loaded.spoils || []).forEach((sp) => {
+      const d = sp && itemDef(sp.key);
+      const qty = Math.max(0, Math.floor(Number(sp && sp.qty) || 0));
+      if (!d || !qty) return;
+      if (migrateStash(m, sp.key, qty)) carried++;
+      else sold += d.value * qty;
+    });
+    if (sold) m.player.gold += sold;
+    if (carried || sold) {
+      m.log.push({ t: lastSeen, m: `Spoils left on the field were carried in${sold ? `, and what didn't fit sold for ${fmtGold(sold)}` : ""}.` });
+    }
+
+    // A hunt already underway carries on from the Outer edge of the same ground,
+    // with its kill count and limit. One that was already pulling back, had
+    // reached its limit or had run twelve hours is over.
+    const old = m.tasks.combat;
+    const tier = typeof old?.queued === "number" && regionOfTier(old.queued) ? old.queued : old && old.tier;
+    const done = Math.max(0, Math.floor(Number(old && old.done) || 0));
+    const limit = old && old.limit != null && Number.isFinite(Number(old.limit)) ? Math.max(1, Math.floor(Number(old.limit))) : null;
+    const elapsed = clamp(Number(old && old.elapsed) || 0, 0, IDLE_CAP_MS);
+    const over = !old || old.queued === "stop" || (limit != null && done >= limit) || elapsed >= IDLE_CAP_MS;
+    if (!over && regionOfTier(tier)) {
+      const hunt = newHunt(tier, "outer", limit);
+      hunt.done = tier === old.tier ? done : 0;
+      hunt.elapsed = elapsed;
+      hunt.nextMark = (Math.floor(elapsed / XP_MARK_MS) + 1) * XP_MARK_MS;
+      hunt.marks = [[hunt.nextMark - XP_MARK_MS, 0]];
+      m.tasks.combat = hunt;
+    } else {
+      m.tasks.combat = null;
+    }
+  }
+  delete m.spoils;
+
+  // Anything that isn't a hunt this version understands is dropped.
+  const c = m.tasks.combat;
+  if (c && (!regionOfTier(c.tier) || !ZONES.some((z) => z.id === c.zone) || !Array.isArray(c.foes) || !Array.isArray(c.marks))) {
+    m.tasks.combat = null;
+  }
+  if (c && m.tasks.combat) {
+    c.foes = c.foes.filter((f) => f && getMonster(f.id) && f.hp > 0);
+    if (c.phase === "fight" && !c.foes.length) {
+      c.phase = "search";
+      c.wait = SEARCH_MIN_MS;
+    }
+  }
+
+  // Health can't sit above what this version says your most is.
+  const most = combatStats({ level: levelFromXp(Number(m.skills.warfare) || 0), klass: m.player.klass, equipment: m.equipment }).maxHp;
+  const hp = Number(m.player.hp);
+  m.player.hp = Number.isFinite(hp) ? clamp(hp, 0, most) : most;
 }
 
 // Tasks from older saves have no batch limit (they run until stopped) and
@@ -167,7 +258,7 @@ function migrateTasks(m, lastSeen) {
   });
 }
 
-function migrateCompanions(m, loaded) {
+function migrateCompanions(m, loaded, stamp) {
   const src = loaded.companions || {};
   const owned = {};
   Object.keys(src.owned || {}).forEach((id) => {
@@ -186,13 +277,13 @@ function migrateCompanions(m, loaded) {
   const refund = Object.keys(RETIRED_PETS).filter((id) => pets[id]).reduce((n, id) => n + RETIRED_PETS[id], 0);
   if (refund) {
     m.player.gold += refund;
-    m.log.push({ t: Date.now(), m: `Your old animals have left the camp. ${fmt(refund)} gold was paid back for them.` });
+    m.log.push({ t: stamp || Date.now(), m: `Your old animals have left the camp. ${fmtGold(refund)} was paid back for them.` });
   }
 }
 
 // Belongings hold ten slots now. Anything past that moves to Provisions,
 // then the Vault. Whatever still has nowhere to go stays put.
-function settleBelongings(m) {
+function settleBelongings(m, stamp) {
   const keys = m.inv.order.filter((k) => m.inv.items[k] != null);
   Object.keys(m.inv.items).forEach((k) => { if (!keys.includes(k)) keys.push(k); });
 
@@ -208,7 +299,7 @@ function settleBelongings(m) {
   m.inv.order = m.inv.order.filter((k) => m.inv.items[k] != null);
 
   if (moved) {
-    m.log.push({ t: Date.now(), m: `Belongings now hold ${PACK_SLOTS} slots. ${moved} stack${moved === 1 ? " was" : "s were"} moved into camp storage.` });
+    m.log.push({ t: stamp || Date.now(), m: `Belongings now hold ${PACK_SLOTS} slots. ${moved} stack${moved === 1 ? " was" : "s were"} moved into camp storage.` });
   }
 }
 
@@ -220,7 +311,7 @@ function applyLoadedRow(row, username, userId) {
 
   const gone = Date.now() - last;
   if (gone > 30000) {
-    catchUp({ ms: Math.min(gone, IDLE_CAP_MS), overCap: gone > IDLE_CAP_MS });
+    catchUp({ ms: Math.min(gone, IDLE_CAP_MS), overCap: gone > IDLE_CAP_MS, from: last });
   }
 
   refreshBounty();
@@ -243,7 +334,9 @@ async function resumeCloudSession() {
 
 /* ================= 5. OFFLINE CATCH-UP ================= */
 /* Runs the tick loop in one-second steps for the time you were away
-   (capped at 12 hours), then leaves one quiet line in the camp log. */
+   (capped at 12 hours), then leaves one quiet line in the camp log.
+   The hunt engine works event by event inside each step, so every
+   reinforcement, Sovereign and remedy lands when it would have. */
 
 function heldEverywhere() {
   const out = {};
@@ -255,15 +348,28 @@ function heldEverywhere() {
 }
 
 function catchUp(result) {
-  const step = 1000;
+  // Five-second steps: the hunt engine lands every event at its own moment inside a step.
+  const step = 5000;
   let left = result.ms;
   let guard = 0;
   const goldBefore = state.player.gold;
   const before = heldEverywhere();
 
-  while (left > 0 && (state.tasks.skilling || state.tasks.combat) && guard++ < 100000) {
-    tick(Math.min(step, left));
-    left -= step;
+  catchingUp = true;
+  simClock = result.from != null ? result.from : Date.now() - result.ms;
+  try {
+    while (left > 0 && (state.tasks.skilling || state.tasks.combat) && guard++ < 100000) {
+      const dt = Math.min(step, left);
+      simClock += dt;
+      tick(dt);
+      left -= dt;
+    }
+    // Whatever time is left passes with nothing running.
+    if (left > 0) state.player.recoveryLeft = Math.max(0, state.player.recoveryLeft - left);
+  } finally {
+    catchingUp = false;
+    simClock = null;
+    combatFx = [];
   }
 
   state.meta.playtimeMs += result.ms;
@@ -276,16 +382,16 @@ function catchUp(result) {
   });
 
   if (state.player.gold - goldBefore > 0) {
-    gains.push(`${fmt(state.player.gold - goldBefore)} gold`);
+    gains.push(fmtGold(state.player.gold - goldBefore));
   }
 
   if (result.overCap && (state.tasks.skilling || state.tasks.combat)) {
     state.tasks.skilling = null;
     state.tasks.combat = null;
-    say("12 hours passed.");
+    say("Away more than twelve hours. The crews and the hunt stood down.");
   }
 
-  if (gains.length) {
+  if (gains.length && !result.quiet) {
     say(`Away ${fmtTime(result.ms)}: ${gains.slice(0, 4).join(", ")}.`);
   }
 }

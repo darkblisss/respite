@@ -18,12 +18,11 @@ function freshState() {
   return {
     schema: SCHEMA,
     meta: { createdAt: Date.now(), lastSeen: Date.now(), playtimeMs: 0, account: null, userId: null },
-    player: { gold: 0, hp: 20, recoveryUntil: 0, klass: null },
+    player: { gold: 0, hp: 25, recoveryLeft: 0, klass: null },
     skills,
     inv:   { slots: PACK_SLOTS,   items: {}, order: [] },
     bank:  { slots: STORES_SLOTS, items: {}, order: [] },
     vault: { slots: BANK_SLOTS,   items: {}, order: [] },
-    spoils: [],
     uid: 1,
     equipment,
     tools: {},
@@ -32,7 +31,8 @@ function freshState() {
     region: "region_1",
     travel: { unlocked: ["region_1"] },
     companions: { owned: {}, active: null },   // owned[id] = { bond, rank, dupes }
-    threat: {},
+    threat: {},        // "tier:zone" -> 0..100
+    settings: { hideSovereign: false },
     agents: [],        // hired requisition agents
     requisitions: [],  // deployments awaiting the daily reset
     reqDay: 0,
@@ -60,12 +60,19 @@ function currentRegion() {
   return regionById(state.region);
 }
 
+// Out of the hunt after a death. Counts down in game time, so it also runs offline.
 function recovering() {
-  return state.player.recoveryUntil > Date.now();
+  return state.player.recoveryLeft > 0;
 }
 
+// While catching up on time away, the clock follows the time being played out,
+// so log lines carry the time they happened, and toasts and arena effects stay quiet.
+let simClock = null;
+let catchingUp = false;
+const nowMs = () => (simClock == null ? Date.now() : simClock);
+
 function say(msg) {
-  state.log.push({ t: Date.now(), m: msg });
+  state.log.push({ t: nowMs(), m: msg });
   if (state.log.length > 60) state.log.shift();
 }
 
@@ -279,7 +286,7 @@ function doubleChance(skillId) {
 
 function xpMult(skillId) {
   let m = skillId ? weatherXpMult(skillId) * bountifulXpMult(skillId) * (1 + companionBonus("xp", skillId)) : 1;
-  if (state.buff && state.buff.until > Date.now()) m *= state.buff.mult;
+  if (state.buff && state.buff.until > nowMs()) m *= state.buff.mult;
   return m;
 }
 
@@ -289,29 +296,38 @@ function xpEach(skillId, amount) {
 }
 
 function grantXp(skillId, amount) {
-  const gain = xpEach(skillId, amount);
+  addXp(skillId, xpEach(skillId, amount));
+}
+
+// Adds XP that already carries its multipliers. The hunt adds fractions of a
+// point; the total keeps them. Returns true on a level up.
+function addXp(skillId, gain) {
   const before = skillLevel(skillId);
   state.skills[skillId] = (state.skills[skillId] || 0) + gain;
   const after = skillLevel(skillId);
+  if (after <= before) return false;
 
-  if (after > before) {
-    say(`${skillName(skillId)} reaches level ${after}.`);
-    if (skillId === "warfare" && canPickClass()) setTimeout(maybeOfferClass, 60);
-    if (skillId === "warfare") state.player.hp = maxHp();
-    const hit = GATHER_ACTIONS[skillId] ? MASTERY_TRACK.find((m) => m.level === after) : null;
-    if (hit) toast(`${skillName(skillId)} ${after}: ${hit.label}`);
-    else if (after % 10 === 0) toast(`${skillName(skillId)} reaches level ${after}`);
+  say(`${skillName(skillId)} reaches level ${after}.`);
+  if (skillId === "warfare") {
+    state.player.hp = maxHp();
+    if (canPickClass()) setTimeout(maybeOfferClass, 60);
   }
+  const hit = GATHER_ACTIONS[skillId] ? MASTERY_TRACK.find((m) => m.level === after) : null;
+  if (hit) toast(`${skillName(skillId)} ${after}: ${hit.label}`);
+  else if (after % 10 === 0) toast(`${skillName(skillId)} reaches level ${after}`);
+  return true;
 }
 
 /* ================= 7. TICK ================= */
 
 function tick(dt) {
   resolveRequisitions();
+  if (state.player.recoveryLeft > 0) state.player.recoveryLeft = Math.max(0, state.player.recoveryLeft - dt);
   if (state.tasks.skilling || state.tasks.combat) companionBond(dt);
   if (state.tasks.skilling) skillTick(dt);
   if (state.tasks.combat) combatTick(dt);
-  if (state.buff && state.buff.until <= Date.now()) state.buff = null;
+  else if (state.player.hp > maxHp()) state.player.hp = maxHp();   // took armour off, say
+  if (state.buff && state.buff.until <= nowMs()) state.buff = null;
 }
 
 function stopSkilling(line, note) {
@@ -335,12 +351,12 @@ function skillTick(dt) {
 
   while (task.progress >= time && guard++ < 200000) {
     if (!canAfford(def.cost)) {
-      stopSkilling(`Work stopped. No materials left for ${titleCase(def.name)}.`, "Out of materials");
+      stopSkilling(`${titleCase(def.name)} stopped after ${fmtTime(task.elapsed)}: no materials left.`, "Out of materials");
       return;
     }
 
     if (!roomFor(def)) {
-      stopSkilling("Work stopped. Belongings, Provisions and the Vault are all full.", "Nowhere to put anything");
+      stopSkilling(`${titleCase(def.name)} stopped after ${fmtTime(task.elapsed)}: Belongings, Provisions and the Vault are all full.`, "Nowhere to put anything");
       return;
     }
 
@@ -354,7 +370,7 @@ function skillTick(dt) {
     companionFind(task.skillId);
 
     if (task.limit != null && task.done >= task.limit) {
-      stopSkilling(`Batch finished: ${fmt(task.done)} × ${titleCase(def.name)}.`, "Batch finished");
+      stopSkilling(`Batch finished: ${fmt(task.done)} × ${titleCase(def.name)} in ${fmtTime(task.elapsed)}.`, "Batch finished");
       return;
     }
 
@@ -371,7 +387,7 @@ function skillTick(dt) {
   }
 
   if (task.elapsed >= IDLE_CAP_MS) {
-    stopSkilling("Twelve hours at the same work. The crews stand down.", "Crews stood down");
+    stopSkilling(`Twelve hours at ${titleCase(def.name)} and ${fmt(task.done)} done. The crews stand down.`, "Crews stood down");
   }
 }
 
@@ -547,7 +563,7 @@ function claimBounty() {
   b.claimed = true;
   addGold(b.gold);
   state.buff = { until: Date.now() + 60 * 60 * 1000, mult: 2 };
-  say(`Bounty paid: ${fmt(b.gold)} gold.`);
+  say(`Bounty paid: ${fmtGold(b.gold)}.`);
   toast("Double experience for one hour");
   render();
 }
@@ -555,7 +571,7 @@ function claimBounty() {
 /* ================= 10. REQUISITIONS ================= */
 
 function hireAgent() {
-  if (state.player.gold < AGENT_HIRE_COST) { say(`Hiring costs ${fmt(AGENT_HIRE_COST)} gold.`); render(); return; }
+  if (state.player.gold < AGENT_HIRE_COST) { say(`Hiring costs ${fmtGold(AGENT_HIRE_COST)}.`); render(); return; }
   if (state.agents.length >= AGENT_ROSTER_MAX) { say("The roster is full."); render(); return; }
   state.player.gold -= AGENT_HIRE_COST;
   const rarity = rollAgentRarity();
@@ -617,7 +633,7 @@ function requisitionTargets() {
 /* ================= 11. SHOP & TRAVEL ================= */
 
 function shopStock() {
-  return REMEDIES.map((r) => ({ key: r.id, price: Math.round(r.value * 1.6) }));
+  return REMEDIES.map((r) => ({ key: r.id, price: r.price }));
 }
 
 function smugglerStock() {
@@ -672,7 +688,7 @@ function travelTo(regionId) {
   const r = regionById(regionId);
   if (!state.travel.unlocked.includes(regionId)) {
     if (state.player.gold < r.toll) {
-      say(`Need ${fmt(r.toll)} gold.`);
+      say(`Need ${fmtGold(r.toll)}.`);
       render();
       return;
     }
@@ -965,9 +981,13 @@ function loop() {
   const dt = now - lastTick;
   lastTick = now;
 
-  if (dt > 0) {
-    tick(Math.min(dt, 60000));
-    state.meta.playtimeMs += Math.min(dt, 60000);
+  if (dt > 60000) {
+    // The page slept (a phone in a pocket, a throttled background tab).
+    // Play the gap out properly instead of dropping it.
+    catchUp({ ms: Math.min(dt, IDLE_CAP_MS), overCap: dt > IDLE_CAP_MS, from: now - dt, quiet: dt < 10 * 60 * 1000 });
+  } else if (dt > 0) {
+    tick(dt);
+    state.meta.playtimeMs += dt;
   }
 
   renderFrame();
@@ -976,9 +996,4 @@ function loop() {
 function startLoop() {
   lastTick = Date.now();
   if (!loopTimer) loopTimer = setInterval(loop, 60);
-}
-
-// Called when the tab comes back into view.
-function resetTickClock() {
-  lastTick = Date.now();
 }

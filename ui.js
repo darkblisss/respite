@@ -24,7 +24,8 @@ let benchTier = 1;
 let benchTierSkill = null;
 
 let popItem = null;          // { key, from, pick } shown in the item popup
-let popAction = null;        // { kind, skillId, actionId, tier, monsterId, pick } in the action popup
+let popAction = null;        // { kind, skillId, actionId, tier, zone, monsterId, back, pick } in the action popup
+let huntZone = "outer";      // the zone the Hunt page's main button offers
 let lastPick = {};           // the amount last chosen for each skill, this session only
 
 let keys = {};               // render signatures, cleared by render()
@@ -101,7 +102,7 @@ function renderFrame() {
 
 function toast(msg) {
   const stack = el("toastStack");
-  if (!stack) return;
+  if (!stack || catchingUp) return;
   const t = document.createElement("div");
   t.className = "toast";
   t.textContent = msg;
@@ -116,7 +117,7 @@ const countOf = (done, limit) => `${fmt(done)} / ${limit == null ? "∞" : fmt(l
 /* ================= 4. TOPBAR ================= */
 
 function renderTopbar() {
-  setText(el("goldText"), fmt(state.player.gold));
+  setText(el("goldText"), fmtWhole(state.player.gold));
   setText(el("clockText"), serverClock());
 
   const hp = Math.max(0, Math.ceil(state.player.hp));
@@ -144,20 +145,15 @@ function renderTopbar() {
   const cBar = el("tbFieldBar");
 
   if (cp) {
-    setText(el("tbFieldName"), cp.mob.name);
+    setText(el("tbFieldName"), `${cp.zone.name} · ${cp.region.name}`);
     cBar.style.width = cp.pct + "%";
-
-    let line = `${countOf(cp.done, cp.limit)} kills · ${fmtTime(cp.timeLeft)} left`;
-    line += cp.food ? ` · remedies ${fmt(cp.foodHave)}/${fmt(cp.foodNeed)}` : " · no remedies";
-    if (state.tasks.combat.queued === "stop") line += " · pulling back";
-
-    setText(el("tbFieldMeta"), line);
-    el("tbFieldClear").classList.toggle("queued", state.tasks.combat.queued === "stop");
+    const doing = cp.phase === "hide" ? "hiding" : cp.phase === "search" ? "searching" : cp.kind === "sovereign" ? "a Sovereign" : `${cp.c.foes.length} on you`;
+    const rate = cp.xpRate == null ? "XP/hr soon" : `${fmt(Math.round(cp.xpRate))} XP/hr`;
+    setText(el("tbFieldMeta"), `${countOf(cp.done, cp.limit)} kills · ${rate} · Threat ${cp.threat} · ${doing}`);
   } else {
     setText(el("tbFieldName"), recovering() ? "Recovering" : "Idle");
     cBar.style.width = "0";
-    setText(el("tbFieldMeta"), recovering() ? `Back in ${fmtTime(state.player.recoveryUntil - Date.now())}.` : "Nobody is hunting.");
-    el("tbFieldClear").classList.remove("queued");
+    setText(el("tbFieldMeta"), recovering() ? `Back in ${fmtTime(state.player.recoveryLeft)}.` : "Nobody is hunting.");
   }
 }
 
@@ -253,12 +249,6 @@ function updateSidebar() {
     const busy = ref.kind === "war" ? !!state.tasks.combat : !!(state.tasks.skilling && state.tasks.skilling.skillId === id);
     ref.item.classList.toggle("busy", busy);
   });
-
-  const spoilTag = el("spoilsTag");
-  if (spoilTag) {
-    setText(spoilTag, state.spoils.length ? `${state.spoils.length} unclaimed spoils` : "");
-    spoilTag.hidden = !state.spoils.length;
-  }
 }
 
 function modSpan(pct, skillId) {
@@ -332,12 +322,11 @@ function renderSkill() {
   if (keys.skill !== sig) {
     keys.skill = sig;
     liveRefs = { nodes: [], recipes: [], hunt: null };
-    keys.spoils = null;
     keys.skillChips = null;
 
     el("skCamp").hidden = s.kind !== "gather";
-    el("skQuarry").hidden = s.kind !== "war";
-    el("skSpoils").hidden = s.kind !== "war";
+    el("skZones").hidden = s.kind !== "war";
+    el("skFoes").hidden = s.kind !== "war";
 
     renderMasteryTip(s);
     if (s.kind === "war") renderHuntBody(region);
@@ -346,7 +335,6 @@ function renderSkill() {
   }
 
   renderSkillChips(s);
-  if (s.kind === "war") renderSpoils();
   updateLive();
 }
 
@@ -357,7 +345,7 @@ function skillSig(s, region) {
   if (s.kind === "craft") parts.push(benchTab, benchTier);
   if (s.kind === "war") {
     const c = state.tasks.combat;
-    parts.push(c ? c.tier : "-", recovering(), state.player.klass || "-");
+    parts.push(c ? `${c.tier}:${c.zone}` : "-", recovering(), state.player.klass || "-");
   }
   return parts.join("|");
 }
@@ -598,47 +586,6 @@ function renderBenchBody(s) {
 
   // Picking a default tier above can change the signature; record the final one.
   keys.skill = skillSig(s, currentRegion());
-}
-
-// Rebuilds only when a new kind of loot lands; counts update in place.
-function renderSpoils() {
-  const list = el("skSpoilsBody");
-  setText(el("skSpoilsCount"), state.spoils.length ? `${state.spoils.length} lots waiting` : "");
-  el("skSpoilsActions").hidden = !state.spoils.length;
-
-  const sig = state.spoils.map((s) => s.key).join(",");
-  if (keys.spoils !== sig) {
-    keys.spoils = sig;
-    list.innerHTML = "";
-
-    if (!state.spoils.length) {
-      list.innerHTML = '<div class="muted tiny">Nothing left where they fell.</div>';
-      return;
-    }
-
-    state.spoils.slice().reverse().forEach((s) => {
-      const d = itemDef(s.key);
-      const row = document.createElement("div");
-      row.className = "spoil-row";
-      row.dataset.key = s.key;
-      row.innerHTML =
-        `<button type="button" class="left sp-open">${icon(d.icon, "ico-sm")}<span class="sp-name"></span></button>` +
-        '<div class="sp-qty"></div>' +
-        '<button type="button" class="minibtn sp-take">Take</button>' +
-        '<button type="button" class="minibtn sp-sell"></button>';
-      const nm = row.querySelector(".sp-name");
-      nm.textContent = itemName(s.key);
-      if (d.rarity && d.rarity !== "common") nm.classList.add("rar-" + d.rarity);
-      list.appendChild(row);
-    });
-  }
-
-  list.querySelectorAll(".spoil-row").forEach((row) => {
-    const s = state.spoils.find((x) => x.key === row.dataset.key);
-    if (!s) return;
-    setText(row.querySelector(".sp-qty"), "×" + fmt(s.qty));
-    setText(row.querySelector(".sp-sell"), fmtGold(itemDef(s.key).value * s.qty));
-  });
 }
 
 // Missing components, by name, for a recipe that can't be paid for once.
@@ -911,8 +858,10 @@ function renderCampScene(s) {
 }
 
 /* ================= 9. THE HUNT ================= */
-/* The arena: your commander on the left, the quarry on the right, chunky
-   health bars, and every blow floating up off whoever took it. */
+/* The arena: your commander on the left and up to three foes on the right,
+   each with its own health bar and every blow floating up off whoever took
+   it. Under it, the region's four zones and the quarry that lives there.
+   Zone pills open the zone popup, where a hunt is started. */
 
 const MONSTER_ART = {
   beast:
@@ -945,14 +894,19 @@ const MONSTER_ART = {
     '<circle class="m-eye" cx="44" cy="52" r="2.7"/><path class="m-bone" d="M24 62 L26 66 L28 62 M30 63 L32 67"/>',
 };
 
-function monsterArt(mob) {
-  return `<svg class="m-art ${mob.rank}" viewBox="0 0 120 120" aria-hidden="true">${MONSTER_ART[mob.icon] || MONSTER_ART.horror}</svg>`;
+function monsterArt(mob, elite) {
+  const cls = mob.archetype === "sovereign" ? "sovereign" : elite ? "elite" : "";
+  return `<svg class="m-art ${cls}" viewBox="0 0 120 120" aria-hidden="true">${MONSTER_ART[mob.icon] || MONSTER_ART.horror}</svg>`;
 }
 
-const RANK_NAMES = { grunt: "Common", elite: "Elite", boss: "Sovereign" };
+const ZONE_ICONS = { outer: "zoneOuter", middle: "zoneMiddle", inner: "zoneInner", core: "zoneCore" };
+
+const pctOf = (x) => `${Math.round(x * 100)}%`;
+
+// "the Outer of The Ashen Verge"
+const zonePlace = (zoneId, tier) => `the ${zoneDef(zoneId).name} of ${regionOfTier(tier).name}`;
 
 function renderHuntBody(region) {
-  const tier = region.tier;
   el("skWorkLabel").textContent = `The Hunt · ${region.name}`;
   const box = el("skWorkBody");
   box.innerHTML = "";
@@ -966,157 +920,271 @@ function renderHuntBody(region) {
       '<div class="arena-name"></div>' +
       '<div class="hpbar"><i></i><span></span></div>' +
       '<div class="veilbar" title="The Veil"><i></i></div>' +
+      '<div class="veil-note"></div>' +
     '</div>' +
-    '<div class="arena-mid"><div class="arena-vs">VS</div><div class="arena-status"></div></div>' +
-    '<div class="arena-side foe">' +
-      '<div class="fx-layer"></div>' +
-      '<button type="button" class="arena-art" data-hunt="open"></button>' +
-      '<div class="arena-name"><span class="fn"></span><span class="rank-tag"></span></div>' +
-      '<div class="hpbar foe"><i></i><span></span></div>' +
-      '<div class="veilbar blank"></div>' +
-    '</div>';
+    '<div class="arena-mid"><div class="arena-vs">VS</div><div class="arena-status"></div><div class="arena-timer"></div></div>' +
+    '<div class="arena-foes"><div class="foe-empty"><span class="fe-title"></span><span class="fe-sub"></span></div></div>';
   box.appendChild(arena);
 
   const foot = document.createElement("div");
   foot.className = "arena-foot";
   foot.innerHTML =
-    '<div class="arena-count"><b></b><span></span></div>' +
-    '<div class="btnrow"><button type="button" class="btn" data-hunt="pull"></button><button type="button" class="btn btn-primary" data-hunt="open"></button></div>';
+    '<div class="arena-stats">' +
+      '<div class="arena-stat"><span class="l">Kills</span><b data-stat="kills"></b></div>' +
+      '<div class="arena-stat"><span class="l">XP/hr</span><b data-stat="xp"></b></div>' +
+      '<div class="arena-stat"><span class="l">Threat</span><b data-stat="threat"></b></div>' +
+      '<div class="arena-stat"><span class="l">Time left</span><b data-stat="left"></b></div>' +
+    '</div>' +
+    '<div class="arena-hint">Choose a zone below to take up the hunt.</div>' +
+    '<div class="arena-actions">' +
+      '<label class="hide-toggle"><input type="checkbox" data-hunt="hide"><span>Hide when Threat peaks</span></label>' +
+      '<div class="btnrow"><button type="button" class="btn" data-hunt="pull">Pull back</button><button type="button" class="btn btn-primary" data-hunt="open"></button></div>' +
+    '</div>';
   box.appendChild(foot);
 
   const you = arena.querySelector(".you");
-  const foe = arena.querySelector(".foe");
+  const stat = (k) => foot.querySelector(`[data-stat="${k}"]`);
   liveRefs.hunt = {
-    tier, monsterId: null,
+    tier: region.tier,
     youSide: you, youArt: you.querySelector(".arena-art"), youName: you.querySelector(".arena-name"),
-    youHp: you.querySelector(".hpbar i"), youHpText: you.querySelector(".hpbar span"),
-    veil: you.querySelector(".veilbar i"), youFx: you.querySelector(".fx-layer"),
-    foeSide: foe, foeArt: foe.querySelector(".arena-art"), foeName: foe.querySelector(".fn"), foeRank: foe.querySelector(".rank-tag"),
-    foeHp: foe.querySelector(".hpbar i"), foeHpText: foe.querySelector(".hpbar span"), foeFx: foe.querySelector(".fx-layer"),
-    status: arena.querySelector(".arena-status"),
-    countMain: foot.querySelector(".arena-count b"), countSub: foot.querySelector(".arena-count span"),
-    pull: foot.querySelector('[data-hunt="pull"]'), open: foot.querySelector(".btn-primary"),
+    youHp: you.querySelector(".hpbar i"), youHpText: you.querySelector(".hpbar span"), youFx: you.querySelector(".fx-layer"),
+    veilBar: you.querySelector(".veilbar"), veil: you.querySelector(".veilbar i"), veilNote: you.querySelector(".veil-note"),
+    status: arena.querySelector(".arena-status"), timer: arena.querySelector(".arena-timer"),
+    foes: arena.querySelector(".arena-foes"), foeCards: new Map(),
+    empty: arena.querySelector(".foe-empty"), emptyTitle: arena.querySelector(".fe-title"), emptySub: arena.querySelector(".fe-sub"),
+    stats: foot.querySelector(".arena-stats"), hint: foot.querySelector(".arena-hint"),
+    kills: stat("kills"), xp: stat("xp"), threat: stat("threat"), left: stat("left"),
+    hideWrap: foot.querySelector(".hide-toggle"), hide: foot.querySelector('[data-hunt="hide"]'),
+    pull: foot.querySelector('[data-hunt="pull"]'), open: foot.querySelector('[data-hunt="open"]'),
+    zones: {},
   };
 
+  renderZones();
   renderQuarry(region);
 }
 
+function renderZones() {
+  const body = el("skZonesBody");
+  body.innerHTML = "";
+
+  const caption = document.createElement("p");
+  caption.className = "panel-caption";
+  caption.textContent = "Deeper zones field more foes at once, call reinforcements sooner, turn up more Elites and pay more XP a kill. Every kill builds that zone's Threat, and at 100 its Sovereign may come for you.";
+  body.appendChild(caption);
+
+  const pills = document.createElement("div");
+  pills.className = "node-pills zone-pills";
+  ZONES.forEach((z) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "node-pill war zone";
+    b.dataset.zone = z.id;
+    b.innerHTML =
+      `<span class="np-art">${icon(ZONE_ICONS[z.id], "ico-lg")}</span>` +
+      '<span class="np-body"><span class="np-name"></span><span class="np-state"></span></span>' +
+      '<span class="np-bar threat"><i></i></span>';
+    b.querySelector(".np-name").textContent = z.name;
+    pills.appendChild(b);
+    liveRefs.hunt.zones[z.id] = { pill: b, state: b.querySelector(".np-state"), bar: b.querySelector(".np-bar i") };
+  });
+  body.appendChild(pills);
+}
+
 function renderQuarry(region) {
-  const body = el("skQuarryBody");
+  const body = el("skFoesBody");
   body.innerHTML = "";
 
   const pills = document.createElement("div");
   pills.className = "node-pills";
-  rosterFor(region.tier).forEach((m) => {
+  foesOf(region.tier).concat([sovereignOf(region.tier)]).forEach((m) => {
+    const sov = m.archetype === "sovereign";
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "node-pill war";
+    b.className = "node-pill war" + (sov ? " sovereign" : "");
     b.dataset.monster = m.id;
     b.innerHTML =
       `<span class="np-art">${icon(m.icon, "ico-lg")}</span>` +
       '<span class="np-body"><span class="np-name"></span><span class="np-state"></span></span>';
     b.querySelector(".np-name").textContent = m.name;
-    b.querySelector(".np-state").textContent =
-      m.rank === "grunt" ? "Most of what turns up" : m.rank === "elite" ? "One spawn in five" : `Comes out at ${THREAT_CAP} threat`;
+    b.querySelector(".np-state").textContent = sov
+      ? "Sovereign · comes when Threat peaks"
+      : `${ARCHETYPES[m.archetype].name} · ${fmt(m.hp)} health · swings every ${(m.speed / 1000).toFixed(1)}s`;
     pills.appendChild(b);
   });
   body.appendChild(pills);
+}
 
-  const threat = document.createElement("div");
-  threat.className = "threat-block";
-  threat.innerHTML =
-    '<div class="threat-head"><span class="label">Regional Threat</span><span class="threat-num"></span></div>' +
-    '<div class="bar threat"><i></i></div><div class="threat-note"></div>';
-  body.appendChild(threat);
+function buildFoeCard(f) {
+  const mob = getMonster(f.id);
+  const sov = mob.archetype === "sovereign";
+  const node = document.createElement("div");
+  node.className = "foe-card" + (sov ? " sovereign" : f.elite ? " elite" : "");
+  node.innerHTML =
+    '<div class="fx-layer"></div>' +
+    `<button type="button" class="foe-art" data-monster="${mob.id}">${monsterArt(mob, f.elite)}</button>` +
+    '<div class="foe-body"><div class="foe-name"><span class="fn"></span></div><div class="hpbar foe"><i></i><span></span></div></div>';
+  node.querySelector(".foe-art").setAttribute("aria-label", `${mob.name}: details`);
+  node.querySelector(".fn").textContent = mob.name;
+  if (sov || f.elite) {
+    const tag = document.createElement("span");
+    tag.className = "rank-tag " + (sov ? "boss" : "elite");
+    tag.textContent = sov ? "Sovereign" : "Elite";
+    node.querySelector(".foe-name").appendChild(tag);
+  }
+  return {
+    node, art: node.querySelector(".foe-art"), fx: node.querySelector(".fx-layer"),
+    hp: node.querySelector(".hpbar i"), hpText: node.querySelector(".hpbar span"), gone: false,
+  };
+}
 
-  Object.assign(liveRefs.hunt, {
-    quarry: pills,
-    threatNum: threat.querySelector(".threat-num"),
-    threatBar: threat.querySelector(".bar.threat i"),
-    threatNote: threat.querySelector(".threat-note"),
+// Foe cards are keyed by uid: new foes get a card, the fallen fade out.
+function syncFoeCards(h, c) {
+  const foes = c && c.phase === "fight" ? c.foes : [];
+  const standing = new Set(foes.map((f) => f.uid));
+
+  h.foeCards.forEach((card, uid) => {
+    if (standing.has(uid) || card.gone) return;
+    card.gone = true;
+    card.node.classList.add("gone");
+    setTimeout(() => {
+      card.node.remove();
+      if (h.foeCards.get(uid) === card) h.foeCards.delete(uid);
+    }, 700);
   });
+
+  foes.forEach((f, i) => {
+    let card = h.foeCards.get(f.uid);
+    if (!card) {
+      card = buildFoeCard(f);
+      h.foeCards.set(f.uid, card);
+      h.foes.appendChild(card.node);
+    }
+    card.node.classList.toggle("target", i === 0);
+    card.hp.style.width = clamp(f.hp / f.max, 0, 1) * 100 + "%";
+    setText(card.hpText, `${fmt(Math.max(0, Math.ceil(f.hp)))} / ${fmt(f.max)}`);
+  });
+
+  const fading = [...h.foeCards.values()].some((card) => card.gone);
+  h.empty.hidden = foes.length > 0 || fading;
 }
 
 function updateHunt() {
   const h = liveRefs.hunt;
   const c = state.tasks.combat;
   const here = !!(c && c.tier === h.tier);
-  const mob = (here && getMonster(c.monsterId)) || rankOf(h.tier, "grunt");
-
-  if (h.monsterId !== mob.id) {
-    h.monsterId = mob.id;
-    h.foeArt.innerHTML = monsterArt(mob);
-    h.foeArt.setAttribute("aria-label", `${mob.name}: details`);
-    setText(h.foeName, mob.name);
-    h.foeRank.className = "rank-tag " + mob.rank;
-    setText(h.foeRank, mob.rank === "grunt" ? "" : RANK_NAMES[mob.rank]);
-    h.foeRank.hidden = mob.rank === "grunt";
-    h.quarry.querySelectorAll("[data-monster]").forEach((p) => p.classList.toggle("active", here && p.dataset.monster === mob.id));
-  }
+  const s = combatStats();
+  if (here) huntZone = c.zone;
 
   // ---- you ----
   setText(h.youName, commanderName());
-  const max = maxHp();
-  const hp = clamp(Math.ceil(state.player.hp), 0, max);
-  h.youHp.style.width = (hp / max) * 100 + "%";
-  setText(h.youHpText, `${fmt(hp)} / ${fmt(max)}`);
-  h.veil.style.width = (here ? clamp((c.veil || 0) / VEIL_MAX, 0, 1) * 100 : 0) + "%";
+  const hp = clamp(Math.ceil(state.player.hp), 0, s.maxHp);
+  h.youHp.style.width = (hp / s.maxHp) * 100 + "%";
+  setText(h.youHpText, `${fmt(hp)} / ${fmt(s.maxHp)}`);
   h.youSide.classList.toggle("down", recovering());
 
-  // ---- the quarry ----
-  const respawning = here && c.respawn > 0;
-  const foeMax = here ? c.mobMax : mob.hp;
-  const foeHp = here ? (respawning ? 0 : clamp(Math.ceil(c.mobHp), 0, foeMax)) : mob.hp;
-  h.foeHp.style.width = (foeHp / foeMax) * 100 + "%";
-  setText(h.foeHpText, `${fmt(foeHp)} / ${fmt(foeMax)}`);
-  h.foeSide.classList.toggle("dead", respawning);
-  h.foeSide.classList.toggle("idle", !here);
+  const kls = myClass();
+  h.veilBar.classList.toggle("locked", !kls);
+  h.veil.style.width = (kls && here ? clamp(c.veil / VEIL_MAX, 0, 1) * 100 : 0) + "%";
+  let veilText = kls ? kls.veilName : canPickClass() ? "Choose a discipline" : `The Veil opens at Hunt ${CLASS_PICK_LEVEL}`;
+  if (kls && here && c.volley > 0) veilText = `Volley · ${c.volley} to come`;
+  setText(h.veilNote, veilText);
 
+  // ---- the foes ----
+  syncFoeCards(h, here ? c : null);
+
+  // ---- what is happening ----
   let status = "Not hunting";
-  if (recovering()) status = `Recovering. Back in ${fmtTime(state.player.recoveryUntil - Date.now())}.`;
-  else if (respawning) status = c.queued === "stop" ? "Pulling back" : "Something else stirs";
-  else if (here) status = c.queued === "stop" ? "Pulling back after this fight" : "On the hunt";
-  else if (c) status = `Hunting in ${regionOfTier(c.tier).name}`;
-  setText(h.status, status);
+  let timer = "";
+  let emptyTitle = `${zoneDef(huntZone).name} lies quiet`;
+  let emptySub = "Nothing is being hunted here.";
 
+  if (recovering()) {
+    status = "Recovering";
+    timer = `Back in ${fmtTime(state.player.recoveryLeft)}`;
+    emptySub = "You are in no state to hunt.";
+  } else if (c && !here) {
+    status = `Hunting ${zonePlace(c.zone, c.tier)}`;
+  } else if (here) {
+    const zone = zoneDef(c.zone);
+    if (c.phase === "hide") {
+      status = "Hiding";
+      timer = `${fmtTime(c.wait)} left`;
+      emptyTitle = "Lying low";
+      emptySub = `Something vast is searching the ${zone.name}.`;
+    } else if (c.phase === "search") {
+      status = c.sovereignNext ? "Something vast approaches" : "Searching";
+      timer = `${fmtTime(c.wait)}`;
+      emptyTitle = c.sovereignNext ? sovereignOf(c.tier).name : `Searching the ${zone.name}`;
+      emptySub = c.sovereignNext ? "It has found you." : "The next encounter is close.";
+    } else if (c.kind === "sovereign") {
+      status = "A Sovereign";
+      timer = c.enrage ? `Enraged ×${c.enrage}` : `Enrages in ${fmtTime(c.enrageAt - c.clock)}`;
+    } else {
+      status = "Fighting";
+      timer = c.foes.length >= MAX_FOES ? "Three at once" : `Reinforcements in ${fmtTime(c.reinforceAt - c.clock)}`;
+    }
+  }
+  setText(h.status, status);
+  setText(h.timer, timer);
+  setText(h.emptyTitle, emptyTitle);
+  setText(h.emptySub, emptySub);
+
+  // ---- the numbers ----
+  h.stats.hidden = !here;
+  h.hint.hidden = here;
+  h.hideWrap.hidden = !here;
   if (here) {
-    const plan = combatPlan();
-    setText(h.countMain, `${countOf(c.done, c.limit)} kills`);
-    setText(h.countSub, plan ? `${fmtTime(plan.timeLeft)} left` : "");
+    setText(h.kills, countOf(c.done, c.limit));
+    setText(h.xp, c.xpRate == null ? `In ${fmtTime(c.nextMark - c.elapsed)}` : fmt(Math.round(c.xpRate)));
+    setText(h.threat, `${threatIn(c.tier, c.zone)} / ${THREAT_CAP}`);
+    setText(h.left, fmtTime(Math.max(0, IDLE_CAP_MS - c.elapsed)));
+    if (document.activeElement !== h.hide) h.hide.checked = !!state.settings.hideSovereign;
+  } else if (c) {
+    h.hint.textContent = `The hunt is out in ${zonePlace(c.zone, c.tier)}.`;
   } else {
-    setText(h.countMain, "No hunt underway");
-    setText(h.countSub, "Choose how many to hunt, or hunt until you pull back.");
+    h.hint.textContent = "Choose a zone below to take up the hunt.";
   }
 
   h.pull.hidden = !here;
-  setText(h.pull, here && c.queued === "stop" ? "Keep hunting" : "Pull back");
   h.open.disabled = recovering();
-  setText(h.open, recovering() ? "Recovering" : here ? "Change hunt" : "Hunt");
+  setText(h.open, recovering() ? "Recovering" : here ? "Change hunt" : `Hunt the ${zoneDef(huntZone).name}`);
 
-  const threat = threatIn(h.tier);
-  const boss = rankOf(h.tier, "boss").name;
-  setText(h.threatNum, `${threat} / ${THREAT_CAP}`);
-  h.threatBar.style.width = (threat / THREAT_CAP) * 100 + "%";
-  setText(h.threatNote, threat >= THREAT_CAP ? `${boss} is waiting.` : `At ${THREAT_CAP}, ${boss} comes out.`);
+  // ---- zones ----
+  ZONES.forEach((z) => {
+    const ref = h.zones[z.id];
+    if (!ref) return;
+    const threat = threatIn(h.tier, z.id);
+    ref.pill.classList.toggle("active", here && c.zone === z.id);
+    setText(ref.state, `${z.foesText} at once · ×${z.xp} XP · Threat ${threat}`);
+    ref.bar.style.width = (threat / THREAT_CAP) * 100 + "%";
+  });
 }
 
 const FLOAT_TEXT = {
   hit: (n) => fmt(n),
   crit: (n) => `${fmt(n)}!`,
-  veil: (n) => fmt(n),
+  strike: (n) => `${fmt(n)}!`,
+  ambush: (n) => `${fmt(n)}!`,
+  volley: (n) => fmt(n),
+  empowered: (n) => `${fmt(n)}!`,
   bleed: (n) => fmt(n),
   thorns: (n) => fmt(n),
   hurt: (n) => fmt(n),
-  block: (n) => `Blocked ${fmt(n)}`,
-  dodge: () => "Dodged",
+  ambushed: (n) => `${fmt(n)}!`,
+  block: (n) => `Blunted ${fmt(n)}`,
+  glance: () => "Glance",
   heal: (n) => `+${fmt(n)}`,
+  join: () => "Joins",
+  enrage: () => "Enraged",
 };
+const STRUCK = ["hit", "crit", "strike", "ambush", "volley", "empowered", "hurt", "ambushed", "block", "kill"];
 
 function spawnFloat(h, ev) {
-  const onFoe = ev.who === "foe";
-  const art = onFoe ? h.foeArt : h.youArt;
+  const card = ev.who === "you" ? null : h.foeCards.get(ev.who);
+  if (ev.who !== "you" && !card) return;
+  const art = card ? card.art : h.youArt;
 
-  if (["hit", "crit", "veil", "hurt", "block", "kill"].includes(ev.kind)) {
+  if (STRUCK.includes(ev.kind)) {
     art.classList.remove("struck");
     void art.offsetWidth;   // restart the animation
     art.classList.add("struck");
@@ -1127,7 +1195,7 @@ function spawnFloat(h, ev) {
   const f = document.createElement("span");
   f.className = `float ${ev.kind} lane${floatSeq++ % 3}`;
   f.textContent = text(ev.amount);
-  (onFoe ? h.foeFx : h.youFx).appendChild(f);
+  (card ? card.fx : h.youFx).appendChild(f);
   setTimeout(() => f.remove(), 1000);
 }
 
@@ -1137,9 +1205,10 @@ function drainCombatFx() {
   const events = combatFx.splice(0);
   const h = liveRefs.hunt;
   const c = state.tasks.combat;
-  if (!h || route.page !== "skill" || document.hidden || !c || c.tier !== h.tier) return;
+  if (!h || route.page !== "skill" || document.hidden || (c && c.tier !== h.tier)) return;
   const now = Date.now();
-  events.forEach((ev) => { if (now - ev.t < 1500) spawnFloat(h, ev); });
+  // A burst (a long frame, a slow device) shows only its last few blows.
+  events.filter((ev) => now - ev.t < 1500).slice(-8).forEach((ev) => spawnFloat(h, ev));
 }
 
 /* ================= 10. CHARACTER ================= */
@@ -1226,29 +1295,30 @@ function renderCharacterLabour() {
 function renderCharacterField() {
   const box = el("chField");
   const cp = combatPlan();
-  const sig = cp ? "fight:" + cp.mob.id : recovering() ? "recovering" : "idle";
+  const sig = cp ? `hunt:${cp.c.tier}:${cp.c.zone}` : recovering() ? "recovering" : "idle";
 
   if (keys.chField !== sig) {
     keys.chField = sig;
     box.innerHTML = "";
-    if (cp) box.appendChild(taskBlock(cp.mob.icon, cp.mob.name, true));
+    if (cp) box.appendChild(taskBlock(ZONE_ICONS[cp.zone.id], `${cp.zone.name} · ${cp.region.name}`, true));
     else if (recovering()) box.appendChild(idleBlock("Recovering", "", "Open the Hunt", () => go("skill", "warfare")));
     else box.appendChild(idleBlock("Nothing hunted", "Take up the hunt yourself.", "Open the Hunt", () => go("skill", "warfare")));
   }
 
   if (cp) {
     box.querySelector(".bar i").style.width = cp.pct + "%";
-    setText(box.querySelector(".task-meta span"), `${countOf(cp.done, cp.limit)} kills`);
+    setText(box.querySelector(".task-meta span"), `${countOf(cp.done, cp.limit)} kills · ${cp.xpRate == null ? "XP/hr soon" : `${fmt(Math.round(cp.xpRate))} XP/hr`}`);
     setText(box.querySelector(".task-meta b"), fmtTime(cp.timeLeft) + " left");
   } else if (recovering()) {
-    setText(box.querySelector(".idle-block .sub"), `Back in ${fmtTime(state.player.recoveryUntil - Date.now())}.`);
+    setText(box.querySelector(".idle-block .sub"), `Back in ${fmtTime(state.player.recoveryLeft)}.`);
   }
 }
 
 function renderCharacterStats() {
+  const s = combatStats();
   const rows = [
-    ["Health", maxHp()], ["Attack", Math.round(attackPower())], ["Defence", Math.round(defencePower())],
-    ["Kills", fmt(state.stats.kills)], ["Deaths", fmt(state.stats.deaths)], ["Gold Earned", fmt(state.stats.goldEarned)],
+    ["Health", fmt(s.maxHp)], ["Attack", fmtStat(s.attack)], ["Defence", fmtStat(s.defence)],
+    ["Kills", fmt(state.stats.kills)], ["Deaths", fmt(state.stats.deaths)], ["Gold Earned", fmtWhole(state.stats.goldEarned)],
   ];
   const sig = JSON.stringify(rows);
   if (keys.chStats === sig) return;
@@ -1509,17 +1579,21 @@ function renderStatRows(boxId, rows) {
 
 function renderStanding() {
   const kls = myClass();
+  const s = combatStats();
+  const tier = currentRegion().tier;
+  let veil = `Opens at Hunt ${CLASS_PICK_LEVEL}`;
+  if (kls) veil = s.absorb ? `+${fmtStat(s.absorb)} a second` : `+${s.veilGain} a blow`;
+  else if (canPickClass()) veil = "Choose a discipline";
   renderStatRows("dollStanding", [
     ["Discipline", kls ? kls.name : (canPickClass() ? "Choose one" : `Unlocks at Hunt ${CLASS_PICK_LEVEL}`), kls ? "good" : "gold"],
-    ["Health", fmt(maxHp())],
-    ["Attack Power", Math.round(attackPower()), "gold"],
-    ["Defence", Math.round(defencePower())],
-    ["Attack Speed", (swingSpeed() / 1000).toFixed(1) + "s"],
-    ["Crit Chance", Math.round(critChance() * 100) + "%"],
-    ["Crit Damage", Math.round(critDamage() * 100) + "%"],
-    ["Block", Math.round(blockChance() * 100) + "%"],
-    ["Dodge", Math.round(dodgeChance() * 100) + "%"],
-    ["Defence Pen.", Math.round(defencePen() * 100) + "%"],
+    ["Health", fmt(s.maxHp)],
+    ["Attack", fmtStat(s.attack), "gold"],
+    ["Defence", `${fmtStat(s.defence)} · stops ${pctOf(mitigation(s.defence, tier))} here`],
+    ["Swing", (s.speed / 1000).toFixed(1) + "s"],
+    ["Crit Chance", pctOf(s.crit)],
+    ["Crit Damage", pctOf(s.critDmg)],
+    ["Penetration", pctOf(s.pen)],
+    ["Veil", veil],
     ["Hunt", "Lv " + skillLevel("warfare"), "good"],
     ["Belongings", `${slotsUsed("inv")} / ${packSlots()}`],
   ]);
@@ -1555,7 +1629,7 @@ function renderLedger() {
 
   renderStatRows("dollLedger", [
     ["Total Level", totalLevel(), "good"],
-    ["Gold on Hand", fmt(state.player.gold), "gold"],
+    ["Gold on Hand", fmtWhole(state.player.gold), "gold"],
     ["Provisions", `${slotsUsed("bank")} / ${slotCap("bank")}`],
     ["Vault", `${slotsUsed("vault")} / ${slotCap("vault")}`],
     ["Actions Worked", fmt(state.stats.actions)],
@@ -1644,7 +1718,7 @@ function qtyPicker(pick, opts) {
      "inv" | "bank" | "vault"  in storage: equip, move, sell, break down
      "equip:<slot>"            worn: unequip, repair
      "tool:<skillId>"          in the tool rack: stow
-     "view"                    just looking (costs, drops, spoils) */
+     "view"                    just looking (costs and drops) */
 
 let itemReturnFocus = null;
 
@@ -1780,9 +1854,19 @@ function fillItemPopup() {
 
   if (d.kind === "gear") {
     const cmp = displaced.length > 0;
-    [["attack", "Attack"], ["defence", "Defence"], ["health", "Max Health"]].forEach(([stat, label]) => {
+    [["attack", "Attack"], ["defence", "Defence"], ["health", "Max Health"], ["veil", "Veil a blow"]].forEach(([stat, label]) => {
       if (d[stat] || (cmp && sum(stat))) statRowInto(stats, label, `+${fmt(d[stat])}`, cmp ? d[stat] - sum(stat) : 0);
     });
+    if (d.crit || (cmp && sum("crit"))) {
+      const delta = cmp ? Math.round((d.crit - sum("crit")) * 1000) / 10 : 0;
+      const row = statRowInto(stats, "Crit Chance", `+${+(d.crit * 100).toFixed(1)}%`, 0);
+      if (delta) {
+        const chip = document.createElement("span");
+        chip.className = "delta " + (delta > 0 ? "up" : "down");
+        chip.textContent = `${delta > 0 ? "+" : "−"}${Math.abs(delta)}%`;
+        row.parentNode.appendChild(chip);
+      }
+    }
     if (d.slot === "weapon") statRowInto(stats, "Grip", d.twoHanded ? "Two-handed" : "One-handed");
     if (from.startsWith("equip:")) statRowInto(stats, "Condition", `${wearPct(key)}%`);
     else statRowInto(stats, "Durability", fmt(d.maxDur));
@@ -1951,7 +2035,7 @@ let actionReturnFocus = null;
 
 function openActionPopup(spec) {
   if (el("actionModal").hidden) actionReturnFocus = document.activeElement;
-  const memo = lastPick[spec.kind === "hunt" ? "warfare" : spec.skillId];
+  const memo = lastPick[spec.kind === "hunt" || spec.kind === "foe" ? "warfare" : spec.skillId];
   popAction = Object.assign({}, spec, { pick: memo ? { n: memo.n, inf: memo.inf } : { n: 1, inf: true }, sig: null });
   buildActionPopup();
   el("actionModal").hidden = false;
@@ -1980,8 +2064,9 @@ function refreshActionPopup() {
 function actionSig(a) {
   if (a.kind === "hunt") {
     const c = state.tasks.combat;
-    return ["hunt", a.tier, a.monsterId, recovering(), !!(c && c.tier === a.tier), companionSig()].join("|");
+    return ["hunt", a.tier, a.zone, recovering(), c ? `${c.tier}:${c.zone}` : "-", companionSig()].join("|");
   }
+  if (a.kind === "foe") return ["foe", a.monsterId, companionSig()].join("|");
   const t = state.tasks.skilling;
   const def = findAction(a.skillId, a.actionId);
   return [a.kind, a.skillId, a.actionId, skillLevel(a.skillId) < def.level,
@@ -2003,7 +2088,7 @@ function updateActionPopup() {
     return;
   }
   if (a.kind === "hunt") updateHuntPopup(a);
-  else updateWorkPopup(a);
+  else if (a.kind !== "foe") updateWorkPopup(a);
 }
 
 function buildActionPopup() {
@@ -2016,11 +2101,20 @@ function buildActionPopup() {
   el("amActions").innerHTML = "";
   el("amPlan").innerHTML = '<span></span> <span class="warn"></span>';
 
+  const viewOnly = a.kind === "foe";
+  el("amRun").hidden = true;
+  el("amQty").hidden = viewOnly;
+  el("amPlan").hidden = viewOnly;
+
   if (a.kind === "hunt") buildHuntPopup(a);
+  else if (a.kind === "foe") buildFoePopup(a);
   else buildWorkPopup(a);
 
   const qtyBox = el("amQty");
   qtyBox.innerHTML = "";
+  a.picker = null;
+  if (viewOnly) return;
+
   a.picker = qtyPicker(a.pick, {
     max: () => actionPopupMax(a),
     allowInf: true,
@@ -2034,10 +2128,7 @@ function buildActionPopup() {
 }
 
 function actionPopupMax(a) {
-  if (a.kind === "hunt") {
-    const mob = getMonster(a.monsterId) || rankOf(a.tier, "grunt");
-    return Math.floor(IDLE_CAP_MS / fightOdds(mob).killMs);
-  }
+  if (a.kind === "hunt") return a.odds && a.odds.killMs ? Math.max(1, Math.floor(IDLE_CAP_MS / a.odds.killMs)) : 9999;
   return actionMax(findAction(a.skillId, a.actionId));
 }
 
@@ -2196,96 +2287,185 @@ function updateWorkPopup(a) {
 }
 
 function buildHuntPopup(a) {
-  const mob = getMonster(a.monsterId) || rankOf(a.tier, "grunt");
-  const odds = fightOdds(mob);
+  const zone = zoneDef(a.zone);
+  const region = regionOfTier(a.tier);
   const c = state.tasks.combat;
-  const engaged = !!(c && c.tier === a.tier);
+  const here = !!(c && c.tier === a.tier && c.zone === zone.id);
+  huntZone = zone.id;
 
-  const desc = mob.rank === "grunt"
-    ? "The usual. Most of what the hunt turns up here."
-    : mob.rank === "elite"
-      ? "Turns up in one spawn in five. Hits harder, and pays for it."
-      : `Comes out when threat reaches ${THREAT_CAP}. Always leaves a piece of epic gear.`;
-  setActionHead(monsterArt(mob), "war", mob.name, `${RANK_NAMES[mob.rank]} · Lv ${mob.level} · ${regionOfTier(mob.tier).name}`, desc);
+  setActionHead(icon(ZONE_ICONS[zone.id], "ico-lg"), "war zone", `${zone.name} · ${region.name}`, `Hunt · Tier ${a.tier}`, zone.note);
   fillChips(el("amChips"), xpMods("warfare"));
 
   const stats = el("amStats");
-  statRowInto(stats, "Health", fmt(mob.hp));
-  statRowInto(stats, "Attack", fmt(mob.attack));
-  statRowInto(stats, "Defence", fmt(mob.defence));
-  statRowInto(stats, "Swings every", `${(mob.speed / 1000).toFixed(1)}s`);
-  statRowInto(stats, "Experience", `${fmt(xpEach("warfare", mob.xp))} XP a kill`);
-  const goldMult = 1 + companionBonus("gold");
-  statRowInto(stats, "Gold", `${fmt(Math.round(mob.gold[0] * goldMult))} to ${fmt(Math.round(mob.gold[1] * goldMult))}`);
-  statRowInto(stats, "A kill takes", `about ${fmtTime(odds.killMs)}`);
-  statRowInto(stats, "Survival", odds.survivable ? "Survivable" : "You will not last here", 0, odds.survivable ? "good" : "warn");
+  if (skillLevel("warfare") < region.level) statRowInto(stats, "Suited to", `Hunt Lv ${region.level} and up`, 0, "warn");
+  statRowInto(stats, "Foes at once", `${zone.foesText}, never more than ${MAX_FOES}`);
+  statRowInto(stats, "Reinforcements", `One every ${zone.windowMs / 1000}s a fight runs on`);
+  statRowInto(stats, "Elites", pctOf(zone.elite));
+  statRowInto(stats, "XP a kill", `×${zone.xp}`);
+  a.refs.threat = statRowInto(stats, "Threat", "");
+  a.refs.peak = statRowInto(stats, "At 100 Threat", "");
+  a.refs.xp = statRowInto(stats, "XP/hr", "Reckoning");
+  a.refs.kill = statRowInto(stats, "A kill", "Reckoning");
+  a.refs.last = statRowInto(stats, "You last", "Reckoning");
   a.refs.food = statRowInto(stats, "Remedies", "");
+
+  el("amListLabel").textContent = "Turns up here";
+  foesOf(a.tier).forEach((m) => foeListRow(m, `${pctOf(zone.mix[m.archetype])} of foes`));
+  const sov = sovereignOf(a.tier);
+  foeListRow(sov, zone.engage >= 1 ? "When Threat peaks" : `${pctOf(zone.engage)} of Threat peaks`);
+  el("amListWrap").hidden = false;
+
+  const box = el("amActions");
+  if (here) {
+    const pull = document.createElement("button");
+    pull.type = "button";
+    pull.className = "btn";
+    pull.textContent = "Pull back";
+    pull.onclick = () => { pullBack(); closeActionPopup(); };
+    box.appendChild(pull);
+  }
+  const startBtn = document.createElement("button");
+  startBtn.type = "button";
+  startBtn.className = "btn btn-primary" + (here ? "" : " wide");
+  startBtn.onclick = startFromPopup;
+  box.appendChild(startBtn);
+  a.refs.go = startBtn;
+
+  // The odds are played out just after the popup paints, a run at a time.
+  const sig = a.sig;
+  a.odds = null;
+  huntOddsLater(a.tier, zone.id, (odds) => {
+    if (popAction !== a || a.sig !== sig) return;
+    a.odds = odds;
+    paintHuntOdds(a);
+    updateHuntPopup(a);
+  });
+}
+
+// A foe in a popup list. Opens that foe's own popup.
+function foeListRow(mob, value) {
+  const row = document.createElement("div");
+  row.className = "am-row";
+  row.innerHTML = '<button type="button" class="am-item"></button><span class="am-val"></span>';
+  const b = row.querySelector(".am-item");
+  b.dataset.monster = mob.id;
+  b.innerHTML = `${icon(mob.icon, "ico-sm")}<span></span>`;
+  b.querySelector("span").textContent = mob.name;
+  row.querySelector(".am-val").textContent = value;
+  el("amList").appendChild(row);
+}
+
+function paintHuntOdds(a) {
+  const o = a.odds;
+  setText(a.refs.xp, `About ${fmt(Math.round(o.xpPerHour))}`);
+  setText(a.refs.kill, o.killMs ? `Every ${fmtTime(o.killMs)} or so` : "Rarely");
+
+  const last = a.refs.last;
+  if (o.survivalMs == null) {
+    setText(last, "Past twelve hours");
+    last.className = "good";
+  } else if (o.deaths < o.runs) {
+    setText(last, `${fmtTime(o.survivalMs)}, often longer`);
+    last.className = "";
+  } else {
+    setText(last, `About ${fmtTime(o.survivalMs)}`);
+    last.className = o.survivalMs < 60 * 60 * 1000 ? "warn" : "";
+  }
+}
+
+function updateHuntPopup(a) {
+  const c = state.tasks.combat;
+  const zone = zoneDef(a.zone);
+  const here = !!(c && c.tier === a.tier && c.zone === zone.id);
+  const n = a.pick.inf ? null : a.pick.n;
+
+  a.picker.refresh();
+  setText(a.refs.threat, `${threatIn(a.tier, zone.id)} / ${THREAT_CAP} · ×${zone.threat} a kill`);
+  const sov = sovereignOf(a.tier).name;
+  setText(a.refs.peak, state.settings.hideSovereign
+    ? "You hide for five minutes"
+    : zone.engage >= 1 ? `${sov} comes` : `${sov} comes ${pctOf(zone.engage)} of the time`);
+
+  const held = remedyHeals().length;
+  const perHour = a.odds ? a.odds.remediesPerHour : 0;
+  setText(a.refs.food, held ? `${fmt(held)} held${perHour >= 0.05 ? ` · about ${fmtStat(perHour)} an hour` : ""}` : "None held");
+  a.refs.food.className = held ? "" : "warn";
+
+  const run = el("amRun");
+  run.hidden = !here;
+  if (here) {
+    const plan = combatPlan();
+    el("amRunBar").style.width = plan.pct + "%";
+    setText(el("amRunLeft"), `Underway · ${countOf(c.done, c.limit)} kills`);
+    setText(el("amRunRight"), c.xpRate == null ? `XP/hr in ${fmtTime(c.nextMark - c.elapsed)}` : `${fmt(Math.round(c.xpRate))} XP/hr`);
+  }
+
+  const plan = el("amPlan");
+  const killMs = a.odds && a.odds.killMs;
+  setText(plan.children[0], n
+    ? `${fmt(n)} kills${killMs ? ` · about ${fmtTime(n * killMs)}` : ""}`
+    : "No limit · until you pull back, fall or twelve hours pass");
+  setText(plan.children[1], n && killMs && n * killMs > IDLE_CAP_MS ? "Stops at twelve hours." : "");
+
+  a.refs.go.disabled = recovering();
+  setText(a.refs.go, recovering() ? "Recovering" : here || !c ? "Hunt" : "Move the hunt here");
+}
+
+function buildFoePopup(a) {
+  const mob = getMonster(a.monsterId);
+  const sov = mob.archetype === "sovereign";
+  const arch = ARCHETYPES[mob.archetype];
+  const n = foeNumbers(mob, false);
+  const s = combatStats();
+
+  setActionHead(monsterArt(mob, false), "war", mob.name, `${sov ? "Sovereign" : arch.name} · ${regionOfTier(mob.tier).name}`, sov ? SOVEREIGN.note : arch.note);
+  el("amChips").innerHTML = "";
+
+  const stats = el("amStats");
+  statRowInto(stats, "Health", fmt(n.hp));
+  statRowInto(stats, "Attack", `${fmtStat(n.attack)} a blow`);
+  const perMinute = (n.attack * (1 - mitigation(s.defence, mob.tier)) * 60000) / mob.speed;
+  statRowInto(stats, "Against you", `About ${fmtStat(perMinute)} a minute`);
+  statRowInto(stats, "Defence", `Stops ${pctOf(mitigation(mob.defence, mob.tier))} of a blow`);
+  statRowInto(stats, "Swings every", `${(mob.speed / 1000).toFixed(1)}s`);
+  statRowInto(stats, "Experience", `${fmtStat(n.xp * xpMult("warfare"))} a kill, more deeper in`);
+  if (!sov) statRowInto(stats, "Threat", `${n.threat} a kill, more deeper in`);
+  const goldMult = 1 + companionBonus("gold");
+  statRowInto(stats, "Gold", `${fmtGold(Math.round(n.gold[0] * goldMult))} to ${fmtGold(Math.round(n.gold[1] * goldMult))}`);
+  if (sov) {
+    statRowInto(stats, "Enrages", `+${pctOf(SOVEREIGN.enrage)} attack every ${SOVEREIGN.enrageMs / 1000}s`);
+  } else {
+    const e = foeNumbers(mob, true);
+    statRowInto(stats, "As an Elite", `${fmt(e.hp)} health · ${fmtStat(e.attack)} a blow · ×${ELITE.xp} XP`);
+  }
 
   el("amListLabel").textContent = "Drops";
   const dropMult = 1 + companionBonus("drops");
   mob.drops.forEach(([k, qty, chance]) => {
     actionListRow(k, `${itemName(k)} ×${qty}`).textContent = chancePct(Math.min(1, chance * dropMult));
   });
-  if (mob.rank === "boss") actionListRow(null, "Epic gear").textContent = "Always";
+  if (sov) actionListRow(null, "Epic gear").textContent = "Always";
+  else actionListRow(null, "Elites drop").textContent = `×${ELITE.drops}`;
   const rare = companionBonus("rare");
   if (rare) actionListRow(null, "Finer gear").textContent = chancePct(rare);
   el("amListWrap").hidden = false;
 
-  const box = el("amActions");
-  if (engaged) {
-    const pull = document.createElement("button");
-    pull.type = "button";
-    pull.className = "btn";
-    pull.onclick = () => { pullBack(); };
-    box.appendChild(pull);
-    a.refs.pull = pull;
+  if (a.back) {
+    const back = document.createElement("button");
+    back.type = "button";
+    back.className = "btn wide";
+    back.textContent = `Back to the ${zoneDef(a.back.zone).name}`;
+    back.onclick = () => openActionPopup(a.back);
+    el("amActions").appendChild(back);
   }
-  const startBtn = document.createElement("button");
-  startBtn.type = "button";
-  startBtn.className = "btn btn-primary" + (engaged ? "" : " wide");
-  startBtn.onclick = startFromPopup;
-  box.appendChild(startBtn);
-  a.refs.go = startBtn;
-  a.refs.killMs = odds.killMs;
-}
-
-function updateHuntPopup(a) {
-  const c = state.tasks.combat;
-  const engaged = !!(c && c.tier === a.tier);
-  const n = a.pick.inf ? null : a.pick.n;
-
-  a.picker.refresh();
-
-  const food = bestFood();
-  setText(a.refs.food, food ? `${fmt(haveQty(food))} × ${itemName(food)}` : "None");
-  a.refs.food.className = food ? "" : "warn";
-
-  const run = el("amRun");
-  run.hidden = !engaged;
-  if (engaged) {
-    const plan = combatPlan();
-    el("amRunBar").style.width = (c.respawn > 0 ? 0 : clamp((c.mobHp / c.mobMax) * 100, 0, 100)) + "%";
-    setText(el("amRunLeft"), `Underway · ${countOf(c.done, c.limit)} kills`);
-    setText(el("amRunRight"), plan ? `${fmtTime(plan.timeLeft)} left` : "");
-  }
-
-  const plan = el("amPlan");
-  setText(plan.children[0], n
-    ? `${fmt(n)} kills · about ${fmtTime(n * a.refs.killMs)}`
-    : "No limit · until you pull back or twelve hours pass");
-  setText(plan.children[1], n && n * a.refs.killMs > IDLE_CAP_MS ? "Stops at twelve hours." : "");
-
-  if (a.refs.pull) setText(a.refs.pull, c && c.queued === "stop" ? "Keep hunting" : "Pull back");
-  a.refs.go.disabled = recovering();
-  setText(a.refs.go, recovering() ? "Recovering" : "Hunt");
 }
 
 function startFromPopup() {
   const a = popAction;
-  if (!a || (a.refs.go && a.refs.go.disabled)) return;
+  if (!a || a.kind === "foe" || (a.refs.go && a.refs.go.disabled)) return;
   const limit = a.pick.inf ? null : a.pick.n;
   lastPick[a.kind === "hunt" ? "warfare" : a.skillId] = { n: a.pick.n, inf: a.pick.inf };
-  const started = a.kind === "hunt" ? startHunt(a.tier, limit) : startSkillTask(a.skillId, a.actionId, limit);
+  const started = a.kind === "hunt" ? startHunt(a.tier, a.zone, limit) : startSkillTask(a.skillId, a.actionId, limit);
   if (started) closeActionPopup();
 }
 
@@ -2346,7 +2526,7 @@ function renderAtlas() {
       foot.textContent = "Road open";
     } else {
       foot.className = "atlas-foot cost" + (state.player.gold < r.toll ? " cant" : "");
-      foot.textContent = `Toll ${fmt(r.toll)} gold`;
+      foot.textContent = `Toll ${fmtGold(r.toll)}`;
     }
     card.onclick = () => travelTo(r.id);
     box.appendChild(card);
@@ -2429,7 +2609,7 @@ function renderBounty() {
   const card = box.querySelector(".bounty-card");
   if (!b || !card) return;
   card.querySelector(".bar i").style.width = clamp((b.progress / b.amount) * 100, 0, 100) + "%";
-  setText(card.querySelector(".bounty-reward"), `${fmt(Math.min(b.progress, b.amount))} of ${fmt(b.amount)} · pays ${fmt(b.gold)} gold and an hour of double XP.`);
+  setText(card.querySelector(".bounty-reward"), `${fmt(Math.min(b.progress, b.amount))} of ${fmt(b.amount)} · pays ${fmtGold(b.gold)} and an hour of double XP.`);
   const btn = card.querySelector("button");
   const done = b.progress >= b.amount;
   setText(btn, b.claimed ? "Paid out" : (done ? "Claim" : "Not finished"));
@@ -2485,7 +2665,7 @@ function buildCompanions() {
       '<div class="comp-actions"></div>';
 
     card.querySelector(".comp-name").textContent = def.name;
-    card.querySelector(".comp-sub").textContent = i.owned ? `Rank ${RANK_NUMERALS[i.rank]} · Bond ${i.level}` : `${def.cost.toLocaleString()} gold`;
+    card.querySelector(".comp-sub").textContent = i.owned ? `Rank ${RANK_NUMERALS[i.rank]} · Bond ${i.level}` : fmtGold(def.cost);
     card.querySelector(".comp-badge").hidden = !i.active;
     card.querySelector(".comp-blurb").textContent = def.blurb;
     card.querySelector(".t-name").textContent = def.trait.name;
@@ -2578,10 +2758,10 @@ function renderClassPicker() {
     card.querySelector(".cc-name").textContent = c.name;
     card.querySelector(".cc-blurb").textContent = c.blurb;
     const st = card.querySelector(".cc-stats");
-    [`${c.health} health`, `${c.attack} attack`, `${c.defence} defence`,
+    [`Health ×${c.health}`, `Attack ×${c.attack}`, `Defence ×${c.defence}`,
      `${(c.speed / 1000).toFixed(1)}s swing`, `${Math.round(c.crit * 100)}% crit`]
       .forEach((txt) => { const s = document.createElement("span"); s.textContent = txt; st.appendChild(s); });
-    card.querySelector(".cc-veil").textContent = `Veil technique: ${c.veilName}. ${c.veilNote}`;
+    card.querySelector(".cc-veil").textContent = `${c.veilName}. ${c.veilNote}`;
     card.onclick = () => pickClass(c.id);
     grid.appendChild(card);
   });
@@ -2732,7 +2912,22 @@ window.addEventListener("hashchange", () => {
   route = parseHash();
   closeItemPopup();
   if (popAction) closeActionPopup();
+  setNav(false);
   render();
+});
+
+// On narrow screens the sidebar is a drawer: the menu button opens it, and
+// choosing a page or tapping the blank space beside it closes it.
+function setNav(open) {
+  document.body.classList.toggle("nav-open", open);
+  el("sideBackdrop").hidden = !open;
+  el("menuBtn").setAttribute("aria-expanded", String(open));
+}
+el("menuBtn").innerHTML = icon("menu", "ico-sm");
+el("menuBtn").onclick = () => setNav(!document.body.classList.contains("nav-open"));
+el("sideBackdrop").onclick = () => setNav(false);
+el("sidebar").addEventListener("click", (e) => {
+  if (e.target.closest(".nav-item:not(.locked), .icon-btn")) setNav(false);
 });
 
 document.querySelectorAll(".icon-btn").forEach((b) => {
@@ -2858,33 +3053,36 @@ el("skWorkBody").addEventListener("click", (e) => {
     openActionPopup({ kind: s.kind === "craft" ? "craft" : "gather", skillId: s.id, actionId: pill.dataset.action });
     return;
   }
-  const hunt = e.target.closest("[data-hunt]");
+  const foe = e.target.closest("[data-monster]");
+  if (foe) {
+    openActionPopup({ kind: "foe", monsterId: foe.dataset.monster });
+    return;
+  }
+  const hunt = e.target.closest("button[data-hunt]");
   if (hunt && liveRefs.hunt) {
     if (hunt.dataset.hunt === "pull") pullBack();
-    else openActionPopup({ kind: "hunt", tier: liveRefs.hunt.tier, monsterId: liveRefs.hunt.monsterId });
+    else if (hunt.dataset.hunt === "open") openActionPopup({ kind: "hunt", tier: liveRefs.hunt.tier, zone: huntZone });
   }
 });
 
-el("skQuarryBody").addEventListener("click", (e) => {
+// The arena's tick box: go to ground when Threat peaks instead of meeting the Sovereign.
+el("skWorkBody").addEventListener("change", (e) => {
+  const box = e.target.closest('input[data-hunt="hide"]');
+  if (!box) return;
+  state.settings.hideSovereign = box.checked;
+  say(box.checked ? "You'll go to ground when Threat peaks." : "You'll stand and face whatever comes when Threat peaks.");
+  render();
+});
+
+el("skZonesBody").addEventListener("click", (e) => {
+  const pill = e.target.closest("[data-zone]");
+  if (pill && liveRefs.hunt) openActionPopup({ kind: "hunt", tier: liveRefs.hunt.tier, zone: pill.dataset.zone });
+});
+
+el("skFoesBody").addEventListener("click", (e) => {
   const pill = e.target.closest("[data-monster]");
-  if (pill && liveRefs.hunt) openActionPopup({ kind: "hunt", tier: liveRefs.hunt.tier, monsterId: pill.dataset.monster });
+  if (pill) openActionPopup({ kind: "foe", monsterId: pill.dataset.monster });
 });
-
-// Unclaimed spoils: the row's key is looked up at click time, so new loot
-// landing mid-click can't shift which lot you take.
-el("skSpoilsBody").addEventListener("click", (e) => {
-  const row = e.target.closest(".spoil-row");
-  if (!row) return;
-  const idx = state.spoils.findIndex((s) => s.key === row.dataset.key);
-  if (idx < 0) return;
-  if (e.target.closest(".sp-take")) claimSpoil(idx);
-  else if (e.target.closest(".sp-sell")) sellSpoil(idx);
-  else if (e.target.closest(".sp-open")) openItemPopup(row.dataset.key, "view");
-});
-
-el("spoilsClaimAll").onclick = claimAllSpoils;
-el("spoilsSellAll").onclick = sellAllSpoils;
-el("spoilsTag").onclick = () => go("skill", "warfare");
 
 el("compList").addEventListener("click", (e) => {
   const b = e.target.closest("[data-comp]");
@@ -2897,10 +3095,9 @@ el("compList").addEventListener("click", (e) => {
 // Trades stop the moment you ask: crews down tools immediately.
 el("tbTradesClear").onclick = () => stopSkillTask();
 
-// The hunt ends after the current fight.
+// Pulling back is immediate.
 el("tbFieldClear").onclick = () => {
-  if (!pullBack()) return;
-  toast(state.tasks.combat.queued ? "Pulling back after this fight" : "The hunt goes on");
+  if (pullBack()) toast("You pulled back");
 };
 
 // Item popup.
@@ -2915,7 +3112,15 @@ el("actionModal").addEventListener("click", (e) => {
     return;
   }
   const item = e.target.closest(".am-item[data-key]");
-  if (item) openItemPopup(item.dataset.key, "view");
+  if (item) {
+    openItemPopup(item.dataset.key, "view");
+    return;
+  }
+  const foe = e.target.closest(".am-item[data-monster]");
+  if (foe && popAction) {
+    const back = popAction.kind === "hunt" ? { kind: "hunt", tier: popAction.tier, zone: popAction.zone } : null;
+    openActionPopup({ kind: "foe", monsterId: foe.dataset.monster, back });
+  }
 });
 
 el("cfOk").onclick = () => closeConfirm(true);
@@ -2928,7 +3133,8 @@ el("hireAgentBtn").onclick = hireAgent;
 // Escape closes whatever is on top.
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
-  if (!el("confirmModal").hidden) closeConfirm(false);
+  if (document.body.classList.contains("nav-open")) setNav(false);
+  else if (!el("confirmModal").hidden) closeConfirm(false);
   else if (!el("itemModal").hidden) closeItemPopup();
   else if (!el("actionModal").hidden) closeActionPopup();
   else if (!el("settingsModal").hidden) el("settingsModal").hidden = true;
@@ -3008,9 +3214,10 @@ render();
 resumeCloudSession();
 startLoop();
 
+// Back in view: play out any time the page slept through, then redraw.
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) {
-    resetTickClock();
+    loop();
     render();
   }
 });

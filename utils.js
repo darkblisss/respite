@@ -39,10 +39,22 @@ function fmtTime(ms) {
   return `${Math.floor(h / 24)}d ${h % 24}h`;
 }
 
-// Gold with its unit: "1,600g", "44,800g", "1.25M gold". Never "44.8Kg".
+// A whole number with thousands marked the same way everywhere: 10000 -> "10,000".
+function fmtWhole(n) {
+  return String(Math.floor(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+// Gold is always the whole amount: "1,600g", "1,250,000g". Never "1.25M" or "44.8Kg".
 function fmtGold(n) {
-  n = Math.floor(n);
-  return Math.abs(n) < 1e6 ? `${n.toLocaleString()}g` : `${fmt(n)} gold`;
+  return `${fmtWhole(n)}g`;
+}
+
+// Combat numbers: 0.026 -> "0.03", 3.28 -> "3.3", 403.4 -> "403".
+function fmtStat(n) {
+  const v = Number(n) || 0;
+  if (Math.abs(v) < 1) return String(Math.round(v * 100) / 100);
+  if (Math.abs(v) < 100) return String(Math.round(v * 10) / 10);
+  return fmtWhole(Math.round(v));
 }
 
 // How long ago something happened: "Just now", "2m ago", "4h ago", "3d ago".
@@ -195,6 +207,13 @@ const ICONS = {
   swords: '<path d="m4 4 9 9M14 14l6 6M18 4l-9 9M10 14l-6 6"/>',
   info:   '<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.6h.01"/>',
   lock:   '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  menu:   '<path d="M4 7h16M4 12h16M4 17h16"/>',
+
+  // hunt zones: rings closing in on the heart of a region
+  zoneOuter:  '<circle cx="12" cy="12" r="9" stroke-dasharray="2.5 2.5"/><circle cx="12" cy="12" r="1.2"/>',
+  zoneMiddle: '<circle cx="12" cy="12" r="9" stroke-dasharray="2.5 2.5"/><circle cx="12" cy="12" r="5.5"/><circle cx="12" cy="12" r="1.2"/>',
+  zoneInner:  '<circle cx="12" cy="12" r="9" stroke-dasharray="2.5 2.5"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="1"/>',
+  zoneCore:   '<circle cx="12" cy="12" r="9" stroke-dasharray="2.5 2.5"/><circle cx="12" cy="12" r="6"/><path d="M12 8.2 15.3 12 12 15.8 8.7 12Z" fill="currentColor"/>',
 
   // weather
   rain:   '<path d="M7 15a4 4 0 0 1 .5-8 5.5 5.5 0 0 1 10.5 2A3.5 3.5 0 0 1 17 15H7Z"/><path d="M8 18v2M12 18v3M16 18v2"/>',

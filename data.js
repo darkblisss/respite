@@ -10,27 +10,19 @@
 
 /* ================= 1. CONSTANTS ================= */
 
-const SCHEMA = 7;
+const SCHEMA = 8;
 const IDLE_CAP_MS = 12 * 60 * 60 * 1000;
 const WINDOW_MS = 12 * 60 * 60 * 1000;      // bounty + smuggler refresh, on world clock
 const DAY_MS = 24 * 60 * 60 * 1000;         // weather window
 const WEEK_MS = 7 * DAY_MS;
 const MAX_LEVEL = 99;
-const PLAYER_SWING_MS = 2400;
-const RESPAWN_MS = 2000;
 const PACK_SLOTS = 10;     // Belongings
 const STORES_SLOTS = 30;   // Provisions
 const BANK_SLOTS = 50;     // the Vault, reachable from either page
 const BANK_MAX = 200;
-const RECOVERY_MS = 5 * 60 * 1000;   // knocked out of the hunt after a death
-const DEATH_WEAR = 25;               // extra durability every worn piece loses on death
-const THREAT_CAP = 100;
-const SPOILS_CAP = 40;
 const CLASS_PICK_LEVEL = 5;
-const VEIL_MAX = 100;
-const VEIL_PER_HIT = 18;
 const REQUISITIONS_PER_DAY = 3;
-const AGENT_HIRE_COST = 2500;
+const AGENT_HIRE_COST = 250;
 const AGENT_ROSTER_MAX = 12;
 
 // What each storage pool is called on screen. The ids never change: saves use them.
@@ -210,27 +202,28 @@ const CRAFT_ACTIONS = { forgemaster: [], woodwright: [], tanner: [], weaver: [],
 
 const matId = (tier, type) => `${slug(basePrefix(tier[type]))}_${type}`;
 
-// Remedies: taken automatically in the field. Ids keep their old "provision" name for saves.
+// Remedies: taken automatically on the hunt. `value` is what they sell for,
+// `price` what the Apothecary charges. Ids keep their old "provision" name for saves.
 const REMEDY_SPEC = [
-  { tier: 1, name: "Bitter-Ash Salve",     heal: 25,   price: 50 },
-  { tier: 3, name: "Gravemoss Poultice",   heal: 70,   price: 150 },
-  { tier: 4, name: "Corpse-Marrow Draught",heal: 180,  price: 450 },
-  { tier: 6, name: "Star-Steel Tonic",     heal: 380,  price: 1400 },
-  { tier: 7, name: "Leviathan Blood",      heal: 800,  price: 4200, smuggler: true },
-  { tier: 9, name: "Godsbane Elixir",      heal: 1800, price: 12000, smuggler: true },
+  { tier: 1, name: "Bitter-Ash Salve",      heal: 25,   value: 2,   price: 5 },
+  { tier: 3, name: "Gravemoss Poultice",    heal: 70,   value: 6,   price: 15 },
+  { tier: 4, name: "Corpse-Marrow Draught", heal: 180,  value: 18,  price: 45 },
+  { tier: 6, name: "Star-Steel Tonic",      heal: 380,  value: 56,  price: 140 },
+  { tier: 7, name: "Leviathan Blood",       heal: 800,  value: 168, price: 420, smuggler: true },
+  { tier: 9, name: "Godsbane Elixir",       heal: 1800, value: 480, price: 1200, smuggler: true },
 ];
 
 const REMEDIES = REMEDY_SPEC.map((p) => ({
   id: `provision_t${p.tier}`, name: p.name, icon: "ration", kind: "material",
-  tier: p.tier, heal: p.heal, value: Math.round(p.price * 0.4), price: p.price, smuggler: !!p.smuggler,
+  tier: p.tier, heal: p.heal, value: p.value, price: p.price, smuggler: !!p.smuggler,
 }));
 REMEDIES.forEach((r) => { MATERIALS[r.id] = r; });
 
-MATERIALS.vault_chest = { id: "vault_chest", name: "Banded Chest", icon: "crate", kind: "material", value: 600, chest: 5, tier: 2 };
+MATERIALS.vault_chest = { id: "vault_chest", name: "Banded Chest", icon: "crate", kind: "material", value: 60, chest: 5, tier: 2 };
 
 REAGENTS.forEach((r) => {
   MATERIALS[r.id] = { id: r.id, name: r.name, icon: r.icon, kind: "material",
-    category: "Reagent", value: 8, tier: 1, reagent: true };
+    category: "Reagent", value: 1, tier: 1, reagent: true };
 });
 
 // Every artisan recipe unlocks at its tier's level: 1, 10, 20 … 80.
@@ -242,32 +235,83 @@ CRAFT_ACTIONS.woodwright.push({
 // Generation Setup
 const compTime = (t) => (45 + 75 * t) * 1000;
 const gearTime = (t) => (90 + 150 * t) * 1000;
-const statPwr = (t) => 4 * Math.pow(1.52, t - 1);
-const valBase = (t) => 4 * Math.pow(2.05, t - 1);
+
+// The economy's yardstick: a tier-1 raw material or reagent sells for 1 gold,
+// and each tier is worth about twice the last.
+const valBase = (t) => Math.pow(2.05, t - 1);
+
+/* Gear stat lines, as a tier-1 Common piece. Tiers multiply them by
+   GEAR_GROWTH, rarity multiplies again, and every stat rounds to a whole
+   number. Crit is a flat chance that only rarity changes. Weapons from tier 5
+   also add Veil per blow (WEAPON_VEIL). A full tier-9 Relic set with every
+   level earned stays under 5,000 health. */
+const GEAR_GROWTH = { attack: 1.85, defence: 1.85, health: 2 };
+const WEAPON_VEIL = [0, 0, 0, 0, 1, 2, 3, 4, 5];
+
+const GEAR_LINES = {
+  // weapons and offhands
+  sword:       { attack: 1 },
+  dagger:      { attack: 1, crit: 0.03 },
+  greatsword:  { attack: 2 },
+  bow:         { attack: 2 },
+  staff:       { attack: 2 },
+  shield:      { defence: 1 },
+  grimoire:    { attack: 1 },
+  // heavy: Defence on every piece
+  helm:        { health: 1, defence: 1 },
+  chest:       { health: 2, defence: 1 },
+  hboots:      { health: 1, defence: 1 },
+  hgaunts:     { health: 1, defence: 1 },
+  // medium: a little Defence, a little crit
+  hood_medium: { health: 1, crit: 0.01 },
+  jacket:      { health: 2, defence: 1 },
+  mboots:      { health: 1, crit: 0.01 },
+  mgloves:     { health: 1, crit: 0.01 },
+  // light: the most health
+  hood_light:  { health: 2 },
+  robe:        { health: 3 },
+  lboots:      { health: 1 },
+  lgloves:     { health: 1 },
+  // jewellery
+  amulet:      { attack: 1 },
+  ring:        { defence: 1 },
+};
+
+// A stat line's value at a tier and rarity multiplier. Never rounds a real stat away to 0.
+function gearStat(base, growth, tier, mult) {
+  if (!base) return 0;
+  return Math.max(1, Math.round(base * Math.pow(growth, tier - 1) * (mult || 1)));
+}
+
+// What a pile of materials is worth.
+function costValue(cost) {
+  return Object.keys(cost || {}).reduce((n, k) => n + (MATERIALS[k] ? MATERIALS[k].value * cost[k] : 0), 0);
+}
 
 function addMat(id, name, icon, tier, valMult, category) {
   MATERIALS[id] = { id, name, icon, kind: "material",
-    value: Math.round(valBase(tier) * valMult), tier, category: category || "Component" };
+    value: Math.max(1, Math.round(valBase(tier) * valMult)), tier, category: category || "Component" };
 }
 
-function addGear(id, name, icon, slot, tier, prof, atk, def, hp, twoHand, maxDur) {
-  const pwr = statPwr(tier);
+function addGear(id, name, icon, slot, tier, prof, line, twoHand, maxDur) {
   GEAR[id] = {
-    id, name, icon, kind: "gear", slot, tier, prof,
-    attack: Math.round(pwr * atk), defence: Math.round(pwr * def), health: Math.round(pwr * hp),
+    id, name, icon, kind: "gear", slot, tier, prof, line,
     twoHanded: !!twoHand, maxDur, repairMat: matId(TIERS[tier - 1], "delve"),
-    value: Math.round(pwr * (atk + def + hp) * 34 + 50),
+    value: 1,   // set from the recipe's materials in addCraft
   };
 }
 
 // A recipe's level is its tier's level. Gear recipes produce a rolled item
-// (craftGear); everything else produces one of `id` (out).
+// (craftGear); everything else produces one of `id` (out). Gear and tools
+// are worth a quarter more than what went into them.
 function addCraft(prof, id, name, icon, tier, time, xpScale, cost, isGear) {
   CRAFT_ACTIONS[prof].push({
     id: `craft_${id}`, skillId: prof, tier, name, icon,
     level: TIERS[tier - 1].level, time, xp: Math.round(TIERS[tier - 1].xp * xpScale) + 1,
     cost, [isGear ? "craftGear" : "out"]: isGear ? id : { [id]: 1 },
   });
+  const made = GEAR[id] || TOOLS[id];
+  if (made) made.value = Math.max(1, Math.round(costValue(cost) * 1.25));
 }
 
 TIERS.forEach((t) => {
@@ -383,13 +427,13 @@ TIERS.forEach((t) => {
   const wGsword = `${slug(tDelve)}_greatsword`;
   const wGrimoire = `${slug(tDred)}_grimoire`;
 
-  addGear(wSword, `${tDelve} Sword`, "blade", "weapon", tier, "forgemaster", 1.0, 0.15, 0, false, dur);
-  addGear(wDagger, `${tDelve} Dagger`, "blade", "weapon", tier, "forgemaster", 1.15, 0, 0, false, dur);
-  addGear(wShield, `${tFell} Shield`, "ward", "offhand", tier, "woodwright", 0, 0.9, 0, false, dur);
-  addGear(wBow, `${tFell} Bow`, "stave", "weapon", tier, "woodwright", 1.4, 0.1, 0, true, dur);
-  addGear(wStaff, `${tDred} Staff`, "stave", "weapon", tier, "artificer", 1.2, 0.3, 0, true, dur);
-  addGear(wGsword, `${tDelve} Greatsword`, "greatblade", "weapon", tier, "forgemaster", 1.75, 0, 0, true, dur);
-  addGear(wGrimoire, `${tDred} Grimoire`, "book", "offhand", tier, "artificer", 0.3, 0.5, 0.6, false, dur);
+  addGear(wSword, `${tDelve} Sword`, "blade", "weapon", tier, "forgemaster", "sword", false, dur);
+  addGear(wDagger, `${tDelve} Dagger`, "blade", "weapon", tier, "forgemaster", "dagger", false, dur);
+  addGear(wShield, `${tFell} Shield`, "ward", "offhand", tier, "woodwright", "shield", false, dur);
+  addGear(wBow, `${tFell} Bow`, "stave", "weapon", tier, "woodwright", "bow", true, dur);
+  addGear(wStaff, `${tDred} Staff`, "stave", "weapon", tier, "artificer", "staff", true, dur);
+  addGear(wGsword, `${tDelve} Greatsword`, "greatblade", "weapon", tier, "forgemaster", "greatsword", true, dur);
+  addGear(wGrimoire, `${tDred} Grimoire`, "book", "offhand", tier, "artificer", "grimoire", false, dur);
 
   addCraft("forgemaster", wSword, GEAR[wSword].name, "blade", tier, gTime, 2.5, { [blade]: 1, [handle]: 1 }, true);
   addCraft("forgemaster", wDagger, GEAR[wDagger].name, "blade", tier, gTime, 2.5, { [blade]: 1, [handle]: 1 }, true);
@@ -399,16 +443,26 @@ TIERS.forEach((t) => {
   addCraft("forgemaster", wGsword, GEAR[wGsword].name, "greatblade", tier, gTime, 3.2, { [gblade]: 1, [ggrip]: 1, [bind]: 1 }, true);
   addCraft("artificer", wGrimoire, GEAR[wGrimoire].name, "book", tier, gTime, 3.2, { [book]: 1, [bind]: 1, [clasp]: 1 }, true);
 
+  // Jewellery (Artificer)
+  const jAmulet = `${slug(tDred)}_amulet`;
+  const jRing = `${slug(tDelve)}_ring`;
+
+  addGear(jAmulet, `${tDred} Amulet`, "charm", "neck", tier, "artificer", "amulet", false, dur);
+  addGear(jRing, `${tDelve} Ring`, "band", "ring", tier, "artificer", "ring", false, dur);
+
+  addCraft("artificer", jAmulet, GEAR[jAmulet].name, "charm", tier, gTime, 2.5, { [clasp]: 1, [inlay]: 2, [shard]: tier }, true);
+  addCraft("artificer", jRing, GEAR[jRing].name, "band", tier, gTime, 2.5, { [bar]: 6, [inlay]: 1, [shard]: tier }, true);
+
   // Heavy Armor (Forgemaster)
   const aHH = `${slug(tDelve)}_helm`;
   const aHC = `${slug(tDelve)}_chest`;
   const aHB = `${slug(tDelve)}_hboots`;
   const aHG = `${slug(tDelve)}_hgaunts`;
 
-  addGear(aHH, `${tDelve} Helm`, "cowl", "head", tier, "forgemaster", 0, 0.55, 0, false, dur);
-  addGear(aHC, `${tDelve} Chestplate`, "plate", "chest", tier, "forgemaster", 0, 1.0, 0, false, dur);
-  addGear(aHB, `${tDelve} Boots`, "treads", "feet", tier, "forgemaster", 0, 0.7, 0, false, dur);
-  addGear(aHG, `${tDelve} Gauntlets`, "gauntlets", "hands", tier, "forgemaster", 0.1, 0.4, 0, false, dur);
+  addGear(aHH, `${tDelve} Helm`, "cowl", "head", tier, "forgemaster", "helm", false, dur);
+  addGear(aHC, `${tDelve} Chestplate`, "plate", "chest", tier, "forgemaster", "chest", false, dur);
+  addGear(aHB, `${tDelve} Boots`, "treads", "feet", tier, "forgemaster", "hboots", false, dur);
+  addGear(aHG, `${tDelve} Gauntlets`, "gauntlets", "hands", tier, "forgemaster", "hgaunts", false, dur);
 
   [aHH, aHC, aHB, aHG].forEach((id) => {
     addCraft("forgemaster", id, GEAR[id].name, GEAR[id].icon, tier, gTime, 2.5, { [bar]: 20, [coal]: tier }, true);
@@ -420,10 +474,10 @@ TIERS.forEach((t) => {
   const aMB = `${slug(tFlay)}_mboots`;
   const aMG = `${slug(tFlay)}_mgloves`;
 
-  addGear(aMH, `${tFlay} Hood`, "cowl", "head", tier, "tanner", 0, 0.4, 0.2, false, dur);
-  addGear(aMC, `${tFlay} Jacket`, "shroud", "chest", tier, "tanner", 0.1, 0.7, 0, false, dur);
-  addGear(aMB, `${tFlay} Boots`, "treads", "feet", tier, "tanner", 0, 0.45, 0, false, dur);
-  addGear(aMG, `${tFlay} Gloves`, "gauntlets", "hands", tier, "tanner", 0.18, 0.32, 0, false, dur);
+  addGear(aMH, `${tFlay} Hood`, "cowl", "head", tier, "tanner", "hood_medium", false, dur);
+  addGear(aMC, `${tFlay} Jacket`, "shroud", "chest", tier, "tanner", "jacket", false, dur);
+  addGear(aMB, `${tFlay} Boots`, "treads", "feet", tier, "tanner", "mboots", false, dur);
+  addGear(aMG, `${tFlay} Gloves`, "gauntlets", "hands", tier, "tanner", "mgloves", false, dur);
 
   [aMH, aMC, aMB, aMG].forEach((id) => {
     addCraft("tanner", id, GEAR[id].name, GEAR[id].icon, tier, gTime, 2.5, { [leather]: 20, [tallow]: tier }, true);
@@ -435,10 +489,10 @@ TIERS.forEach((t) => {
   const aLB = `${slug(tHarv)}_lboots`;
   const aLG = `${slug(tHarv)}_lgloves`;
 
-  addGear(aLH, `${tHarv} Hood`, "cowl", "head", tier, "weaver", 0, 0.3, 0.8, false, dur);
-  addGear(aLC, `${tHarv} Robe`, "shroud", "chest", tier, "weaver", 0.18, 0.4, 1.2, false, dur);
-  addGear(aLB, `${tHarv} Boots`, "treads", "feet", tier, "weaver", 0, 0.2, 0.5, false, dur);
-  addGear(aLG, `${tHarv} Gloves`, "gauntlets", "hands", tier, "weaver", 0.22, 0.15, 0.4, false, dur);
+  addGear(aLH, `${tHarv} Hood`, "cowl", "head", tier, "weaver", "hood_light", false, dur);
+  addGear(aLC, `${tHarv} Robe`, "shroud", "chest", tier, "weaver", "robe", false, dur);
+  addGear(aLB, `${tHarv} Boots`, "treads", "feet", tier, "weaver", "lboots", false, dur);
+  addGear(aLG, `${tHarv} Gloves`, "gauntlets", "hands", tier, "weaver", "lgloves", false, dur);
 
   [aLH, aLC, aLB, aLG].forEach((id) => {
     addCraft("weaver", id, GEAR[id].name, GEAR[id].icon, tier, gTime, 2.5, { [weave]: 20, [pulp]: tier }, true);
@@ -452,7 +506,7 @@ TIERS.forEach((t) => {
   const pNet = `${slug(tDred)}_net`;
 
   const mTool = (id, name, icon, skill, prof, cost) => {
-    TOOLS[id] = { id, name, icon, kind: "tool", forSkill: skill, tier, speed: tier * 0.02, value: Math.round(60 * Math.pow(2.1, tier - 1)) };
+    TOOLS[id] = { id, name, icon, kind: "tool", forSkill: skill, tier, speed: tier * 0.02, value: 1 };
     addCraft(prof, id, name, icon, tier, gTime, 2.5, cost);
   };
 
@@ -488,10 +542,15 @@ function itemDef(key) {
   if (g) {
     const m = rarityDef(rarity || "common").mult;
     const pfx = prefix ? prefixDef(prefix) : null;
+    const line = GEAR_LINES[g.line];
     return {
       base, rarity: rarity || "common", prefix: prefix || null, kind: "gear",
       name: g.name, icon: g.icon, slot: g.slot,
-      attack: Math.round(g.attack * m), defence: Math.round(g.defence * m), health: Math.round(g.health * m),
+      attack: gearStat(line.attack, GEAR_GROWTH.attack, g.tier, m),
+      defence: gearStat(line.defence, GEAR_GROWTH.defence, g.tier, m),
+      health: gearStat(line.health, GEAR_GROWTH.health, g.tier, m),
+      crit: line.crit ? Math.round(line.crit * m * 1000) / 1000 : 0,
+      veil: g.slot === "weapon" ? gearStat(WEAPON_VEIL[g.tier - 1], 1, 1, m) : 0,
       twoHanded: g.twoHanded, maxDur: g.maxDur, repairMat: g.repairMat,
       value: Math.round(g.value * m * (pfx ? 2 : 1)), tier: g.tier, prof: g.prof,
       effect: pfx ? pfx.effect : null, category: "Equipment",
@@ -532,7 +591,7 @@ function actionOutput(def) {
   return def.out ? Object.keys(def.out)[0] : null;
 }
 
-/* ================= 9. REGIONS & MONSTERS ================= */
+/* ================= 9. REGIONS, ZONES & FOES ================= */
 
 const REGION_NAMES = [
   ["The Ashen Verge", "Dead ground at the camp's edge. Everything here is already picked over, which is why it's safe."],
@@ -545,7 +604,7 @@ const REGION_NAMES = [
   ["The Fade", "Thin light, thinner air. Your own footsteps arrive a moment late."],
   ["Godsdown", "The last ground. Roots the width of streets and whatever it is that feeds them."],
 ];
-const TOLLS = [0, 300, 600, 1100, 1700, 2500, 4200, 6500, 10000];
+const TOLLS = [0, 50, 100, 200, 350, 600, 1000, 1600, 2500];
 
 const REGIONS = TIERS.map((t, i) => ({
   id: `region_${t.i}`, tier: t.i, name: REGION_NAMES[i][0], note: REGION_NAMES[i][1], level: t.level, toll: TOLLS[i]
@@ -554,43 +613,125 @@ const REGIONS = TIERS.map((t, i) => ({
 const regionById = (id) => REGIONS.find((r) => r.id === id) || REGIONS[0];
 const regionOfTier = (tier) => REGIONS.find((r) => r.tier === tier);
 
-const ROSTER_SPEC = [
-  { grunt: ["Carrion Rat", "beast"],       elite: ["Ash Stalker", "horror"],     boss: ["The Ashen Warden", "horror"] },
-  { grunt: ["Bog Crawler", "beast"],       elite: ["Gibbet Shade", "horror"],    boss: ["The Drowned Bailiff", "man"] },
-  { grunt: ["Warren Goblin", "man"],       elite: ["Warren Butcher", "man"],     boss: ["The Cold Matriarch", "horror"] },
-  { grunt: ["Cairn Hound", "beast"],       elite: ["Cairn Wight", "horror"],     boss: ["The Barrow King", "man"] },
-  { grunt: ["Fen Lurker", "beast"],        elite: ["Sallow Troll", "beast"],     boss: ["Mother Sallow", "horror"] },
-  { grunt: ["Umber Husk", "golemMob"],     elite: ["Star-Iron Golem", "golemMob"], boss: ["The Umber Colossus", "golemMob"] },
-  { grunt: ["Wyrmkin Raider", "drakeMob"], elite: ["Wyrmkin Warlord", "drakeMob"], boss: ["The Wyrm Beneath", "drakeMob"] },
-  { grunt: ["Fade Echo", "horror"],        elite: ["Fade Warden", "horror"],     boss: ["The Thin Man", "horror"] },
-  { grunt: ["Godsdown Spawn", "horror"],   elite: ["Godsdown Horror", "horror"], boss: ["What Feeds The Roots", "horror"] },
+/* The hunt. Every region has four zones, from the Outer edge to the Core.
+   An encounter walks in with its foes; if it is still going when the zone's
+   window runs out, a reinforcement joins (never more than MAX_FOES at once).
+   Clear it early and the rest of the window is the walk to the next one.
+   The maths lives in combat.js. */
+
+const PLAYER_SWING_MS = 2400;          // Brute Force, and a Stalker
+const RECOVERY_MS = 5 * 60 * 1000;     // out of the hunt after a death
+const HIDE_MS = 5 * 60 * 1000;         // lying low when Threat peaks
+const DEATH_WEAR = 25;                 // durability every worn piece loses on a death
+const THREAT_CAP = 100;
+const VEIL_MAX = 100;
+const MAX_FOES = 3;
+const SEARCH_MIN_MS = 3000;            // the shortest walk between encounters
+const XP_MARK_MS = 5 * 60 * 1000;      // XP/hr is measured again this often, over the last hour
+const FOE_AMBUSH = 1.5;                // a reinforcement's first blow lands this much harder
+const VOLLEY_GAP_MS = 450;             // between a Mage's opening casts
+const REMEDY_AT = 0.45;                // a remedy is taken at or below this share of health
+const RETREAT_AT = 0.25;               // you break away from a Sovereign at or below this
+
+/* Defence is a number, and what it stops depends on the ground:
+   mitigation = Defence / (Defence + K), with K growing each tier, capped at 80%.
+   The same rule covers blows in both directions. */
+const DEF_K = 7;
+const DEF_GROWTH = 1.85;
+const MITIGATION_CAP = 0.8;
+const defenceK = (tier) => DEF_K * Math.pow(DEF_GROWTH, tier - 1);
+
+const ZONES = [
+  { id: "outer", name: "Outer", xp: 1, windowMs: 60000, threat: 1, elite: 0.04, engage: 0.4, escorts: 0,
+    sizes: [[1, 0.75], [2, 0.25]], mix: { skirmisher: 0.4, stalker: 0.4, brute: 0.2 },
+    foesText: "1 or 2",
+    note: "The picked-over edge. One thing at a time, mostly, and help is slow to reach it." },
+  { id: "middle", name: "Middle", xp: 1.3, windowMs: 50000, threat: 1.25, elite: 0.08, engage: 0.6, escorts: 0,
+    sizes: [[1, 0.5], [2, 0.5]], mix: { skirmisher: 0.35, stalker: 0.4, brute: 0.25 },
+    foesText: "1 or 2",
+    note: "Deeper in. They come in pairs as often as not, and the dark answers faster." },
+  { id: "inner", name: "Inner", xp: 1.7, windowMs: 40000, threat: 1.5, elite: 0.14, engage: 0.8, escorts: 1,
+    sizes: [[2, 0.5], [3, 0.5]], mix: { skirmisher: 0.3, stalker: 0.4, brute: 0.3 },
+    foesText: "2 or 3",
+    note: "Where the ground stops pretending. Two or three at once, and more on the way." },
+  { id: "core", name: "Core", xp: 2.2, windowMs: 30000, threat: 2, elite: 0.22, engage: 1, escorts: 2,
+    sizes: [[3, 1]], mix: { skirmisher: 0.25, stalker: 0.4, brute: 0.35 },
+    foesText: "3",
+    note: "The heart of it. Always three, always hungry, and something vast is listening." },
 ];
+const zoneDef = (id) => ZONES.find((z) => z.id === id) || ZONES[0];
+
+/* Three kinds of foe in every region, plus its Sovereign. Multipliers are
+   against a Stalker of the same tier. `defence` is the share of a blow it
+   shrugs off on its own ground. An Elite is any of the three, only worse. */
+const ARCHETYPES = {
+  skirmisher: { name: "Skirmisher", speed: 2000, hp: 0.7, attack: 0.7, defence: 0,    xp: 0.8, threat: 1, gold: 0.7, drops: 1,
+    note: "Fast and thin. Hits often and hits light." },
+  stalker:    { name: "Stalker",    speed: 2400, hp: 1,   attack: 1,   defence: 0.1,  xp: 1,   threat: 2, gold: 1,   drops: 1,
+    note: "Patient and even. It keeps pace with you, blow for blow." },
+  brute:      { name: "Brute",      speed: 3000, hp: 1.6, attack: 1.8, defence: 0.25, xp: 1.5, threat: 3, gold: 1.5, drops: 1,
+    note: "Slow and heavy. Every blow lands like a door." },
+};
+const ARCHETYPE_ORDER = ["skirmisher", "stalker", "brute"];
+const ELITE = { hp: 1.8, attack: 1.4, xp: 2.5, threat: 2, gold: 2.5, drops: 2 };
+const SOVEREIGN = { speed: 2800, hp: 12, attack: 2.5, defence: 0.3, xp: 15, gold: 20,
+  enrageMs: 30000, enrage: 0.15,
+  note: "It rules this ground. When a zone's Threat peaks it may come for you, with a guard in the deeper zones, and it grows angrier the longer the fight runs. Brought low, you break away and the hunt goes on." };
+
+// A tier-1 Stalker, and how each tier grows on it.
+const FOE_HP = 40;
+const FOE_ATTACK = 0.026;
+const FOE_HP_GROWTH = 1.8;
+const FOE_ATTACK_GROWTH = 1.75;
+const FOE_XP = [1, 4, 8, 14, 21, 30, 41, 54, 68];
+const FOE_GOLD = [0.5, 1.5];   // a Stalker's gold, as a share of its tier's material value
+
+const REGION_FOES = [
+  { skirmisher: ["Carrion Rat", "beast"],       stalker: ["Ash Stalker", "horror"],     brute: ["Ash Brute", "man"],             sovereign: ["The Ashen Warden", "horror"] },
+  { skirmisher: ["Bog Crawler", "beast"],       stalker: ["Fen Stalker", "horror"],     brute: ["Bog Brute", "man"],             sovereign: ["The Drowned Bailiff", "man"] },
+  { skirmisher: ["Warren Goblin", "man"],       stalker: ["Rime Stalker", "beast"],     brute: ["Warren Butcher", "man"],        sovereign: ["The Cold Matriarch", "horror"] },
+  { skirmisher: ["Cairn Hound", "beast"],       stalker: ["Cairn Wight", "horror"],     brute: ["Barrow Brute", "man"],          sovereign: ["The Barrow King", "man"] },
+  { skirmisher: ["Fen Lurker", "beast"],        stalker: ["Sallow Stalker", "horror"],  brute: ["Sallow Troll", "beast"],        sovereign: ["Mother Sallow", "horror"] },
+  { skirmisher: ["Umber Husk", "golemMob"],     stalker: ["Root Stalker", "horror"],    brute: ["Star-Iron Golem", "golemMob"],  sovereign: ["The Umber Colossus", "golemMob"] },
+  { skirmisher: ["Wyrmkin Raider", "drakeMob"], stalker: ["Wyrmkin Stalker", "drakeMob"], brute: ["Wyrmkin Warlord", "drakeMob"], sovereign: ["The Wyrm Beneath", "drakeMob"] },
+  { skirmisher: ["Fade Echo", "horror"],        stalker: ["Fade Stalker", "horror"],    brute: ["Fade Warden", "man"],           sovereign: ["The Thin Man", "man"] },
+  { skirmisher: ["Godsdown Spawn", "horror"],   stalker: ["Root Horror", "horror"],     brute: ["Godsdown Brute", "beast"],      sovereign: ["What Feeds The Roots", "horror"] },
+];
+
+// What each kind leaves behind: [material type, qty, chance]. Elites double the qty.
+const FOE_DROPS = {
+  skirmisher: [["flay", 1, 0.45]],
+  stalker:    [["flay", 1, 0.35], ["dredge", 1, 0.15]],
+  brute:      [["delve", 1, 0.35], ["flay", 1, 0.3]],
+  sovereign:  [["flay", 3, 1], ["delve", 3, 1], ["dredge", 2, 1]],
+};
 
 const MONSTERS = [];
 TIERS.forEach((t, i) => {
-  const s = Math.pow(2.1, t.i - 1);
-  const spec = ROSTER_SPEC[i];
-  const mk = (rank, nameIcon, mul) => ({
-    id: `mob_t${t.i}_${rank}`, tier: t.i, rank, name: nameIcon[0], icon: nameIcon[1],
-    level: t.level + (rank === "elite" ? 4 : rank === "boss" ? 8 : 0),
-    hp: Math.round(16 * s * mul.hp), attack: Math.round(4 * s * mul.atk), defence: Math.round(1.6 * s * mul.def),
-    speed: rank === "elite" ? 2600 : rank === "boss" ? 3000 : 3000,
-    xp: Math.round(t.xp * 2.6 * mul.xp), gold: [Math.round(3 * s * mul.gold), Math.round(8 * s * mul.gold)],
-    drops: [
-      [matId(t, "flay"), rank === "boss" ? 3 : 1, 0.5],
-      [matId(t, "delve"), rank === "boss" ? 3 : 1, 0.22],
-      [matId(t, "dredge"), rank === "boss" ? 2 : 1, 0.14],
-    ],
+  const hp = FOE_HP * Math.pow(FOE_HP_GROWTH, t.i - 1);
+  const attack = FOE_ATTACK * Math.pow(FOE_ATTACK_GROWTH, t.i - 1);
+  const k = defenceK(t.i);
+  const goldScale = valBase(t.i);
+  const names = REGION_FOES[i];
+
+  const mk = (arch, spec) => ({
+    id: `mob_t${t.i}_${arch}`, tier: t.i, archetype: arch, name: names[arch][0], icon: names[arch][1],
+    hp: Math.round(hp * spec.hp), attack: attack * spec.attack, speed: spec.speed,
+    defence: Math.round((spec.defence / (1 - spec.defence)) * k * 10) / 10,
+    xp: FOE_XP[i] * spec.xp, threat: spec.threat || 0,
+    gold: [Math.floor(FOE_GOLD[0] * goldScale * spec.gold), Math.max(1, Math.round(FOE_GOLD[1] * goldScale * spec.gold))],
+    drops: FOE_DROPS[arch].map(([type, qty, chance]) => [matId(t, type), qty, chance]),
   });
-  MONSTERS.push(mk("grunt", spec.grunt, { hp: 1, atk: 1, def: 1, xp: 1, gold: 1 }));
-  MONSTERS.push(mk("elite", spec.elite, { hp: 1.8, atk: 1.45, def: 1.3, xp: 2.4, gold: 2.2 }));
-  MONSTERS.push(mk("boss",  spec.boss,  { hp: 9, atk: 2.1, def: 1.8, xp: 14, gold: 16 }));
+
+  ARCHETYPE_ORDER.forEach((arch) => MONSTERS.push(mk(arch, ARCHETYPES[arch])));
+  MONSTERS.push(mk("sovereign", SOVEREIGN));
 });
 
-const rosterFor = (tier) => MONSTERS.filter((m) => m.tier === tier);
-const rankOf = (tier, rank) => MONSTERS.find((m) => m.tier === tier && m.rank === rank);
-const monsterOfTier = (tier) => rankOf(tier, "grunt");
 const getMonster = (id) => MONSTERS.find((m) => m.id === id) || null;
+const foeOf = (tier, arch) => MONSTERS.find((m) => m.tier === tier && m.archetype === arch) || null;
+const foesOf = (tier) => ARCHETYPE_ORDER.map((arch) => foeOf(tier, arch));
+const sovereignOf = (tier) => foeOf(tier, "sovereign");
+const monsterOfTier = (tier) => foeOf(tier, "stalker");
 
 /* ================= 10. ITEM SOURCES ================= */
 /* Built once from the tables above so the item popup can say where a thing
@@ -627,13 +768,14 @@ MONSTERS.forEach((m) => {
 
 const BENCH_TABS = [
   { id: "components", label: "Components", groups: ["Refined", "Parts"] },
-  { id: "wares",      label: "Wares",      groups: ["Weapons", "Armour", "Tools", "Supplies"] },
+  { id: "wares",      label: "Wares",      groups: ["Weapons", "Armour", "Jewellery", "Tools", "Supplies"] },
 ];
 
 function benchGroupOf(def) {
   if (def.craftGear) {
     const g = GEAR[def.craftGear];
-    return { tab: "wares", group: (g.slot === "weapon" || g.slot === "offhand") ? "Weapons" : "Armour" };
+    if (g.slot === "weapon" || g.slot === "offhand") return { tab: "wares", group: "Weapons" };
+    return { tab: "wares", group: (g.slot === "neck" || g.slot === "ring") ? "Jewellery" : "Armour" };
   }
   const outId = actionOutput(def);
   if (TOOLS[outId]) return { tab: "wares", group: "Tools" };
@@ -687,30 +829,61 @@ const MASTERY_TRACK = [
   { level: 90, double: 0.02, label: "Peerless" },
 ];
 
-/* ================= 14. CLASSES ================= */
-/* Chosen once, at Hunt level 5. Each shapes the same fight rather than
-   forking it: different base stats, different swing speed, and a
-   different thing to do when the Veil fills. */
+/* ================= 14. DISCIPLINES ================= */
+/* Hunt levels 1 to 4 are Brute Force: no discipline and no Veil. At level 5
+   you choose one, and the Veil (0 to 100) opens. Each shapes the same fight
+   rather than forking it: its own bulk, swing and payoff when the Veil fills.
+   Multipliers apply to the base stats a Hunt level gives. */
+
+// Hunt level -> base stats, before a discipline and gear.
+const baseHealth = (level) => 25 + 3 * (level - 1) + 0.13 * (level - 1) * (level - 1);
+const baseAttack = (level) => Math.pow(1.85, (level - 1) / 10);
+const baseDefence = (level) => (DEF_K / 9) * (Math.pow(1.85, (level - 1) / 10) - 1);
+
+// Veil a Warrior or Rogue builds per blow, by Hunt level. Weapons from tier 5 add more.
+const VEIL_CURVE = [[5, 10], [20, 12], [40, 16], [60, 20], [80, 25]];
+function veilPerBlow(level) {
+  if (level <= VEIL_CURVE[0][0]) return VEIL_CURVE[0][1];
+  for (let i = 1; i < VEIL_CURVE.length; i++) {
+    const [l1, v1] = VEIL_CURVE[i];
+    const [l0, v0] = VEIL_CURVE[i - 1];
+    if (level <= l1) return Math.round(v0 + ((v1 - v0) * (level - l0)) / (l1 - l0));
+  }
+  return VEIL_CURVE[VEIL_CURVE.length - 1][1];
+}
+
+const BRUTE_FORCE = { id: null, name: "Brute Force", health: 1, attack: 1, defence: 1,
+  speed: PLAYER_SWING_MS, crit: 0.05, critDmg: 1.5, pen: 0 };
 
 const CLASSES = [
   { id: "warrior", name: "Warrior", icon: "plate",
-    blurb: "Forces the Veil through the body. Slow, heavy, hard to put down.",
-    health: 24, attack: 5, defence: 1.5, speed: 2600,
-    crit: 0.05, critDmg: 1.5, block: 0.12, dodge: 0.03, pen: 0.05,
-    veilName: "Onslaught", veilNote: "A brutal swing that ignores half of Defence." },
+    blurb: "Forces the Veil through the body. Slow, heavy and hard to put down.",
+    health: 1.2, attack: 1, defence: 1.5, speed: 2600, crit: 0.05, critDmg: 1.5, pen: 0.1,
+    veilName: "Devastating Strike",
+    veilNote: "Veil builds with every blow you land, and half as much with every blow aimed at you. It carries from fight to fight. Full, your next swing lands three times over and ignores half of Defence." },
   { id: "rogue", name: "Rogue", icon: "blade",
     blurb: "Brief, precise Veil surges. Fast hands, thin margins.",
-    health: 20, attack: 4, defence: 0.8, speed: 2000,
-    crit: 0.15, critDmg: 1.8, block: 0.02, dodge: 0.12, pen: 0.10,
-    veilName: "Bleedout", veilNote: "A flurry that always crits." },
+    health: 1, attack: 0.85, defence: 1, speed: 2000, crit: 0.12, critDmg: 1.75, pen: 0.15,
+    veilName: "Ambush",
+    veilNote: "Every encounter you walk into opens on an Ambush: a certain critical, a quarter harder again. Veil rebuilds with each blow; full, the next swing is another Ambush." },
   { id: "mage", name: "Mage", icon: "stave",
     blurb: "Shapes the Veil directly. Fragile, and worth it.",
-    health: 18, attack: 6, defence: 0.5, speed: 2800,
-    crit: 0.08, critDmg: 1.6, block: 0.02, dodge: 0.05, pen: 0.20,
-    veilName: "Unmaking", veilNote: "Detonates the Veil for heavy damage." },
+    health: 0.9, attack: 1.3, defence: 0.7, speed: 2600, crit: 0.06, critDmg: 1.6, pen: 0.25,
+    veilName: "Elemental Absorption",
+    veilNote: "Every encounter you walk into opens with a volley of three empowered casts, and every empowered cast washes over the whole fight. The Veil then drinks from the air, two a second, never from your blows. Full, your next cast is empowered." },
 ];
 
 const classDef = (id) => CLASSES.find((c) => c.id === id) || null;
+
+// What each discipline does with a full Veil.
+const TECHNIQUE = {
+  strike:    { mult: 3, pen: 0.5 },     // Warrior
+  ambush:    { mult: 1.25 },            // Rogue, on top of a certain critical
+  volley:    { casts: 3, mult: 2 },     // Mage, opening each encounter
+  empowered: { mult: 3 },               // Mage, whenever the Veil fills
+  splash:    0.5,                       // Mage casts: share of the blow every other foe takes
+  absorb:    2,                         // Mage Veil a second
+};
 
 /* ================= 15. REQUISITION AGENTS ================= */
 /* A roster of Agents you send out for a chosen resource. Three deployments
@@ -746,7 +919,7 @@ const AGENT_NAMES = [
      reagent  more reagents found alongside a resource
      speed    shorter action time (gathering and artisans)
      gold     more gold from kills
-     drops    spoils drop more often
+     drops    kills drop materials more often
      rare     chance a kill turns up a piece of uncommon-or-better gear
    Skill lists may use "gather", "trade" (gathering and artisans) or "all". */
 
@@ -762,7 +935,7 @@ const BOND_MS = 60 * 1000;
 
 const COMPANIONS = [
   {
-    id: "rat", name: "Tunnel Rat", icon: "rat", cost: 1500,
+    id: "rat", name: "Tunnel Rat", icon: "rat", cost: 150,
     source: "delving", sourceText: "while Delving", findChance: 1 / 1200,
     blurb: "Thin, clever and always the first to smell a fresh seam.",
     trait: { name: "Seam Sense", kind: "xp", skills: ["delving"], base: 0.08, perRank: 0.02, text: "Delving XP" },
@@ -774,7 +947,7 @@ const COMPANIONS = [
     ],
   },
   {
-    id: "crow", name: "Carrion Crow", icon: "crow", cost: 2500,
+    id: "crow", name: "Carrion Crow", icon: "crow", cost: 250,
     source: "gather", sourceText: "while gathering", findChance: 1 / 1500,
     blurb: "It watches every crew from the ridgeline and screams when something moves.",
     trait: { name: "Far Sight", kind: "xp", skills: ["gather"], base: 0.04, perRank: 0.01, text: "gathering XP" },
@@ -786,7 +959,7 @@ const COMPANIONS = [
     ],
   },
   {
-    id: "marshcat", name: "Marshcat", icon: "marshcat", cost: 3000,
+    id: "marshcat", name: "Marshcat", icon: "marshcat", cost: 300,
     source: "harvesting", sourceText: "while Harvesting", findChance: 1 / 1200,
     blurb: "Wet-furred and silent. It walks the rushes ahead of the sickles.",
     trait: { name: "Reedstalker", kind: "xp", skills: ["harvesting"], base: 0.08, perRank: 0.02, text: "Harvesting XP" },
@@ -798,19 +971,19 @@ const COMPANIONS = [
     ],
   },
   {
-    id: "hound", name: "Veil Hound", icon: "hound", cost: 4000,
+    id: "hound", name: "Veil Hound", icon: "hound", cost: 400,
     source: "hunt", sourceText: "while hunting", findChance: 1 / 1500,
     blurb: "Lean, grey and patient. It can follow a blood trail through a week of rain.",
     trait: { name: "Bloodhound", kind: "xp", skills: ["warfare"], base: 0.08, perRank: 0.02, text: "Hunt XP" },
     unlocks: [
       { bond: 5,  kind: "gold",  value: 0.10, text: "+10% gold from kills" },
-      { bond: 10, kind: "drops", value: 0.10, text: "Spoils drop 10% more often" },
+      { bond: 10, kind: "drops", value: 0.10, text: "Kills drop materials 10% more often" },
       { bond: 20, kind: "rare",  value: 0.01, text: "+1% rare find chance on kills" },
       { rank: 3,  kind: "rare",  value: 0.01, text: "+1% rare find chance on kills" },
     ],
   },
   {
-    id: "stag", name: "Veil Stag", icon: "stag", cost: 10000,
+    id: "stag", name: "Veil Stag", icon: "stag", cost: 1000,
     source: "any", sourceText: "whatever you are doing", findChance: 1 / 3000,
     blurb: "It appears at the treeline at dusk and the crews work quieter for it.",
     trait: { name: "Pathfinder", kind: "xp", skills: ["all"], base: 0.03, perRank: 0.01, text: "XP to every skill" },
@@ -826,7 +999,7 @@ const COMPANIONS = [
 const companionDef = (id) => COMPANIONS.find((c) => c.id === id) || null;
 
 // The old pets were retired in favour of companions. Saves that owned them get the price back.
-const RETIRED_PETS = { golem: 4000, sprite: 7500, mule: 2500 };
+const RETIRED_PETS = { golem: 400, sprite: 750, mule: 250 };
 
 /* ================= 17. ITEM LORE ================= */
 /* What the item popup says about a thing. Written by hand for anything you
@@ -939,6 +1112,10 @@ const TYPE_LORE = {
   staff: () => "A two-handed staff that draws the Veil through its head.",
   greatsword: () => "A two-handed blade that ends fights and arguments alike.",
   grimoire: () => "An offhand tome, heavy with things better left unread.",
+
+  // jewellery
+  amulet: () => "An inlaid amulet worn against the skin. It steadies the arm that swings.",
+  ring: () => "A plain band set with an inlay. The blows that reach you arrive a little softer.",
 
   // heavy armour
   helm: () => "A heavy plate helm. It narrows the world to a slit and keeps your skull whole.",
