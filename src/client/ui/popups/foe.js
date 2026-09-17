@@ -8,12 +8,16 @@
 
    Also home to the monster drawings (v4's MONSTER_ART), which
    the arena and the quarry on the Hunt page draw too.
+
+   "Your record" is what the Character page's Collection is for:
+   how often this one has gone down, and how often it has put you
+   down. Both read from the save, so they hold outside a hunt.
    ============================================================ */
 
 import { h } from "../dom.js";
 import { iconEl } from "../icons.js";
 import { openModal } from "../overlay.js";
-import { fmt, fmtGold, fmtStat, chancePct } from "../format.js";
+import { fmt, fmtGold, fmtStat, chancePct, plural } from "../format.js";
 import { registerPopup, openPopup } from "../widgets.js";
 import { GameData, getMonster, getZone, regionOfTier } from "../../../shared/registry.js";
 import { foeNumbers } from "../../../shared/combat.js";
@@ -69,11 +73,25 @@ const pctOf = (x) => `${Math.round(x * 100)}%`;
 
 const stat = (label, value, tone) => h("div.stat", h("span.l", label), h("span.v", { class: tone && `t-${tone}` }, value));
 
+// A line that is a fact, not an item: nothing to open.
+const note = (label, value, glyph = "sparkle") =>
+  h("div.ap-row", h("span.ap-link", iconEl(glyph), h("span", label)), h("span.ap-val", value));
+
+/* How often this one has fallen, and how often you have. The Collection reads
+   both for every foe in the world on a frame, so they stay this cheap. */
+export const foeKills = (state, monsterId) => (state.rolls && state.rolls[`m:${monsterId}`]) || 0;
+export const foeFalls = (state, monsterId) => (state.foeDeaths && state.foeDeaths[monsterId]) || 0;
+
+// Zero reads as never, not as a nought.
+const times = (n) => (n ? plural(n, "time") : "Never");
+
 // Everything the numbers below lean on. When it moves (a level, a new piece, a buff running out) the body is drawn again.
 function numbersSig(ctx, mob) {
   const state = ctx.state;
   return [statsOf(state).defence, xpMult(state, "warfare", ctx.now), companionBonus(state, "gold"),
-    companionBonus(state, "drops"), companionBonus(state, "rare")].join("|");
+    companionBonus(state, "drops"), companionBonus(state, "rare"),
+    // A kill or a fall mid-fight moves the record, so it counts as a change too.
+    foeKills(state, mob.id), foeFalls(state, mob.id)].join("|");
 }
 
 function foeBody(ctx, mob) {
@@ -91,7 +109,8 @@ function foeBody(ctx, mob) {
     stat("Health", fmt(n.hp)),
     stat("Attack", `${fmtStat(n.attack)} a blow`),
     stat("Against you", `About ${fmtStat(perMinute)} a minute`),
-    stat("Defence", `Stops ${pctOf(mitigation(mob.defence, mob.tier))} of a blow`),
+    // Its Defence as a number. What that works out to is "Against you", above.
+    stat("Defence", fmtStat(mob.defence)),
     stat("Swings every", `${(mob.speed / 1000).toFixed(1)}s`),
     stat("Experience", `${fmtStat(n.xp * xpMult(state, "warfare", ctx.now))} a kill, more deeper in`),
     sov ? null : stat("Threat", `${n.threat} a kill, more deeper in`),
@@ -111,8 +130,6 @@ function foeBody(ctx, mob) {
       h("button.ap-link", { type: "button", dataset: { item: key } }, iconEl(d ? d.icon : "unknown"), h("span", `${itemName(key)} ×${qty}`)),
       h("span.ap-val", chancePct(Math.min(1, chance * dropMult))));
   });
-  // Lines that are facts, not items: nothing to open.
-  const note = (label, value) => h("div.ap-row", h("span.ap-link", iconEl("sparkle"), h("span", label)), h("span.ap-val", value));
   rows.push(sov ? note("Epic gear", "Always") : note("Elites drop", `×${GameData.ELITE.drops}`));
   if (rare) rows.push(note("Finer gear", chancePct(rare)));
 
@@ -122,10 +139,17 @@ function foeBody(ctx, mob) {
     if (link) openPopup("item", ctx, link.dataset.item, { from: null });
   });
 
+  const kills = foeKills(state, mob.id);
+  const falls = foeFalls(state, mob.id);
+
   return [
     h("p.ap-desc", sov ? GameData.SOVEREIGN.note : GameData.ARCHETYPES[mob.archetype].note),
     stats,
     h("div.ap-block", h("div.eyebrow", "Drops"), list),
+    h("div.ap-block", h("div.eyebrow", "Your record"),
+      h("div.ap-list",
+        note("You have felled it", times(kills), "swords"),
+        note("It has felled you", times(falls), "skull"))),
   ];
 }
 

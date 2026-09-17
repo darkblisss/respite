@@ -16,7 +16,7 @@
 
 import { h, setText, setAttr, toggleClass } from "../ui/dom.js";
 import { iconEl } from "../ui/icons.js";
-import { confirm, toast } from "../ui/overlay.js";
+import { confirm, openModal, toast } from "../ui/overlay.js";
 import { fmtWhole, fmtTime, fmtAgo } from "../ui/format.js";
 import { openPopup } from "../ui/widgets.js";
 import { CONFIG } from "../../shared/config.js";
@@ -415,36 +415,69 @@ function partyBody(ctx, page) {
     let cards = new Map();
     let rosterSig = null;
 
+    // Lives in the invite dialog now, not on the page. Painted either way.
     const invitesBox = h("div");
+    const inviteFormNode = inviteForm();
     let invitesSig = null;
 
     const onlineChip = h("span.chip.chip-good", iconEl("online"), h("span"));
     const chat = chatPanel();
 
+    // The chat takes the full width the invites card used to share with it.
     page.replaceChildren(
       h("header.page-head",
         h("div", eyebrow, title, h("p.page-sub", RULE), h("div.chip-row.mt-3", bonusChip)),
         actions),
       grid,
-      h("div.grid-2",
-        h("section.card.card-flush.chat", cardHead("Party chat", { actions: onlineChip }), chat.log, chat.alert, chat.form),
-        h("section.card",
-          cardHead("Invites", { sub: `The party holds ${P.maxSize}. Pending invites count toward that.` }),
-          invitesBox)));
+      h("section.card.card-flush.chat", cardHead("Party chat", { actions: onlineChip }), chat.log, chat.alert, chat.form));
 
-    /* The page actions: an invite form for the leader, and Leave for everyone. */
+    /* The page actions: a button that opens the invite dialog, and Leave for everyone.
+       The chat is the reason to be on this page, so the invite field and the list of
+       who is pending live behind one press instead of taking a third of the page. */
+    let inviteBadge = null;
+
+    function openInvites(leader) {
+      // invitesBox is painted every frame whether or not it is on screen, so the
+      // dialog opens already current and keeps up while it is open.
+      const body = leader ? [inviteFormNode, h("div.divider"), invitesBox] : [invitesBox];
+      return openModal({
+        title: "Invites",
+        sub: leader ? `The party holds ${P.maxSize}. Pending invites count toward that.` : "Only the party leader can invite.",
+        art: "user-plus",
+        body,
+        actions: [{ label: "Done", kind: "quiet" }],
+      });
+    }
+
     function paintActions(st, leader) {
       const sig = `${leader}`;
       if (sig === actionsSig) return;
       actionsSig = sig;
       const leave = h("button.btn.btn-quiet.btn-sm", { type: "button" }, iconEl("logout"), "Leave");
       leave.addEventListener("click", () => leaveParty(leave));
+      inviteBadge = h("span.badge", { hidden: true });
+      const open = h("button.btn.btn-primary.btn-sm", { type: "button", "aria-label": "Invites" },
+        iconEl("user-plus"), "Invites", inviteBadge);
+      open.addEventListener("click", () => openInvites(leader));
       // replaceChildren would write a null out as text, so only real nodes go in.
-      actions.replaceChildren(...(leader ? [inviteForm(), leave] : [leave]));
+      actions.replaceChildren(open, leave);
     }
 
+    /* Built once and moved into the invite dialog, so the page is not carrying a
+       text field it rarely needs.
+
+       The autocomplete dance matters: a lone text input that looks username-shaped
+       inside a form makes Chrome offer its saved-password and passkey picker, which
+       reads as a login prompt sitting in the middle of a party page. A name of its
+       own plus "one-time-code" is the combination browsers actually honour; plain
+       "off" is increasingly ignored on fields like this one. The dialog's form is
+       also its own, with no password field anywhere near it. */
     function inviteForm() {
-      const input = h("input.input.input-sm", { type: "text", placeholder: "Username", "aria-label": "Invite by username", maxlength: "20", autocomplete: "off", autocapitalize: "none", spellcheck: "false", enterkeyhint: "send" });
+      const input = h("input.input.input-sm", {
+        type: "text", placeholder: "Username", "aria-label": "Invite by username", maxlength: "20",
+        name: "party-invite-search", autocomplete: "one-time-code",
+        autocapitalize: "none", spellcheck: "false", enterkeyhint: "send",
+      });
       const btn = h("button.btn.btn-primary.btn-sm", { type: "submit" }, "Invite");
       const hint = h("span.field-hint.t-bad", { hidden: true, role: "alert" });
       const say = (text) => {
@@ -475,7 +508,7 @@ function partyBody(ctx, page) {
         toast(`Invite sent to ${display(name)}`, { kind: "good", icon: "user-plus" });
         refresh();
       };
-      return h("form.field", { onSubmit: submit },
+      return h("form.field", { onSubmit: submit, autocomplete: "off" },
         h("div.hstack.gap-2", h("div.input-wrap", iconEl("user-plus"), input), btn),
         hint);
     }
@@ -605,6 +638,12 @@ function partyBody(ctx, page) {
             title: "No invites out",
             text: leader ? "Ask for someone by their username above." : "Only the party leader can invite.",
           }));
+        }
+        // The button on the page says how many are pending without opening anything.
+        if (inviteBadge) {
+          const n = out.length + incoming.length;
+          setText(inviteBadge, n ? String(n) : "");
+          inviteBadge.hidden = !n;
         }
         if (incoming.length) {
           parts.push(h("div.divider"), h("div.eyebrow", "Invites to you"),

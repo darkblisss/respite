@@ -1,25 +1,29 @@
 /* ============================================================
    Respite · popups/zone.js · The Ground
    ------------------------------------------------------------
-   Where a hunt is taken up. What a zone fields, where its Threat
-   stands and what happens when it peaks, then the hunt played out
-   ahead of time: three twelve-hour runs from full health with the
+   Where a hunt is taken up. What a zone fields, then the hunt played
+   out ahead of time: three twelve-hour runs from full health with the
    remedies you hold. The runs are played one at a time after the
    popup has painted, and kept by signature while nothing that
    matters has changed, as v4 did.
+
+   The projection is shown as a warning and a record to beat, not as
+   throughput: the live XP/hr and DPS belong to a run in progress.
+   Threat is region-wide, so it is stated on the Hunt page instead of
+   on each of four zone sheets.
 
    Also exports the Hunt XP chips and the party count, which the
    Hunt page shows in its hero.
    ============================================================ */
 
-import { h, setText, setWidth, toggleClass } from "../dom.js";
+import { h, setAttr, setText, setWidth, toggleClass } from "../dom.js";
 import { iconEl } from "../icons.js";
-import { openModal } from "../overlay.js";
+import { openModal, tipBody, tooltip } from "../overlay.js";
 import { fmt, fmtStat, fmtTime, signedPct } from "../format.js";
-import { qtyPicker, registerPopup, openPopup } from "../widgets.js";
+import { registerPopup, openPopup } from "../widgets.js";
 import { CONFIG } from "../../../shared/config.js";
 import { GameData, foesOf, sovereignOf, regionOfTier } from "../../../shared/registry.js";
-import { threatIn, projectOnce, summariseRuns, huntOddsOpts, oddsSignature } from "../../../shared/combat.js";
+import { bestRun, huntRates, projectOnce, summariseRuns, huntOddsOpts, oddsSignature } from "../../../shared/combat.js";
 import { skillLevel, recovering } from "../../../shared/stats.js";
 import { xpBreakdown, partyMult } from "../../../shared/progression.js";
 import { activeCompanion } from "../../../shared/companions.js";
@@ -27,7 +31,6 @@ import { itemDef } from "../../../shared/items.js";
 import { ORDER } from "../../../shared/storage.js";
 import { huntInterval } from "../../store.js";
 
-const H = CONFIG.hunt;
 const IDLE_CAP = CONFIG.time.idleCapMs;
 const HOUR = 60 * 60 * 1000;
 
@@ -77,8 +80,33 @@ export const chipNode = (c) => h("span.chip", { class: `chip-${c.tone}` }, c.ico
 
 /* ================= 2. PROJECTIONS ================= */
 
-// How many kills was last asked for, this session: the next zone popup starts there.
-let lastPick = { n: 1, unlimited: true };
+/* How long a run is projected to last, as a warning rather than a number. No
+   warning at all while the run outlasts the horizon: silence is the good case. */
+function survivalWarning(odds) {
+  const ms = odds ? odds.survivalMs : null;
+  if (ms == null) return null;
+  if (ms < HOUR) return { text: "You will not last here.", tone: "bad" };
+  if (ms < 6 * HOUR) return { text: "You will be overwhelmed here.", tone: "ember" };
+  if (ms < 12 * HOUR) return { text: "This place will break you.", tone: "warn" };
+  return null;
+}
+
+/* Lore, hovered rather than given a line of its own. The count of Sovereigns met
+   is meant to be a figure the whole region contributes to; until the server keeps
+   that tally this is what the projection saw. */
+function sovereignTip(region, sov, odds) {
+  const met = odds && odds.sovereignsMet ? odds : null;
+  return tipBody({
+    title: sov.name,
+    sub: `The Sovereign of ${region.name}`,
+    rows: [
+      ["Comes", "Once the region's Threat is maxed"],
+      ["Met", met ? `About ${fmtStat(met.metPerHour)} an hour at this pace` : "Not on this pace"],
+      ["Felled", met ? pctOf(met.sovereignsFelled / met.sovereignsMet) : "Never, so far"],
+    ],
+    foot: "Felling it is one of only two things that clears a region's Threat. Hiding out a full hour is the other.",
+  });
+}
 
 // Projections already played, by signature. A handful covers four zones and a change of heart.
 const ODDS = new Map();
@@ -123,6 +151,8 @@ registerPopup("zone", (ctx, tier, zoneId) => {
     sub: `Hunt · Tier ${tier}`,
     art: ZONE_ICONS[zone.id],
     artTone: "ember",
+    // One decision, so Start the Hunt sits down the middle rather than off to the right.
+    className: "modal-center-foot",
     onClose: () => {
       offTick();
       stopOdds();
@@ -135,8 +165,6 @@ registerPopup("zone", (ctx, tier, zoneId) => {
     return [recovering(state), c ? `${c.tier}:${c.zone}` : "-", state.travel.unlocked.includes(region.id),
       skillLevel(state, "warfare") < region.level, !!state.settings.hideSovereign].join("|");
   }
-
-  const pickMax = () => (odds && odds.killMs ? Math.max(1, Math.floor(IDLE_CAP / odds.killMs)) : 9999);
 
   function stat(parent, label, value, tone) {
     const v = h("span.v", { class: tone && `t-${tone}` }, value);
@@ -151,28 +179,27 @@ registerPopup("zone", (ctx, tier, zoneId) => {
     const here = !!(c && c.tier === tier && c.zone === zone.id);
     const open = state.travel.unlocked.includes(region.id);
 
+    /* No "Foes at once" (maxFoes is a global now), no Threat line and no "At 100
+       Threat" line: Threat belongs to the region, so it is stated once on the Hunt
+       page rather than on each of four zone sheets. */
     const facts = h("div.stats");
     if (skillLevel(state, "warfare") < region.level) stat(facts, "Suited to", `Hunt Lv ${region.level} and up`, "bad");
-    stat(facts, "Foes at once", `${zone.foesText}, never more than ${H.maxFoes}`);
-    stat(facts, "Reinforcements", `One every ${zone.windowMs / 1000}s a fight runs on`);
+    stat(facts, "Reinforcements", `Every ${zone.windowMs / 1000}s`);
     stat(facts, "Elites", pctOf(zone.elite));
     stat(facts, "XP a kill", `×${zone.xp}`);
-    const threat = stat(facts, "Threat", "");
-    // What a peak brings. The small line wraps under the name on a narrow sheet instead of squeezing the label.
-    if (state.settings.hideSovereign) {
-      stat(facts, "At 100 Threat", ["You hide", h("small", "for five minutes")]);
-    } else {
-      stat(facts, "At 100 Threat", [sov.name, h("small", zone.engage >= 1 ? "comes every time" : `comes ${pctOf(zone.engage)} of the time`)]);
-      if (zone.escorts > 0) stat(facts, "At its side", zone.escorts === 1 ? "An Elite" : `${zone.escorts} Elites`);
+    stat(facts, "Foes here", `×${zone.power} health and damage`);
+    if (!state.settings.hideSovereign && zone.escorts > 0) {
+      stat(facts, "At its side", zone.escorts === 1 ? "An Elite" : `${zone.escorts} Elites`);
     }
 
-    const reckoning = () => h("small", "Reckoning");
+    /* Throughput numbers are gone from this sheet: the live XP/hr and DPS are on the
+       run bar and the Hunt page, and a projected kills-an-hour only encouraged
+       staring at the rate. What is left is a record to beat and an honest warning. */
     const played = h("div.stats");
-    const xp = stat(played, "XP/hr", reckoning());
-    const kills = stat(played, "Kills an hour", reckoning());
-    const last = stat(played, "You last", reckoning());
+    const best = stat(played, "Best run", h("small", "Reckoning"));
     const remedies = stat(played, "Remedies", "");
-    const sovs = stat(played, "Sovereigns met", reckoning());
+    const warn = h("p.zone-warn", { hidden: true });
+    const stock = h("p.zone-warn.t-warn", { hidden: true }, "You should stock up on some remedies!");
 
     const runTop = h("span");
     const runRate = h("b");
@@ -184,10 +211,14 @@ registerPopup("zone", (ctx, tier, zoneId) => {
     const foeRow = (mob, value) => h("div.ap-row",
       h("button.ap-link", { type: "button", "data-tone": "ember", dataset: { monster: mob.id } }, iconEl(mob.icon), h("span", mob.name)),
       h("span.ap-val", value));
+    /* The Sovereign's line is not a per-encounter chance like the rest of the list,
+       and a percentage there read as though it were. It says what it is instead. */
+    const sovRow = foeRow(sov, state.settings.hideSovereign ? "Not while you hide" : "Appears when Threat is maxed");
     const list = h("div.ap-list",
       foesOf(tier).map((mob) => foeRow(mob, `${pctOf(zone.mix[mob.archetype])} of foes`)),
-      foeRow(sov, state.settings.hideSovereign ? "Not while you hide"
-        : zone.engage >= 1 ? "When Threat peaks" : `${pctOf(zone.engage)} of Threat peaks`));
+      sovRow);
+    // Flavour, not something to act on, so it hovers rather than taking a line of its own.
+    tooltip(sovRow, () => sovereignTip(region, sov, odds), { placement: "top" });
     list.addEventListener("click", (e) => {
       const link = e.target instanceof Element ? e.target.closest("button.ap-link[data-monster]") : null;
       if (!link) return;
@@ -196,41 +227,20 @@ registerPopup("zone", (ctx, tier, zoneId) => {
       openPopup("foe", ctx, link.dataset.monster, { back: { tier, zoneId: zone.id } });
     });
 
-    const picker = qtyPicker({
-      value: lastPick.n,
-      max: pickMax(),
-      unlimited: lastPick.unlimited,
-      allowUnlimited: true,
-      onChange: (p) => {
-        lastPick = { n: p.n, unlimited: p.unlimited };
-        paintPlan();
-      },
-    });
-    picker.input.addEventListener("keydown", (e) => {
-      if (e.key !== "Enter") return;
-      e.preventDefault();
-      const go = m.buttons[m.buttons.length - 1];
-      if (go && !go.disabled) go.click();
-    });
-
-    const planText = h("span");
     const planWarn = h("span.t-warn");
     const chips = h("div.chip-row");
 
-    refs = {
-      chips, chipSig: null, threat, xp, kills, last, remedies, sovs,
-      runTop, runRate, runFill, picker, max: pickMax(), planText, planWarn, planSig: null,
-    };
+    refs = { chips, chipSig: null, best, remedies, warn, stock, runTop, runRate, runFill, planWarn };
 
+    // No kill picker: a hunt runs until you pull back, fall, or twelve hours pass.
     m.setBody([
       h("p.ap-desc", zone.note),
       chips,
       facts,
       run,
-      h("div.ap-block", h("div.eyebrow", "Twelve hours from full health"), played),
+      h("div.ap-block", h("div.eyebrow", "Twelve hours from full health"), played, warn, stock),
       h("div.ap-block", h("div.eyebrow", "Turns up here"), list),
-      h("div.ap-block", h("div.eyebrow", "How many kills"), picker.node),
-      h("p.ap-plan", planText, planWarn),
+      h("p.ap-plan", planWarn),
     ]);
 
     // A Promise keeps the button loading; false (a refusal, already toasted) keeps the popup open.
@@ -240,18 +250,15 @@ registerPopup("zone", (ctx, tier, zoneId) => {
         .then((res) => !!(res && res.ok), () => false)
         .then((ok) => { busy = false; return ok; });
     };
-    // On the same ground the fight carries on and the count starts again.
-    const start = () => {
-      lastPick = { n: picker.pick.n, unlimited: picker.pick.unlimited };
-      return send("startHunt", { tier, zone: zone.id, limit: picker.limit() });
-    };
+    // No limit to send: a hunt runs on until you stop it or it stops you.
+    const start = () => send("startHunt", { tier, zone: zone.id, limit: null });
     const pull = () => send("pullBack", {});
 
     let actions;
     if (recovering(state)) actions = [{ label: "Recovering", kind: "ember", disabled: true }];
     else if (!open) actions = [{ label: "Not open to you", kind: "ember", disabled: true }];
-    else if (here) actions = [{ label: "Pull back", kind: "quiet", onClick: pull }, { label: "Restart the count", kind: "ember", icon: "swords", onClick: start }];
-    else actions = [{ label: c ? "Move the hunt here" : "Hunt", kind: "ember", icon: "swords", onClick: start }];
+    else if (here) actions = [{ label: "Pull back", kind: "quiet", onClick: pull }];
+    else actions = [{ label: c ? "Move the hunt here" : "Start the Hunt", kind: "ember", icon: "swords", onClick: start }];
     m.setActions(actions);
 
     startOdds();
@@ -305,56 +312,22 @@ registerPopup("zone", (ctx, tier, zoneId) => {
     job = null;
   }
 
+  /* The survival projection is a warning, not a number: nothing at all while the
+     run holds, then amber, orange and red as it stops holding. Sentence case, and
+     never shouted. A remedy shortage is said underneath, because it is the one
+     thing the player can go and fix. */
   function paintOdds() {
     if (!odds || !refs) return;
-    const o = odds;
-    setText(refs.xp, `About ${fmt(Math.round(o.xpPerHour))}`);
-    setText(refs.kills, o.killsPerHour >= 10 ? `About ${fmt(Math.round(o.killsPerHour))}`
-      : o.killsPerHour > 0 ? `About ${fmtStat(o.killsPerHour)}` : "Next to none");
-
-    let last;
-    let tone = null;
-    if (o.survivalMs == null) {
-      last = "Outlasts twelve hours";
-      tone = "good";
-    } else if (o.deaths < o.runs) {
-      last = `${fmtTime(o.survivalMs)}, often longer`;
-    } else {
-      last = `About ${fmtTime(o.survivalMs)}`;
-      if (o.survivalMs < HOUR) tone = "bad";
-    }
-    setText(refs.last, last);
-    toggleClass(refs.last, "t-good", tone === "good");
-    toggleClass(refs.last, "t-bad", tone === "bad");
-
-    setText(refs.sovs, o.sovereignsMet
-      ? `About ${fmtStat(o.metPerHour)} an hour, ${pctOf(o.sovereignsFelled / o.sovereignsMet)} felled`
-      : ctx.state.settings.hideSovereign ? "None, you hide" : "None");
+    const w = survivalWarning(odds);
+    setText(refs.warn, w ? w.text : "");
+    ["warn", "ember", "bad"].forEach((t) => toggleClass(refs.warn, `t-${t}`, !!w && w.tone === t));
+    setAttr(refs.warn, "hidden", !w);
   }
 
   function paintPlan() {
     if (!refs) return;
     const state = ctx.state;
-    const p = refs.picker.pick;
-    const killMs = odds && odds.killMs;
-    let lead;
-    let rest;
-    let warn = "";
-    if (p.unlimited) {
-      lead = "No limit";
-      rest = " · until you pull back, fall or twelve hours pass";
-    } else {
-      lead = `${fmt(p.n)} ${p.n === 1 ? "kill" : "kills"}`;
-      rest = killMs ? ` · about ${fmtTime(p.n * killMs)}` : "";
-      if (killMs && p.n * killMs > IDLE_CAP) warn = "Stops at twelve hours.";
-    }
-    if (recovering(state)) warn = `Back on your feet in ${fmtTime(state.player.recoveryLeft)}.`;
-    const sig = `${lead}${rest}`;
-    if (refs.planSig !== sig) {
-      refs.planSig = sig;
-      refs.planText.replaceChildren(h("b", lead), rest);
-    }
-    setText(refs.planWarn, warn);
+    setText(refs.planWarn, recovering(state) ? `Back on your feet in ${fmtTime(state.player.recoveryLeft)}.` : "");
   }
 
   function update() {
@@ -373,24 +346,27 @@ registerPopup("zone", (ctx, tier, zoneId) => {
       refs.chips.replaceChildren(...chips.map(chipNode));
     }
 
-    setText(refs.threat, `${threatIn(state, tier, zone.id)} / ${H.threatCap} · ×${zone.threat} a kill`);
+    // The record to beat on this ground, banked however a run ended.
+    const record = bestRun(state, tier, zone.id);
+    setText(refs.best, record > 0 ? fmtTime(record) : "No run yet");
+    toggleClass(refs.best, "t-good", record >= IDLE_CAP);
 
     const held = remediesHeld(state);
     const perHour = odds ? odds.remediesPerHour : 0;
     setText(refs.remedies, held ? `${fmt(held)} held${perHour >= 0.05 ? ` · about ${fmtStat(perHour)} used an hour` : ""}` : "None held");
     toggleClass(refs.remedies, "t-bad", !held);
+    setAttr(refs.stock, "hidden", held > 0);
 
     if (c && c.tier === tier && c.zone === zone.id) {
-      setText(refs.runTop, `Underway · ${c.limit == null ? fmt(c.done) : `${fmt(c.done)} of ${fmt(c.limit)}`} kills`);
-      setText(refs.runRate, c.xpRate == null ? `XP/hr in ${fmtTime(c.nextMark - c.elapsed)}` : `${fmt(Math.round(c.xpRate))} XP/hr`);
-      setWidth(refs.runFill, c.limit == null ? (c.elapsed / IDLE_CAP) * 100 : (c.done / c.limit) * 100);
+      const rates = huntRates(c);
+      setText(refs.runTop, `Underway · ${fmt(c.done)} kills`);
+      // Live, off a rolling window, so it moves rather than standing still for minutes.
+      setText(refs.runRate, rates.xpRate == null
+        ? "Reckoning"
+        : `${fmt(Math.round(rates.xpRate))} XP/hr · ${fmtStat(rates.dps)} DPS`);
+      setWidth(refs.runFill, (c.elapsed / IDLE_CAP) * 100);
     }
 
-    const max = pickMax();
-    if (max !== refs.max) {
-      refs.max = max;
-      refs.picker.refresh(max);
-    }
     paintPlan();
   }
 

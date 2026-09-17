@@ -157,6 +157,15 @@ export function resolveSkilling(state, dt, env, at0) {
     return 0;
   }
 
+  /* Pre-flight: the stock has to cover the next action before any time is spent on
+     it. Without this the task sat out its whole timer against materials it did not
+     have, showed "0s left" on a full bar while it waited (skillPlan's remaining is
+     0 once the stock is gone), and only then failed with "Missing materials". */
+  if (stockCovers(state, def.cost) < 1) {
+    endTask(state, task, STOCK, task.elapsed, env, at0);
+    return 0;
+  }
+
   const time = actionTime(state, def);
   const budget = Math.max(0, Math.min(dt, IDLE_CAP - task.elapsed));
   let due = Math.floor((task.progress + budget) / time);

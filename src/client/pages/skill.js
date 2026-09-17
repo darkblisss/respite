@@ -98,8 +98,8 @@ function heroView(ctx, skill) {
     setText(note, skill.note.slice(first.length).trim());
   }
 
+  // No art box: the skill's icon is the sidebar's job, and showing it twice read as a duplicate.
   const node = h("section.hero",
-    h("div.art.art-xl", { "aria-hidden": "true" }, iconEl(skill.icon)),
     h("div.hero-main", eyebrow, h("h1.hero-title", skill.name)),
     h("div.hero-level", h("div.hero-lv", h("small", "Lv"), lv), lvSub),
     tags,

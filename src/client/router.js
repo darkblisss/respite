@@ -21,8 +21,10 @@ export const DEFAULT_HASH = "#/character";
 // Route page id -> [module file, breadcrumb group, title].
 const PAGES = Object.freeze({
   character: ["character", "The Vanguard", "Character"],
-  armaments: ["armaments", "The Vanguard", "Armaments"],
-  companions: ["companions", "The Vanguard", "Companions"],
+  armaments: ["armaments", "The Vanguard", "Satchel"],
+  // Companions are unhooked from the live camp until the system is redesigned: the module and its
+  // shared state stay put, so restoring this line (and the nav row in ui/shell.js) brings it back.
+  // companions: ["companions", "The Vanguard", "Companions"],
   stockpile: ["stockpile", "The Camp", "Stockpile"],
   bounties: ["bounties", "The Camp", "Bounties"],
   requisitions: ["requisitions", "The Camp", "Requisitions"],
@@ -30,7 +32,7 @@ const PAGES = Object.freeze({
   atlas: ["atlas", "The Realm", "Atlas"],
   market: ["market", "The Realm", "Market"],
   party: ["party", "The Realm", "Party"],
-  hiscores: ["hiscores", "The Realm", "Hiscores"],
+  hiscores: ["hiscores", "The Realm", "Leaderboard"],
 });
 
 const KIND_GROUP = { gather: "Trades", craft: "Artisans", war: "The Field" };

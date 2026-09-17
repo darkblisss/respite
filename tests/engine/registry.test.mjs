@@ -6,7 +6,12 @@
      node tests/engine/registry.test.mjs
 
    The v4 sources are read from tests/ref-v4 in the repo. Set RESPITE_REF to
-   point somewhere else. */
+   point somewhere else.
+
+   A few of v4's numbers have deliberately been left behind. Those comparisons
+   are listed in DIVERGED below with the reason they moved; they report as
+   CHANGED and are counted on their own. Everything else still has to match v4
+   to the character, so accidental drift is still a failure. */
 
 import vm from "node:vm";
 import { existsSync, readFileSync } from "node:fs";
@@ -21,6 +26,7 @@ const refDir = path.resolve(process.env.RESPITE_REF || path.join(repo, "tests", 
 
 let passed = 0;
 let failed = 0;
+let changed = 0;
 
 function check(name, ok, detail) {
   if (ok) passed++;
@@ -57,18 +63,84 @@ function firstDiff(a, b) {
   return `first difference at char ${i}\n     old: ${cut(a)}\n     new: ${cut(b)}`;
 }
 
+/* ================= INTENTIONAL DIVERGENCE ================= */
+
+/* The balance has deliberately moved away from v4 in a few places, so these
+   comparisons can no longer agree. Each is listed with the reason it moved, and
+   reports as CHANGED rather than FAIL. `at` names the fields that were meant to
+   move: they are dropped from both sides and everything else in that table still
+   has to match v4 exactly, so a typo in a zone's window is still caught. A
+   listing whose two sides have come back together is a failure, so this map
+   cannot quietly rot. */
+const DIVERGED = {
+  "GameData.ZONES": {
+    why: "the per-zone Threat multiplier became a power multiplier on foe health and damage, with a new mix and elite chance at each depth",
+    at: ["threat", "power", "mix", "elite"],
+  },
+  "getZone = zoneDef": {
+    why: "the same ZONES change, read back through the getter",
+    at: ["threat", "power", "mix", "elite"],
+  },
+  "CONFIG.hunt.hideMs = HIDE_MS": { why: "going to ground is a full hour now, not five minutes" },
+  "CONFIG.hunt.xpMarkMs = XP_MARK_MS": { why: "the five-minute XP mark gave way to rateMarkMs, rateWindowMs and rateMinSpanMs" },
+};
+
+// Each listing, and how many comparisons it covered.
+const divergences = new Map();
+const divergenceOf = (name) => (Object.hasOwn(DIVERGED, name) ? { key: name, ...DIVERGED[name] } : null);
+
+// A copy of value with every property named in keys dropped, however deep.
+function without(value, keys) {
+  if (Array.isArray(value)) return value.map((v) => without(v, keys));
+  if (value && typeof value === "object") {
+    const out = {};
+    Object.keys(value).forEach((k) => { if (!keys.includes(k)) out[k] = without(value[k], keys); });
+    return out;
+  }
+  return value;
+}
+
+function changedLine(name, d, suffix = "") {
+  changed++;
+  divergences.set(d.key, (divergences.get(d.key) || 0) + 1);
+  console.log(`CHANGED ${name}${suffix} (${d.why})`);
+  return true;
+}
+
+const STALE = "listed in DIVERGED, but v4 and v5 agree: take it out";
+
 function same(name, oldVal, newVal) {
+  const d = divergenceOf(name);
   const a = norm(oldVal);
   const b = norm(newVal);
-  return check(name, a === b, a === b ? "" : firstDiff(a, b));
+  if (!d) return check(name, a === b, a === b ? "" : firstDiff(a, b));
+  if (a === b) return check(name, false, STALE);
+  if (d.at) {
+    const ka = norm(without(oldVal, d.at));
+    const kb = norm(without(newVal, d.at));
+    if (ka !== kb) return check(name, false, `moved outside ${d.at.join(", ")}: ${firstDiff(ka, kb)}`);
+  }
+  return changedLine(name, d);
 }
 
 function sameOver(name, inputs, oldFn, newFn) {
+  const d = divergenceOf(name);
+  let moved = false;
   for (const input of inputs) {
-    const a = norm(attempt(() => oldFn(input)));
-    const b = norm(attempt(() => newFn(input)));
-    if (a !== b) return check(name, false, `input ${show(input)}: ${firstDiff(a, b)}`);
+    const oldVal = attempt(() => oldFn(input));
+    const newVal = attempt(() => newFn(input));
+    const a = norm(oldVal);
+    const b = norm(newVal);
+    if (a === b) continue;
+    if (!d) return check(name, false, `input ${show(input)}: ${firstDiff(a, b)}`);
+    moved = true;
+    if (d.at) {
+      const ka = norm(without(oldVal, d.at));
+      const kb = norm(without(newVal, d.at));
+      if (ka !== kb) return check(name, false, `input ${show(input)}: moved outside ${d.at.join(", ")}: ${firstDiff(ka, kb)}`);
+    }
   }
+  if (d) return moved ? changedLine(name, d, ` (${inputs.length} inputs)`) : check(name, false, STALE);
   return check(`${name} (${inputs.length} inputs)`, true);
 }
 
@@ -208,7 +280,8 @@ async function main() {
     { marketFee: 0.05, marketMaxListings: 20, marketListingDays: 7, marketMaxPrice: 1000000000 },
     { marketFee: CONFIG.economy.marketFee, marketMaxListings: CONFIG.economy.marketMaxListings,
       marketListingDays: CONFIG.economy.marketListingDays, marketMaxPrice: CONFIG.economy.marketMaxPrice });
-  same("CONFIG.party", { maxSize: 4, huntBonusPerMember: 0.10, huntBonusCap: 0.30 }, CONFIG.party);
+  // v4 had no parties, so this is v5's own number: 5% a member, three others at most.
+  same("CONFIG.party", { maxSize: 4, huntBonusPerMember: 0.05, huntBonusCap: 0.15 }, CONFIG.party);
 
   section("CONFIG formulas");
   same("CONFIG.xpTable = XP_TABLE", O.XP_TABLE, CONFIG.xpTable);
@@ -362,6 +435,14 @@ async function main() {
     check("GameData shares no object between two places", !twice, `same object at ${twice}`);
   }
 
+  /* What the attempts below are aimed at, as it stands before any of them. ZONES
+     has moved on from v4, so v4 is no longer the yardstick for "unchanged" here:
+     every one of these tables is held against itself instead, which catches a
+     mutation that took wherever it landed. Their agreement with v4 is the
+     GameData tables section above. */
+  const TARGETED = ["MATERIALS", "GEAR", "CRAFT_ACTIONS", "GATHER_ACTIONS", "MONSTERS", "ZONES", "COMPANIONS", "GATHER_SKILLS", "RARITIES"];
+  const beforeAttempts = JSON.parse(JSON.stringify(TARGETED.map((n) => GameData[n])));
+
   const MUTATIONS = [
     ["add a table to GameData", () => { GameData.EXTRA = {}; }],
     ["replace a table", () => { GameData.MATERIALS = {}; }],
@@ -391,9 +472,7 @@ async function main() {
     }
     check(`strict mode throws a TypeError: ${label}`, threw);
   }
-  same("tables unchanged after the attempts",
-    ["MATERIALS", "GEAR", "CRAFT_ACTIONS", "GATHER_ACTIONS", "MONSTERS", "ZONES", "COMPANIONS", "GATHER_SKILLS", "RARITIES"].map((n) => O[n]),
-    ["MATERIALS", "GEAR", "CRAFT_ACTIONS", "GATHER_ACTIONS", "MONSTERS", "ZONES", "COMPANIONS", "GATHER_SKILLS", "RARITIES"].map((n) => GameData[n]));
+  same("tables unchanged after the attempts", beforeAttempts, TARGETED.map((n) => GameData[n]));
 
   /* ---------- Display order ---------- */
   section("Display order");
@@ -420,6 +499,11 @@ async function main() {
     check(`${file}: imports are relative with .js extensions`, imports.every((p) => /^\.\.?\//.test(p) && p.endsWith(".js")));
   }
   check("this test: no em or en dashes", !DASHES.test(readFileSync(fileURLToPath(import.meta.url), "utf8")));
+
+  section("Intentional divergences from v4");
+  check("every listing in DIVERGED was reached", divergences.size === Object.keys(DIVERGED).length,
+    `reached ${divergences.size} of ${Object.keys(DIVERGED).length}: a listing nothing reaches has lost its comparison`);
+  divergences.forEach((n, key) => console.log(`  ${key}${n > 1 ? ` (${n} comparisons)` : ""}: ${DIVERGED[key].why}`));
 }
 
 try {
@@ -427,5 +511,5 @@ try {
 } catch (e) {
   check("the test ran to the end", false, e && e.stack);
 }
-console.log(`\n${passed} passed, ${failed} failed, ${passed + failed} total`);
+console.log(`\n${passed} passed, ${failed} failed, ${changed} changed, ${passed + failed + changed} total`);
 process.exitCode = failed ? 1 : 0;

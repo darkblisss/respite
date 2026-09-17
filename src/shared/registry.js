@@ -484,21 +484,26 @@ function buildRegistry() {
      window runs out, a reinforcement joins (never more than maxFoes at once).
      Clear it early and the rest of the window is the walk to the next one.
      The maths lives in combat.js. */
+  /* `mix` is the share of each archetype the ground fields, `power` the multiplier
+     on a foe's health and damage at that depth (the same foe, harder deeper in).
+     Power climbs in even steps to 1.4x at the Core while XP climbs to 2.2x, so
+     deeper ground stays a clearly better deal and not just a longer slog. Threat
+     per kill has no zone dial: the mix sending up more Brutes does that work. */
   const ZONES = [
-    { id: "outer", name: "Outer", xp: 1, windowMs: 60000, threat: 1, elite: 0.04, engage: 0.4, escorts: 0,
-      sizes: [[1, 0.75], [2, 0.25]], mix: { skirmisher: 0.4, stalker: 0.4, brute: 0.2 },
+    { id: "outer", name: "Outer", xp: 1, windowMs: 60000, power: 1, elite: 0.04, engage: 0.4, escorts: 0,
+      sizes: [[1, 0.75], [2, 0.25]], mix: { skirmisher: 0.7, stalker: 0.2, brute: 0.1 },
       foesText: "1 or 2",
       note: "The picked-over edge. One thing at a time, mostly, and help is slow to reach it." },
-    { id: "middle", name: "Middle", xp: 1.3, windowMs: 50000, threat: 1.25, elite: 0.08, engage: 0.6, escorts: 0,
-      sizes: [[1, 0.5], [2, 0.5]], mix: { skirmisher: 0.35, stalker: 0.4, brute: 0.25 },
+    { id: "middle", name: "Middle", xp: 1.3, windowMs: 50000, power: 1.15, elite: 0.1, engage: 0.6, escorts: 0,
+      sizes: [[1, 0.5], [2, 0.5]], mix: { skirmisher: 0.5, stalker: 0.3, brute: 0.2 },
       foesText: "1 or 2",
       note: "Deeper in. They come in pairs as often as not, and the dark answers faster." },
-    { id: "inner", name: "Inner", xp: 1.7, windowMs: 40000, threat: 1.5, elite: 0.14, engage: 0.8, escorts: 1,
-      sizes: [[2, 0.5], [3, 0.5]], mix: { skirmisher: 0.3, stalker: 0.4, brute: 0.3 },
+    { id: "inner", name: "Inner", xp: 1.7, windowMs: 40000, power: 1.27, elite: 0.16, engage: 0.8, escorts: 1,
+      sizes: [[2, 0.5], [3, 0.5]], mix: { skirmisher: 0.2, stalker: 0.45, brute: 0.35 },
       foesText: "2 or 3",
       note: "Where the ground stops pretending. Two or three at once, and more on the way." },
-    { id: "core", name: "Core", xp: 2.2, windowMs: 30000, threat: 2, elite: 0.22, engage: 1, escorts: 2,
-      sizes: [[3, 1]], mix: { skirmisher: 0.25, stalker: 0.4, brute: 0.35 },
+    { id: "core", name: "Core", xp: 2.2, windowMs: 30000, power: 1.4, elite: 0.22, engage: 1, escorts: 2,
+      sizes: [[3, 1]], mix: { skirmisher: 0.15, stalker: 0.35, brute: 0.5 },
       foesText: "3",
       note: "The heart of it. Always three, always hungry, and something vast is listening." },
   ];

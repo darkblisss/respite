@@ -1,5 +1,5 @@
 /* ============================================================
-   Respite · pages/armaments.js · The Armoury
+   Respite · pages/armaments.js · The Satchel
    ------------------------------------------------------------
    What you carry and what you wear: Belongings (the slot grid
    the Stockpile page builds), the paperdoll and your Standing.
@@ -8,6 +8,10 @@
    The discipline and the Veil appear only once a discipline is
    chosen. Nothing here writes the save: worn pieces open the item
    popup, which sends the commands.
+
+   `dollCard` and `standingCard` are exported: the Character page's
+   first tab shows the same two beside each other, and one paperdoll
+   in the repo beats two that drift apart.
    ============================================================ */
 
 import { h, on, setText, setAttr, toggleClass } from "../ui/dom.js";
@@ -18,7 +22,7 @@ import { storageCard } from "./stockpile.js";
 import { itemDef, itemName } from "../../shared/items.js";
 import { wearPct } from "../../shared/combat.js";
 import { GameData } from "../../shared/registry.js";
-import { statsOf, myClass, mitigation, skillLevel } from "../../shared/stats.js";
+import { statsOf, myClass, skillLevel } from "../../shared/stats.js";
 import { currentRegion } from "../../shared/world.js";
 
 const { DOLL_ORDER, SLOT_LABELS, SLOT_GLYPHS } = GameData;
@@ -63,7 +67,10 @@ function dollSlot(state, slot) {
     h("span.doll-slot-name", itemName(key)));
 }
 
-function dollCard(ctx) {
+/* `link` puts a small quiet link in the card head ({ href, label }). The Satchel
+   itself needs none; the Character tab uses it to point back here. */
+export function dollCard(ctx, { link = null } = {}) {
+  const linkNode = link ? h("a.btn.btn-sm.btn-quiet", { href: link.href }, link.label, iconEl("arrow-right")) : null;
   const chips = h("div.card-actions");
   const left = h("div.doll-col");
   const right = h("div.doll-col");
@@ -122,7 +129,7 @@ function dollCard(ctx) {
       const nextClass = k ? k.id : "";
       if (nextClass !== classSig) {
         classSig = nextClass;
-        chips.replaceChildren(...(k ? [h("span.chip.chip-violet", k.name)] : []));
+        chips.replaceChildren(...[k ? h("span.chip.chip-violet", k.name) : null, linkNode].filter(Boolean));
       }
       setText(nameNode, commanderName(ctx));
       setText(subNode, [k && k.name, region.name].filter(Boolean).join(" · "));
@@ -135,12 +142,12 @@ function dollCard(ctx) {
 function standingRows(state) {
   const s = statsOf(state);
   const k = myClass(state);
-  const tier = currentRegion(state).tier;
   return [
     k && ["Discipline", k.name, "good"],
     ["Health", fmtWhole(s.maxHp)],
     ["Attack", fmtStat(s.attack), "gold"],
-    ["Defence", fmtStat(s.defence), null, `stops ${pct(mitigation(s.defence, tier))} here`],
+    // A flat number, never the share it stops: the mitigation curve is the engine's business.
+    ["Defence", fmtStat(s.defence)],
     ["Swing", `${(s.speed / 1000).toFixed(1)}s`],
     ["Crit chance", pct(s.crit)],
     ["Crit damage", pct(s.critDmg)],
@@ -150,7 +157,7 @@ function standingRows(state) {
   ].filter(Boolean);
 }
 
-function standingCard() {
+export function standingCard() {
   const list = h("div.stats");
   const node = h("section.card",
     h("div.card-head", h("div",
@@ -178,7 +185,7 @@ const VIEW = { pool: "inv", filter: "all", sort: "custom" };
 
 export default {
   id: "armaments",
-  title: () => "Armaments",
+  title: () => "Satchel",
   group: "The Vanguard",
 
   mount(view, ctx) {
@@ -189,7 +196,7 @@ export default {
     view.appendChild(h("div.page",
       h("header.page-head", h("div",
         h("div.eyebrow.page-eyebrow", "The Vanguard"),
-        h("h1.page-title", "Armaments"),
+        h("h1.page-title", "Satchel"),
         h("p.page-sub", "What you carry into the hunt and what you wear there. Remedies live here, in Belongings."))),
       h("div.storage",
         store.node,

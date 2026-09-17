@@ -90,7 +90,11 @@ export function createNet({
   if (!client && supabase && typeof supabase.createClient === "function" && base && key) {
     try {
       client = supabase.createClient(base, key, {
-        auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+        /* pkce puts an OAuth redirect's answer in the query string (?code=) rather
+           than the fragment, which this app owns for its own routing. The session
+           is still picked up by hand in finishOAuth, not on load: detectSessionInUrl
+           would race the router on the very first frame. */
+        auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, flowType: "pkce" },
       });
     } catch (err) {
       console.error("net: createClient failed", err);
@@ -180,6 +184,69 @@ export function createNet({
     }
   }
 
+  /* Where Discord sends the player back: this page, without the query it is about
+     to be handed and without the hash, which the provider would otherwise have to
+     be told about route by route. The router puts them back on a page from the
+     default once they land. */
+  function redirectTo() {
+    if (typeof location === "undefined") return undefined;
+    return `${location.origin}${location.pathname}`;
+  }
+
+  /* Discord as a way in. Nothing but a redirect happens here: the answer comes back
+     to redirectTo() as ?code=, and finishOAuth trades it for a session.
+
+     The server needs no new code for this. handler.js's accountFor already names an
+     account whose email is not one of ours: it falls back to a p_<hex> name off the
+     user id, unique on profiles, and that name is the one parties and the Leaderboard
+     use from then on. It does need the provider turned on in the Supabase dashboard
+     (Authentication, Providers, Discord) against a Discord Developer Portal app. */
+  async function signInWithDiscord() {
+    if (!client) return CLOSED;
+    try {
+      const { error } = await client.auth.signInWithOAuth({
+        provider: "discord",
+        options: { redirectTo: redirectTo() },
+      });
+      if (error) return authMessage(error, "Discord could not be reached.");
+      // The page is on its way to Discord; there is nothing left to report.
+      return null;
+    } catch (err) {
+      return UNREACHABLE;
+    }
+  }
+
+  /* Called once at startup. A ?code= in the query is an OAuth redirect coming home:
+     trade it for a session and take it back out of the address bar, so a reload does
+     not try to spend a code that is already gone. Anything else is left alone. */
+  async function finishOAuth() {
+    if (!client || typeof location === "undefined") return null;
+    let code = null;
+    try {
+      code = new URLSearchParams(location.search).get("code");
+    } catch {
+      return null;
+    }
+    if (!code) return null;
+    let session = null;
+    try {
+      const { data, error } = await client.auth.exchangeCodeForSession(code);
+      if (!error) session = toSession(data && data.session);
+    } catch (err) {
+      console.error("net: exchangeCodeForSession failed", err);
+    }
+    try {
+      history.replaceState(null, "", `${location.pathname}${location.hash}`);
+    } catch {
+      // An address bar that will not be written to is not worth failing a sign in over.
+    }
+    if (session) {
+      current = session;
+      tell("signed_in", session, "local");
+    }
+    return session;
+  }
+
   async function signOut() {
     if (client) {
       try {
@@ -247,13 +314,19 @@ export function createNet({
     return { ok: false, error: typeof json.error === "string" ? json.error : "server_error", status };
   }
 
+  /* code is PostgREST's, kept beside the sentence because a caller sometimes has to tell one
+     failure from another: PGRST202 is a function this realm does not have. */
   async function rpc(name, args = {}) {
-    if (!client) return { data: null, error: "Sign in first." };
+    if (!client) return { data: null, error: "Sign in first.", code: null };
     try {
       const { data, error } = await client.rpc(name, args || {});
-      return { data: error ? null : data ?? null, error: error ? rpcMessage(error) : null };
+      return {
+        data: error ? null : data ?? null,
+        error: error ? rpcMessage(error) : null,
+        code: error && typeof error.code === "string" ? error.code : null,
+      };
     } catch (err) {
-      return { data: null, error: UNREACHABLE };
+      return { data: null, error: UNREACHABLE, code: null };
     }
   }
 
@@ -350,6 +423,19 @@ export function createNet({
     return { rows: Array.isArray(data) ? data : [], error };
   }
 
+  /* The boards profiles could not answer until migration 004 (kills, and the Hunt boards by
+     discipline). A realm that has not run it has no such function, and `missing` says so, so a
+     page can tell "the realm does not keep this board yet" from "the realm did not answer".
+     Rows carry the hiscores shape plus `discipline`. */
+  async function leaderboard(board = "kills", limit = 50) {
+    const { data, error, code } = await rpc("leaderboard", { p_board: board, p_limit: limit });
+    if (error) {
+      const missing = code === "PGRST202" || /could not find the function|does not exist/i.test(error);
+      return { rows: [], error, missing };
+    }
+    return { rows: Array.isArray(data) ? data : [], error: null, missing: false };
+  }
+
   async function onlineCount() {
     const { data, error } = await rpc("online_count");
     const n = Number(data);
@@ -366,6 +452,8 @@ export function createNet({
     session,
     signIn,
     signUp,
+    signInWithDiscord,
+    finishOAuth,
     signOut,
     refresh,
     onAuthChange(fn) {
@@ -377,6 +465,7 @@ export function createNet({
     market,
     party,
     hiscores,
+    leaderboard,
     onlineCount,
     heartbeat,
     get client() { return client; },

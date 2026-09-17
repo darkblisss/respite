@@ -47,10 +47,12 @@ function skillRow(id) {
 const NAV = [
   { id: "navVanguard", rows: [
     { route: { page: "character" }, label: "Character", icon: "person" },
+    // The Satchel sits above the Hunt: what you carry into a fight, then the fight.
+    { route: { page: "armaments" }, label: "Satchel", icon: "plate", meta: (s) => `${slotsUsed(s, "inv")}/${slotCap(s, "inv")}` },
     { route: { page: "skill", arg: "warfare" }, label: "Hunt", icon: "swords",
       meta: (s) => `Lv ${skillLevel(s, "warfare")}`, dot: (s) => (s.tasks.combat ? "ember" : null) },
-    { route: { page: "armaments" }, label: "Armaments", icon: "plate", meta: (s) => `${slotsUsed(s, "inv")}/${slotCap(s, "inv")}` },
-    { route: { page: "companions" }, label: "Companions", icon: "paw" },
+    // Companions are out of the live camp until the system is redesigned. Re-enable this row with the route in router.js.
+    // { route: { page: "companions" }, label: "Companions", icon: "paw" },
   ] },
   { id: "navRealm", rows: [
     { route: { page: "atlas" }, label: "Atlas", icon: "atlas" },
@@ -60,7 +62,7 @@ const NAV = [
         const n = store.party && Array.isArray(store.party.invites_in) ? store.party.invites_in.length : 0;
         return n ? { text: String(n), tone: null, label: n === 1 ? "An invite is waiting" : `${n} invites are waiting` } : null;
       } },
-    { route: { page: "hiscores" }, label: "Hiscores", icon: "trophy" },
+    { route: { page: "hiscores" }, label: "Leaderboard", icon: "trophy" },
   ] },
   { id: "navCamp", rows: [
     { route: { page: "stockpile" }, label: "Stockpile", icon: "stockpile", meta: (s) => `${slotsUsed(s, "bank")}/${slotCap(s, "bank")}` },
@@ -202,13 +204,13 @@ export function createShell(app) {
         stop: "Pull back from hiding",
       };
     } else if (plan) {
-      const kills = plan.limit == null ? `${fmtWhole(plan.done)} kills` : `${fmtWhole(plan.done)} of ${fmtWhole(plan.limit)} kills`;
-      const rate = plan.xpRate == null ? "XP/hr soon" : `${fmtWhole(Math.round(plan.xpRate))} XP/hr`;
+      const kills = `${fmtWhole(plan.done)} kills`;
+      const rate = plan.xpRate == null ? "Reckoning" : `${fmtWhole(Math.round(plan.xpRate))} XP/hr`;
       look = {
         state: "hunting", icon: zoneIcon(plan.zone.id), name: `${plan.zone.name} · ${plan.region.name}`, short: plan.zone.name,
         meta: `${kills} · ${rate} · Threat ${plan.threat}`,
-        // The fight in hand: fills as the foe in front of you goes down.
-        pct: plan.target ? 100 - plan.pct : 0,
+        // The fight in hand: a health bar, draining as the foe in front of you goes down.
+        pct: plan.target ? plan.pct : 0,
         stop: "Pull back from the hunt",
       };
     } else if (recovering(s)) {

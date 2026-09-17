@@ -18,7 +18,10 @@ await run(async () => {
   const St = await shared("stats.js");
   const S = await shared("storage.js");
   const I = await shared("items.js");
+  const Cb = await shared("combat.js");
+  const { getMonster } = await shared("registry.js");
   const { hashString } = await shared("rng.js");
+  const H = CONFIG.hunt;
 
   const NOW = Date.UTC(2026, 8, 16, 12, 0);
   const LEFT = NOW - 3 * 3600000;       // when the v4 player last saved
@@ -42,6 +45,23 @@ await run(async () => {
     return JSON.parse(JSON.stringify(v4.call("migrate", clone(raw))));
   }
   const heldOf = (s) => S.heldEverywhere(s);
+
+  /* A v4 hunt in the shape v5 keeps one: no stored XP rate, a damage total for the
+     run, a damage reading on every sample of the rolling window, and the next
+     sample on the ten-second grid rather than five minutes out. `power` is the
+     depth a foe stands at, which scales its health, so v4's foes are measured
+     again against the zone they were in. */
+  function asV5Hunt(c) {
+    const { xpRate, ...rest } = c;
+    const power = GameData.ZONES.find((z) => z.id === c.zone).power;
+    return {
+      ...rest,
+      dmg: 0,
+      marks: c.marks.map(([t, xp]) => [t, xp, 0]),
+      nextMark: (Math.floor(c.elapsed / H.rateMarkMs) + 1) * H.rateMarkMs,
+      foes: c.foes.map((f) => ({ ...f, power, max: Cb.foeNumbers(getMonster(f.id), f.elite, power).hp })),
+    };
+  }
 
   section("A fresh v4 save");
   {
@@ -90,7 +110,11 @@ await run(async () => {
     const c = m.tasks.combat;
     const { startedAt, id, ...rest } = c;
     const { startedAt: s4, ...rest4 } = raw.tasks.combat;
-    same("the hunt carries on exactly where it stood", rest, rest4);
+    same("the hunt carries on where it stood, in the shape this version keeps one", rest, asV5Hunt(rest4));
+    const power = GameData.ZONES.find((z) => z.id === rest4.zone).power;
+    check("its foes carry the depth they are standing in, which is what their health is measured against",
+      power > 1 && c.foes.length > 0 && c.foes.every((f, i) => f.power === power && f.max === Cb.foeNumbers(getMonster(f.id), f.elite, power).hp && f.max > raw.tasks.combat.foes[i].max),
+      c.foes.map((f) => [f.id, f.power, f.max]));
     check("with an id, and the save's one hunt stream from the seed for its dice", id === 1 && !("rng" in c) && m.rng.hunt === hashString(`${SEED}:hunt`) && startedAt === raw.tasks.combat.startedAt && m.serial === 2);
     check("relics with numeric uids stay as they are", m.equipment.weapon === "cold_sword|relic|4|echoing" && m.equipment.chest === "cold_chest|rare|7");
     const w = await listening();
@@ -133,11 +157,12 @@ await run(async () => {
     check("unclaimed spoils are carried into storage, junk left behind", S.haveQty(m, "mangy_flay") === 4 && m.inv.items["slag_sword|rare|3"] === 1 && !("spoils" in m) && m.log.some((l) => l.m === "Spoils left on the field were carried in." && l.t === LEFT));
     check("recovery becomes game time, Threat resets, hiding starts off", m.player.recoveryLeft === 120000 && !("recoveryUntil" in m.player) && JSON.stringify(m.threat) === "{}" && m.settings.hideSovereign === false);
     const c = m.tasks.combat;
-    check("a hunt underway carries on from the Outer of the same ground, count and limit kept",
-      c.tier === 2 && c.zone === "outer" && c.limit === 50 && c.done === 4 && c.elapsed === 3600000 && c.nextMark === 3900000 && JSON.stringify(c.marks) === "[[3600000,0]]" && c.id === 1);
+    check("a hunt underway carries on from the Outer of the same ground, count and limit kept, its window opening on the ten-second grid",
+      c.tier === 2 && c.zone === "outer" && c.limit === 50 && c.done === 4 && c.elapsed === 3600000 && c.nextMark === 3610000 && JSON.stringify(c.marks) === "[[3600000,0,0]]" && c.dmg === 0 && c.id === 1,
+      { nextMark: c.nextMark, marks: c.marks });
     const { id, rng, startedAt, ...rest } = c;
     const { startedAt: s4, ...rest4 } = old.tasks.combat;
-    same("the same hunt v4's migrate made", rest, rest4);
+    same("the same hunt v4's migrate made", rest, asV5Hunt(rest4));
     same("the same log lines v4's migrate wrote", m.log.map((l) => l.m), old.log.map((l) => l.m));
     check("migration notes are dated when you left", m.log.slice(-2).every((l) => l.t === LEFT));
   }
@@ -223,7 +248,8 @@ await run(async () => {
     E.applyCommand(s, { type: "startSkill", args: { skillId: "delving", actionId: "delving_t1_raw", limit: 90 } }, w.env);
     E.applyCommand(s, { type: "startHunt", args: { tier: 1, zone: "middle", limit: 3000 } }, w.env);
     E.advance(s, NOW + 20 * 60000 + 1234, w.env);
-    s.threat["1:inner"] = 40;
+    // Threat is region-wide and kept unrounded, so a live save holds a fraction under one tier key.
+    s.threat["1"] = 40.7;
     const back = migrateSave(JSON.parse(JSON.stringify(s)), { now: NOW + 99999, seed: 1 });
     same("a live schema 9 save round-trips unchanged", back, s);
     check("including the hunt in flight", !!back.tasks.combat && back.tasks.combat.foes.length === s.tasks.combat.foes.length && back.clock === s.clock);
@@ -246,7 +272,8 @@ await run(async () => {
     s.agents = [{ id: "agent_40", name: "Silt", rarity: "rare" }, { id: "agent_40", name: "Dup", rarity: "rare" }, { id: "x", name: "Bad", rarity: "rare" }];
     s.serial = 2;
     s.companions = { owned: { rat: { bond: 30.000004, rank: 2, dupes: 1 } }, active: "crow" };
-    s.threat = { "1:outer": 150, "0:outer": 5, "1:attic": 3, "1:inner:x": 4 };
+    // Old per-zone keys, a bare tier key, and junk: one region ends up as hot as its hottest zone was.
+    s.threat = { "1:outer": 150, "1:middle": 40, "0:outer": 5, "1:attic": 3, "1:inner:x": 4, 3: 12.5, 9: -8 };
     s.log = [{ t: 1, m: "ok" }, "old string", { t: "x", m: 5 }, null];
     const m = migrateSave(JSON.parse(JSON.stringify(s)), opts);
     check("a broken hunt is dropped", m.tasks.combat === null);
@@ -256,7 +283,8 @@ await run(async () => {
     check("gold can't be negative, health can't pass the most", m.player.gold === 0 && m.player.hp === St.maxHp(m));
     check("agents: duplicates and bad ids dropped; serial kept above every id", m.agents.length === 1 && m.serial === 41);
     same("companions: Bond snapped, the active one must be owned", m.companions, { owned: { rat: { bond: 30, rank: 2, dupes: 1 } }, active: null });
-    same("threat: only real ground, within 0 to 100", m.threat, { "1:outer": 100 });
+    same("threat: keyed by region, the hottest zone of an old save carried forward, within 0 to 100",
+      m.threat, { 1: 100, 3: 12.5, 9: 0 });
     same("log: strings become entries, junk goes", m.log, [{ t: 1, m: "ok" }, { t: NOW, m: "old string" }]);
   }
 
@@ -314,7 +342,6 @@ await run(async () => {
 
   /* ================= LEGACY ROWS AND THE SAVE'S INVARIANTS ================= */
   const W = await shared("world.js");
-  const Cb = await shared("combat.js");
   const { foeOf, sovereignOf } = await shared("registry.js");
   const legacy = { ...opts, legacy: true };
   const ledgerLine = (m) => m.log.map((l) => l.m).filter((t) => /ledger didn't add up/.test(t));
@@ -475,7 +502,7 @@ await run(async () => {
     same("a note round-trips", migrateSave(JSON.parse(JSON.stringify(s)), opts).player.camp, note);
     const bad = [null, 5, {}, { since: "x", hp: 1, walkUntil: 1 }, { since: NOW, hp: NaN, walkUntil: NOW }];
     check("a broken note is no note", bad.every((camp) => migrateSave({ ...JSON.parse(JSON.stringify(s)), player: { ...s.player, camp } }, opts).player.camp === null));
-    same("a note from the future is dated now, and can't promise a walk longer than five minutes, or health past the sky",
+    same("a note from the future is dated now, and can't promise a walk longer than the longest wait the rules make, or health past the sky",
       migrateSave({ ...JSON.parse(JSON.stringify(s)), player: { ...s.player, camp: { since: NOW + 1e9, hp: 1e20, walkUntil: NOW + 1e12 } } }, opts).player.camp,
       { since: s.clock, hp: 1e9, walkUntil: s.clock + CONFIG.hunt.hideMs });
     const out = JSON.parse(JSON.stringify(s));

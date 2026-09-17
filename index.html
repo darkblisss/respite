@@ -17,6 +17,9 @@
 <link rel="stylesheet" href="css/components.css">
 <link rel="stylesheet" href="css/layout.css">
 <link rel="stylesheet" href="css/pages.css">
+<!-- Per-page sheets, last: both lean on classes pages.css defines. -->
+<link rel="stylesheet" href="css/character.css">
+<link rel="stylesheet" href="css/leaderboard.css">
 </head>
 <body>
 <a class="skip-link" href="#view">Skip to the page</a>
@@ -24,12 +27,18 @@
 <!--
   The shell. main.js fills the mount points below; every id here is part of
   the contract in UI-KIT.md ("Shell mount ids"). Pages render into #view.
+
+  The icons baked in below are copies of icon() output, width and height
+  attributes and all. They look redundant next to .ico but they are not: an
+  <svg> with only a viewBox has no size of its own, and Safari lays these out
+  from the attributes on the first paint, which is why the bar came up blank
+  until a popup forced a repaint. Keep them in step with icons.js.
 -->
 <div class="app" id="app" data-drawer="closed">
 
   <!-- ================= TOPBAR ================= -->
   <header class="topbar" id="topbar">
-    <button type="button" class="tb-icon-btn tb-menu" id="tbMenu" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    <button type="button" class="tb-icon-btn tb-menu" id="tbMenu" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
 
     <a class="tb-brand" id="tbBrand" href="#/character" aria-label="Respite, your character">
       <img class="tb-logo" src="assets/respite-logo.webp" alt="" width="32" height="32">
@@ -41,7 +50,7 @@
     <div class="tb-acts" id="tbActs">
       <div class="act" id="tbBench" data-kind="bench" data-state="idle">
         <a class="act-link" id="tbBenchLink" href="#/character">
-          <span class="act-ico" id="tbBenchIcon" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3.5 20.5 12.5 11.5"/><path d="M10 7.5l4-4 7 7-4 4-7-7Z"/><path d="M13 9.5l2 2"/></svg></span>
+          <span class="act-ico" id="tbBenchIcon" aria-hidden="true"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3.5 20.5 12.5 11.5"/><path d="M10 7.5l4-4 7 7-4 4-7-7Z"/><path d="M13 9.5l2 2"/></svg></span>
           <span class="act-text">
             <span class="act-name" id="tbBenchName">Idle</span>
             <span class="act-short" id="tbBenchShort">Idle</span>
@@ -49,12 +58,12 @@
           </span>
           <span class="act-bar" aria-hidden="true"><i id="tbBenchBar"></i></span>
         </a>
-        <button type="button" class="act-stop" id="tbBenchStop" aria-label="Stand the crews down"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
+        <button type="button" class="act-stop" id="tbBenchStop" aria-label="Stand the crews down"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
       </div>
 
       <div class="act" id="tbHunt" data-kind="hunt" data-state="idle">
         <a class="act-link" id="tbHuntLink" href="#/skill/warfare">
-          <span class="act-ico" id="tbHuntIcon" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m4 4 9 9M14 14l6 6M18 4l-9 9M10 14l-6 6"/></svg></span>
+          <span class="act-ico" id="tbHuntIcon" aria-hidden="true"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m4 4 9 9M14 14l6 6M18 4l-9 9M10 14l-6 6"/></svg></span>
           <span class="act-text">
             <span class="act-name" id="tbHuntName">Idle</span>
             <span class="act-short" id="tbHuntShort">Idle</span>
@@ -62,15 +71,15 @@
           </span>
           <span class="act-bar" aria-hidden="true"><i id="tbHuntBar"></i></span>
         </a>
-        <button type="button" class="act-stop" id="tbHuntStop" aria-label="Pull back from the hunt"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
+        <button type="button" class="act-stop" id="tbHuntStop" aria-label="Pull back from the hunt"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
       </div>
     </div>
 
     <div class="tb-stats">
-      <div class="tb-gold" id="tbGold" title="Gold"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M9.5 10h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4"/></svg><span id="tbGoldText">0</span><span class="sr-only"> gold</span></div>
+      <div class="tb-gold" id="tbGold" title="Gold"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M9.5 10h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4"/></svg><span id="tbGoldText">0</span><span class="sr-only"> gold</span></div>
 
       <div class="tb-hp" id="tbHp" role="meter" aria-label="Health" aria-valuemin="0" aria-valuemax="20" aria-valuenow="20">
-        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.2a4.3 4.3 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20Z"/></svg>
+        <svg class="ico" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.2a4.3 4.3 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20Z"/></svg>
         <span class="tb-hpbar"><i id="tbHpFill"></i></span>
         <span class="tb-hptext" id="tbHpText">20/20</span>
       </div>
@@ -80,7 +89,7 @@
         <span id="tbConnText">Guest</span>
       </button>
 
-      <button type="button" class="tb-icon-btn tb-settings" id="tbSettings" aria-label="Settings and account"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="3"/><path d="M12 2.8l1.7 2.4 2.8-.8.5 2.9 2.9.5-.8 2.8 2.4 1.7-2.4 1.7.8 2.8-2.9.5-.5 2.9-2.8-.8-1.7 2.4-1.7-2.4-2.8.8-.5-2.9-2.9-.5.8-2.8L2.8 12l2.4-1.7-.8-2.8 2.9-.5.5-2.9 2.8.8L12 2.8Z"/></svg><span class="tb-dot" aria-hidden="true"></span></button>
+      <button type="button" class="tb-icon-btn tb-settings" id="tbSettings" aria-label="Settings and account"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="3"/><path d="M12 2.8l1.7 2.4 2.8-.8.5 2.9 2.9.5-.8 2.8 2.4 1.7-2.4 1.7.8 2.8-2.9.5-.5 2.9-2.8-.8-1.7 2.4-1.7-2.4-2.8.8-.5-2.9-2.9-.5.8-2.8L2.8 12l2.4-1.7-.8-2.8 2.9-.5.5-2.9 2.8.8L12 2.8Z"/></svg><span class="tb-dot" aria-hidden="true"></span></button>
     </div>
   </header>
 
@@ -93,7 +102,7 @@
           <img class="tb-logo" src="assets/respite-logo.webp" alt="" width="28" height="28">
           <span class="tb-word">Respite</span>
         </a>
-        <button type="button" class="btn btn-quiet btn-icon" id="drawerClose" aria-label="Close navigation"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
+        <button type="button" class="btn btn-quiet btn-icon" id="drawerClose" aria-label="Close navigation"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
       </div>
 
       <nav class="nav" id="nav" aria-label="Main">

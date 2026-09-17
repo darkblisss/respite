@@ -1,0 +1,106 @@
+/* ============================================================
+   Respite · css/character.css · The Muster
+   ------------------------------------------------------------
+   The Character page's four tabs and nothing else. Loaded after
+   pages.css, so a rule here may lean on a page class without
+   having to restyle it: the paperdoll, the Standing panel and
+   the quarry's foe tiles are borrowed as they are and only put
+   somewhere else.
+   ============================================================ */
+
+/* ================= 1. THE TABS ================= */
+/* The Leaderboard's shape: a scrolling chip row where there is room,
+   a select where there is not. The row scrolls rather than wraps, so
+   the panel under it never moves down a line as tabs are added. */
+
+.char-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.char-tabs::-webkit-scrollbar { display: none; }
+.char-tabs .chip { flex-shrink: 0; }
+
+.char-tab-select { display: none; }
+
+@media (max-width: 599px) {
+  .char-tabs { display: none; }
+  .char-tab-select { display: block; }
+}
+
+/* ================= 2. PANEL LAYOUT ================= */
+/* A panel that holds more than one block spaces them as the page does. */
+
+.char-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--page-gap);
+  min-width: 0;
+}
+
+/* Worn beside Standing rather than above it. One column until there is
+   room for the paperdoll's three tracks and a list of numbers at once. */
+.char-face {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--page-gap);
+  align-items: start;
+}
+
+@media (min-width: 900px) {
+  .char-face { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+
+@media (min-width: 1200px) {
+  .char-face { grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr); }
+}
+
+/* ================= 3. THE COLLECTION ================= */
+
+.char-bestiary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+/* A foe never felled: the name and a lock, no drawing and no numbers.
+   Dashed and dimmed, as a tier that is not open yet reads. */
+.foe-tile.is-locked {
+  border-style: dashed;
+  border-color: var(--line-soft);
+  background: var(--surface-1);
+  box-shadow: none;
+}
+
+.foe-tile.is-locked .foe-art {
+  background: var(--wash);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+  color: var(--bone-ghost);
+}
+
+.foe-tile.is-locked .foe-art .ico { width: 22px; height: 22px; }
+.foe-tile.is-locked .foe-tile-name { color: var(--bone-faint); }
+.foe-tile.is-locked .tag { opacity: .6; }
+
+/* The Sovereign's tile spans the row it sits in (the quarry's rule), and
+   a locked one loses the violet wash that says it is something special. */
+.foe-tile.is-locked.is-sovereign {
+  border-color: var(--line-soft);
+  background: var(--surface-1);
+}
+
+/* A felled foe's line carries three counts, so on a narrow tile it breaks
+   rather than pushing the tile wider than its column. */
+.char-bestiary .foe-tile-sub { overflow-wrap: anywhere; }
+
+/* ================= 4. THE RECORD ================= */
+/* Six figures in the ruled grid Standing uses, then the quieter rows.
+   Two across on phones: three columns of tabular figures do not fit. */
+
+@media (max-width: 599px) {
+  .char-stack .standing { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

@@ -229,7 +229,6 @@ function openActionPopup(ctx, skillId, actionId) {
   const chipRow = h("div.chip-row");
   const stats = h("div.stats");
   const rarityWell = def.craftGear ? h("div.well") : null;
-  const uses = !def.craftGear && outDef.kind !== "tool" ? usesLine(outKey) : null;
   const list = h("div.ap-list");
   const listBlock = h("div.ap-block", h("div.eyebrow", craft ? "Needs" : "Also turns up"), list);
   const runText = h("span");
@@ -238,9 +237,12 @@ function openActionPopup(ctx, skillId, actionId) {
   const run = h("div.ap-run", { hidden: true }, h("div.ap-run-top", runText, runLeft), h("div.bar", runFill));
   const plan = h("p.ap-plan");
 
+  // No limit is gone: Max is the ceiling, so the two ends of the box are Min and Max.
   const picker = qtyPicker({
-    value: memo.n,
-    unlimited: memo.unlimited,
+    value: memo.unlimited ? Math.max(1, actionMax(ctx.state, def)) : memo.n,
+    allowUnlimited: false,
+    presets: [],
+    showMin: true,
     max: Math.max(1, actionMax(ctx.state, def)),
     onChange: () => { remember(); update(); },
   });
@@ -281,13 +283,13 @@ function openActionPopup(ctx, skillId, actionId) {
       ["Time", eachTime(actionTime(state, def))],
       ["Experience", `${fmtWhole(xpEach(state, skillId, def.xp, now))} XP each`],
     );
+    // No "Yield" row and no "Held" row: the list you clicked through to get here already
+    // says what this makes and how much of it you have.
     if (def.craftGear) rows.push(["Makes", `${getGear(def.craftGear).name}, rarity rolled`]);
-    else rows.push([craft ? "Makes" : "Yield", `${def.out[outKey]} × ${itemName(outKey)}`]);
     const dbl = craft ? 0 : doubleChance(state, skillId);
     if (dbl) rows.push(["Double yield", chancePct(dbl), "good"]);
     if (outDef.kind === "tool") rows.push(...toolRows(state, outDef));
     else if (craft && !def.craftGear) rows.push(["Value", `${fmtGold(outDef.value)} each`]);
-    if (!def.craftGear) rows.push(["Held", fmt(haveQty(state, outKey))]);
     return rows;
   }
 
@@ -361,18 +363,12 @@ function openActionPopup(ctx, skillId, actionId) {
 
     // ---- what the chosen amount comes to ----
     const per12 = Math.floor(TWELVE_HOURS / time);
-    let lead;
-    let rest;
+    const count = n || picker.pick.n;
+    const lead = `${fmtWhole(count)} × ${name}`;
+    const rest = ` · ${fmtTime(count * time)} · ${fmtWhole(count * xp)} XP`;
     let warn = "";
-    if (n) {
-      lead = `${fmtWhole(n)} × ${name}`;
-      rest = ` · ${fmtTime(n * time)} · ${fmtWhole(n * xp)} XP`;
-      if (craft && stock < n) warn = `Stock covers ${fmtWhole(stock)}.`;
-      else if (n > per12) warn = "Stops at twelve hours.";
-    } else {
-      lead = "No limit";
-      rest = craft && stock < per12 ? ` · stock covers ${fmtWhole(stock)}` : ` · up to ${fmtWhole(per12)} in twelve hours`;
-    }
+    if (craft && stock < count) warn = `Stock covers ${fmtWhole(stock)}.`;
+    else if (count > per12) warn = "Stops at twelve hours.";
     const sig = `${lead}${rest}|${warn}`;
     if (planSig !== sig) {
       planSig = sig;
@@ -398,12 +394,14 @@ function openActionPopup(ctx, skillId, actionId) {
     sub: [skill.name, `Tier ${def.tier}`, craft ? "At camp" : regionOfTier(def.tier).name].join(" · "),
     art: def.icon,
     size: "md",
+    // Centres the picker and the verb: this sheet is one decision, so it sits down the middle.
+    className: "modal-center-foot",
     body: [
       lore ? h("p.ap-desc", lore) : null,
       chipRow,
       stats,
       rarityWell ? h("div.ap-block", h("div.eyebrow", "By rarity"), rarityWell) : null,
-      uses ? h("p.modal-note", uses) : null,
+      // No "Goes into..." note: it belongs on the item, not on the order sheet.
       listBlock,
       run,
       h("div.ap-block", h("div.eyebrow", "How many"), picker.node),

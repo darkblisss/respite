@@ -15,15 +15,21 @@ import { fmtWhole } from "./format.js";
 /* UI-KIT.md 7.11. Unlimited is an empty box with a "No limit" placeholder and a
    pressed "No limit" chip, never a symbol. */
 
-export function qtyPicker({ value = 1, max = 9999, unlimited = false, allowUnlimited = true, presets = [1, 10, 100], onChange = null } = {}) {
+export function qtyPicker({ value = 1, max = 9999, unlimited = false, allowUnlimited = true, presets = [1, 10, 100], showMin = false, onChange = null } = {}) {
   const pick = { n: value, unlimited: allowUnlimited && unlimited };
-  const input = h("input.qty-input", { type: "text", inputmode: "numeric", autocomplete: "off", "aria-label": "How many", placeholder: "No limit" });
+  const input = h("input.qty-input", {
+    type: "text", inputmode: "numeric", autocomplete: "off", "aria-label": "How many",
+    // Only an unlimited-capable box promises no limit.
+    placeholder: allowUnlimited ? "No limit" : "",
+  });
   const dec = h("button.qty-btn", { type: "button", "aria-label": "One fewer" }, iconEl("minus"));
   const inc = h("button.qty-btn", { type: "button", "aria-label": "One more" }, iconEl("plus"));
   const chips = presets.map((n) => h("button.chip", { type: "button", "data-q": String(n) }, fmtWhole(n)));
+  // Min and Max are the two ends of the box: enough on their own where the numbered presets only added noise.
+  const minChip = showMin ? h("button.chip", { type: "button", "data-q": "min" }, "Min") : null;
   const maxChip = h("button.chip", { type: "button", "data-q": "max" }, "Max");
   const noLimit = allowUnlimited ? h("button.chip.chip-wide", { type: "button", "data-q": "none" }, "No limit") : null;
-  const node = h("div.qty", h("div.qty-stepper", dec, input, inc), h("div.qty-presets", chips, maxChip, noLimit));
+  const node = h("div.qty", h("div.qty-stepper", dec, input, inc), h("div.qty-presets", minChip, chips, maxChip, noLimit));
 
   // notify is false for redraws from outside, so a caller's onChange never loops back into refresh().
   const show = (notify = true) => {
@@ -32,6 +38,7 @@ export function qtyPicker({ value = 1, max = 9999, unlimited = false, allowUnlim
     toggleClass(node, "is-unlimited", pick.unlimited);
     if (noLimit) setAttr(noLimit, "aria-pressed", String(pick.unlimited));
     chips.forEach((c) => setAttr(c, "aria-pressed", String(!pick.unlimited && Number(c.dataset.q) === pick.n)));
+    if (minChip) setAttr(minChip, "aria-pressed", String(!pick.unlimited && pick.n === 1));
     setAttr(maxChip, "aria-pressed", String(!pick.unlimited && pick.n === max));
     dec.disabled = !pick.unlimited && pick.n <= 1;
     inc.disabled = !pick.unlimited && pick.n >= max;
@@ -44,6 +51,7 @@ export function qtyPicker({ value = 1, max = 9999, unlimited = false, allowUnlim
     const q = b.dataset.q;
     if (q === "none") pick.unlimited = true;
     else if (q === "max") { pick.unlimited = false; pick.n = max; }
+    else if (q === "min") { pick.unlimited = false; pick.n = 1; }
     else { pick.unlimited = false; pick.n = Number(q); }
     show();
   });

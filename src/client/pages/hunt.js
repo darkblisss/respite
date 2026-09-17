@@ -16,13 +16,13 @@
 
 import { h, on, setAttr, setText, setWidth, toggleClass } from "../ui/dom.js";
 import { iconEl } from "../ui/icons.js";
-import { fmt, fmtWhole, fmtTime } from "../ui/format.js";
+import { fmt, fmtStat, fmtWhole, fmtTime } from "../ui/format.js";
 import { openPopup } from "../ui/widgets.js";
 import { monsterArt } from "../ui/popups/foe.js";
 import { huntChips, chipNode, partyHere, ZONE_ICONS } from "../ui/popups/zone.js";
 import { CONFIG } from "../../shared/config.js";
 import { GameData, getMonster, getZone, getSkill, foesOf, sovereignOf, regionOfTier } from "../../shared/registry.js";
-import { campPlan, threatIn } from "../../shared/combat.js";
+import { campPlan, huntRates, threatIn, threatShown } from "../../shared/combat.js";
 import { statsOf, canPickClass, recovering, myClass, xpProgress } from "../../shared/stats.js";
 import { currentRegion } from "../../shared/world.js";
 
@@ -106,8 +106,8 @@ export default {
     const heroXp = h("div.hero-xp",
       h("div.bar.bar-ember", heroFill),
       h("div.hero-xp-meta", h("span", getSkill("warfare").note), heroNext));
+    // No art box, as on every other skill page: the swords live in the sidebar.
     const hero = h("section.hero", { "data-tone": "ember" },
-      h("div.art.art-xl", { "data-tone": "ember", "aria-hidden": "true" }, iconEl("swords")),
       h("div.hero-main", heroEyebrow, h("h1.hero-title", "Hunt")),
       h("div.hero-level", h("div.hero-lv", h("small", "Lv"), heroLv), heroLvSub),
       heroXp);
@@ -156,9 +156,10 @@ export default {
     };
     const kKills = kpi("Kills");
     const kRate = kpi("XP/hr");
+    const kDps = kpi("DPS");
     const kThreat = kpi("Threat", true);
     const kLeft = kpi("Time left");
-    const kpis = h("div.kpis", kKills.node, kRate.node, kThreat.node, kLeft.node);
+    const kpis = h("div.kpis", kKills.node, kRate.node, kDps.node, kThreat.node, kLeft.node);
     const hint = h("p.hunt-hint");
 
     const hideInput = h("input", { type: "checkbox" });
@@ -174,13 +175,20 @@ export default {
 
     const awayText = document.createTextNode("");
     const away = h("span.chip.chip-ember", iconEl("swords"), awayText);
+    /* Threat is region-wide, so it is stated once here rather than on each of four
+       zone cards, and this is also the one place the hide rule is spelled out. */
+    const threatValue = h("b");
+    const threatFill = h("i");
+    const regionThreat = h("div.meter.region-threat",
+      h("span.meter-top", h("span", "Region Threat"), threatValue),
+      h("span.bar.bar-ember.bar-thin", threatFill));
     const zonesGrid = h("div.grid-cards.max-2");
     const zones = h("section.section",
       h("div.section-head",
         h("div",
           h("h2.section-title", "Zones"),
-          h("p.section-sub", "Deeper zones field more foes, call reinforcements sooner and pay more XP. At 100 Threat the Sovereign may come for you.")),
-        away),
+          h("p.section-sub", "Deeper zones field more foes, hit harder and pay more XP. Threat is the whole region's: hide out a full hour, or fell the Sovereign, to clear it.")),
+        h("div.section-end", regionThreat, away)),
       zonesGrid);
     const zoneRefs = new Map();
 
@@ -194,16 +202,14 @@ export default {
 
     function buildZones(tier) {
       zoneRefs.clear();
+      // No Threat meter per card: one region, one counter, shown in the section head.
       zonesGrid.replaceChildren(...GameData.ZONES.map((z) => {
         const tag = h("span");
-        const value = h("b");
-        const fill = h("i");
         const node = h("button.zone-card", { type: "button", dataset: { tier: String(tier), zone: z.id } },
           h("span.art", { "data-tone": "ember", "aria-hidden": "true" }, iconEl(ZONE_ICONS[z.id])),
-          h("span.zone-main", h("span.zone-name", z.name), h("span.zone-sub", `${z.foesText} at once · ×${z.xp} XP`)),
-          tag,
-          h("span.meter", h("span.meter-top", h("span", "Threat"), value), h("span.bar.bar-ember.bar-thin", fill)));
-        zoneRefs.set(z.id, { node, tag, value, fill });
+          h("span.zone-main", h("span.zone-name", z.name), h("span.zone-sub", `${z.foesText} at once · ×${z.xp} XP · ×${z.power} foes`)),
+          tag);
+        zoneRefs.set(z.id, { node, tag });
         return node;
       }));
     }
@@ -462,10 +468,14 @@ export default {
       setAttr(kpis, "hidden", !c);
       setAttr(hint, "hidden", !!c);
       if (c) {
-        setText(kKills.v, c.limit == null ? fmt(c.done) : `${fmt(c.done)} of ${fmt(c.limit)}`);
-        setText(kRate.v, c.xpRate == null ? "Soon" : fmt(Math.round(c.xpRate)));
+        setText(kKills.v, fmt(c.done));
+        // Live off a rolling window: both figures move every second instead of
+        // sitting still for five minutes and then jumping.
+        const rates = huntRates(c);
+        setText(kRate.v, rates.xpRate == null ? "Reckoning" : fmt(Math.round(rates.xpRate)));
+        setText(kDps.v, rates.dps == null ? "Reckoning" : fmtStat(rates.dps));
         const threat = threatIn(state, c.tier, c.zone);
-        setText(kThreat.v, `${threat} / ${H.threatCap}`);
+        setText(kThreat.v, `${threatShown(threat)} / ${H.threatCap}`);
         setWidth(kThreat.fill, (threat / H.threatCap) * 100);
         setText(kLeft.v, fmtTime(Math.max(0, IDLE_CAP - c.elapsed)));
       } else {
@@ -488,19 +498,21 @@ export default {
         sigs.zones = tier;
         buildZones(tier);
       }
+      // One counter for the region, so every card reads the same peak.
+      const threat = threatIn(state, tier);
+      const peaked = threat >= H.threatCap;
+      setText(threatValue, `${threatShown(threat)} / ${H.threatCap}`);
+      setWidth(threatFill, (threat / H.threatCap) * 100);
+
       GameData.ZONES.forEach((z) => {
         const r = zoneRefs.get(z.id);
-        const threat = threatIn(state, tier, z.id);
         const active = !!(c && c.tier === tier && c.zone === z.id);
-        const peaked = threat >= H.threatCap;
         toggleClass(r.node, "is-active", active);
         toggleClass(r.node, "is-peaked", peaked);
         toggleClass(r.tag, "tag", active || peaked);
         toggleClass(r.tag, "tag-ember", active);
         toggleClass(r.tag, "tag-sovereign", !active && peaked);
         setText(r.tag, active ? "Hunting" : peaked ? "Peaked" : "");
-        setText(r.value, `${threat} / ${H.threatCap}`);
-        setWidth(r.fill, (threat / H.threatCap) * 100);
       });
 
       // Travel doesn't end a hunt: say where it is when that isn't here.
