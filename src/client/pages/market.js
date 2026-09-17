@@ -1,0 +1,832 @@
+/* ============================================================
+   Respite · pages/market.js · The Trading Post
+   ------------------------------------------------------------
+   #/market (UI-KIT 8.14): what other commanders are selling,
+   your own listings and your recent trades. The realm owns every
+   row. This page only asks for them (ctx.net.market) and sends
+   marketBuy and marketCancel through ctx.dispatch, which waits
+   on the server. Every gold spend asks first.
+
+   Rows are rebuilt only when what the realm said changes; time
+   left and pending buttons repaint in place. Guests get a
+   sign-in card instead of the page.
+   ============================================================ */
+
+import { h, setText, setAttr, setWidth, toggleClass, on } from "../ui/dom.js";
+import { iconEl } from "../ui/icons.js";
+import { openModal, confirm, toast } from "../ui/overlay.js";
+import { fmtWhole, fmtGold, fmtTime, fmtAgo } from "../ui/format.js";
+import { qtyPicker, confirmSpend, openPopup } from "../ui/widgets.js";
+import { CONFIG } from "../../shared/config.js";
+import { itemDef, isRemedy, stacks } from "../../shared/items.js";
+import { GameData, rarityDef, skillName } from "../../shared/registry.js";
+import { placeFor } from "../../shared/storage.js";
+
+const E = CONFIG.economy;
+const FEE_PCT = Math.round(E.marketFee * 100);
+const REFRESH_MS = 30 * 1000;
+const SEARCH_MS = 300;
+const ASK_MS = 15 * 1000;
+const SHOWN = 50;
+const INTO = { inv: "into Belongings", bank: "into the Stockpile", vault: "into the Vault" };
+
+// Remedies are materials to the realm, so that split is made here, from a wider page of rows.
+const KINDS = [
+  { id: "all", label: "All", kind: null },
+  { id: "material", label: "Materials", kind: "material", keep: (r) => !isRemedy(r.item_key) },
+  { id: "gear", label: "Gear", kind: "gear" },
+  { id: "tool", label: "Tools", kind: "tool" },
+  { id: "remedy", label: "Remedies", kind: "material", keep: (r) => isRemedy(r.item_key) },
+];
+
+const STATUS = {
+  open: ["Open", "tag-good"],
+  sold: ["Sold", "tag-gold"],
+  expired: ["Expired", null],
+  cancelled: ["Taken back", null],
+};
+
+/* ================= SMALL PIECES ================= */
+
+const num = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const when = (iso) => {
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? t : 0;
+};
+
+// Usernames are stored lowercase; on screen they read as names.
+const display = (name) => {
+  const s = String(name == null ? "" : name);
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : "Someone";
+};
+
+function rarityOf(row) {
+  const d = itemDef(row.item_key);
+  if (row.rarity) return row.rarity;
+  return d && d.kind !== "material" && d.rarity ? d.rarity : "common";
+}
+
+function itemArt(key, rarity, cls = "art-sm") {
+  const d = itemDef(key);
+  return h("div.art", { class: cls, "data-rarity": rarity || "common", "aria-hidden": "true" }, iconEl(d ? d.icon : "unknown"));
+}
+
+// "Rare weapon · Tier 2", "Bars · Tier 2", "Reagent", "Tool · Delving · Tier 2".
+function kindLine(row) {
+  const d = itemDef(row.item_key);
+  const tier = row.item_tier != null ? row.item_tier : d && d.tier;
+  const tierText = tier ? `Tier ${tier}` : null;
+  let parts;
+  if (!d) parts = ["Goods", tierText];
+  else if (d.kind === "gear") parts = [`${rarityDef(d.rarity).name} ${String(GameData.SLOT_LABELS[d.slot] || "gear").toLowerCase()}`, tierText];
+  else if (d.kind === "tool") parts = ["Tool", skillName(d.forSkill), tierText];
+  else if (d.heal > 0) parts = [`Remedy · Restores ${fmtWhole(d.heal)} HP`];
+  else if (d.reagent) parts = ["Reagent"];
+  else if (d.chest) parts = ["Chest", tierText];
+  else parts = [d.category || "Material", tierText];
+  return parts.filter(Boolean).join(" · ");
+}
+
+function cardHead(title, { sub = null, actions = null } = {}) {
+  const subEl = sub == null ? null : h("p.card-sub", sub);
+  return {
+    subEl,
+    node: h("div.card-head",
+      h("div", h("h2.card-title", title), subEl),
+      actions ? h("div.card-actions", actions) : null),
+  };
+}
+
+function emptyState({ icon, title, text, action = null, small = true }) {
+  return h("div.empty", { class: small && "empty-sm" },
+    h("div.empty-art", iconEl(icon)),
+    h("div.empty-title", title),
+    text ? h("p.empty-text", text) : null,
+    action);
+}
+
+function failState(error, retry) {
+  return emptyState({
+    icon: "offline",
+    title: "The realm did not answer",
+    text: `${String(error || "Something went wrong on the road.")} Your camp is fine.`,
+    action: h("button.btn.btn-sm", { type: "button", onClick: retry }, iconEl("sync"), "Retry"),
+  });
+}
+
+function skeletonListings(n = 4) {
+  return Array.from({ length: n }, () => h("div.listing.realm-skel", { "aria-hidden": "true" },
+    h("div.listing-item", h("span.skel.skel-art"), h("div.grow", h("span.skel.skel-line.skel-w-60"), h("span.skel.skel-line.skel-w-35"))),
+    h("div.listing-qty", h("span.skel.skel-line.skel-w-50.ml-auto")),
+    h("div.listing-price", h("span.skel.skel-line.skel-w-60.ml-auto")),
+    h("div.listing-seller", h("span.skel.skel-line.skel-w-60")),
+    h("div.listing-buy", h("span.skel.skel-line.skel-w-80"))));
+}
+
+function skeletonList(n = 3) {
+  return h("div.list.realm-skel", { "aria-hidden": "true" }, Array.from({ length: n }, () => h("div.list-row",
+    h("span.skel.skel-art"),
+    h("div.lr-main", h("span.skel.skel-line.skel-w-60"), h("span.skel.skel-line.skel-w-35")),
+    h("span"))));
+}
+
+// Guests see why the Market needs a name, and the way to get one.
+function signInCard(ctx) {
+  return h("section.card",
+    h("div.empty",
+      h("div.empty-art", iconEl("lock")),
+      h("div.empty-title", "Sign in to trade"),
+      h("p.empty-text", "The Market is run by the realm, not your camp. It holds your goods while they sell and pays you by post, and the post needs a name. Guests can't buy or sell."),
+      h("div.btn-row",
+        h("button.btn.btn-gold", { type: "button", onClick: () => openPopup("account", ctx, { mode: "create" }) }, "Create account"),
+        h("button.btn", { type: "button", onClick: () => openPopup("account", ctx, { mode: "signin" }) }, "Sign in"))));
+}
+
+function busy(btn, on) {
+  if (!btn) return;
+  toggleClass(btn, "is-loading", !!on);
+  btn.disabled = !!on;
+}
+
+/* ================= THE PAGE ================= */
+
+export default {
+  id: "market",
+  title: () => "Market",
+  group: "The Realm",
+
+  mount(view, ctx) {
+    const page = h("div.page");
+    view.replaceChildren(page);
+    let body = null;
+    let who = null;
+
+    // A sign-in (or out) swaps the whole page; everything below belongs to one account.
+    function render() {
+      const acc = ctx.account;
+      who = `${acc.mode}:${acc.userId || ""}`;
+      if (body) body.destroy();
+      body = null;
+      const guest = acc.mode === "guest";
+      const actions = guest ? null : h("div.page-actions",
+        h("button.btn.btn-primary", { type: "button", onClick: () => openPopup("sell", ctx) }, iconEl("tag"), "Sell an item"));
+      page.replaceChildren(h("header.page-head",
+        h("div",
+          h("div.eyebrow.page-eyebrow", "The Realm"),
+          h("h1.page-title", "Market"),
+          h("p.page-sub", `Buy from other commanders, or put your own goods up. The market keeps ${FEE_PCT}% of every sale.`)),
+        actions));
+      if (guest) page.append(signInCard(ctx));
+      else body = marketBody(ctx, page, actions);
+    }
+
+    render();
+    return {
+      update() {
+        const acc = ctx.account;
+        if (`${acc.mode}:${acc.userId || ""}` !== who) render();
+        else if (body) body.update();
+      },
+      unmount() {
+        if (body) body.destroy();
+        body = null;
+      },
+    };
+  },
+};
+
+/* ================= SIGNED IN ================= */
+
+function marketBody(ctx, page, actions) {
+  let alive = true;
+  const filt = { q: "", kind: "all", tier: 0, sort: "price" };
+  const board = { rows: null, error: null, stale: false, token: 0, at: 0, sig: "" };
+  const mine = { rows: null, error: null, token: 0, sig: "" };
+  const trades = { rows: null, error: null, token: 0, sig: "" };
+  const pending = new Set();   // listing ids waiting on the server
+  let shown = [];              // { row, node, buy, time, own } for the listings on screen
+  let mineShown = [];          // { row, node, sub, cancel } for your own
+  let lastSecond = -1;
+  let searchTimer = 0;
+
+  const me = () => ctx.account;
+  const isMine = (row) => {
+    const acc = me();
+    if (acc.userId && row.seller_id != null) return String(row.seller_id).toLowerCase() === String(acc.userId).toLowerCase();
+    return !!acc.username && String(row.seller_name || "").toLowerCase() === acc.username.toLowerCase();
+  };
+  const kindDef = () => KINDS.find((k) => k.id === filt.kind) || KINDS[0];
+  const filtered = () => !!(filt.q.trim() || filt.kind !== "all" || filt.tier);
+
+  /* ---------- the listings card ---------- */
+
+  const search = h("input.input.input-sm", { type: "search", placeholder: "Search items", "aria-label": "Search listings", autocomplete: "off", maxlength: "40", enterkeyhint: "search" });
+  const seg = h("div.seg", { role: "tablist", "aria-label": "Kind" },
+    KINDS.map((k) => h("button.seg-btn", { type: "button", role: "tab", "aria-selected": k.id === filt.kind ? "true" : "false", dataset: { kind: k.id } }, k.label)));
+  const tierSel = h("select.select.select-sm", { "aria-label": "Tier" },
+    h("option", { value: "0" }, "All tiers"),
+    GameData.TIERS.map((t) => h("option", { value: String(t.i) }, `Tier ${t.i}`)));
+  const sortSel = h("select.select.select-sm", { "aria-label": "Sort" },
+    h("option", { value: "price" }, "Cheapest"),
+    h("option", { value: "newest" }, "Newest"));
+  // One refresh for the whole page, beside Sell an item: the bar has no room left on a desktop row.
+  const refreshBtn = h("button.btn.btn-quiet", { type: "button" }, iconEl("sync"), "Refresh");
+  if (actions) actions.prepend(refreshBtn);
+
+  const listSub = h("p.card-sub", "Asking the realm");
+  const listBox = h("div.listings", { role: "table", "aria-label": "Listings", "aria-busy": "true" });
+  const listCard = h("section.card.card-flush",
+    h("div.card-head",
+      h("div", h("h2.card-title", "Listings"), listSub),
+      h("div.market-bar.grow", h("div.input-wrap.market-search", iconEl("search"), search), seg, tierSel, sortSel)),
+    listBox);
+
+  /* ---------- my listings and recent sales ---------- */
+
+  const mineChip = h("span.chip", "0 open");
+  const mineHead = cardHead("My listings", { sub: `Up to ${E.marketMaxListings} at once. Unsold goods come back by post after ${E.marketListingDays} days.`, actions: mineChip });
+  const mineBox = h("div");
+  const tradesHead = cardHead("Recent sales", { sub: `What sold and what you bought. Sales pay by post, less the market's ${FEE_PCT}%.` });
+  const tradesBox = h("div");
+
+  page.append(
+    listCard,
+    h("div.grid-2",
+      h("section.card", mineHead.node, mineBox),
+      h("section.card", tradesHead.node, tradesBox)));
+
+  /* ---------- loading ---------- */
+
+  // Reads only. A throw or a request that never comes back becomes an answer with an error, never a stuck page.
+  async function ask(fn) {
+    let timer = 0;
+    try {
+      const res = await Promise.race([
+        Promise.resolve().then(fn),
+        new Promise((resolve) => { timer = setTimeout(() => resolve({ rows: null, error: "The realm is slow to answer." }), ASK_MS); }),
+      ]);
+      return res && typeof res === "object" ? res : { rows: null, error: "The realm sent nothing back." };
+    } catch (err) {
+      return { rows: null, error: "The road to the realm is closed." };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function loadListings({ quiet = false } = {}) {
+    const token = ++board.token;
+    const k = kindDef();
+    if (!quiet || !board.rows) {
+      board.rows = null;
+      board.error = null;
+      paintListings();
+    }
+    setAttr(listBox, "aria-busy", "true");
+    const res = await ask(() => ctx.net.market.browse({
+      q: filt.q.trim(),
+      kind: k.kind,
+      tier: filt.tier || null,
+      sort: filt.sort,
+      limit: k.keep ? SHOWN * 2 : SHOWN,
+      offset: 0,
+    }));
+    if (!alive || token !== board.token) return;
+    setAttr(listBox, "aria-busy", "false");
+    board.at = Date.now();
+    if (res.error) {
+      // A quiet refresh that fails keeps what was on screen and says so.
+      if (quiet && board.rows) board.stale = true;
+      else board.error = String(res.error);
+    } else {
+      const rows = Array.isArray(res.rows) ? res.rows : [];
+      board.rows = (k.keep ? rows.filter(k.keep) : rows).slice(0, SHOWN);
+      board.error = null;
+      board.stale = false;
+    }
+    paintListings();
+  }
+
+  async function loadMine() {
+    const token = ++mine.token;
+    const res = await ask(() => ctx.net.market.mine());
+    if (!alive || token !== mine.token) return;
+    if (res.error) {
+      if (!mine.rows) mine.error = String(res.error);
+    } else {
+      mine.rows = Array.isArray(res.rows) ? res.rows : [];
+      mine.error = null;
+    }
+    paintMine();
+  }
+
+  async function loadTrades() {
+    const token = ++trades.token;
+    const res = await ask(() => ctx.net.market.sales());
+    if (!alive || token !== trades.token) return;
+    if (res.error) {
+      if (!trades.rows) trades.error = String(res.error);
+    } else {
+      trades.rows = Array.isArray(res.rows) ? res.rows : [];
+      trades.error = null;
+    }
+    paintTrades();
+  }
+
+  function refreshAll({ quiet = true } = {}) {
+    return Promise.all([loadListings({ quiet }), loadMine(), loadTrades()]);
+  }
+
+  /* ---------- painting the listings ---------- */
+
+  function paintListings() {
+    const sortWords = filt.sort === "newest" ? "newest first" : "cheapest first";
+    if (board.error) {
+      board.sig = "error";
+      shown = [];
+      setText(listSub, "No answer");
+      listBox.replaceChildren(failState(board.error, () => loadListings()));
+      return;
+    }
+    if (!board.rows) {
+      board.sig = "loading";
+      shown = [];
+      setText(listSub, "Asking the realm");
+      listBox.replaceChildren(...skeletonListings());
+      return;
+    }
+
+    const n = board.rows.length;
+    let count;
+    if (!n) count = filtered() ? "Nothing matches" : "Nothing for sale";
+    else if (n >= SHOWN) count = `The ${SHOWN} ${filt.sort === "newest" ? "newest" : "cheapest"}`;
+    else count = `${fmtWhole(n)} ${filtered() ? (n === 1 ? "match" : "matches") : "open"}, ${sortWords}`;
+    setText(listSub, board.stale ? `${count}. Couldn't refresh just now.` : count);
+    toggleClass(listSub, "t-bad", board.stale);
+
+    const acc = me();
+    const sig = `${acc.userId}|${board.rows.map((r) => `${r.id}:${r.qty_left}:${r.price_each}:${r.expires_at}`).join(",")}`;
+    if (sig === board.sig) return;
+    board.sig = sig;
+
+    if (!n) {
+      shown = [];
+      listBox.replaceChildren(filtered()
+        ? emptyState({
+          icon: "search",
+          title: "No listings match",
+          text: filt.q.trim() ? `Nobody is selling anything like "${filt.q.trim()}" right now. Try another tier, or list your own.` : "Nobody is selling that right now. Try another kind or tier, or list your own.",
+          action: h("button.btn.btn-sm", { type: "button", onClick: clearFilters }, "Clear filters"),
+          small: false,
+        })
+        : emptyState({
+          icon: "market",
+          title: "The market is quiet",
+          text: "Nobody has anything up for sale. Be the first.",
+          action: h("button.btn.btn-sm", { type: "button", onClick: () => openPopup("sell", ctx) }, iconEl("tag"), "Sell an item"),
+          small: false,
+        }));
+      return;
+    }
+
+    shown = board.rows.map(listingRow);
+    listBox.replaceChildren(
+      h("div.listing-head", { role: "row" },
+        h("span", { role: "columnheader" }, "Item"),
+        h("span.num", { role: "columnheader" }, "Left"),
+        h("span.num", { role: "columnheader" }, "Each"),
+        h("span", { role: "columnheader" }, "Seller"),
+        h("span", { role: "columnheader" }, h("span.sr-only", "Buy"))),
+      ...shown.map((s) => s.node));
+    paintClock(true);
+  }
+
+  function listingRow(row) {
+    const rarity = rarityOf(row);
+    const own = isMine(row);
+    const name = String(row.item_name || "Goods");
+    const time = h("span");
+    const buy = own
+      ? h("button.btn.btn-quiet.btn-sm", { type: "button", "data-act": "cancel", "aria-label": `Take ${name} off the market` }, "Cancel")
+      : h("button.btn.btn-gold.btn-soft.btn-sm", { type: "button", "data-act": "buy", "aria-label": `Buy ${name}` }, "Buy");
+    const node = h("div.listing", { role: "row", class: { "is-mine": own }, dataset: { id: String(row.id) } },
+      h("div.listing-item", { role: "cell" },
+        itemArt(row.item_key, rarity),
+        h("div.lr-main",
+          h("button.lr-title.listing-name", { type: "button", class: rarity !== "common" && `rar-${rarity}`, "data-act": "item", "aria-label": `${name}: details` }, name),
+          h("div.lr-sub", `${kindLine(row)} · `, time))),
+      h("div.listing-qty", { role: "cell" }, h("span.listing-l", "Left"), fmtWhole(num(row.qty_left))),
+      h("div.listing-price", { role: "cell" }, h("span.listing-l", "Each"), fmtGold(num(row.price_each))),
+      h("div.listing-seller", { role: "cell" },
+        h("span.listing-l", "Seller"),
+        h("span.truncate", display(row.seller_name)),
+        own ? h("span.tag.tag-violet", "Yours") : null),
+      h("div.listing-buy", { role: "cell" }, buy));
+    return { row, node, buy, time, own };
+  }
+
+  // Time left and pending buttons, once a second (and right after a rebuild).
+  function paintClock(force = false) {
+    const second = Math.floor(ctx.now / 1000);
+    if (!force && second === lastSecond) return false;
+    lastSecond = second;
+    const now = ctx.now;
+    shown.forEach((s) => {
+      const left = when(s.row.expires_at) - now;
+      setText(s.time, left > 0 ? `${fmtTime(left)} left` : "Expired");
+      const wait = pending.has(String(s.row.id));
+      toggleClass(s.buy, "is-loading", wait);
+      s.buy.disabled = wait || left <= 0;
+    });
+    mineShown.forEach((s) => {
+      const left = when(s.row.expires_at) - now;
+      setText(s.sub, mineSub(s.row, now));
+      if (s.cancel) {
+        const wait = pending.has(String(s.row.id));
+        toggleClass(s.cancel, "is-loading", wait);
+        s.cancel.disabled = wait || left <= 0;
+        s.cancel.hidden = left <= 0;
+      }
+    });
+    return true;
+  }
+
+  /* ---------- my listings ---------- */
+
+  function mineSub(row, now) {
+    const qty = num(row.qty);
+    const left = num(row.qty_left);
+    const status = liveStatus(row, now);
+    if (status === "open") return `${fmtWhole(left)} of ${fmtWhole(qty)} left · ${fmtTime(when(row.expires_at) - now)} to go`;
+    if (status === "sold") return `All ${fmtWhole(qty)} sold · ${fmtAgo(now - when(row.updated_at || row.created_at))}`;
+    if (status === "expired") return `${fmtWhole(left)} of ${fmtWhole(qty)} unsold, back by post · ${fmtAgo(now - when(row.updated_at || row.expires_at))}`;
+    return `${fmtWhole(left)} of ${fmtWhole(qty)} taken back · ${fmtAgo(now - when(row.updated_at || row.created_at))}`;
+  }
+
+  // An open listing past its time is already on its way home.
+  function liveStatus(row, now) {
+    const status = STATUS[row.status] ? row.status : "open";
+    return status === "open" && when(row.expires_at) <= now ? "expired" : status;
+  }
+
+  function paintMine() {
+    if (mine.error && !mine.rows) {
+      mine.sig = "error";
+      mineShown = [];
+      mineBox.replaceChildren(failState(mine.error, () => { mine.error = null; paintMine(); loadMine(); }));
+      return;
+    }
+    if (!mine.rows) {
+      mine.sig = "loading";
+      mineShown = [];
+      mineBox.replaceChildren(skeletonList(2));
+      return;
+    }
+    const now = ctx.now;
+    const open = mine.rows.filter((r) => liveStatus(r, now) === "open").length;
+    setText(mineChip, `${fmtWhole(open)} of ${fmtWhole(E.marketMaxListings)} open`);
+    toggleClass(mineChip, "chip-warn", open >= E.marketMaxListings);
+
+    const sig = mine.rows.map((r) => `${r.id}:${liveStatus(r, now)}:${r.qty_left}`).join(",");
+    if (sig === mine.sig) return;
+    mine.sig = sig;
+
+    if (!mine.rows.length) {
+      mineShown = [];
+      mineBox.replaceChildren(emptyState({
+        icon: "tag",
+        title: "Nothing listed",
+        text: "Open anything in Belongings, the Stockpile or the Vault and choose List on the market.",
+        action: h("button.btn.btn-sm", { type: "button", onClick: () => openPopup("sell", ctx) }, "Sell an item"),
+      }));
+      return;
+    }
+
+    mineShown = mine.rows.map((row) => {
+      const status = liveStatus(row, now);
+      const [label, tone] = STATUS[status];
+      const qty = Math.max(1, num(row.qty));
+      const sold = qty - num(row.qty_left);
+      const sub = h("div.lr-sub");
+      const cancel = status === "open"
+        ? h("button.btn.btn-quiet.btn-sm", { type: "button", "data-act": "cancel", "aria-label": `Take ${row.item_name} off the market` }, "Cancel")
+        : null;
+      // How much of it has sold, as the kit's thin gold bar.
+      let bar = null;
+      if (status === "open" || status === "sold") {
+        const fill = h("i");
+        setWidth(fill, (sold / qty) * 100);
+        bar = h("div.bar.bar-gold.bar-thin.mt-2", { role: "img", "aria-label": `${fmtWhole(sold)} of ${fmtWhole(qty)} sold` }, fill);
+      }
+      const node = h("div.list-row.stack-sm", { dataset: { id: String(row.id) } },
+        itemArt(row.item_key, rarityOf(row)),
+        h("div.lr-main",
+          h("div.lr-title", `${row.item_name} · ${fmtGold(num(row.price_each))} each`),
+          sub,
+          bar),
+        h("div.lr-end", h("span.tag", { class: tone }, label), cancel));
+      return { row, node, sub, cancel };
+    });
+    mineBox.replaceChildren(h("div.list", mineShown.map((s) => s.node)));
+    paintClock(true);
+  }
+
+  /* ---------- recent sales ---------- */
+
+  function paintTrades() {
+    if (trades.error && !trades.rows) {
+      trades.sig = "error";
+      tradesBox.replaceChildren(failState(trades.error, () => { trades.error = null; paintTrades(); loadTrades(); }));
+      return;
+    }
+    if (!trades.rows) {
+      trades.sig = "loading";
+      tradesBox.replaceChildren(skeletonList(3));
+      return;
+    }
+    // Minute-grained "ago" texts: rebuilding when they change is cheap and rare.
+    const now = ctx.now;
+    const acc = me();
+    const sig = `${Math.floor(now / 60000)}|${trades.rows.map((r) => r.id).join(",")}`;
+    if (sig === trades.sig) return;
+    trades.sig = sig;
+
+    if (!trades.rows.length) {
+      tradesBox.replaceChildren(emptyState({ icon: "coin-stack", title: "No trades yet", text: "What you sell and what you buy shows up here." }));
+      return;
+    }
+
+    tradesBox.replaceChildren(h("div.list", trades.rows.map((r) => {
+      const qty = num(r.qty);
+      const each = num(r.price_each);
+      const total = qty * each;
+      const fee = num(r.fee);
+      const sold = acc.userId && String(r.seller_id || "").toLowerCase() === String(acc.userId).toLowerCase();
+      const ago = fmtAgo(now - when(r.created_at));
+      return sold
+        ? h("div.list-row",
+          h("div.art.art-sm", { "data-tone": "gold", "aria-hidden": "true" }, iconEl("coin")),
+          h("div.lr-main",
+            h("div.lr-title", `Sold ${fmtWhole(qty)} ${r.item_name}`),
+            h("div.lr-sub", `${fmtWhole(qty)} × ${fmtGold(each)} = ${fmtGold(total)} · the market kept ${fmtGold(fee)} · ${ago}`)),
+          h("div.lr-end", h("span.price", `+${fmtGold(total - fee)}`)))
+        : h("div.list-row",
+          itemArt(r.item_key, itemRarity(r.item_key)),
+          h("div.lr-main",
+            h("div.lr-title", `Bought ${fmtWhole(qty)} ${r.item_name}`),
+            h("div.lr-sub", `${fmtWhole(qty)} × ${fmtGold(each)} · ${ago}`)),
+          h("div.lr-end", h("span.price.is-short", `−${fmtGold(total)}`)));
+    })));
+  }
+
+  function itemRarity(key) {
+    const d = itemDef(key);
+    return d && d.kind !== "material" && d.rarity ? d.rarity : "common";
+  }
+
+  /* ---------- buying ---------- */
+
+  function landing(key, seller) {
+    const w = placeFor(ctx.state, key);
+    return w ? `From ${seller}. It goes ${INTO[w]}.` : `From ${seller}. Belongings, the Stockpile and the Vault are all full: make room first.`;
+  }
+
+  async function sendBuy(row, qty) {
+    const id = String(row.id);
+    pending.add(id);
+    paintClock(true);
+    let res;
+    try {
+      res = await ctx.dispatch("marketBuy", { listingId: num(row.id), qty });
+    } catch (err) {
+      res = { ok: false };
+      toast("The market did not answer", { kind: "warn" });
+    }
+    pending.delete(id);
+    if (res && res.ok) {
+      const data = res.data || {};
+      const got = Number.isFinite(data.qty) ? data.qty : qty;
+      const cost = Number.isFinite(data.cost) ? data.cost : qty * num(row.price_each);
+      toast(`Bought ${fmtWhole(got)} ${row.item_name} for ${fmtGold(cost)}`, { kind: "gold", icon: "market" });
+    }
+    if (!alive) return res;
+    paintClock(true);
+    refreshAll();
+    return res;
+  }
+
+  async function buy(row) {
+    const left = Math.max(0, Math.floor(num(row.qty_left)));
+    const each = num(row.price_each);
+    const name = String(row.item_name);
+    const seller = display(row.seller_name);
+    if (left < 1 || pending.has(String(row.id))) return;
+
+    // One thing (or the last of a stack): straight to the confirmation.
+    if (left === 1 || !stacks(row.item_key)) {
+      const ok = await confirmSpend(ctx, {
+        title: `Buy ${name}?`,
+        body: landing(row.item_key, seller),
+        gold: each,
+        confirmText: `Buy for ${fmtGold(each)}`,
+      });
+      if (ok && alive) sendBuy(row, 1);
+      return;
+    }
+
+    const gold = () => Math.floor(ctx.state.player.gold);
+    let m = null;
+    let waiting = false;
+    const plan = h("p.ap-plan");
+    const picker = qtyPicker({
+      value: Math.max(1, Math.min(left, Math.floor(gold() / Math.max(1, each)))),
+      max: left,
+      allowUnlimited: false,
+      presets: [1, 10, 100].filter((n) => n < left),
+      onChange: () => paintPlan(),
+    });
+    setAttr(picker.input, "aria-label", `How many ${name} to buy`);
+
+    function paintPlan() {
+      const n = picker.pick.n;
+      const total = n * each;
+      const have = gold();
+      plan.replaceChildren(
+        h("span", h("b", `${fmtWhole(n)} × ${name}`), ` · ${fmtGold(total)}`),
+        total > have ? h("span.t-warn", `Short by ${fmtGold(total - have)}`) : h("span", `${fmtGold(have - total)} left after`));
+      if (m && m.buttons[1]) setText(m.buttons[1].lastChild, `Buy for ${fmtGold(total)}`);
+    }
+
+    async function go() {
+      if (waiting) return;
+      const n = picker.pick.n;
+      const total = n * each;
+      const ok = await confirmSpend(ctx, {
+        title: `Buy ${fmtWhole(n)} ${name}?`,
+        body: landing(row.item_key, seller),
+        gold: total,
+        confirmText: `Buy for ${fmtGold(total)}`,
+      });
+      if (!ok || m.closed) return;
+      waiting = true;
+      m.buttons.forEach((b) => { b.disabled = true; });
+      toggleClass(m.buttons[1], "is-loading", true);
+      await sendBuy(row, n);
+      if (!m.closed) m.close("action");
+    }
+
+    const rarity = rarityOf(row);
+    const d = itemDef(row.item_key);
+    m = openModal({
+      title: `Buy ${name}`,
+      sub: `${fmtWhole(left)} left · ${fmtGold(each)} each · from ${seller}`,
+      art: d ? d.icon : "market",
+      artRarity: rarity !== "common" ? rarity : null,
+      artTone: "gold",
+      size: "sm",
+      body: [h("div.ap-block", h("div.eyebrow", "How many"), picker.node), plan],
+      actions: [
+        { label: "Cancel", kind: "quiet" },
+        { label: "Buy", kind: "gold", icon: "coin", onClick: () => { go(); return false; } },
+      ],
+    });
+    paintPlan();
+  }
+
+  /* ---------- taking a listing back ---------- */
+
+  async function takeBack(row) {
+    const left = Math.max(0, Math.floor(num(row.qty_left)));
+    const name = String(row.item_name);
+    if (pending.has(String(row.id))) return;
+    const ok = await confirm({
+      title: `Take ${name} off the market?`,
+      body: left > 1 ? `The ${fmtWhole(left)} still unsold come back to camp now.` : "It comes back to camp now.",
+      confirmText: "Take it back",
+    });
+    if (!ok || !alive) return;
+    const id = String(row.id);
+    pending.add(id);
+    paintClock(true);
+    let res;
+    try {
+      res = await ctx.dispatch("marketCancel", { listingId: num(row.id) });
+    } catch (err) {
+      res = { ok: false };
+      toast("The market did not answer", { kind: "warn" });
+    }
+    pending.delete(id);
+    if (res && res.ok) {
+      const got = res.data && Number.isFinite(res.data.qty) ? res.data.qty : left;
+      toast(`${fmtWhole(got)} ${name} came back from the market`, { kind: "info", icon: "market" });
+    }
+    if (!alive) return;
+    paintClock(true);
+    refreshAll();
+  }
+
+  /* ---------- wiring ---------- */
+
+  function paintSeg() {
+    seg.querySelectorAll(".seg-btn").forEach((b) => setAttr(b, "aria-selected", b.dataset.kind === filt.kind ? "true" : "false"));
+  }
+
+  function clearFilters() {
+    clearTimeout(searchTimer);
+    filt.q = "";
+    filt.kind = "all";
+    filt.tier = 0;
+    search.value = "";
+    tierSel.value = "0";
+    paintSeg();
+    loadListings();
+  }
+
+  const offs = [
+    on(listBox, "click", "[data-act]", (e, btn) => {
+      const node = btn.closest(".listing");
+      const s = node && shown.find((x) => String(x.row.id) === node.dataset.id);
+      if (!s) return;
+      if (btn.dataset.act === "item") openPopup("item", ctx, s.row.item_key, { from: null, readOnly: true });
+      else if (btn.dataset.act === "buy") buy(s.row);
+      else if (btn.dataset.act === "cancel") takeBack(s.row);
+    }),
+    on(mineBox, "click", "[data-act='cancel']", (e, btn) => {
+      const node = btn.closest(".list-row");
+      const s = node && mineShown.find((x) => String(x.row.id) === node.dataset.id);
+      if (s) takeBack(s.row);
+    }),
+    on(seg, "click", ".seg-btn", (e, b) => {
+      if (b.dataset.kind === filt.kind) return;
+      filt.kind = b.dataset.kind;
+      paintSeg();
+      loadListings();
+    }),
+    // Tabs in a row move with the arrow keys.
+    on(seg, "keydown", ".seg-btn", (e, b) => {
+      if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+      const btns = Array.from(seg.querySelectorAll(".seg-btn"));
+      const next = btns[(btns.indexOf(b) + (e.key === "ArrowRight" ? 1 : btns.length - 1)) % btns.length];
+      e.preventDefault();
+      next.focus();
+      next.click();
+    }),
+    ctx.on("realm:market", () => refreshAll()),
+  ];
+
+  search.addEventListener("input", () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      if (search.value.trim() === filt.q.trim()) return;
+      filt.q = search.value;
+      loadListings();
+    }, SEARCH_MS);
+  });
+  search.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    clearTimeout(searchTimer);
+    filt.q = search.value;
+    loadListings();
+  });
+  tierSel.addEventListener("change", () => { filt.tier = Number(tierSel.value) || 0; loadListings(); });
+  sortSel.addEventListener("change", () => { filt.sort = sortSel.value === "newest" ? "newest" : "price"; loadListings(); });
+  // Only a refresh the player asked for spins; the quiet ones every half minute don't.
+  refreshBtn.addEventListener("click", () => {
+    busy(refreshBtn, true);
+    refreshAll({ quiet: true }).then(() => { if (alive) busy(refreshBtn, false); });
+  });
+
+  // Every 30 seconds while the tab is seen; never under a buy still waiting on its answer.
+  const timer = setInterval(() => {
+    if (!alive || document.hidden || pending.size) return;
+    refreshAll();
+  }, REFRESH_MS);
+  const onVisible = () => {
+    if (!document.hidden && Date.now() - board.at >= REFRESH_MS && !pending.size) refreshAll();
+  };
+  document.addEventListener("visibilitychange", onVisible);
+
+  paintMine();
+  paintTrades();
+  loadListings();
+  loadMine();
+  loadTrades();
+
+  return {
+    update() {
+      // Once a second is plenty for times left and "2m ago".
+      if (paintClock() && trades.rows) paintTrades();
+    },
+    destroy() {
+      alive = false;
+      clearInterval(timer);
+      clearTimeout(searchTimer);
+      document.removeEventListener("visibilitychange", onVisible);
+      offs.forEach((off) => off());
+    },
+  };
+}

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<base href="../">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0b0910">
+<meta name="description" content="Respite: a slow, grim idle RPG. Your crews work, your hunt goes on, the camp keeps its fire.">
+<title>Respite page runner</title>
+<link rel="icon" type="image/webp" href="assets/respite-logo.webp">
+<link rel="apple-touch-icon" href="assets/respite-logo.webp">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/components.css">
+<link rel="stylesheet" href="css/layout.css">
+<link rel="stylesheet" href="css/pages.css">
+</head>
+<body>
+<a class="skip-link" href="#view">Skip to the page</a>
+
+<!--
+  The shell. main.js fills the mount points below; every id here is part of
+  the contract in UI-KIT.md ("Shell mount ids"). Pages render into #view.
+-->
+<div class="app" id="app" data-drawer="closed">
+
+  <!-- ================= TOPBAR ================= -->
+  <header class="topbar" id="topbar">
+    <button type="button" class="tb-icon-btn tb-menu" id="tbMenu" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+
+    <a class="tb-brand" id="tbBrand" href="#/character" aria-label="Respite, your character">
+      <img class="tb-logo" src="assets/respite-logo.webp" alt="" width="32" height="32">
+      <span class="tb-word">Respite</span>
+    </a>
+
+    <nav class="tb-crumbs" id="tbCrumbs" aria-label="Breadcrumb"></nav>
+
+    <div class="tb-acts" id="tbActs">
+      <div class="act" id="tbBench" data-kind="bench" data-state="idle">
+        <a class="act-link" id="tbBenchLink" href="#/character">
+          <span class="act-ico" id="tbBenchIcon" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3.5 20.5 12.5 11.5"/><path d="M10 7.5l4-4 7 7-4 4-7-7Z"/><path d="M13 9.5l2 2"/></svg></span>
+          <span class="act-text">
+            <span class="act-name" id="tbBenchName">Idle</span>
+            <span class="act-short" id="tbBenchShort">Idle</span>
+            <span class="act-meta" id="tbBenchMeta">No crews at work</span>
+          </span>
+          <span class="act-bar" aria-hidden="true"><i id="tbBenchBar"></i></span>
+        </a>
+        <button type="button" class="act-stop" id="tbBenchStop" aria-label="Stand the crews down"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
+      </div>
+
+      <div class="act" id="tbHunt" data-kind="hunt" data-state="idle">
+        <a class="act-link" id="tbHuntLink" href="#/skill/warfare">
+          <span class="act-ico" id="tbHuntIcon" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m4 4 9 9M14 14l6 6M18 4l-9 9M10 14l-6 6"/></svg></span>
+          <span class="act-text">
+            <span class="act-name" id="tbHuntName">Idle</span>
+            <span class="act-short" id="tbHuntShort">Idle</span>
+            <span class="act-meta" id="tbHuntMeta">Nobody is hunting</span>
+          </span>
+          <span class="act-bar" aria-hidden="true"><i id="tbHuntBar"></i></span>
+        </a>
+        <button type="button" class="act-stop" id="tbHuntStop" aria-label="Pull back from the hunt"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
+      </div>
+    </div>
+
+    <div class="tb-stats">
+      <div class="tb-gold" id="tbGold" title="Gold"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M9.5 10h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4"/></svg><span id="tbGoldText">0</span><span class="sr-only"> gold</span></div>
+
+      <div class="tb-hp" id="tbHp" role="meter" aria-label="Health" aria-valuemin="0" aria-valuemax="20" aria-valuenow="20">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.2a4.3 4.3 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20Z"/></svg>
+        <span class="tb-hpbar"><i id="tbHpFill"></i></span>
+        <span class="tb-hptext" id="tbHpText">20/20</span>
+      </div>
+
+      <button type="button" class="conn" id="tbConn" data-state="guest">
+        <span class="conn-dot" aria-hidden="true"></span>
+        <span id="tbConnText">Guest</span>
+      </button>
+
+      <button type="button" class="tb-icon-btn tb-settings" id="tbSettings" aria-label="Settings and account"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="3"/><path d="M12 2.8l1.7 2.4 2.8-.8.5 2.9 2.9.5-.8 2.8 2.4 1.7-2.4 1.7.8 2.8-2.9.5-.5 2.9-2.8-.8-1.7 2.4-1.7-2.4-2.8.8-.5-2.9-2.9-.5.8-2.8L2.8 12l2.4-1.7-.8-2.8 2.9-.5.5-2.9 2.8.8L12 2.8Z"/></svg><span class="tb-dot" aria-hidden="true"></span></button>
+    </div>
+  </header>
+
+  <div class="shell">
+
+    <!-- ================= SIDEBAR (a drawer below 1024px) ================= -->
+    <aside class="sidebar" id="sidebar" aria-label="Navigation">
+      <div class="drawer-head">
+        <a class="tb-brand" href="#/character">
+          <img class="tb-logo" src="assets/respite-logo.webp" alt="" width="28" height="28">
+          <span class="tb-word">Respite</span>
+        </a>
+        <button type="button" class="btn btn-quiet btn-icon" id="drawerClose" aria-label="Close navigation"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
+      </div>
+
+      <nav class="nav" id="nav" aria-label="Main">
+        <section class="nav-group" id="navVanguard" aria-labelledby="navVanguardHead">
+          <h2 class="nav-head" id="navVanguardHead">The Vanguard</h2>
+          <ul class="nav-list" id="navVanguardList"></ul>
+        </section>
+        <section class="nav-group" id="navRealm" aria-labelledby="navRealmHead">
+          <h2 class="nav-head" id="navRealmHead">The Realm</h2>
+          <ul class="nav-list" id="navRealmList"></ul>
+        </section>
+        <section class="nav-group" id="navCamp" aria-labelledby="navCampHead">
+          <h2 class="nav-head" id="navCampHead">The Camp</h2>
+          <ul class="nav-list" id="navCampList"></ul>
+        </section>
+        <section class="nav-group" id="navTrades" aria-labelledby="navTradesHead">
+          <h2 class="nav-head" id="navTradesHead">Trades</h2>
+          <ul class="nav-list" id="navTradesList"></ul>
+        </section>
+        <section class="nav-group" id="navArtisans" aria-labelledby="navArtisansHead">
+          <h2 class="nav-head" id="navArtisansHead">Artisans</h2>
+          <ul class="nav-list" id="navArtisansList"></ul>
+        </section>
+      </nav>
+
+      <div class="side-foot" id="sideFoot">
+        <div class="weather" id="weather" hidden></div>
+      </div>
+    </aside>
+
+    <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
+
+    <!-- ================= MAIN ================= -->
+    <main class="main" id="main">
+      <div class="banner-dock" id="bannerDock"></div>
+
+      <div class="view" id="view" tabindex="-1">
+        <div class="boot" id="boot">
+          <img class="boot-mark" src="assets/respite-logo.webp" alt="" width="56" height="56">
+          <span>Waking the camp</span>
+        </div>
+      </div>
+
+      <section class="log-dock" id="logDock" aria-label="Camp log" hidden></section>
+    </main>
+  </div>
+</div>
+
+<!-- ================= FLOATING LAYERS ================= -->
+<div id="modalRoot"></div>
+<div class="tip-layer" id="tipLayer"></div>
+<div class="toasts" id="toasts" aria-live="polite" aria-relevant="additions"></div>
+<div class="sr-only" id="srLive" aria-live="polite"></div>
+
+<noscript>
+  <div class="banner noscript" data-tone="ember">
+    <div class="banner-text"><b>Respite needs JavaScript.</b>The camp cannot run without it.</div>
+  </div>
+</noscript>
+
+<script type="module" src="dev/page.js"></script>
+</body>
+</html>

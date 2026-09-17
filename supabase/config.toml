@@ -1,0 +1,14 @@
+# Respite: Supabase CLI settings. Only `supabase functions deploy` reads this file; the database
+# schema is applied by hand from supabase/schema.sql.
+
+project_id = "respite"
+
+[functions.game]
+enabled = true
+# The function checks the bearer token itself (it asks Auth for the user), so the gateway's
+# JWT check stays off. That also lets CORS preflights, which carry no token, reach it.
+verify_jwt = false
+# Deploy from the repo root. The entrypoint imports ../../../src/server/handler.js, and with
+# --use-api the CLI follows relative imports from here and uploads every file they reach,
+# src/server and src/shared included, keeping their paths from the project root.
+entrypoint = "./functions/game/index.ts"

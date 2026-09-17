@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<base href="../">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Respite stage check</title>
+<link rel="icon" type="image/webp" href="assets/respite-logo.webp">
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+<!--
+  The fake supabase-js surface without the client: tests/e2e/harness.test.mjs
+  drives window.harness from dev/harness-check.js. Served by dev/server.mjs only.
+-->
+<main class="page">
+  <header class="page-head">
+    <div>
+      <div class="eyebrow page-eyebrow">The Stage</div>
+      <h1 class="page-title">Stage check</h1>
+      <p class="page-sub">Every call made through the fake client, newest last.</p>
+    </div>
+  </header>
+  <section class="card">
+    <div class="card-head">
+      <div>
+        <h2 class="card-title">Calls</h2>
+        <p class="card-sub" id="who">Signed out</p>
+      </div>
+    </div>
+    <ol class="list small" id="calls"></ol>
+  </section>
+</main>
+<script src="dev/fake-supabase.js"></script>
+<script type="module" src="dev/harness-check.js"></script>
+</body>
+</html>

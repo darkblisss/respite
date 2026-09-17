@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0b0910">
+<!-- Every path below is relative to the repo root, so the real shell's asset paths work here too. -->
+<base href="../">
+<title>Respite UI Kit</title>
+<link rel="icon" type="image/webp" href="assets/respite-logo.webp">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/components.css">
+<link rel="stylesheet" href="css/layout.css">
+<link rel="stylesheet" href="css/pages.css">
+<style>
+  /* Kit chrome only. Nothing here ships with the game. */
+  .kit {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 0 32px 120px;
+  }
+
+  .kit-top {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 36px 0 20px;
+  }
+
+  .kit-top img { width: 48px; height: 48px; border-radius: 12px; box-shadow: 0 0 0 1px var(--line); }
+  .kit-top h1 { font-family: var(--font-display); font-size: 30px; font-weight: 600; line-height: 1.1; }
+  .kit-top p { margin-top: 4px; font-size: var(--text-sm); color: var(--bone-faint); }
+
+  .kit-toc {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    display: flex;
+    gap: 6px;
+    margin: 0 -32px;
+    padding: 10px 32px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    background: rgba(11, 9, 16, .9);
+    border-bottom: 1px solid var(--line);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+  }
+
+  .kit-toc::-webkit-scrollbar { display: none; }
+  .kit-toc a { flex-shrink: 0; }
+
+  .kit-section {
+    padding-top: 56px;
+    scroll-margin-top: 56px;
+  }
+
+  .kit-section > header { margin-bottom: 20px; }
+  .kit-section > header + * { margin-top: 0 !important; }
+  .kit-section > header h2 { font-family: var(--font-display); font-size: 26px; font-weight: 600; line-height: 1.2; }
+  .kit-section > header p { margin-top: 6px; max-width: 72ch; font-size: var(--text-md); color: var(--bone-dim); line-height: 1.6; }
+  .kit-section > header code, .kit-note code { font-size: 12.5px; color: var(--violet-hi); }
+
+  .kit-section > header + * { margin-top: 0; }
+  .kit-section > * + * { margin-top: 28px; }
+  .kit-cols > .kit-block { margin-top: 0; }
+  html[data-shot] .kit-toc { position: static; }
+  .kit-label { margin-bottom: 10px; }
+
+  .kit-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .kit-cols {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+    gap: 16px;
+    align-items: start;
+  }
+
+  .kit-stage {
+    padding: 20px;
+    border-radius: 16px;
+    border: 1px dashed rgba(232, 225, 213, .12);
+    background:
+      radial-gradient(circle at 1px 1px, rgba(232, 225, 213, .05) 1px, transparent 0) 0 0 / 16px 16px,
+      rgba(0, 0, 0, .12);
+  }
+
+  .kit-note { margin-top: 10px; font-size: var(--text-xs); color: var(--bone-faint); line-height: 1.5; }
+
+  .kit-swatches {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+  }
+
+  .kit-swatch {
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    background: var(--surface-1);
+  }
+
+  .kit-swatch i { display: block; height: 52px; }
+  .kit-swatch div { padding: 8px 10px; font-size: 12px; line-height: 1.35; }
+  .kit-swatch b { display: block; font-weight: 600; color: var(--bone); }
+  .kit-swatch span { color: var(--bone-faint); font-variant-numeric: tabular-nums; }
+
+  .kit-type > div { display: flex; align-items: baseline; gap: 16px; padding: 10px 0; border-top: 1px solid var(--line-soft); }
+  .kit-type > div:first-child { border-top: 0; }
+  .kit-type code { flex: 0 0 120px; font-size: 12px; color: var(--bone-faint); }
+
+  .kit-space { display: flex; flex-direction: column; gap: 6px; }
+  .kit-space div { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--bone-faint); }
+  .kit-space i { display: block; height: 10px; border-radius: 3px; background: var(--violet-lo); }
+
+  .kit-radii, .kit-shadows { display: flex; flex-wrap: wrap; gap: 14px; }
+  .kit-radii div, .kit-shadows div {
+    display: grid;
+    place-items: center;
+    width: 112px;
+    height: 76px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    font-size: 12px;
+    color: var(--bone-faint);
+  }
+
+  .kit-icons {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    gap: 8px;
+  }
+
+  .kit-icon {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 6px 10px;
+    border-radius: 10px;
+    background: var(--surface-1);
+    border: 1px solid var(--line-soft);
+    font-size: 11px;
+    color: var(--bone-faint);
+    text-align: center;
+    overflow-wrap: anywhere;
+  }
+
+  .kit-icon .ico { width: 24px; height: 24px; color: var(--bone); }
+  .kit-icon.is-new .ico { color: var(--violet-hi); }
+
+  /* Overlays shown in place, for looking at, not for using. */
+  .kit-static .modal { position: relative; opacity: 1; transform: none; max-height: none; margin: 0 auto; }
+  .kit-static .tip { position: relative; left: auto; top: auto; opacity: 1; visibility: visible; transform: none; display: inline-block; vertical-align: top; }
+  .kit-static .tip .tip-arrow { display: none; }
+  .kit-toasts { display: flex; flex-direction: column; gap: 8px; max-width: 360px; }
+  .kit-toasts .toast { animation: none; cursor: default; }
+  .kit-toasts .toast-timer { animation: none; transform: scaleX(.6); }
+
+  .kit-frame {
+    position: relative;
+    border-radius: 14px;
+    border: 1px solid var(--line);
+    overflow: hidden;
+    background: var(--bg);
+  }
+
+  .kit-frame .topbar { position: relative; top: auto; }
+  .kit-frame + .kit-frame { margin-top: 10px; }
+
+  .kit-side {
+    width: 248px;
+    padding: 8px;
+    border-radius: 14px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+  }
+
+  .kit-corners {
+    position: relative;
+    height: 220px;
+  }
+
+  .kit-corners > * { position: absolute; }
+
+  .kit-pages {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+    gap: 10px;
+  }
+
+  .kit-page-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: var(--surface-1);
+    font-weight: 600;
+  }
+
+  .kit-page-link:hover { border-color: var(--violet-edge); }
+  .kit-page-link small { display: block; font-weight: 400; font-size: 12px; color: var(--bone-faint); }
+
+  .kit-switch {
+    position: fixed;
+    left: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    z-index: 95;
+    max-width: calc(100vw - 24px);
+  }
+
+  .kit-switch .select { width: auto; max-width: 70vw; background-color: var(--surface-3); box-shadow: var(--shadow-pop); }
+
+  .float.is-frozen { animation: none; opacity: 1; transform: translate(-50%, -16px); }
+
+  .kit-phone {
+    width: 390px;
+    max-width: 100%;
+    height: 760px;
+    border: 1px solid var(--line-strong);
+    border-radius: 28px;
+    background: var(--bg);
+    box-shadow: var(--shadow-pop);
+  }
+
+  @media (max-width: 599px) {
+    .kit { padding: 0 16px 96px; }
+    .kit-toc { margin: 0 -16px; padding: 10px 16px; }
+    .kit-top { padding-top: 24px; }
+    .kit-top h1 { font-size: 24px; }
+    .kit-section { padding-top: 40px; }
+    .kit-section > header h2 { font-size: 22px; }
+    .kit-stage { padding: 14px; }
+    .kit-side { width: 100%; }
+    .kit-corners { height: 260px; }
+  }
+</style>
+</head>
+<body>
+<div id="kit"></div>
+<script type="module" src="dev/kit.js"></script>
+</body>
+</html>
