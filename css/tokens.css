@@ -1,0 +1,215 @@
+/* ============================================================
+   Respite · tokens.css · The Palette
+   ------------------------------------------------------------
+   Every colour, size, radius, shadow, timing and layer the UI
+   uses. Dark only. Other stylesheets read these through var()
+   and never write a raw colour of their own where a token fits.
+
+   Colour has a job:
+     violet  the bench and the crews, focus, the current page
+     ember   the hunt, danger, things going wrong
+     gold    money and the one spend on a surface
+     good    health, gains, online
+   ============================================================ */
+
+:root {
+  color-scheme: dark;
+
+  /* ---- surfaces, from the ground up ---- */
+  --bg: #0b0910;            /* the page */
+  --surface-1: #141019;     /* cards, pills, rows that stand alone */
+  --surface-2: #1c1723;     /* raised: hover, buttons, slots */
+  --surface-3: #241d2d;     /* floating: tooltips, toasts, menus */
+  --surface-sunk: #0f0c14;  /* wells, inputs, bar tracks */
+  --scrim: rgba(6, 4, 10, .72);
+
+  /* v4 names, kept so old habits still land somewhere sensible */
+  --panel: var(--surface-1);
+  --panel-raised: var(--surface-2);
+  --panel-deep: var(--surface-sunk);
+
+  /* ---- lines ---- */
+  --line-soft: rgba(232, 225, 213, .06);
+  --line: rgba(232, 225, 213, .1);
+  --line-strong: rgba(232, 225, 213, .16);
+  --wash: rgba(232, 225, 213, .04);       /* quiet fill for hover and neutral chips */
+  --wash-strong: rgba(232, 225, 213, .07);
+
+  /* ---- text (contrast measured on --surface-3, the lightest surface) ---- */
+  --bone: #e8e1d5;          /* 12.5:1  names, numbers that matter */
+  --bone-dim: #b5adbb;      /* 7.5:1   body copy, secondary labels */
+  --bone-faint: #948c9f;    /* 5.0:1   meta, captions, eyebrows */
+  --bone-ghost: #5f586a;    /* 2.4:1   decoration and disabled only, never for reading */
+  --on-accent: #120e18;     /* text on solid violet, gold and ember */
+
+  /* ---- accents ---- */
+  --violet: #9d82e0;
+  --violet-hi: #b9a4f2;
+  --violet-lo: #5b4891;
+  --violet-deep: #2a2140;
+  --violet-soft: rgba(157, 130, 224, .14);
+  --violet-edge: rgba(157, 130, 224, .42);
+
+  --ember: #d8743f;
+  --ember-hi: #eb9068;
+  --ember-lo: #7d3a2c;
+  --ember-deep: #2d1a18;
+  --ember-soft: rgba(216, 116, 63, .14);
+  --ember-edge: rgba(216, 116, 63, .42);
+
+  --gold: #d9b566;
+  --gold-hi: #ecd08f;
+  --gold-lo: #7a6232;
+  --gold-deep: #2a2215;
+  --gold-soft: rgba(217, 181, 102, .13);
+  --gold-edge: rgba(217, 181, 102, .4);
+
+  --good: #7cbfa4;
+  --good-hi: #9dd6bf;
+  --good-lo: #3f6e5d;
+  --good-soft: rgba(124, 191, 164, .13);
+  --good-edge: rgba(124, 191, 164, .38);
+
+  --warn: #e3a857;
+  --warn-soft: rgba(227, 168, 87, .13);
+  --warn-edge: rgba(227, 168, 87, .4);
+
+  --bad: var(--ember-hi);
+  --bad-soft: var(--ember-soft);
+  --bad-edge: var(--ember-edge);
+
+  --focus: #b9a4f2;
+  --focus-ring: 0 0 0 3px rgba(157, 130, 224, .28);
+
+  /* ---- health and the Veil ---- */
+  --hp: #7cbfa4;
+  --hp-deep: #3f6e5d;
+  --foe: #d8743f;
+  --foe-deep: #7d3a2c;
+  --veil: #a88ee6;
+  --veil-deep: #4a3a7a;
+
+  /* ---- rarity ---- */
+  --r-common: #a59eb0;
+  --r-uncommon: #7cbfa4;
+  --r-rare: #7aa2dc;
+  --r-epic: #b88bdb;
+  --r-legendary: #dcb462;
+  --r-relic: #e07a4c;
+
+  /* ---- type ---- */
+  --font-display: "Spectral", Georgia, "Times New Roman", serif;
+  --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --text-2xs: 11px;   /* eyebrows and tags, always uppercase and tracked */
+  --text-xs: 12px;    /* meta, chips, timestamps */
+  --text-sm: 13px;    /* secondary copy, nav */
+  --text-md: 14px;    /* body */
+  --text-lg: 16px;    /* lead copy */
+  --text-xl: 18px;    /* card titles (display) */
+  --text-2xl: 22px;   /* modal and section titles (display) */
+  --text-3xl: 28px;   /* page titles (display) */
+  --text-4xl: 36px;   /* hero numbers (display) */
+
+  --lh-tight: 1.2;
+  --lh: 1.45;
+  --lh-loose: 1.6;
+  --tracking-caps: .12em;
+
+  /* ---- space: a 4px step ---- */
+  --sp-0: 2px;
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-7: 28px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+
+  /* ---- radii ---- */
+  --r-xs: 4px;      /* tags, deltas */
+  --r-sm: 6px;      /* small controls inside other controls */
+  --r-md: 10px;     /* buttons, inputs, slots, rows */
+  --r-lg: 14px;     /* cards, pills */
+  --r-xl: 18px;     /* heroes, dialogs */
+  --r-pill: 999px;  /* chips, badges */
+
+  /* ---- depth ---- */
+  --hi: inset 0 1px 0 rgba(255, 255, 255, .04);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .35);
+  --shadow-card: inset 0 1px 0 rgba(255, 255, 255, .035), 0 1px 2px rgba(0, 0, 0, .3), 0 18px 36px -28px rgba(0, 0, 0, .9);
+  --shadow-pop: 0 14px 34px rgba(0, 0, 0, .55), 0 2px 6px rgba(0, 0, 0, .35);
+  --shadow-modal: 0 32px 80px rgba(0, 0, 0, .65), 0 4px 14px rgba(0, 0, 0, .4);
+
+  /* ---- motion ---- */
+  --dur-1: 120ms;   /* hover, press */
+  --dur-2: 180ms;   /* dialogs, tooltips */
+  --dur-3: 260ms;   /* sheets, drawer */
+  --bar-dur: 140ms; /* progress bars: short and linear, they move several times a second */
+  --ease: cubic-bezier(.2, .7, .2, 1);
+  --ease-in: cubic-bezier(.4, 0, 1, 1);
+
+  /* ---- layers ---- */
+  --z-sticky: 10;
+  --z-topbar: 40;
+  --z-drawer: 60;
+  --z-modal: 80;
+  --z-toast: 90;
+  --z-tip: 100;
+
+  /* ---- the shell ---- */
+  --topbar-h: 64px;
+  --hpline-h: 0px;          /* the phone health line under the topbar */
+  --sidebar-w: 232px;
+  --content-max: 1180px;
+  --gutter: 32px;           /* page side padding */
+  --page-gap: 24px;         /* between blocks on a page */
+  --card-pad: 20px;
+  --grid-gap: 16px;
+  --tap: 32px;              /* the floor for control sizes; 44px on touch */
+}
+
+@media (max-width: 1279px) {
+  :root { --gutter: 28px; }
+}
+
+@media (max-width: 1023px) {
+  :root {
+    --topbar-h: 56px;
+    --hpline-h: 3px;
+    --gutter: 24px;
+  }
+}
+
+@media (max-width: 599px) {
+  :root {
+    --gutter: 16px;
+    --page-gap: 16px;
+    --card-pad: 16px;
+    --grid-gap: 12px;
+  }
+}
+
+@media (max-width: 379px) {
+  :root {
+    --gutter: 12px;
+    --card-pad: 14px;
+  }
+}
+
+@media (pointer: coarse) {
+  :root { --tap: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-1: 0ms;
+    --dur-2: 0ms;
+    --dur-3: 0ms;
+    --bar-dur: 0ms;
+  }
+}

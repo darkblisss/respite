@@ -1,12 +1,10 @@
 ## Weather
 
 - Weather affects **XP only**, never gathering speed.
-- Each weather event secretly rolls **1 to 10** to determine its effect.
-- The roll is **not shown to the player**.
-- Effect is calculated as:
-  **Effect = 5% + (Roll − 1) × 1.67%**
-- Effects are rounded to **0 decimal places**, giving a range of **5% to 20%**.
-- Severity is determined by the final effect:
+- Each day's effect is a whole number from **5% to 20%**:
+  **`const effect = randomInt(5, 20);`**
+- The roll is seeded by the UTC day number, so every player sees the same sky and the forecast never changes once revealed.
+- Severity is determined by the effect:
   - **5% to 9%:** Faint
   - **10% to 15%:** Oppressive
   - **16% to 20%:** Extreme

@@ -1,0 +1,11 @@
+// Respite: settings for Deno run anywhere in this repo, such as type-checking the game function
+// (deno check supabase/functions/game/index.ts) or the engine's Deno smoke test.
+{
+  // package.json and npm install are for the Node tests. Without this, Deno would see
+  // package.json and resolve npm: imports only from node_modules, so a fresh clone could not
+  // type-check the function and the check would lean on whatever npm installed. Deno fetches
+  // npm:postgres@3.4.5 into its own cache instead, as the Edge Function bundler does.
+  "nodeModulesDir": "none",
+  // The function's one npm import is pinned to an exact version where it is imported.
+  "lock": false
+}
