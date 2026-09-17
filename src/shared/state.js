@@ -128,7 +128,13 @@ function blankState(clock, seed) {
     bountyBoard: {},
     buff: null,
     smugglerBought: {},
-    stats: { kills: 0, actions: 0, deaths: 0, crafted: 0, epics: 0, goldEarned: 0, bosses: 0 },
+    /* selfMade is the Wealth board's whole basis: the gold value a player has
+       *created*, counted the moment it is created and never again. A gathered
+       material counts at its value; a craft counts only what it added over the
+       materials it ate, so an ore dug and then smelted is not counted twice.
+       Nothing bought, traded, looted, requisitioned or smuggled ever touches it,
+       which is what stops the board being bought. */
+    stats: { kills: 0, actions: 0, deaths: 0, crafted: 0, epics: 0, goldEarned: 0, bosses: 0, selfMade: 0 },
     log: [],
     rng: { seed: s, world: hashString(`${s}:world`), hunt: hashString(`${s}:hunt`) },
     rolls: {},

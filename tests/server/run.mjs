@@ -239,7 +239,7 @@ async function seedSave(user, seed, edit) {
 /* ================= 3. SUITES ================= */
 
 await section('the schema', async () => {
-  same('migrations ran (twice)', migrationFiles, ['002_server.sql', '003_profiles_from_saves.sql', '004_leaderboard_boards.sql']);
+  same('migrations ran (twice)', migrationFiles, ['002_server.sql', '003_profiles_from_saves.sql', '004_leaderboard_boards.sql', '005_wealth_board.sql']);
   same('the expiry sweep has its partial index on open listings',(await q1(`select indexdef from pg_indexes where indexname = 'market_listings_open_expiry_idx'`)).indexdef,
     'CREATE INDEX market_listings_open_expiry_idx ON public.market_listings USING btree (expires_at, id) WHERE (status = \'open\'::text)');
   same('the hourly listing count has its index', (await q1(`select indexdef from pg_indexes where indexname = 'market_listings_seller_created_idx'`)).indexdef,

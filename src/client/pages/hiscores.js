@@ -10,10 +10,13 @@
 
    Boards come from ctx.net.hiscores (Total, the trades, the
    benches: every realm answers those) and ctx.net.leaderboard
-   (Hunt by discipline, kills: only a realm that has run
-   migration 004). Anything a realm does not keep says so plainly
-   instead of showing a made up list. Wealth is kept nowhere yet:
-   the save records what a player holds, not where it came from.
+   (Hunt by discipline and kills need migration 004, Wealth needs
+   005). Anything a realm does not keep says so plainly instead
+   of showing a made up list.
+
+   Wealth ranks what a player has *made*, summed as they made it
+   (stats.selfMade), not what they are holding: nothing bought,
+   traded or looted counts, so no one can buy a place on it.
 
    Answers are kept for the visit, so going back to a board is
    instant and asks the realm nothing again (the refresh button
@@ -33,7 +36,9 @@ const ASK_MS = 15 * 1000;
 
 /* A board is one list. `ask` says who answers it: "skill" is hiscores() from schema.sql,
    "board" is the leaderboard() migration 004 adds, null is nobody yet. `num` names the number
-   column, `kills` counts instead of levelling, `mark` is the discipline a Hunt board is for. */
+   column, `oneFigure` is a board that is a single count rather than a level and its XP, `note`
+   replaces the card's sub line where a board needs to say what it counts, and `mark` is the
+   discipline a Hunt board is for. */
 const skillBoard = (id) => {
   const s = getSkill(id);
   return {
@@ -65,15 +70,20 @@ const TABS = [
   {
     id: "wealth", name: "Wealth", icon: "coin",
     boards: [{
-      id: "wealth", name: "Wealth", title: "Wealth of your own making", icon: "coin", num: "Value",
-      ask: null,
-      unkept: "This board would count only what you gathered and made yourself, never what you traded for. The camp writes down what you hold, not where it came from, so a sword you forged reads the same as a sword you bought.",
+      id: "wealth", name: "Wealth", title: "Wealth of your own making", icon: "coin", num: "Value", oneFigure: true,
+      ask: { how: "board", key: "wealth" },
+      /* It ranks what a player has produced, not what they are holding, and the sub line says
+         so: selling what you made does not take it back off you. Holdings restricted to
+         self-made things would need provenance on every stack. */
+      note: "Counted as you make it: what you pull out of the ground, and what a bench adds over the materials it ate. Nothing bought, traded or looted, so no one can buy a place here.",
+      empty: "Nobody has made anything yet.",
+      unkept: "The realm keeps no tally of what players make yet, so nothing is ranked here.",
     }],
   },
   {
     id: "kills", name: "Monsters killed", icon: "skull",
     boards: [{
-      id: "kills", name: "Monsters killed", title: "Monsters killed", icon: "skull", num: "Kills", kills: true,
+      id: "kills", name: "Monsters killed", title: "Monsters killed", icon: "skull", num: "Kills", oneFigure: true,
       ask: { how: "board", key: "kills" },
       empty: "Nothing has been killed yet.",
       unkept: "The realm keeps no tally of kills yet, so nothing is ranked here.",
@@ -343,7 +353,8 @@ function boardBody(ctx, page) {
     const acc = ctx.account;
     const me = String(acc.username || "").toLowerCase();
     refreshBtn.hidden = !b.ask;
-    setText(cardSub, b.ask ? "Updated as commanders play" : "Nothing is kept for this board yet");
+    // A board with a note says what it actually counts, which Wealth needs more than "updated".
+    setText(cardSub, b.note || (b.ask ? "Updated as commanders play" : "Nothing is kept for this board yet"));
 
     if (!got) {
       meChip.hidden = true;
@@ -391,7 +402,7 @@ function boardBody(ctx, page) {
           h("th", { scope: "col" }, "Rank"),
           h("th", { scope: "col" }, "Commander"),
           h("th.num", { scope: "col" }, b.num),
-          b.kills ? null : h("th.num.hs-hide-sm", { scope: "col" }, "XP"))),
+          b.oneFigure ? null : h("th.num.hs-hide-sm", { scope: "col" }, "XP"))),
         h("tbody", got.rows.map((r, i) => {
           const rank = Number(r.rank) || i + 1;
           const isMe = mineRow === r;
@@ -407,20 +418,20 @@ function boardBody(ctx, page) {
               h("span.truncate", display(r.username)),
               isMe ? h("span.tag.tag-violet", "You") : null,
               loose ? h("span.tag.hs-hide-sm", "Undisciplined") : null)),
-            h("td.num", b.kills ? fmtWhole(xp) : fmtWhole(level)),
-            b.kills ? null : h("td.num.hs-hide-sm", { title: `${fmtWhole(xp)} XP` }, fmt(xp)));
+            h("td.num", b.oneFigure ? fmtWhole(xp) : fmtWhole(level)),
+            b.oneFigure ? null : h("td.num.hs-hide-sm", { title: `${fmtWhole(xp)} XP` }, fmt(xp)));
         })))));
   }
 
   function skeleton(b) {
     return h("div.table-wrap.realm-skel", { "aria-hidden": "true" },
       h("table.table",
-        h("thead", h("tr", h("th", "Rank"), h("th", "Commander"), h("th.num", b.num), b.kills ? null : h("th.num.hs-hide-sm", "XP"))),
+        h("thead", h("tr", h("th", "Rank"), h("th", "Commander"), h("th.num", b.num), b.oneFigure ? null : h("th.num.hs-hide-sm", "XP"))),
         h("tbody", Array.from({ length: 8 }, () => h("tr",
           h("td", h("span.skel.skel-line.skel-w-35")),
           h("td", h("span.skel.skel-line.skel-w-60")),
           h("td", h("span.skel.skel-line.skel-w-50.ml-auto")),
-          b.kills ? null : h("td.hs-hide-sm", h("span.skel.skel-line.skel-w-50.ml-auto")))))));
+          b.oneFigure ? null : h("td.hs-hide-sm", h("span.skel.skel-line.skel-w-50.ml-auto")))))));
   }
 
   refreshBtn.addEventListener("click", () => load());

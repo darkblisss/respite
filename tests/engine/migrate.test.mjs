@@ -72,7 +72,9 @@ await run(async () => {
       JSON.stringify(m.rolls) === "{}" && m.serial === 1 && m.lootLostAt === null && m.player.camp === null);
     check("the account and user come from the server", m.meta.userId === "u-1" && m.meta.account === "wren");
     check("createdAt, playtime and v4's log kept", m.meta.createdAt === raw.meta.createdAt && m.meta.playtimeMs === raw.meta.playtimeMs && JSON.stringify(m.log) === JSON.stringify(raw.log));
-    check("stats gain bosses", m.stats.bosses === 0 && Object.keys(m.stats).length === 7);
+    // v4 kept five; v5 added bosses, and the Wealth board added selfMade. A v4 save
+    // starts both at zero: nothing is invented for work done before they were counted.
+    check("stats gain bosses and selfMade", m.stats.bosses === 0 && m.stats.selfMade === 0 && Object.keys(m.stats).length === 8);
     same("the bounty v4 posted is kept", m.bounty, raw.bounty);
     check("migrateSave leaves its input alone", JSON.stringify(raw) === JSON.stringify(v4Save()));
   }
