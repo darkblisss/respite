@@ -149,7 +149,14 @@ export const ICONS = {
 
 const cache = new Map();
 
+const IMAGE_ICONS = {
+  pick: "assets/delving-icon.webp",
+};
+
 export function icon(name, cls) {
+  if (IMAGE_ICONS[name]) {
+    return `<img class="ico${cls ? " " + cls : ""}" src="${IMAGE_ICONS[name]}" alt="" aria-hidden="true" />`;
+  }
   const body = ICONS[name] || ICONS.unknown;
   return `<svg class="ico${cls ? " " + cls : ""}" viewBox="0 0 24 24" fill="none" stroke="currentColor" ` +
     `stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${body}</svg>`;
