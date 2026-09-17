@@ -504,6 +504,30 @@ button.ap-link:hover span { text-decoration: underline; text-decoration-color: v
   gap: 14px;
 }
 
+/* Belongings with the Satchel under it: one column, so on a phone the loadout
+   follows the pack it is packed from rather than the paperdoll. */
+.storage-stack,
+.satchel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--page-gap);
+  min-width: 0;
+}
+
+.satchel { gap: 10px; }
+
+/* Which draught goes first, in a line under the loadout. */
+.satchel-next {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--text-sm);
+  color: var(--bone-dim);
+}
+
+.satchel-next .ico { width: 16px; height: 16px; color: var(--bone-faint); }
+.satchel-next b { color: var(--bone); font-weight: 600; }
+
 .storage-side {
   display: flex;
   flex-direction: column;

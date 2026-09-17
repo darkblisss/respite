@@ -52,9 +52,10 @@ ENGINE.md is the binding engine spec and adds to this shape: `rolls` (roll count
   meta: { createdAt, playtimeMs, account, userId },
   player: { gold, hp, recoveryLeft, klass },
   skills: { [skillId]: xp },        // xp may be fractional
-  inv:   { slots, items: {key: qty}, order: [key] },   // Belongings
+  inv:   { slots, items: {key: qty}, order: [key] },   // Belongings; a remedy costs a slot a bottle here
   bank:  { slots, items, order },   // Stockpile (was Provisions)
   vault: { slots, items, order },   // Vault
+  satchel: { slots, items, order }, // the Satchel: remedies only, and the only pool a fight reaches
   uid: 1,
   equipment: { weapon, offhand, head, chest, hands, feet, neck, ring },  // item keys or null
   tools: { [gatherSkillId]: toolBaseId },

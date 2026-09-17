@@ -39,8 +39,9 @@ await run(async () => {
     s.travel.unlocked = ["region_1", "region_2", "region_3", "region_4", "region_5"];
     s.region = "region_5";
     s.settings.hideSovereign = true;
-    put(s, "inv", "provision_t4", 40);
-    put(s, "bank", "provision_t6", 12);
+    // Packed for the hunt: only the Satchel is reachable in a fight.
+    put(s, "satchel", "provision_t4", 40);
+    put(s, "satchel", "provision_t6", 12);
     // The bench eats this ore; the hunt's Brutes drop more of it.
     put(s, "bank", "crucible_delve", 70);
     put(s, "vault", "coal", 900);
@@ -65,7 +66,8 @@ await run(async () => {
     [START + 1002, "deployAgent", { agentId: "agent_5", itemKey: "resin" }],
     [START + 37 * 60000 + 333, "setHide", { on: false }],
     [START + 2 * HOUR + 4567, "startSkill", { skillId: "delving", actionId: "delving_t5", limit: 400 }],
-    [START + 3 * HOUR + 17 * 60000 + 3, "buyRemedy", { key: "provision_t4", qty: 25 }],
+    [START + 3 * HOUR + 17 * 60000 + 3, "buyRemedy", { key: "provision_t4", qty: 2 }],
+    [START + 3 * HOUR + 17 * 60000 + 4, "moveItem", { key: "provision_t4", from: "inv", to: "satchel", qty: null }],
     [START + 4 * HOUR, "unequip", { slot: "ring" }],
     [START + 4 * HOUR + 60000, "equip", { key: "crucible_ring|epic|77", from: "bank" }],
     [START + 5 * HOUR + 29 * 60000 + 999, "travel", { regionId: "region_4" }],
@@ -139,7 +141,8 @@ await run(async () => {
   const results = Object.fromEntries(once.results.map(([when, type, r]) => [`${type}@${when - START}`, r]));
   console.log(`     ${A.stats.kills} kills, ${A.stats.deaths} deaths, ${A.stats.actions} actions, ${count("hunt:hide")} hides, ${count("hunt:felled")} Sovereigns, ${A.log.length} log lines`);
   console.log(`     commands: ${once.results.map(([when, type, r]) => `${type} ${r.ok ? "ok" : r.error}`).join("; ")}`);
-  check("the hunt killed, and took remedies", A.stats.kills > 100 && S.haveQty(A, "provision_t4") + S.haveQty(A, "provision_t6") < 40 + 25 + 12);
+  check("the hunt killed, and took remedies out of the Satchel", A.stats.kills > 100 &&
+    S.qtyIn(A, "satchel", "provision_t4") + S.qtyIn(A, "satchel", "provision_t6") < 40 + 2 + 12 && S.qtyIn(A, "inv", "provision_t4") === 0);
   check("the Stag reached Bond 10 two minutes of work in", count("companion:bond") >= 1 && at("companion:bond")[0] === START + 2 * 60000);
   check("Bond 10 quickened the bench mid-run", Co.companionBonus(A, "speed", "forgemaster") > 0);
   const stock = once.events.filter((e) => e[0] === "task:ended" && e[2] === "stock");

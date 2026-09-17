@@ -67,8 +67,9 @@ await run(async () => {
     s.equipment = gearSet(GameData, 9, "warrior", "rare");
     s.travel.unlocked = GameData.REGIONS.map((r) => r.id);
     s.region = "region_9";
-    put(s, "inv", "provision_t9", 400);
-    put(s, "bank", "provision_t7", 400);
+    // Packed: only the Satchel is reachable in a fight.
+    put(s, "satchel", "provision_t9", 400);
+    put(s, "satchel", "provision_t7", 400);
     // The quickest recipe there is: 3,600 completions, each one a cut in the hunt.
     put(s, "bank", "slag_delve", 8000);
     put(s, "vault", "coal", 4000);

@@ -473,7 +473,7 @@ Resolves `true` only on Confirm; Cancel, Escape, the backdrop and a swipe resolv
 ```js
 if (!(await confirm({
   title: `Buy ${qty} × ${name}?`,
-  body: "They go straight into Belongings, ready for the hunt.",
+  body: "They go into Belongings, to pack in the Satchel.",
   confirmText: `Buy for ${fmtGold(price * qty)}`,
   cost: { gold: price * qty, have: state.player.gold },
 }))) return;
@@ -600,7 +600,7 @@ To change the narrowest card, set `--grid-min` on a page class in pages.css (`.s
     <div>
       <div class="eyebrow">The Camp</div>                      <!-- optional -->
       <h2 class="card-title"><svg class="ico">bonesetter</svg>The Bonesetter</h2>   <!-- icon optional -->
-      <p class="card-sub">Always open. Remedies go straight into Belongings.</p>
+      <p class="card-sub">Always open. Remedies go into Belongings, to pack in the Satchel.</p>
     </div>
     <div class="card-actions"><!-- chips or small buttons --></div>
   </div>
@@ -1078,6 +1078,8 @@ Phones (below 768px): the stats wrap under the name as compact chips (24px), the
 - Fill the grid to the pool's capacity with empty slots.
 - `.capacity.is-full` turns the count ember.
 - Five across; four at 479px and below. The toolbar wraps; on phones the sort select takes its own full line.
+- `.storage-stack` is a column of two `storageCard`s, used by the Satchel page to put Belongings above the Satchel. `.satchel` is the second card's tighter grid, and `.satchel-next` the line under it naming the draught the next fight would reach (off `bestRemedy`).
+- A `storageCard` takes `filters: false` where a pool holds one kind (the Satchel), and a `hint` for a line under its capacity bar. A remedy in Belongings costs a slot a bottle, so it draws as separate cells of 1 rather than one stack, and the capacity line counts them that way.
 - Drag to reorder (pages/stockpile.js `storageCard`): set `data-reorder` on `.slot-grid` while the view is in custom order (it also stops a held finger selecting the name or opening the touch callout). While dragging the grid carries `.is-sorting` (a grabbing cursor), the lifted slot `.is-selected` and the place it would take `.is-dragover`; the drop sends `reorder { pool, key, before }`. Mouse: press and move 5px. Touch: hold still 380ms, then move; a finger that moves first scrolls the page. Near the top or bottom edge the page scrolls under the drag; Escape cancels.
 
 ### 7.14 Tooltip content classes

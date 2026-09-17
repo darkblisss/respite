@@ -80,23 +80,32 @@ Materials include remedies (`provision_t*` ids stay for saves), reagents and `va
 
 ## 3. storage.js: StorageManager
 
-Pools: `inv` (Belongings, 10 slots), `bank` (Stockpile, starts 30, widened by chests to 200), `vault` (Vault, 50). A stack takes one slot. Names come from `CONFIG.storage.names`.
+Pools: `inv` (Belongings, 10 slots), `bank` (Stockpile, starts 30, widened by chests to 200), `vault` (Vault, 50), `satchel` (the Satchel, 4). A stack takes one slot, with two exceptions the Satchel brought in:
+
+- `canHold(w, key)`: the Satchel takes remedies and nothing else. Enforced in the transaction layer, not just hidden in the UI.
+- `unstacked(w, key)`: a remedy in Belongings costs a slot a bottle, so a bought lot sits as separate entries and the Satchel is where it gets tidy. `slotsNeeded` and `roomFor` do that arithmetic; `placeFor` takes the quantity for the same reason.
+
+The Satchel is the only pool a fight can reach (`ORDER.eat`). A remedy anywhere else is dead weight until it is packed.
 
 ```js
-export const POOLS = ["inv", "bank", "vault"];
+export const POOLS = ["inv", "bank", "vault", "satchel"];
 export const ORDER = Object.freeze({
   loot:     ["inv", "vault", "bank"],   // hunt drops, finds, Sovereign pieces
   material: ["bank", "vault", "inv"],   // gathered and crafted materials, requisitions, smuggler
   gear:     ["inv", "bank", "vault"],   // crafted gear
   tool:     ["bank", "vault", "inv"],   // crafted and unequipped tools
-  remedy:   ["inv", "bank", "vault"],   // remedies are used only by the hunter: Belongings first
+  remedy:   ["inv"],                    // a remedy bought lands in Belongings; the hunter packs the Satchel
   spend:    ["bank", "vault", "inv"],   // paying costs
-  eat:      ["inv", "bank", "vault"],   // remedies taken on the hunt (best heal first, then this order)
+  eat:      ["satchel"],                // remedies a fight can reach, best heal first
   mail:     ["inv", "bank", "vault"],
 });
 export const orderFor = (key) => ...     // remedy -> remedy, gear -> gear, tool -> tool, else material
 
-export function slotCap(state, w)        // inv: CONFIG.storage.slots.inv, bank/vault: state[w].slots
+export const canHold = (w, key)          // satchel: remedies only
+export const unstacked = (w, key)        // inv + remedy: a slot a bottle
+export function slotsNeeded(state, w, key, qty)
+export function roomFor(state, w, key, qty)
+export function slotCap(state, w)        // inv/satchel: CONFIG.storage.slots[w], bank/vault: state[w].slots
 export function slotsUsed(state, w)
 export function isFull(state, w)
 export function qtyIn(state, w, key)
@@ -390,7 +399,7 @@ export function migrateSave(raw, { now, seed, userId, account, legacy = false })
   - `rng`: new from `seed` (`world` and `hunt` with it); `rolls: {}`; `serial`: 1; `lootLostAt: null`; `player.camp: null` (v4 kept no note, so the first hunt sets out whole as it did).
   - Skilling task: keep if its action still exists and the level allows it; give it `id` (serial++), integer `progress`/`elapsed`, `startedAt = clock`; drop `queued`.
   - Hunt task: v4 rules, plus an `id` (from `newHunt`, or `serial++`); any `rng` a row carries is dropped.
-  - Remedies sitting in the Stockpile or Vault move into Belongings while there is a free slot (a stack at a time, best heal first). Log once: "Remedies are kept in Belongings now. N stacks were moved." when any moved.
+  - Any save without a `satchel` gets one packed once: remedies move in best heal first, every stack of a kind merging into its one slot, while slots last. Log once: "Remedies are carried in the Satchel now. N stacks were moved." when any moved. Idempotent, so it covers both v4 saves and schema 9 saves written before the Satchel existed.
   - Numeric uids stay. Equipment keys that no longer resolve are dropped.
   - The steps copy the pools and the tasks before changing them in place and only read the rest, so `raw` is never written to (migrate.test.mjs migrates deep-frozen v4 saves).
 - Always: clamp hp to maxHp, drop unknown pools' items whose key has no def, cap log at 60.

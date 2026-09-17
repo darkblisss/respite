@@ -3,7 +3,8 @@
    ------------------------------------------------------------
    Where a hunt is taken up. What a zone fields, then the hunt played
    out ahead of time: three twelve-hour runs from full health with the
-   remedies you hold. The runs are played one at a time after the
+   remedies in the Satchel, which are the only ones a fight can
+   reach. The runs are played one at a time after the
    popup has painted, and kept by signature while nothing that
    matters has changed, as v4 did.
 
@@ -118,7 +119,9 @@ function remember(sig, value) {
   while (ODDS.size > ODDS_KEEP) ODDS.delete(ODDS.keys().next().value);
 }
 
-// Remedies the hunt can reach, counted whole (remedyHeals stops counting at 400).
+/* Remedies the hunt can reach, counted whole (remedyHeals stops counting at
+   400). ORDER.eat is the Satchel, so a bottle in Belongings counts for
+   nothing here, exactly as it counts for nothing in the fight. */
 function remediesHeld(state) {
   let n = 0;
   ORDER.eat.forEach((w) => {
@@ -197,9 +200,9 @@ registerPopup("zone", (ctx, tier, zoneId) => {
        staring at the rate. What is left is a record to beat and an honest warning. */
     const played = h("div.stats");
     const best = stat(played, "Best run", h("small", "Reckoning"));
-    const remedies = stat(played, "Remedies", "");
+    const remedies = stat(played, "In the Satchel", "");
     const warn = h("p.zone-warn", { hidden: true });
-    const stock = h("p.zone-warn.t-warn", { hidden: true }, "You should stock up on some remedies!");
+    const stock = h("p.zone-warn.t-warn", { hidden: true }, "Nothing is packed. Put remedies in your Satchel before you set out.");
 
     const runTop = h("span");
     const runRate = h("b");
@@ -353,7 +356,7 @@ registerPopup("zone", (ctx, tier, zoneId) => {
 
     const held = remediesHeld(state);
     const perHour = odds ? odds.remediesPerHour : 0;
-    setText(refs.remedies, held ? `${fmt(held)} held${perHour >= 0.05 ? ` · about ${fmtStat(perHour)} used an hour` : ""}` : "None held");
+    setText(refs.remedies, held ? `${fmt(held)} packed${perHour >= 0.05 ? ` · about ${fmtStat(perHour)} used an hour` : ""}` : "None packed");
     toggleClass(refs.remedies, "t-bad", !held);
     setAttr(refs.stock, "hidden", held > 0);
 

@@ -44,10 +44,14 @@ const storage = {
     inv: 10,     // Belongings
     bank: 30,    // Stockpile
     vault: 50,   // the Vault, reachable from either page
+    /* The Satchel: the only remedies a fight can reach. Six remedies exist, so
+       four slots leave two behind and make the loadout a choice; each slot
+       stacks without limit, so four kinds still cover a twelve-hour hunt. */
+    satchel: 4,
   },
   bankMax: 200,  // the Stockpile widens no further than this
   // What each storage pool is called on screen.
-  names: { inv: "Belongings", bank: "Stockpile", vault: "Vault" },
+  names: { inv: "Belongings", bank: "Stockpile", vault: "Vault", satchel: "Satchel" },
 };
 
 /* ================= 3. PROGRESSION ================= */

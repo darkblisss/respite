@@ -27,6 +27,7 @@ import { advance, applyCommand, awaySnapshot, COMMANDS, makeEnv, SERVER_ONLY, su
 import { createEmitter, emit } from "../shared/events.js";
 import { attachChronicle } from "../shared/chronicle.js";
 import { createState } from "../shared/state.js";
+import { POOLS } from "../shared/storage.js";
 import { createClock } from "./clock.js";
 
 /* ================= 1. RULES OF THE ROAD ================= */
@@ -131,7 +132,7 @@ export function hasProgress(state) {
   if (state.player && state.player.gold > 0) return true;
   if (state.skills && Object.values(state.skills).some((xp) => xp > 0)) return true;
   if (state.tasks && (state.tasks.skilling || state.tasks.combat)) return true;
-  if (["inv", "bank", "vault"].some((w) => state[w] && Object.keys(state[w].items || {}).length > 0)) return true;
+  if (POOLS.some((w) => state[w] && Object.keys(state[w].items || {}).length > 0)) return true;
   if (state.companions && Object.keys(state.companions.owned || {}).length > 0) return true;
   return !!(state.travel && state.travel.unlocked && state.travel.unlocked.length > 1);
 }

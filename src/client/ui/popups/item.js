@@ -6,13 +6,18 @@
      openPopup("item", ctx, key, { from, readOnly })
 
    from  "inv" | "bank" | "vault"  held there: equip or take up,
-                                   move, sell, open, break down,
+         | "satchel"               move, sell, open, break down,
                                    repair, list on the market
          "worn"                    on the paperdoll or in the tool
                                    rack: unequip or stow, repair
          null                      not held (a market row, a recipe):
                                    the facts and no actions
    readOnly shows the facts only, wherever the item is.
+
+   The Satchel is offered only to remedies, because that is all the
+   engine lets in (storage.js canHold), and Belongings give a remedy
+   a slot a bottle, so the room a move needs is asked of roomFor
+   rather than counted here.
 
    It keeps itself true while open (amounts, wear, what it would
    replace) and closes when the item leaves the place it was
@@ -27,7 +32,7 @@ import { qtyPicker, registerPopup, openPopup } from "../widgets.js";
 import { CONFIG } from "../../../shared/config.js";
 import { GameData, itemSources, prefixDef, rarityDef, skillName } from "../../../shared/registry.js";
 import { itemDef, itemName, stacks } from "../../../shared/items.js";
-import { ORDER, POOLS, isPool, poolName, qtyIn, haveQty, isFull, slotCap, slotsUsed, placeFor } from "../../../shared/storage.js";
+import { ORDER, POOLS, canHold, isPool, poolName, qtyIn, haveQty, roomFor, slotCap, slotsUsed, placeFor } from "../../../shared/storage.js";
 import { displacedBy, salvageValue } from "../../../shared/world.js";
 import { wearPct, repairCost } from "../../../shared/combat.js";
 import { statsOf, combatStats, skillLevel } from "../../../shared/stats.js";
@@ -46,7 +51,7 @@ const SLOT_NOUN = {
 
 const SLOT_LABEL = (slot) => GameData.SLOT_LABELS[slot].toLowerCase();
 
-const POOL_ICON = { inv: "pack", bank: "stockpile", vault: "lock" };
+const POOL_ICON = { inv: "pack", bank: "stockpile", vault: "lock", satchel: "ration" };
 
 // How a pool reads inside a sentence: "Belongings", "the Stockpile".
 const phrase = (w) => (w === "inv" ? poolName(w) : `the ${poolName(w)}`);
@@ -211,10 +216,17 @@ const statNode = (r) => h("div.stat",
     r.delta ? h("span.delta", { class: r.delta.cls }, r.delta.text) : null));
 
 // The quiet line about what it does: a remedy's heal, a chest's slots.
-function noteParts(state, d) {
+function noteParts(state, d, from) {
   if (d.heal) {
     const at = Math.round(CONFIG.hunt.remedyAt * 100);
-    return ["heart", ["Heals ", h("b", fmtWhole(d.heal)), ` · taken automatically on the hunt at ${at}% health. Remedies are kept in Belongings first.`]];
+    const packed = qtyIn(state, "satchel", d.base);
+    // Where it is decides whether the hunt can reach it, so the line says so plainly.
+    const where = from === "satchel"
+      ? ` The hunt drinks this one at ${at}% health, the strongest in the Satchel first.`
+      : packed > 0
+        ? ` Only the Satchel is reached in a fight, and ${fmtWhole(packed)} is already packed.`
+        : " Pack it in the Satchel or the hunt goes without it.";
+    return ["heart", ["Heals ", h("b", fmtWhole(d.heal)), ".", where]];
   }
   if (d.chest) {
     const max = CONFIG.storage.bankMax;
@@ -430,12 +442,19 @@ function openItem(ctx, key, opts, extra) {
       });
     }
 
-    POOLS.filter((w) => w !== from).forEach((w) => {
-      const full = qtyIn(state, w, key) === 0 && isFull(state, w);
+    /* One move a pool that would take it. The Satchel is left out for
+       anything but a remedy, and the room asked for is the amount on the
+       picker, because Belongings spend a slot a bottle. */
+    POOLS.filter((w) => w !== from && canHold(w, key)).forEach((w) => {
+      const room = roomFor(state, w, key, n);
+      // "Pack 4 in Satchel" beside "Move 4 to Stockpile": the same shape, on one line.
+      const verb = w === "satchel" ? "Pack" : "Move";
+      const prep = w === "satchel" ? "in" : "to";
       list.push({
         id: `move-${w}`, icon: POOL_ICON[w],
-        label: full ? `${poolName(w)} is full` : many ? `Move ${fmtWhole(n)} to ${poolName(w)}` : `Move to ${poolName(w)}`,
-        disabled: full,
+        label: !room ? `${poolName(w)} is full`
+          : many ? `${verb} ${fmtWhole(n)} ${prep} ${poolName(w)}` : `${verb} ${prep} ${poolName(w)}`,
+        disabled: !room,
         onClick: () => send("moveItem", { key, from, to: w, qty: amountNow(ctx.state) }),
       });
     });
@@ -567,7 +586,7 @@ function openItem(ctx, key, opts, extra) {
       m.setTitle(itemName(key), sub);
     }
 
-    const noteP = noteParts(state, d);
+    const noteP = noteParts(state, d, from);
     const noteSig = partsSig(noteP);
     if (noteSig !== P.noteSig) {
       P.noteSig = noteSig;

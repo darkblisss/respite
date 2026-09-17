@@ -1,32 +1,39 @@
 /* ============================================================
    Respite · storage.js · The Quartermaster
    ------------------------------------------------------------
-   The three pools and every change to what they hold.
-     inv    Belongings  (10 slots)
-     bank   the Stockpile (30, widened by chests up to 200)
-     vault  the Vault   (50)
+   The four pools and every change to what they hold.
+     inv      Belongings  (10 slots)
+     bank     the Stockpile (30, widened by chests up to 200)
+     vault    the Vault   (50)
+     satchel  the Satchel (4), the combat loadout
    A stack takes one slot. Where a new thing goes is decided in one
    place (placeFor, ORDER) so the hunt, the bench, the shop and the
    mail all agree.
+
+   Two rules are the Satchel's own. It takes remedies and nothing
+   else, because it is what the hunter can reach mid-fight and gear
+   swaps stay a camp job. And a remedy bought does not stack in
+   Belongings: there it costs a slot a bottle, so carrying a hunt's
+   worth means packing the Satchel rather than the pack.
 
    transact() runs a change as all or nothing: every write made
    through its `tx` is journaled and undone if anything refuses.
    ============================================================ */
 
 import { CONFIG } from "./config.js";
-import { itemDef, itemName } from "./items.js";
+import { itemDef, itemName, isRemedy } from "./items.js";
 
-export const POOLS = Object.freeze(["inv", "bank", "vault"]);
-export const isPool = (w) => w === "inv" || w === "bank" || w === "vault";
+export const POOLS = Object.freeze(["inv", "bank", "vault", "satchel"]);
+export const isPool = (w) => w === "inv" || w === "bank" || w === "vault" || w === "satchel";
 
 export const ORDER = Object.freeze({
   loot:     Object.freeze(["inv", "vault", "bank"]),   // hunt drops, finds, Sovereign pieces
   material: Object.freeze(["bank", "vault", "inv"]),   // gathered and crafted materials, requisitions, smuggler
   gear:     Object.freeze(["inv", "bank", "vault"]),   // crafted gear
   tool:     Object.freeze(["bank", "vault", "inv"]),   // crafted and unequipped tools
-  remedy:   Object.freeze(["inv", "bank", "vault"]),   // remedies are used only by the hunter: Belongings first
+  remedy:   Object.freeze(["inv"]),                    // a remedy bought lands in Belongings; the hunter packs the Satchel
   spend:    Object.freeze(["bank", "vault", "inv"]),   // paying costs
-  eat:      Object.freeze(["inv", "bank", "vault"]),   // remedies taken on the hunt (best heal first, then this order)
+  eat:      Object.freeze(["satchel"]),                // remedies taken on the hunt: the Satchel alone, best heal first
   mail:     Object.freeze(["inv", "bank", "vault"]),
 });
 
@@ -40,34 +47,69 @@ export const orderFor = (key) => {
 
 export const poolName = (w) => CONFIG.storage.names[w] || String(w);
 
+/* ================= WHAT A POOL TAKES ================= */
+
+/* The Satchel is the loadout for a fight, so it holds only what can be drunk
+   in one: remedies. Gear swaps stay a camp job, and the Worn grid is where
+   they live. */
+export const canHold = (w, key) => w !== "satchel" || isRemedy(key);
+
+/* Belongings give a remedy a slot a bottle. They are bought there and do not
+   stack there, so ten is all a pack ever carries and a real hunt is packed
+   into the Satchel, where they do stack. */
+export const unstacked = (w, key) => w === "inv" && isRemedy(key);
+
 /* ================= READING ================= */
 
 export function slotCap(state, w) {
-  return w === "inv" ? CONFIG.storage.slots.inv : state[w].slots;
+  // Belongings and the Satchel are fixed; the Stockpile and the Vault widen.
+  return w === "bank" || w === "vault" ? state[w].slots : CONFIG.storage.slots[w];
 }
 
 export function slotsUsed(state, w) {
-  return Object.keys(state[w].items).length;
+  const items = state[w].items;
+  let n = 0;
+  for (const k of Object.keys(items)) n += unstacked(w, k) ? items[k] : 1;
+  return n;
 }
 
 export function isFull(state, w) {
   return slotsUsed(state, w) >= slotCap(state, w);
 }
 
-// Own keys only: a key like "constructor" is never an item.
-export function qtyIn(state, w, key) {
-  const items = state[w].items;
-  return Object.hasOwn(items, key) ? items[key] : 0;
+// The slots adding qty of key would cost: none into a stack that grows, one for
+// a new stack, one a unit where the pool does not stack it.
+export function slotsNeeded(state, w, key, qty = 1) {
+  if (unstacked(w, key)) return qty;
+  return qtyIn(state, w, key) > 0 ? 0 : 1;
 }
 
+export function roomFor(state, w, key, qty = 1) {
+  if (!canHold(w, key)) return false;
+  return slotsUsed(state, w) + slotsNeeded(state, w, key, qty) <= slotCap(state, w);
+}
+
+/* Own keys only: a key like "constructor" is never an item. A pool the save has
+   not got holds nothing, so reading one is safe on a save that came in before
+   the Satchel and has not been through migrateSave yet. */
+export function qtyIn(state, w, key) {
+  const pool = state[w];
+  const items = pool ? pool.items : null;
+  return items && Object.hasOwn(items, key) ? items[key] : 0;
+}
+
+// Everything the camp holds, the Satchel included: what is packed is still owned.
 export function haveQty(state, key) {
-  return qtyIn(state, "inv", key) + qtyIn(state, "bank", key) + qtyIn(state, "vault", key);
+  let n = 0;
+  for (const w of POOLS) n += qtyIn(state, w, key);
+  return n;
 }
 
 export function heldEverywhere(state) {
   const out = {};
   POOLS.forEach((w) => {
-    const items = state[w].items;
+    const items = state[w] ? state[w].items : null;
+    if (!items) return;
     Object.keys(items).forEach((k) => { out[k] = (out[k] || 0) + items[k]; });
   });
   return out;
@@ -84,10 +126,12 @@ export function orderedKeys(state, w) {
   return out;
 }
 
-// A stack already held grows where it is; otherwise the first pool in order with room.
-export function placeFor(state, key, order = orderFor(key)) {
-  for (const w of order) if (qtyIn(state, w, key) > 0) return w;
-  for (const w of order) if (!isFull(state, w)) return w;
+/* A stack already held grows where it is; otherwise the first pool in order
+   with room. `qty` matters only where a pool does not stack the thing, and
+   there even a held stack needs the slots. */
+export function placeFor(state, key, order = orderFor(key), qty = 1) {
+  for (const w of order) if (qtyIn(state, w, key) > 0 && roomFor(state, w, key, qty)) return w;
+  for (const w of order) if (qtyIn(state, w, key) === 0 && roomFor(state, w, key, qty)) return w;
   return null;
 }
 
@@ -161,12 +205,14 @@ class Tx {
     return removed;
   }
 
-  // Into one pool. A new stack needs a free slot.
+  // Into one pool. A new stack needs a free slot, and so does every bottle
+  // of a remedy going into Belongings, where they do not stack.
   add(w, key, qty) {
     checkQty(qty);
+    if (!canHold(w, key)) this.fail(`${poolName(w)} only takes remedies.`);
     const pool = this.state[w];
     const have = qtyIn(this.state, w, key);
-    if (!have && isFull(this.state, w)) this.fail(`${poolName(w)} is full.`);
+    if (!roomFor(this.state, w, key, qty)) this.fail(`${poolName(w)} is full.`);
     this.set(pool.items, key, have + qty);
     if (!pool.order.includes(key)) this.push(pool.order, key);
     return qty;
@@ -175,7 +221,7 @@ class Tx {
   // Wherever it belongs. Returns the pool it went into.
   stash(key, qty, order = orderFor(key)) {
     checkQty(qty);
-    const w = placeFor(this.state, key, order);
+    const w = placeFor(this.state, key, order, qty);
     if (!w) this.fail(`Nowhere to put ${itemName(key)}.`);
     this.add(w, key, qty);
     return w;

@@ -421,7 +421,7 @@ await section('a v4 save migrates on its first request', async () => {
   check('meta.lastSeen is gone', !('lastSeen' in s.meta));
   // 4,000 ms of progress plus two hours at 12 s an action: 600 more, 4,000 ms over.
   same('the crew worked the two hours away', [haveQty(s, 'slag_delve'), s.skills.delving, s.tasks.skilling && s.tasks.skilling.done], [640, 1800, 612]);
-  same('remedies moved into Belongings', [s.inv.items.provision_t1, s.bank.items.provision_t1], [6, undefined]);
+  same('remedies moved into the Satchel', [s.satchel.items.provision_t1, s.bank.items.provision_t1, s.inv.items.provision_t1], [6, undefined, undefined]);
   check('the old log line survives', s.log.some((l) => l.m === 'An old line from v4.'));
   check('a welcome-back line is dated now', s.log.some((l) => l.t === NOW && /Away/i.test(l.m)), s.log.slice(-3));
   const row = await saved(old);
@@ -765,7 +765,8 @@ await section('party hunts share ground', async () => {
   const [a, b, solo, d, e, farm, alt] = names.map((n) => newUser(n));
   const everyone = [a, b, solo, d, e, farm, alt];
   // Everyone gets the same seed and the same camp, so only the party can make a difference.
-  const hardy = (s) => { s.skills.warfare = 2000; put(s, 'inv', 'provision_t1', 60); };
+  // Packed, not carried: only the Satchel is reachable in a fight.
+  const hardy = (s) => { s.skills.warfare = 2000; put(s, 'satchel', 'provision_t1', 60); };
   for (const u of everyone) await seedSave(u, 4242, hardy);
   for (const u of everyone) await play(u);
 
@@ -800,7 +801,9 @@ await section('party hunts share ground', async () => {
   }
   check('the hunts ran the hour', states.lone.tasks.combat && states.lone.stats.kills > 0, { kills: states.lone.stats.kills, task: !!states.lone.tasks.combat });
   check('two members on the same ground both out-earn the solo hunter', xp.wolf_a > xp.lone && xp.wolf_b > xp.lone, xp);
-  check('by a margin like the 10% bonus', xp.wolf_a >= xp.lone * 1.05, xp);
+  // The bonus is 5% a member now. The margin lands on it exactly, so an exact
+  // comparison sits a float's width under it: allow that width.
+  check('by a margin like the 5% bonus', xp.wolf_a >= xp.lone * 1.05 - 1e-6, xp);
   same('a member on other ground gives nothing: pack_d earns exactly what the solo hunter did', xp.pack_d, xp.lone);
   same('and hunts exactly the same hour', { ...states.pack_d, meta: null, log: null }, { ...states.lone, meta: null, log: null });
   check('an alt that set out and went quiet lends its bonus only for the three minutes after it was seen',
@@ -893,7 +896,7 @@ await section('a long absence is caught up in slices', async () => {
   const T0 = NOW;
   const quick = newUser('quick');
   const slow = newUser('slow');
-  const busy = (s) => { s.skills.warfare = 2000; put(s, 'inv', 'provision_t1', 40); };
+  const busy = (s) => { s.skills.warfare = 2000; put(s, 'satchel', 'provision_t1', 40); };
   await seedSave(quick, 777, busy);
   await seedSave(slow, 777, busy);
   const setOut = () => [cmd('startSkill', { skillId: 'felling', actionId: 'felling_t1_raw', limit: null }), cmd('startHunt', { tier: 1, zone: 'outer', limit: null })];

@@ -2,7 +2,7 @@
    (stats, timers, reinforcements, disciplines, Sovereigns, hiding,
    retreats, death, limits, the cap, XP marks, loot, time away) plus what v5
    adds: counter rolls for loot and finds, wear on the hunt stream, remedies
-   from Belongings first, party XP, and the events and log lines.
+   out of the Satchel and nowhere else, party XP, and the events and log lines.
 
      node tests/engine/hunt.test.mjs */
 
@@ -143,7 +143,7 @@ await run(async () => {
       s = hunter(seed, { equipment: gearSet(GameData, 9, "light", "relic") });
       s.equipment.neck = null;
       s.equipment.ring = null;
-      put(s, "inv", "provision_t9", 500);
+      put(s, "satchel", "provision_t9", 500);
       a = await arena();
       c = hunt(s, 9, "inner");
       stepWhile(s, a.env, 50, () => c.phase !== "fight", 100);
@@ -705,20 +705,46 @@ await run(async () => {
   }
   {
     const s = hunter(74, { level: 20 });
-    put(s, "inv", "provision_t1", 5);
-    put(s, "inv", "provision_t3", 2);
-    put(s, "bank", "provision_t3", 5);
-    put(s, "vault", "provision_t4", 1);
+    put(s, "satchel", "provision_t1", 5);
+    put(s, "satchel", "provision_t3", 7);
+    put(s, "satchel", "provision_t4", 1);
     const a = await arena();
     const heals = [];
     a.emitter.on("hunt:fx", (p) => {
-      if (p.kind === "heal") heals.push([S.qtyIn(p.state, "vault", "provision_t4"), S.qtyIn(p.state, "inv", "provision_t3"), S.qtyIn(p.state, "bank", "provision_t3"), S.qtyIn(p.state, "inv", "provision_t1")]);
+      if (p.kind === "heal") heals.push(["provision_t4", "provision_t3", "provision_t1"].map((k) => S.qtyIn(p.state, "satchel", k)));
     });
     applyCommand(s, { type: "startHunt", args: { tier: 6, zone: "core", limit: null } }, a.env);
     stepWhile(s, a.env, 1000, () => !!s.tasks.combat, 3000);
-    same("Remedies: the best heal first, then Belongings before the Stockpile", heals.slice(0, 13),
-      [[0, 2, 5, 5], [0, 1, 5, 5], [0, 0, 5, 5], [0, 0, 4, 5], [0, 0, 3, 5], [0, 0, 2, 5], [0, 0, 1, 5], [0, 0, 0, 5], [0, 0, 0, 4], [0, 0, 0, 3], [0, 0, 0, 2], [0, 0, 0, 1], [0, 0, 0, 0]]);
-    check("bestRemedy and remedyHeals read the same order", Cb.bestRemedy(hunter(1)) === null);
+    same("Remedies: the best heal in the Satchel first, down to the weakest", heals.slice(0, 13),
+      [[0, 7, 5], [0, 6, 5], [0, 5, 5], [0, 4, 5], [0, 3, 5], [0, 2, 5], [0, 1, 5], [0, 0, 5], [0, 0, 4], [0, 0, 3], [0, 0, 2], [0, 0, 1], [0, 0, 0]]);
+    check("bestRemedy is null with nothing packed", Cb.bestRemedy(hunter(1)) === null);
+  }
+  {
+    // The same hunter, the same bottles, every one of them out of reach.
+    const s = hunter(74, { level: 20 });
+    put(s, "inv", "provision_t1", 5);
+    put(s, "bank", "provision_t3", 7);
+    put(s, "vault", "provision_t4", 1);
+    const a = await arena();
+    check("bestRemedy and remedyHeals see nothing outside the Satchel",
+      Cb.bestRemedy(s) === null && Cb.remedyHeals(s).length === 0 && Cb.huntOddsOpts(s, 6, "core").remedies.length === 0);
+    applyCommand(s, { type: "startHunt", args: { tier: 6, zone: "core", limit: null } }, a.env);
+    stepWhile(s, a.env, 1000, () => !!s.tasks.combat, 3000);
+    check("A remedy in Belongings is never drunk: no heal, and the bottles are all still there",
+      !a.fx.some((e) => e.kind === "heal") && S.qtyIn(s, "inv", "provision_t1") === 5 &&
+      S.qtyIn(s, "bank", "provision_t3") === 7 && S.qtyIn(s, "vault", "provision_t4") === 1);
+    check("and the hunter fell for want of them", s.stats.deaths === 1 && a.of("hunt:death").length === 1);
+  }
+  {
+    // Packed, the same fight is survived: the Satchel is what makes the difference.
+    const s = hunter(74, { level: 20 });
+    put(s, "satchel", "provision_t3", 7);
+    const a = await arena();
+    check("remedyHeals reads the Satchel, best first", JSON.stringify(Cb.remedyHeals(s)) === JSON.stringify(Array(7).fill(70)) && Cb.bestRemedy(s) === "provision_t3");
+    applyCommand(s, { type: "startHunt", args: { tier: 6, zone: "core", limit: null } }, a.env);
+    stepWhile(s, a.env, 1000, () => !!s.tasks.combat, 3000);
+    check("A remedy in the Satchel is drunk, and spent out of the Satchel",
+      a.fx.some((e) => e.kind === "heal") && S.qtyIn(s, "satchel", "provision_t3") < 7 && S.haveQty(s, "provision_t3") === S.qtyIn(s, "satchel", "provision_t3"));
   }
 
   section("Party XP");
@@ -747,7 +773,7 @@ await run(async () => {
   {
     const start = () => {
       const s = hunter(76, { level: 25, klass: "rogue", equipment: gearSet(GameData, 3, "rogue") });
-      put(s, "bank", "provision_t3", 30);
+      put(s, "satchel", "provision_t3", 30);
       s.wear[s.equipment.chest] = I.itemDef(s.equipment.chest).maxDur - 60;
       s.player.gold = 0;
       return s;

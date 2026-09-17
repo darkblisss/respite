@@ -32,6 +32,8 @@ const DIVERGED = {
   "projectOnce case ": { why: "the zone mix, the elite chances, the depth's power on foe health and damage, the hour-long hide and Threat that no longer clears on a pass or a retreat all move the fight" },
   "projectHunt case ": { why: "the same fight, summed over three runs" },
   "huntOddsOpts + projectHunt = huntOddsLater's answer": { why: "the same fight, as the zone popup plays it" },
+  "slotsUsed by pool": { why: "Belongings give a remedy a slot a bottle now, so a stack of four reads as four slots used where v4 counted one" },
+  "remedyHeals and the best remedy": { why: "the hunt drinks from the Satchel alone now, so bottles in Belongings and camp storage are reachable to nobody" },
 };
 
 // Each listing, and how many comparisons it covered.
@@ -302,8 +304,9 @@ await run(async () => {
     const s = both(stock);
     const costs = craftDefs.filter((d) => d.tier === 1).map((d) => d.cost);
     same("canPay and stockCovers for tier 1 recipes", costs.map((c) => [v4.call("canAfford", c), v4.call("stockCovers", { cost: c })]), costs.map((c) => [Sto.canPay(s, c), Sto.stockCovers(s, c)]));
-    same("haveQty, qtyIn, slotsUsed, orderedKeys", ["inv", "bank", "vault"].map((w) => [v4.call("slotsUsed", w), v4.call("orderedKeys", w), v4.call("qtyIn", w, "coal"), v4.call("slotCap", w)]),
-      ["inv", "bank", "vault"].map((w) => [Sto.slotsUsed(s, w), Sto.orderedKeys(s, w), Sto.qtyIn(s, w, "coal"), Sto.slotCap(s, w)]));
+    same("qtyIn, orderedKeys, slotCap", ["inv", "bank", "vault"].map((w) => [v4.call("orderedKeys", w), v4.call("qtyIn", w, "coal"), v4.call("slotCap", w)]),
+      ["inv", "bank", "vault"].map((w) => [Sto.orderedKeys(s, w), Sto.qtyIn(s, w, "coal"), Sto.slotCap(s, w)]));
+    same("slotsUsed by pool", ["inv", "bank", "vault"].map((w) => v4.call("slotsUsed", w)), ["inv", "bank", "vault"].map((w) => Sto.slotsUsed(s, w)));
     same("remedyHeals and the best remedy", [v4("remedyHeals()"), v4("bestFood()")], [Cb.remedyHeals(s), Cb.bestRemedy(s)]);
     same("heldEverywhere", v4("heldEverywhere()"), Sto.heldEverywhere(s));
     const bar = GameData.CRAFT_ACTIONS.forgemaster.find((d) => d.id === "craft_slag_bar");
@@ -391,6 +394,11 @@ await run(async () => {
       st.equipment = gearSet(GameData, 3, "warrior");
       st.inv.items.provision_t3 = 12; st.inv.order.push("provision_t3");
       st.bank.items.provision_t1 = 30; st.bank.order.push("provision_t1");
+      /* v4 drank from every pool, v5 from the Satchel alone. The same bottles
+         are written to both places so the odds are asked of the same loadout
+         in both dialects; only where they live has moved. */
+      st.satchel.items = { provision_t3: 12, provision_t1: 30 };
+      st.satchel.order = ["provision_t3", "provision_t1"];
       // The same Threat in both dialects: v4 reads it per zone, v5 per region.
       st.threat = { "3:middle": 60, 3: 60 };
       st.settings.hideSovereign = true;

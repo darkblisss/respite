@@ -957,7 +957,9 @@ export function oddsSignature(opts, tier, zone) {
 
 /* ================= 6. REMEDIES & LOOT ================= */
 
-// The best remedy held and where it is: best heal first, then Belongings, the Stockpile, the Vault.
+/* The best remedy in the Satchel and where it is: best heal first. Only the
+   Satchel is reachable in a fight, so a bottle left in Belongings or in camp
+   storage does nothing, however many of them there are. */
 function remedySpot(state) {
   let pick = null;
   for (const w of ORDER.eat) {
@@ -969,12 +971,13 @@ function remedySpot(state) {
   return pick;
 }
 
+// The next remedy the hunter would drink, or null when the Satchel is empty.
 export function bestRemedy(state) {
   const spot = remedySpot(state);
   return spot ? spot.key : null;
 }
 
-// Every remedy you hold, as heal amounts, best first. Capped: enough for any projection.
+// Every remedy the Satchel holds, as heal amounts, best first. Capped: enough for any projection.
 export function remedyHeals(state) {
   const out = [];
   ORDER.eat.forEach((w) => {

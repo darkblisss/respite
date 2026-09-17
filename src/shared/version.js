@@ -7,8 +7,9 @@
    browser predict differently, and the server turns it away.
    ============================================================ */
 
-/* 3: region-wide Threat, zone power multipliers and the new foe mix, Threat per
-   kill by archetype alone, a full hour of hiding as the only clearing besides a
-   felled Sovereign, the post-death wound, live XP/hr and DPS off a rolling window,
-   a pre-flight material check on skilling, and the halved party bonus. */
-export const ENGINE_VERSION = 3;
+/* 4: the Satchel. A fourth pool, the combat loadout, holding remedies and
+   nothing else; the hunt drinks from it alone, so a bottle in Belongings does
+   nothing in a fight; the Bonesetter sells into Belongings, where a remedy
+   costs a slot a bottle instead of stacking; and a save without a Satchel has
+   one packed for it on migration. */
+export const ENGINE_VERSION = 4;

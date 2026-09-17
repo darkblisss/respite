@@ -20,10 +20,19 @@ await run(async () => {
   const T0 = Date.UTC(2026, 8, 16, 9, 0);
   const fresh = (seed = 7) => createState({ now: T0, seed });
   const mats = Object.keys(GameData.MATERIALS).filter((k) => !GameData.MATERIALS[k].heal && k !== "vault_chest");
+  // The Satchel takes remedies alone, so it is filled with kinds of those.
+  const kinds = GameData.REMEDIES.map((r) => r.id);
   const fillAll = (s, pools = S.POOLS, keep = []) => {
     let i = 0;
+    let r = 0;
     for (const w of pools) {
       while (!S.isFull(s, w)) {
+        if (w === "satchel") {
+          const k = kinds[r++];
+          if (!k) break;
+          put(s, w, k, 1);
+          continue;
+        }
         const k = mats[i++];
         if (!keep.includes(k) && !S.POOLS.some((p) => Object.hasOwn(s[p].items, k))) put(s, w, k, 1);
       }
@@ -169,6 +178,7 @@ await run(async () => {
     fillAll(full, ["vault"]);
     refused("into a full pool", full, "moveItem", { key: "resin", from: "inv", to: "vault", qty: 1 }, "Vault is full.");
 
+
     const gold = s.player.gold;
     w.events.length = 0;
     check("sellItem earns gold", cmd(s, "sellItem", { key: "coal", from: "inv", qty: 3 }).ok && s.player.gold === gold + 3 && s.stats.goldEarned === 3 && s.inv.items.coal === 7 && w.of("item:sold")[0].gold === 3);
@@ -222,20 +232,61 @@ await run(async () => {
     refused("a junk pool", r, "reorder", { pool: "shelf", key: "coal", before: null }, "No such store.");
   }
 
+  section("Packing the Satchel");
+  {
+    const s = fresh();
+    put(s, "inv", "provision_t3", 6);
+    put(s, "bank", "provision_t9", 40);
+    put(s, "inv", "coal", 3);
+    w.events.length = 0;
+    check("moveItem packs remedies into the Satchel, where they stack to one slot",
+      cmd(s, "moveItem", { key: "provision_t3", from: "inv", to: "satchel", qty: null }).ok &&
+      s.satchel.items.provision_t3 === 6 && S.slotsUsed(s, "satchel") === 1 && !s.inv.items.provision_t3 &&
+      S.slotsUsed(s, "inv") === 1 && w.of("item:moved")[0].to === "satchel");
+    check("and from camp storage as well", cmd(s, "moveItem", { key: "provision_t9", from: "bank", to: "satchel", qty: 40 }).ok && s.satchel.items.provision_t9 === 40);
+    check("what is packed is still the camp's", S.haveQty(s, "provision_t3") === 6 && S.heldEverywhere(s).provision_t9 === 40);
+    refused("a material into the Satchel", s, "moveItem", { key: "coal", from: "inv", to: "satchel", qty: 1 }, "Satchel only takes remedies.");
+    const geared = fresh();
+    put(geared, "inv", "slag_sword|rare|c1.2", 1);
+    put(geared, "bank", "slag_pick", 1);
+    refused("a weapon into the Satchel", geared, "moveItem", { key: "slag_sword|rare|c1.2", from: "inv", to: "satchel", qty: 1 }, "Satchel only takes remedies.");
+    refused("a tool into the Satchel", geared, "moveItem", { key: "slag_pick", from: "bank", to: "satchel", qty: 1 }, "Satchel only takes remedies.");
+
+    check("unpacking part of the Satchel back into Belongings costs a slot a bottle",
+      cmd(s, "moveItem", { key: "provision_t3", from: "satchel", to: "inv", qty: 3 }).ok &&
+      s.satchel.items.provision_t3 === 3 && s.inv.items.provision_t3 === 3 && S.slotsUsed(s, "inv") === 4);
+    refused("more than Belongings has room for", s, "moveItem", { key: "provision_t9", from: "satchel", to: "inv", qty: 40 }, "Belongings is full.");
+    check("the refusal left the Satchel as it was", s.satchel.items.provision_t9 === 40 && s.inv.items.provision_t9 === undefined);
+    check("unpacking into the Stockpile takes the lot in one slot",
+      cmd(s, "moveItem", { key: "provision_t9", from: "satchel", to: "bank", qty: null }).ok &&
+      s.bank.items.provision_t9 === 40 && S.slotsUsed(s, "bank") === 1 && !s.satchel.items.provision_t9 && !s.satchel.order.includes("provision_t9"));
+
+    const packed = fresh();
+    put(packed, "satchel", "provision_t4", 10);
+    check("sellItem works out of the Satchel", cmd(packed, "sellItem", { key: "provision_t4", from: "satchel", qty: 4 }).ok && packed.satchel.items.provision_t4 === 6 && packed.player.gold === 72);
+    check("reorder works on the Satchel", cmd(packed, "reorder", { pool: "satchel", key: "provision_t4", before: null }).ok);
+  }
+
   section("The camp");
   {
     const s = fresh();
     s.player.gold = 1000;
     w.events.length = 0;
-    check("buyRemedy lands in Belongings", cmd(s, "buyRemedy", { key: "provision_t3", qty: 10 }).ok && s.inv.items.provision_t3 === 10 && s.player.gold === 850 && s.log.some((l) => l.m === "Bought 10 × Gravemoss Poultice."));
+    check("buyRemedy lands in Belongings, a slot a bottle, and never in the Satchel",
+      cmd(s, "buyRemedy", { key: "provision_t3", qty: 4 }).ok && s.inv.items.provision_t3 === 4 && S.slotsUsed(s, "inv") === 4 &&
+      S.slotsUsed(s, "satchel") === 0 && s.player.gold === 940 && s.log.some((l) => l.m === "Bought 4 × Gravemoss Poultice."));
     check("even the dearest remedies are sold, as in v4", W.shopStock(s).length === 6 && cmd(s, "buyRemedy", { key: "provision_t7", qty: 1 }).ok);
     refused("something not sold", s, "buyRemedy", { key: "coal", qty: 1 }, "The Bonesetter doesn't sell that.");
     for (const qty of [0, 1001, 2.5, "1", null]) refused(`qty ${JSON.stringify(qty)}`, s, "buyRemedy", { key: "provision_t1", qty }, "Buy 1 to 1,000 at a time.");
     refused("without the gold", s, "buyRemedy", { key: "provision_t9", qty: 1 }, "Not enough gold.");
+    // Six slots left in Belongings, so a lot of seven is refused whole: gold and shelf both untouched.
+    refused("more bottles than Belongings can hold", s, "buyRemedy", { key: "provision_t1", qty: 7 }, "Nowhere to put it.");
+    check("and what does fit still goes through", cmd(s, "buyRemedy", { key: "provision_t1", qty: 5 }).ok && S.slotsUsed(s, "inv") === 10);
     const full = fresh();
     full.player.gold = 1000;
     fillAll(full);
     refused("with nowhere to put it", full, "buyRemedy", { key: "provision_t1", qty: 1 }, "Nowhere to put it.");
+    check("a full Satchel is no help: the Bonesetter never packs it", S.isFull(full, "satchel") && S.qtyIn(full, "inv", "provision_t1") === 0);
 
     const lot = W.smugglerStock(s)[1];
     s.player.gold = lot.price + 5;
