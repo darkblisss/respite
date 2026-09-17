@@ -313,6 +313,8 @@ async function boot() {
   app.net.onAuthChange(onAuth);
 
   await loadPopups();
+  // A Discord redirect comes home with a ?code=: spend it before asking who is signed in.
+  if (app.net.enabled && typeof app.net.finishOAuth === "function") await app.net.finishOAuth();
   const session = app.net.enabled ? await app.net.session() : null;
   if (session) startAccount(session);
   else startGuest();

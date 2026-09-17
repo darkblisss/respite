@@ -16,7 +16,6 @@ import { iconEl } from "../icons.js";
 import { confirm, openModal, toast } from "../overlay.js";
 import { openPopup, registerPopup } from "../widgets.js";
 import { fmtAgo, fmtWhole } from "../format.js";
-import { ENGINE_VERSION } from "../../../shared/version.js";
 import { hasProgress } from "../../store.js";
 import { cleanUsername, passwordError, usernameError } from "../../net.js";
 
@@ -41,8 +40,11 @@ registerPopup("settings", (ctx) => {
   const offs = [];
   const acct = ctx.account;
   const guest = acct.mode !== "account";
-  // Names are stored lowercase; the camp shows them the way the Character page does.
-  const name = acct.username ? acct.username.charAt(0).toUpperCase() + acct.username.slice(1) : "Commander";
+  /* Names are stored lowercase; the camp shows them the way the Character page does.
+     A Discord account's email is not one of ours, so the session carries no username
+     and the server's own name (on the save) is the one to show. */
+  const known = acct.username || ctx.state.meta.account || "";
+  const name = known ? known.charAt(0).toUpperCase() + known.slice(1) : "Commander";
   let modal;
 
   /* ---- account ---- */
@@ -69,7 +71,7 @@ registerPopup("settings", (ctx) => {
     });
     accountBody = h("div.well.account",
       h("span.avatar", { "aria-hidden": "true" }, name.charAt(0).toUpperCase()),
-      h("div.grow", h("span.strong", name), h("span.small.muted", "Your camp is kept on the server.")),
+      h("div.grow", h("span.strong", name)),
       signOut);
   }
   const accountNote = h("span.small", { class: guest ? "muted" : "t-good" }, guest ? "Not signed in" : "Signed in");
@@ -81,8 +83,8 @@ registerPopup("settings", (ctx) => {
   const connection = h("div.stats",
     stat("Status", status),
     guest ? null : stat("Last sync", lastSync),
-    guest ? null : stat("Waiting to send", waiting),
-    stat("Rules", h("span.v", `Edition ${ENGINE_VERSION}`)));
+    // No "Rules: Edition N": it was the engine's schema number, which says nothing to a player.
+    guest ? null : stat("Waiting to send", waiting));
 
   const paint = () => {
     const [text, tone] = connectionText(ctx);
@@ -164,7 +166,7 @@ const COPY = {
   },
   create: {
     title: "Create an account",
-    sub: "A name is yours for good: parties and the Hiscores know you by it",
+    sub: "A name is yours for good: parties and the Leaderboard know you by it",
     art: "user-plus",
     verb: "Create account",
     leave: "A new account starts from a ruin of its own. Everything in this guest camp stays behind, for good.",
@@ -194,9 +196,40 @@ registerPopup("account", (ctx, { mode = "signin" } = {}) => {
       ? h("p.modal-note", "This guest camp stays behind when you sign in.")
       : null;
 
+  /* Discord, above the fields: it is one press either way, so it does not care which
+     tab you are on. The server names a Discord account itself (handler.js's
+     accountFor falls back to a p_ name off the user id when the email is not one of
+     ours), so there is nothing to fill in here. */
+  const discord = ctx.net && ctx.net.enabled && typeof ctx.net.signInWithDiscord === "function"
+    ? h("button.btn.btn-oauth", { type: "button" }, iconEl("party"), "Continue with Discord")
+    : null;
+  if (discord) {
+    discord.addEventListener("click", async () => {
+      showError(null);
+      if (ctx.account.mode === "guest" && hasProgress(ctx.state)) {
+        const leave = await confirm({
+          title: "Leave this camp behind?",
+          body: COPY[current].leave,
+          confirmText: "Continue with Discord",
+          danger: true,
+        });
+        if (!leave) return;
+      }
+      discord.classList.add("is-loading");
+      discord.disabled = true;
+      // On success the page leaves for Discord, so the button is never let go of.
+      const error = await ctx.net.signInWithDiscord();
+      if (!error) return;
+      discord.classList.remove("is-loading");
+      discord.disabled = false;
+      showError(error);
+    });
+  }
+
   const form = h("form.vstack.gap-3", { novalidate: true },
     h("div.seg.seg-full", { role: "tablist", "aria-label": "Account" }, tabIn, tabCreate),
     note,
+    ...(discord ? [discord, h("div.divider-or", h("span", "or with a username"))] : []),
     h("div.set-fields",
       h("div.field", h("label.field-label", { for: "acctUser" }, "Username"), user, userHint),
       h("div.field", h("label.field-label", { for: "acctPass" }, "Password"), pass, passHint)),

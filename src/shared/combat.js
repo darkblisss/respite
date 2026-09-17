@@ -44,15 +44,39 @@ function landed(x, rng) {
 
 /* ================= 1. ZONES, THREAT & FOES ================= */
 
-export const threatKey = (tier, zone) => `${tier}:${zone}`;
+/* Threat is region-wide: every zone of a region shares one counter, so the key is
+   the tier alone. (Saves from before this keyed it "tier:zone"; the migration takes
+   the highest zone of each region forward.) It is kept unrounded, because Threat
+   per kill is fractional and rounding each one away would wreck the pacing. */
+export const threatKey = (tier) => String(tier);
 
-export function threatIn(state, tier, zone) {
-  const key = threatKey(tier, zone);
+export function threatIn(state, tier, _zone) {
+  const key = threatKey(tier);
   return (state.threat && Object.hasOwn(state.threat, key) && state.threat[key]) || 0;
 }
 
-function setThreat(state, tier, zone, n) {
-  state.threat[threatKey(tier, zone)] = clamp(Math.round(n), 0, H.threatCap);
+// What a player is shown. The counter itself keeps its fraction.
+export const threatShown = (n) => Math.floor(n);
+
+function setThreat(state, tier, _zone, n) {
+  state.threat[threatKey(tier)] = clamp(n, 0, H.threatCap);
+}
+
+/* Best time survived on a given ground, in milliseconds. Banked whenever a hunt
+   ends, however it ended, so pulling out early banks the lower time it earned and
+   the record only moves on a genuinely longer run. */
+export const recordKey = (tier, zone) => `${tier}:${zone}`;
+
+export function bestRun(state, tier, zone) {
+  const key = recordKey(tier, zone);
+  return (state.records && Object.hasOwn(state.records, key) && state.records[key]) || 0;
+}
+
+function bankRun(state, c) {
+  if (!c || !(c.elapsed > 0)) return;
+  const key = recordKey(c.tier, c.zone);
+  const ms = Math.round(c.elapsed);
+  if (ms > ((state.records && state.records[key]) || 0)) state.records[key] = ms;
 }
 
 // [[value, weight], ...] -> one value.
@@ -71,12 +95,16 @@ function rollFoe(tier, zone, rng) {
   return { mob: foeOf(tier, arch), elite: rng() < zone.elite };
 }
 
-// A foe's numbers with the Elite modifier folded in.
-export function foeNumbers(mob, elite) {
+/* A foe's numbers with the Elite modifier folded in, and the zone's depth on top.
+   `power` touches health and damage only: XP, gold and Threat are the same foe's
+   whatever depth it stands at, so deeper ground pays the same per kill for a
+   harder fight. */
+export function foeNumbers(mob, elite, power = 1) {
   const e = elite ? GameData.ELITE : null;
+  const p = Number.isFinite(power) && power > 0 ? power : 1;
   return {
-    hp: Math.round(mob.hp * (e ? e.hp : 1)),
-    attack: mob.attack * (e ? e.attack : 1),
+    hp: Math.round(mob.hp * (e ? e.hp : 1) * p),
+    attack: mob.attack * (e ? e.attack : 1) * p,
     xp: mob.xp * (e ? e.xp : 1),
     threat: mob.threat + (e ? e.threat : 0),
     gold: mob.gold.map((g) => Math.round(g * (e ? e.gold : 1))),
@@ -120,7 +148,9 @@ function blankHunt(tier, zone, limit) {
     foes: [], uid: 1,
     swing: 0, volley: 0, veil: 0, streak: 0,
     peak: false, sovereignNext: false, encounters: 0,
-    xp: 0, marks: [[0, 0]], nextMark: H.xpMarkMs, xpRate: null,
+    // xp and dmg run the whole hunt; marks sample both so XP/hr and DPS can be read
+    // off a rolling window at any instant. See huntRates.
+    xp: 0, dmg: 0, marks: [[0, 0, 0]], nextMark: H.rateMarkMs,
   };
 }
 
@@ -166,13 +196,15 @@ export function startHunt(state, { tier, zone, limit } = {}, env) {
   const c = state.tasks.combat;
   if (c && c.tier === tier && c.zone === zone) {
     // Already out on this ground: the fight carries on, the count starts again.
+    // The count starting again banks whatever the run so far was worth as a record.
+    bankRun(state, c);
     c.limit = limit == null ? null : limit;
     c.done = 0;
     c.elapsed = 0;
-    c.nextMark = H.xpMarkMs;
-    c.marks = [[0, 0]];
+    c.nextMark = H.rateMarkMs;
+    c.marks = [[0, 0, 0]];
     c.xp = 0;
-    c.xpRate = null;
+    c.dmg = 0;
     c.startedAt = state.clock;
   } else {
     const hunt = newHunt(state, tier, zone, limit);
@@ -194,6 +226,7 @@ export function startHunt(state, { tier, zone, limit } = {}, env) {
 export function pullBack(state, _args, _env) {
   const c = state.tasks.combat;
   if (!c) return { ok: true };
+  bankRun(state, c);
   state.player.camp = campNote(state, c, state.clock);
   state.tasks.combat = null;
   return { ok: true };
@@ -206,6 +239,21 @@ export function setHide(state, { on } = {}, env) {
   return { ok: true };
 }
 
+/* XP/hr and DPS as they stand this instant: from the oldest sample still inside the
+   rolling window up to now. Worked out on every read rather than written once a
+   mark, so the figures move continuously instead of sitting still for minutes and
+   then jumping. null while the window is too short to mean anything. */
+export function huntRates(c) {
+  if (!c || !Array.isArray(c.marks) || !c.marks.length) return { xpRate: null, dps: null };
+  const [t0, x0, d0] = c.marks[0];
+  const span = c.elapsed - t0;
+  if (!(span >= H.rateMinSpanMs)) return { xpRate: null, dps: null };
+  return {
+    xpRate: ((c.xp - x0) * 3600000) / span,
+    dps: ((c.dmg - (d0 || 0)) * 1000) / span,
+  };
+}
+
 // The live hunt at a glance, for the topbar, the arena and the Character page.
 export function combatPlan(state) {
   const c = state.tasks.combat;
@@ -214,10 +262,12 @@ export function combatPlan(state) {
   const target = c.phase === "fight" ? c.foes[0] || null : null;
   let pct = 0;
   if (target) pct = clamp((target.hp / target.max) * 100, 0, 100);
+  const rates = huntRates(c);
   return {
     c, zone, region: regionOfTier(c.tier), phase: c.phase, kind: c.kind,
     target, mob: target ? getMonster(target.id) : null, pct,
-    done: c.done, limit: c.limit, xpRate: c.xpRate, threat: threatIn(state, c.tier, c.zone),
+    done: c.done, limit: c.limit, xpRate: rates.xpRate, dps: rates.dps,
+    threat: threatShown(threatIn(state, c.tier, c.zone)),
     timeLeft: Math.max(0, IDLE_CAP - c.elapsed),
   };
 }
@@ -288,7 +338,7 @@ function move(ctx, ms) {
 function fireDue(ctx) {
   const c = ctx.c;
   for (let guard = 0; guard < 500 && !ctx.over; guard++) {
-    if (c.elapsed >= c.nextMark - EPS) { markXp(c); continue; }
+    if (c.elapsed >= c.nextMark - EPS) { markRate(c); continue; }
     if (c.elapsed >= IDLE_CAP - EPS) { endHunt(ctx, "cap"); return; }
 
     if (c.phase !== "fight") {
@@ -331,20 +381,25 @@ export function nextHuntDue(state) {
   return untilNext({ c });
 }
 
-// XP/hr: every five minutes, what the last hour (or the hunt so far) earned.
-function markXp(c) {
-  c.marks.push([c.nextMark, c.xp]);
-  while (c.marks.length > (60 * 60 * 1000) / H.xpMarkMs + 1) c.marks.shift();
-  const [t0, x0] = c.marks[0];
-  c.xpRate = ((c.xp - x0) * 3600000) / Math.max(1, c.nextMark - t0);
-  c.nextMark += H.xpMarkMs;
+/* A sample of the run so far, taken every rateMarkMs and kept for an hour. The
+   rates themselves are read off this window on demand: see huntRates. */
+function markRate(c) {
+  c.marks.push([c.nextMark, c.xp, c.dmg]);
+  while (c.marks.length > H.rateWindowMs / H.rateMarkMs + 1) c.marks.shift();
+  c.nextMark += H.rateMarkMs;
+}
+
+// Damage you dealt, for DPS. Every source counts: blows, splash, bleed and thorns.
+function dealt(c, n) {
+  if (n > 0) c.dmg += n;
 }
 
 function addFoe(ctx, mob, elite, ambush) {
   const c = ctx.c;
-  const n = foeNumbers(mob, elite);
+  const power = getZone(c.zone).power || 1;
+  const n = foeNumbers(mob, elite, power);
   const f = {
-    uid: c.uid++, id: mob.id, elite: !!elite, hp: n.hp, max: n.hp, ambush: !!ambush,
+    uid: c.uid++, id: mob.id, elite: !!elite, power, hp: n.hp, max: n.hp, ambush: !!ambush,
     // A reinforcement has the initiative. Everything else staggers in.
     timer: ambush ? 300 + ctx.rng() * 400 : mob.speed * (0.45 + ctx.rng() * 0.35),
     bleed: 0, bleedTimer: 0,
@@ -483,6 +538,7 @@ function playerSwing(ctx) {
   c.swing = c.volley > 0 ? H.volleyGapMs : s.speed;
 
   target.hp -= dmg;
+  dealt(c, dmg);
   ctx.fx(target.uid, technique ? kind : crit ? "crit" : "hit", dmg);
 
   // A Mage's empowered casts wash over everything else in the fight too.
@@ -490,6 +546,7 @@ function playerSwing(ctx) {
   splash.forEach((f) => {
     const hit = playerBlow(s, getMonster(f.id), c.tier, mult * T.splash, false, pen, rng);
     f.hp -= hit;
+    dealt(c, hit);
     ctx.fx(f.uid, kind, hit);
   });
 
@@ -504,7 +561,7 @@ function foeSwing(ctx, f) {
   const mob = getMonster(f.id);
   f.timer += mob.speed;
 
-  let raw = foeNumbers(mob, f.elite).attack * (f.ambush ? H.foeAmbush : 1);
+  let raw = foeNumbers(mob, f.elite, f.power).attack * (f.ambush ? H.foeAmbush : 1);
   if (mob.archetype === "sovereign") raw *= 1 + c.enrage * GameData.SOVEREIGN.enrage;
   raw *= 1 - mitigation(s.defence, c.tier);
   if (s.resilient && p.hp < s.maxHp * 0.35) raw *= 0.8;
@@ -527,6 +584,7 @@ function foeSwing(ctx, f) {
     if (s.thorned) {
       const thorns = Math.max(1, Math.round(dmg * 0.15));
       f.hp -= thorns;
+      dealt(c, thorns);
       ctx.fx(f.uid, "thorns", thorns);
     }
   }
@@ -543,6 +601,7 @@ function foeSwing(ctx, f) {
 
 function bleedTick(ctx, f) {
   f.hp -= f.bleed;
+  dealt(ctx.c, f.bleed);
   ctx.fx(f.uid, "bleed", f.bleed);
   f.bleed = Math.max(0, f.bleed - 1);
   f.bleedTimer = 1000;
@@ -566,7 +625,7 @@ function killFoe(ctx, f) {
 
   const mob = getMonster(f.id);
   const zone = getZone(c.zone);
-  const n = foeNumbers(mob, f.elite);
+  const n = foeNumbers(mob, f.elite, f.power);
   c.done++;
   ctx.fx(f.uid, "kill", 0);
   ctx.gainXp(n.xp * zone.xp);
@@ -574,12 +633,15 @@ function killFoe(ctx, f) {
   ctx.killed(mob, f.elite);
 
   if (mob.archetype === "sovereign") {
+    // Felling the region's Sovereign is one of the two things that clears Threat.
+    ctx.setThreat(0);
     ctx.sovereignDown(mob);
   } else if (c.kind === "normal") {
+    // Archetype alone: the zone mix already sends this up with depth.
     const before = ctx.threat();
-    const after = Math.min(H.threatCap, before + Math.round(n.threat * zone.threat));
+    const after = Math.min(H.threatCap, before + n.threat * H.threatPerKill);
     if (after !== before) ctx.setThreat(after);
-    if (after >= H.threatCap) c.peak = true;
+    if (after >= H.threatCap - EPS) c.peak = true;
   }
 
   if (c.limit != null && c.done >= c.limit) {
@@ -590,7 +652,12 @@ function killFoe(ctx, f) {
 }
 
 /* An encounter is over. Cleared inside the window, the rest of the window is
-   the walk to the next one. A Threat peak is settled here, between fights. */
+   the walk to the next one. A Threat peak is settled here, between fights.
+
+   Threat clears in exactly two places now: felling the Sovereign (killFoe) and
+   sitting out a full hide (leaveHiding). Surviving a Sovereign without killing it,
+   or having it pass you by, leaves the region as hot as it was, so hiding is the
+   only reliable way down and dying is never a shortcut. */
 function endEncounter(ctx) {
   const c = ctx.c;
   const zone = getZone(c.zone);
@@ -604,7 +671,6 @@ function endEncounter(ctx) {
   c.enrage = 0;
 
   if (wasSovereign) {
-    ctx.setThreat(0);
     c.peak = false;
     c.wait = H.searchMinMs;
     return;
@@ -621,22 +687,24 @@ function endEncounter(ctx) {
       c.wait = H.searchMinMs;
       return;
     }
-    ctx.setThreat(0);
+    // It did not come this time. The region stays at its peak and it may come next.
     ctx.passed();
   }
 
   c.wait = Math.max(H.searchMinMs, zone.windowMs - took);
 }
 
+// Going to ground clears nothing yet: the hour has to be sat out first.
 function goToGround(ctx) {
   const c = ctx.c;
-  ctx.setThreat(0);
   c.phase = "hide";
   c.wait = H.hideMs;
   ctx.hid();
 }
 
+// A full hide, seen through: the region forgets you.
 function leaveHiding(ctx) {
+  ctx.setThreat(0);
   ctx.c.phase = "search";
   ctx.c.wait = H.searchMinMs;
 }
@@ -651,9 +719,10 @@ function retreat(ctx) {
   endEncounter(ctx);
 }
 
+/* Dying clears no Threat, whatever put you down. That is the whole point: hiding
+   costs an hour and buys a clean region, death costs a revive and a debuff and
+   buys nothing, so there is never a reason to farm deaths instead of hiding. */
 function die(ctx, mob) {
-  // A Sovereign that has put you down is done with this ground for now.
-  if (ctx.c.kind === "sovereign") ctx.setThreat(0);
   ctx.over = true;
   ctx.died(mob);
 }
@@ -745,11 +814,19 @@ function liveHunt(state, c, env, nowAt) {
     died: (mob) => {
       const at = nowAt();
       const took = c.elapsed;
+      bankRun(state, c);
       state.tasks.combat = null;
       state.player.camp = null;
       state.stats.deaths++;
-      state.player.hp = maxHp(state);
+      // Which foe, and how often: the Collection's bestiary reads this beside the kill count.
+      state.foeDeaths[mob.id] = (state.foeDeaths[mob.id] || 0) + 1;
+      /* The wound runs from the moment you are back on your feet, not from the fall,
+         so the five minutes down and the ten minutes weak do not overlap. Set before
+         the health reset, so you come round at the wounded maximum rather than being
+         clipped back to it on the next frame. */
+      state.debuff = { until: at + H.recoveryMs + H.deathDebuffMs, mult: 1 - H.deathDebuff };
       state.player.recoveryLeft = H.recoveryMs;
+      state.player.hp = maxHp(state);
       GameData.EQUIP_SLOTS.forEach((slot) => {
         const key = state.equipment[slot];
         const d = key ? itemDef(key) : null;
@@ -759,6 +836,7 @@ function liveHunt(state, c, env, nowAt) {
       emit(state, env, "hunt:death", { monsterId: mob.id, elapsedMs: Math.round(took), at });
     },
     ended: (reason) => {
+      bankRun(state, c);
       state.player.camp = campNote(state, c, nowAt());
       state.tasks.combat = null;
       say("hunt:ended", { reason, kills: c.done, elapsedMs: Math.round(c.elapsed) });

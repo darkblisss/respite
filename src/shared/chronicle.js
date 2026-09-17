@@ -9,6 +9,7 @@
    a mastery step) is left to the browser: those return null here.
    ============================================================ */
 
+import { CONFIG } from "./config.js";
 import { GameData, getCompanion, getClass, getMonster, getRegion, getZone, regionOfTier, skillName, findAction } from "./registry.js";
 import { itemName } from "./items.js";
 import { foeTitle } from "./combat.js";
@@ -59,7 +60,8 @@ const LINES = {
     return `You broke away from ${mob ? mob.name : "a Sovereign's guard"} after ${fmtTime(p.fightMs)}.`;
   },
 
-  "hunt:hide": (p) => `Threat peaked in the ${zonePlace(p.tier, p.zone)}. You went to ground for five minutes.`,
+  // Read off the rules rather than written out, so the sentence cannot drift from hideMs again.
+  "hunt:hide": (p) => `Threat peaked in the ${zonePlace(p.tier, p.zone)}. You went to ground for ${fmtTime(CONFIG.hunt.hideMs)}, and the region forgets you once you have sat it out.`,
 
   "hunt:passed": (p) => `Something vast moved through the ${zonePlace(p.tier, p.zone)} and did not find you.`,
 

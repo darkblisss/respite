@@ -65,13 +65,29 @@ const progression = {
 const hunt = {
   playerSwingMs: 2400,          // Brute Force, and a Stalker
   recoveryMs: 5 * 60 * 1000,    // out of the hunt after a death
-  hideMs: 5 * 60 * 1000,        // lying low when Threat peaks
+  hideMs: 60 * 60 * 1000,       // a full hour of lying low: one of only two things that clears Threat
+
+  /* What a death leaves behind once you are back on your feet: every combat stat
+     down this much, for this long. Dying is a costly detour, not a shortcut -- it
+     clears no Threat, so hiding stays the correct play. */
+  deathDebuff: 0.15,
+  deathDebuffMs: 10 * 60 * 1000,
+
   deathWear: 25,                // durability every worn piece loses on a death
   threatCap: 100,
+
+  /* Threat per weak-equivalent kill. The archetype multiplier (Skirmisher 1,
+     Stalker 2, Brute 3) is the only other dial: the zone mix already sends Threat
+     up with depth, so a second per-zone multiplier double-counted it. Threat is
+     region-wide, not per zone. */
+  threatPerKill: 0.7,
+
   veilMax: 100,
   maxFoes: 3,
   searchMinMs: 3000,            // the shortest walk between encounters
-  xpMarkMs: 5 * 60 * 1000,      // XP/hr is measured again this often, over the last hour
+  rateMarkMs: 10 * 1000,        // a sample for the XP/hr and DPS window, this often
+  rateWindowMs: 60 * 60 * 1000, // how much of the run those rates look back over
+  rateMinSpanMs: 1000,          // below this the window is too short to read a rate off
   foeAmbush: 1.5,               // a reinforcement's first blow lands this much harder
   volleyGapMs: 450,             // between a Mage's opening casts
   remedyAt: 0.45,               // a remedy is taken at or below this share of health
@@ -173,10 +189,12 @@ const bench = {
 
 /* ================= 10. PARTIES ================= */
 
+/* Partying is for the company, not the numbers: the bonus is small on purpose,
+   and the draw is a shared fight rather than a multiplier worth chasing. */
 const party = {
   maxSize: 4,
-  huntBonusPerMember: 0.10,
-  huntBonusCap: 0.30,
+  huntBonusPerMember: 0.05,
+  huntBonusCap: 0.15,           // the three others you can have, at 5% each
 };
 
 /* ================= 11. FORMULAS ================= */

@@ -78,8 +78,14 @@ await run(async () => {
 
   section("Zones, foes and economy");
   {
-    const zones = GameData.ZONES.map((z) => [z.id, z.windowMs, z.threat, z.sizes.map((x) => x[0]).join("/")]);
-    same("Four zones: Outer 60s, Middle 50s, Inner 40s, Core 30s", zones, [["outer", 60000, 1, "1/2"], ["middle", 50000, 1.25, "1/2"], ["inner", 40000, 1.5, "2/3"], ["core", 30000, 2, "3"]]);
+    const zones = GameData.ZONES.map((z) => [z.id, z.windowMs, z.power, z.sizes.map((x) => x[0]).join("/")]);
+    same("Four zones: Outer 60s, Middle 50s, Inner 40s, Core 30s, and power climbing to 1.4 at the Core",
+      zones, [["outer", 60000, 1, "1/2"], ["middle", 50000, 1.15, "1/2"], ["inner", 40000, 1.27, "2/3"], ["core", 30000, 1.4, "3"]]);
+    const t1stalker = foeOf(1, "stalker");
+    const scaled = GameData.ZONES.map((z) => Cb.foeNumbers(t1stalker, false, z.power));
+    check("Power scales a foe's health and damage with depth, and leaves its XP, gold and Threat alone",
+      scaled.every((n, i) => n.hp === Math.round(t1stalker.hp * GameData.ZONES[i].power) && Math.abs(n.attack - t1stalker.attack * GameData.ZONES[i].power) < 1e-12) &&
+      new Set(scaled.map((n) => `${n.xp}|${n.threat}|${n.gold.join()}`)).size === 1, scaled.map((n) => [n.hp, n.xp, n.threat]));
     const t1 = ["skirmisher", "stalker", "brute"].map((a) => foeOf(1, a));
     check("Ashen Verge: Carrion Rat, Ash Stalker, Ash Brute", t1.map((m) => m.name).join(",") === "Carrion Rat,Ash Stalker,Ash Brute");
     check("Skirmisher 2.0s, Stalker 2.4s, Brute 3.0s", t1.map((m) => m.speed).join(",") === "2000,2400,3000");
@@ -200,7 +206,8 @@ await run(async () => {
   section("Threat, Sovereigns and hiding");
   {
     const s = hunter(21, { level: 99, klass: "warrior", equipment: gearSet(GameData, 9, "warrior", "relic") });
-    s.threat["1:core"] = 99;
+    // Threat is region-wide: keyed by tier alone, whatever zone you stand in.
+    s.threat["1"] = 99;
     const a = await arena();
     const c = hunt(s, 1, "core");
     stepWhile(s, a.env, 100, () => c.kind !== "sovereign" && !!s.tasks.combat, 20000);
@@ -228,32 +235,45 @@ await run(async () => {
   {
     const s = hunter(22, { level: 99, equipment: gearSet(GameData, 9, "warrior", "relic") });
     s.settings.hideSovereign = true;
-    s.threat["1:middle"] = 99;
+    s.threat["1"] = 99;
     const a = await arena();
     const c = hunt(s, 1, "middle");
     stepWhile(s, a.env, 100, () => c.phase !== "hide", 20000);
-    check("Hide ticked: Threat peaks, you go to ground for five minutes and it goes on the log",
-      c.phase === "hide" && Math.round(c.wait) > 295000 && Cb.threatIn(s, 1, "middle") === 0 && logHas(s, /^Threat peaked in the Middle of The Ashen Verge\. You went to ground for five minutes\.$/));
+    /* The line itself is only matched as far as the ground it names: chronicle.js and
+       listeners.js both still promise five minutes, which is no longer what the hide
+       is. Pinning either wording here would cement one of them, so the length is
+       asserted off the hunt instead, where it is true. */
+    check("Hide ticked: Threat peaks and you go to ground for an hour, and it goes on the log",
+      c.phase === "hide" && Math.round(c.wait) > H.hideMs - 5000 && H.hideMs === 3600000 && logHas(s, /^Threat peaked in the Middle of The Ashen Verge\. You went to ground/), { wait: Math.round(c.wait) });
+    check("Going to ground clears nothing yet: the region is as hot as it was until the hour is sat out",
+      Cb.threatIn(s, 1, "middle") >= H.threatCap - 1e-6, Cb.threatIn(s, 1, "middle"));
     check("hunt:hide carries the ground", a.of("hunt:hide").length === 1 && a.of("hunt:hide")[0].tier === 1 && a.of("hunt:hide")[0].zone === "middle");
     const kills = c.done;
-    for (let i = 0; i < 2990; i++) step(s, a.env, 100);
-    const still = c.phase === "hide" && c.done === kills;
-    for (let i = 0; i < 200; i++) step(s, a.env, 100);
-    check("No hunting while hidden, and the hunt picks itself back up after", still && (c.phase !== "hide" || c.done > kills));
+    // Just short of the hour: still hidden, still hot, still not hunting.
+    for (let i = 0; i < 35990; i++) step(s, a.env, 100);
+    const still = c.phase === "hide" && c.done === kills && Cb.threatIn(s, 1, "middle") >= H.threatCap - 1e-6;
+    let atLeaving = null;
+    for (let i = 0; i < 200 && atLeaving === null; i++) {
+      step(s, a.env, 100);
+      if (c.phase !== "hide") atLeaving = Cb.threatIn(s, 1, "middle");
+    }
+    for (let i = 0; i < 600; i++) step(s, a.env, 100);
+    check("No hunting while hidden, and the hunt picks itself back up after", still && atLeaving !== null && c.done > kills, { still, phase: c.phase, kills: c.done - kills });
+    check("Sitting the hour out is the other thing that clears Threat", atLeaving === 0, atLeaving);
   }
   {
     // Outer, and the Sovereign doesn't come: find a hunt stream where the roll fails.
     let passed = null;
     for (let seed = 1; seed < 40 && !passed; seed++) {
       const s = hunter(seed, { level: 99, equipment: gearSet(GameData, 9, "warrior", "relic") });
-      s.threat["1:outer"] = 99;
+      s.threat["1"] = 99;
       const a = await arena();
       const c = hunt(s, 1, "outer");
       stepWhile(s, a.env, 100, () => !a.of("hunt:passed").length && !c.sovereignNext && c.kind !== "sovereign", 3000);
       if (a.of("hunt:passed").length) passed = { threat: Cb.threatIn(s, 1, "outer"), next: c.sovereignNext, line: logFind(s, /did not find you/), event: a.of("hunt:passed")[0] };
     }
-    check("Outer: when the Sovereign doesn't come, Threat settles and the log says so",
-      !!passed && passed.threat === 0 && !passed.next && passed.line === "Something vast moved through the Outer of The Ashen Verge and did not find you." && passed.event.zone === "outer", passed);
+    check("Outer: when the Sovereign doesn't come, the region stays at its peak and the log says so",
+      !!passed && passed.threat >= H.threatCap - 1e-6 && !passed.next && passed.line === "Something vast moved through the Outer of The Ashen Verge and did not find you." && passed.event.zone === "outer", passed);
   }
   {
     const s = hunter(31);
@@ -269,15 +289,15 @@ await run(async () => {
   }
   {
     const s = hunter(40, { level: 30, equipment: gearSet(GameData, 3, "warrior") });
-    s.threat["1:core"] = 100;
+    s.threat["1"] = 100;
     const a = await arena();
     const c = hunt(s, 1, "core");
     c.sovereignNext = true;
     c.wait = 3000;
     s.settings.hideSovereign = true;
     step(s, a.env, 3500);
-    check("Hide ticked after the Sovereign set out still sends you to ground",
-      c.phase === "hide" && !c.foes.some((f) => getMonster(f.id).archetype === "sovereign") && Cb.threatIn(s, 1, "core") === 0 && logHas(s, /went to ground/));
+    check("Hide ticked after the Sovereign set out still sends you to ground, with the region still hot",
+      c.phase === "hide" && !c.foes.some((f) => getMonster(f.id).archetype === "sovereign") && Cb.threatIn(s, 1, "core") === 100 && logHas(s, /went to ground/), { phase: c.phase, threat: Cb.threatIn(s, 1, "core") });
   }
   {
     const s = hunter(41);
@@ -297,12 +317,22 @@ await run(async () => {
   }
   {
     const s = hunter(42);
-    s.threat["9:core"] = 100;
+    s.threat["9"] = 100;
     const a = await arena();
     const c = hunt(s, 9, "core");
     c.sovereignNext = true;
     stepWhile(s, a.env, 250, () => !!s.tasks.combat, 1000);
-    check("Dying to a Sovereign settles that zone's Threat", s.stats.deaths === 1 && Cb.threatIn(s, 9, "core") === 0);
+    const fell = a.of("hunt:death")[0] || {};
+    check("Falling in a Sovereign's fight is no shortcut: the region keeps its Threat", s.stats.deaths === 1 && Cb.threatIn(s, 9, "core") === 100, Cb.threatIn(s, 9, "core"));
+    // The wound runs from the moment you are back up, so the five minutes down and the ten minutes weak don't overlap.
+    check("A death is counted against the foe that dealt it and leaves a wound on every combat number",
+      s.foeDeaths[fell.monsterId] === 1 && Object.keys(s.foeDeaths).length === 1 && !!s.debuff && s.debuff.mult === 1 - H.deathDebuff &&
+      s.debuff.until === fell.at + H.recoveryMs + H.deathDebuffMs && St.deathPenalty(s) === 1 - H.deathDebuff, { fell, foeDeaths: s.foeDeaths, debuff: s.debuff });
+    const whole = St.combatStats({ level: 1, klass: null, equipment: {} });
+    const hurt = St.statsOf(s);
+    check("and the wound is off the stat sheet too, until it runs out",
+      hurt.maxHp === Math.round(whole.maxHp * (1 - H.deathDebuff)) && hurt.attack < whole.attack && hurt.wounded === 1 - H.deathDebuff &&
+      St.deathPenalty(s, s.debuff.until) === 1 && St.statsOf(s, s.debuff.until).maxHp === whole.maxHp, { hurt: hurt.maxHp, whole: whole.maxHp });
   }
   {
     const s = hunter(43);
@@ -455,7 +485,7 @@ await run(async () => {
     const c = s.tasks.combat;
     const wait = c.wait;
     c.elapsed = CAP - 1000;
-    c.nextMark = (Math.floor(c.elapsed / H.xpMarkMs) + 1) * H.xpMarkMs;
+    c.nextMark = (Math.floor(c.elapsed / H.rateMarkMs) + 1) * H.rateMarkMs;
     step(s, a.env, 2000);
     const ended = a.of("hunt:ended")[0];
     check("Twelve hours up: the note is taken when the cap came, with the walk left then",
@@ -574,21 +604,50 @@ await run(async () => {
     check("and the whole-millisecond offset it ended at", Cb.huntStep(s, 5000, a.env, s.clock) === 1234 && s.tasks.combat === null);
   }
 
-  section("XP an hour");
+  section("XP an hour and damage a second");
+  {
+    const s = hunter(52, { level: 30, equipment: gearSet(GameData, 3, "warrior") });
+    const a = await arena();
+    applyCommand(s, { type: "startHunt", args: { tier: 1, zone: "middle", limit: null } }, a.env);
+    const c = s.tasks.combat;
+    const rates = () => Cb.huntRates(c);
+    step(s, a.env, H.rateMinSpanMs - 100);
+    check("The rates say nothing while the window is under a second wide", rates().xpRate === null && rates().dps === null, rates());
+    step(s, a.env, 200);
+    check("and read from a second on, rather than waiting out a mark", rates().xpRate !== null && rates().dps !== null && c.elapsed < H.rateMarkMs, { elapsed: c.elapsed, rates: rates() });
+  }
   {
     const s = hunter(51, { level: 30, equipment: gearSet(GameData, 3, "warrior") });
     const a = await arena();
     applyCommand(s, { type: "startHunt", args: { tier: 1, zone: "middle", limit: null } }, a.env);
     const c = s.tasks.combat;
+    const rates = () => Cb.huntRates(c);
     const samples = [];
     for (let m = 1; m <= 70; m++) {
       for (let i = 0; i < 60; i++) step(s, a.env, 1000);
-      samples.push({ m, rate: c.xpRate === null ? null : Math.round(c.xpRate), xp: c.xp });
+      samples.push({ m, rate: rates().xpRate, dps: rates().dps, xp: c.xp, dmg: c.dmg, marks: c.marks.length, from: c.marks[0][0] });
     }
-    check("XP/hr waits for the first five minutes", samples[3].rate === null && samples[4].rate !== null);
-    check("XP/hr is measured every five minutes, not every tick", samples[4].rate === samples[5].rate && samples[8].rate === samples[5].rate && samples[9].rate !== samples[8].rate);
-    check("XP/hr at five minutes is that stretch scaled to the hour", Math.abs(samples[4].rate - samples[4].xp * 12) <= Math.max(2, samples[4].xp * 12 * 0.02), samples[4]);
-    check("After an hour, XP/hr covers only the last hour", c.marks.length === 13 && c.marks[0][0] === 600000, c.marks.length);
+    // Nothing has dropped out of the window yet, so the figures cover the whole run.
+    check("XP/hr at five minutes is that stretch scaled to the hour",
+      samples[4].from === 0 && samples[4].marks === 31 && Math.abs(samples[4].rate - samples[4].xp * 12) < 1e-6, samples[4]);
+    check("XP/hr and DPS are worked out live, so they move between one mark and the next",
+      samples[20].rate !== samples[21].rate && samples[20].dps !== samples[21].dps, [samples[20], samples[21]]);
+    {
+      // Read either side of a single ten-second mark: the figures move, the samples don't.
+      const before = { marks: c.marks.length, rate: rates().xpRate, dps: rates().dps };
+      step(s, a.env, H.rateMarkMs / 2);
+      const after = { marks: c.marks.length, rate: rates().xpRate, dps: rates().dps };
+      check("A sample is taken every ten seconds; the figures do not wait for it",
+        after.marks === before.marks && after.rate !== before.rate && after.dps !== before.dps, { before, after });
+    }
+    check("After an hour the window looks back an hour and no further",
+      c.marks.length === H.rateWindowMs / H.rateMarkMs + 1 && c.elapsed - c.marks[0][0] <= H.rateWindowMs + H.rateMarkMs, { marks: c.marks.length, span: c.elapsed - c.marks[0][0] });
+    const [t0, x0, d0] = c.marks[0];
+    same("and both figures are that window's XP and damage, scaled to the hour and the second",
+      [rates().xpRate, rates().dps], [((c.xp - x0) * 3600000) / (c.elapsed - t0), ((c.dmg - d0) * 1000) / (c.elapsed - t0)]);
+    check("Damage dealt is counted as it lands, and every mark carries its reading",
+      c.dmg > 0 && c.marks.every((mk) => mk.length === 3) && d0 > 0 && c.dmg > d0, { dmg: c.dmg, d0 });
+    check("The hunt keeps no stored rate of its own any more", !("xpRate" in c) && !("dps" in c));
   }
 
   /* ================= LOOT ================= */
@@ -679,8 +738,9 @@ await run(async () => {
     stepWhile(beside, w2.env, 1000, () => !!beside.tasks.combat, 600);
     stepWhile(other, w3.env, 1000, () => !!other.tasks.combat, 600);
     const gain = (s) => s.skills.warfare - X[40];
-    check("Two members on the same ground at the same time: +20% Hunt XP", Math.abs(gain(beside) / gain(alone) - 1.2) < 1e-9, gain(beside) / gain(alone));
-    check("capped at +30%", Math.abs(gain(other) / gain(alone) - 1.3) < 1e-9, gain(other) / gain(alone));
+    // 5% a member now, and no more than the three others you can have: the draw is the company, not the multiplier.
+    check("Two members on the same ground at the same time: +10% Hunt XP", Math.abs(gain(beside) / gain(alone) - 1.1) < 1e-9, gain(beside) / gain(alone));
+    check("capped at +15%", Math.abs(gain(other) / gain(alone) - 1.15) < 1e-9, gain(other) / gain(alone));
   }
 
   section("Time away plays out the same");

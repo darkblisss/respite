@@ -634,6 +634,29 @@ button.chip:disabled { opacity: .45; }
   margin: var(--sp-4) 0;
 }
 
+/* A way in that is not a username: one full-width button, then a labelled rule
+   before the fields, so neither route looks like the afterthought. */
+.btn-oauth {
+  width: 100%;
+  justify-content: center;
+}
+
+.divider-or {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  font-size: var(--text-xs);
+  color: var(--bone-faint);
+}
+
+.divider-or::before,
+.divider-or::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line-soft);
+}
+
 .page {
   display: flex;
   flex-direction: column;
@@ -765,6 +788,22 @@ button.chip:disabled { opacity: .45; }
   grid-template-areas:
     "art main level"
     "xp xp xp";
+}
+
+/* A hero with no art box: the skill pages keep their icon in the sidebar alone,
+   so the art column goes rather than leaving a column gap where it stood. */
+.hero:not(:has(> .art)) {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "main level"
+    "tags level"
+    "xp xp";
+}
+
+.hero:not(:has(> .art)):not(:has(> .hero-tags)) {
+  grid-template-areas:
+    "main level"
+    "xp xp";
 }
 
 .hero::after {
@@ -2243,6 +2282,13 @@ button.chip:disabled { opacity: .45; }
 }
 
 .modal-foot .btn { min-width: 112px; }
+
+/* A sheet that is one decision (the gather/craft order): the picker and the verb
+   both sit down the middle rather than trailing off to the right. */
+.modal-center-foot > .modal-foot { justify-content: center; }
+.modal-center-foot .qty { justify-content: center; }
+.modal-center-foot .qty-presets { justify-content: center; }
+.modal-center-foot .ap-plan { justify-content: center; }
 
 /* Many actions: a two-column grid, with .wide buttons across both. */
 .modal-foot.is-grid {

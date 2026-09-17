@@ -121,9 +121,28 @@ export function combatStats(loadout) {
   };
 }
 
-// The save's own hunter.
-export function statsOf(state) {
-  return combatStats({ level: skillLevel(state, "warfare"), klass: state.player.klass, equipment: state.equipment });
+/* What a recent death still costs you, as a multiplier on every combat number.
+   It runs on the world clock, so it ticks down while you are away too. 1 when
+   whole. */
+export function deathPenalty(state, at = state.clock) {
+  const d = state.debuff;
+  if (!d || !(d.until > at)) return 1;
+  return d.mult;
+}
+
+/* The save's own hunter, with a recent death's wound already taken off. Everything
+   that reads a hunter's numbers comes through here, so the penalty lands on the
+   fight, the projections and the stat sheet at once and cannot be read around. */
+export function statsOf(state, at = state.clock) {
+  const s = combatStats({ level: skillLevel(state, "warfare"), klass: state.player.klass, equipment: state.equipment });
+  const wounded = deathPenalty(state, at);
+  if (wounded >= 1) return s;
+  s.maxHp = Math.max(1, Math.round(s.maxHp * wounded));
+  s.attack *= wounded;
+  s.defence *= wounded;
+  s.crit *= wounded;
+  s.wounded = wounded;
+  return s;
 }
 
 export function maxHp(state) {

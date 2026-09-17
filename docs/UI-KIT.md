@@ -384,10 +384,12 @@ const off = on(el("view"), "click", ".item-pill .pill-hit", (e, btn) => {
 ### 6.2 icons.js
 
 - `ICONS`: `{ name: svgInnerMarkup }`, 109 hand-drawn 24 by 24 stroke icons (1.5 stroke, round caps).
-- `icon(name, cls?) -> string`: `<svg class="ico cls" viewBox="0 0 24 24" ... aria-hidden="true" focusable="false">`. Unknown names draw `unknown`.
+- `icon(name, cls?) -> string`: `<svg class="ico cls" width="24" height="24" viewBox="0 0 24 24" ... aria-hidden="true" focusable="false">`. Unknown names draw `unknown`.
 - `iconEl(name, cls?) -> SVGElement`: a fresh element each call (parsed once per name and class, then cloned).
 
 Sizes: `.ico` is 20px; `.ico-xs` 14, `.ico-sm` 16, `.ico-md` 20, `.ico-lg` 24, `.ico-xl` 32, `.ico-2xl` 44. Most components size their own icons, so you rarely need these. Icons are `aria-hidden`: give the control a label.
+
+The `width` and `height` attributes are the icon's own size, and they are not optional: an `<svg>` with only a `viewBox` has no intrinsic size, and Safari lays it out from the attributes on the first paint. Every `.ico` rule still wins over them, so the sizes above are what you see. The copies baked into `index.html` carry them too.
 
 Names (all v4 names are kept, unchanged):
 

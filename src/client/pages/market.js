@@ -410,7 +410,7 @@ function marketBody(ctx, page, actions) {
     const name = String(row.item_name || "Goods");
     const time = h("span");
     const buy = own
-      ? h("button.btn.btn-quiet.btn-sm", { type: "button", "data-act": "cancel", "aria-label": `Take ${name} off the market` }, "Cancel")
+      ? h("button.btn.btn-quiet.btn-sm", { type: "button", "data-act": "cancel", "aria-label": `Take ${name} off the market` }, "Remove")
       : h("button.btn.btn-gold.btn-soft.btn-sm", { type: "button", "data-act": "buy", "aria-label": `Buy ${name}` }, "Buy");
     const node = h("div.listing", { role: "row", class: { "is-mine": own }, dataset: { id: String(row.id) } },
       h("div.listing-item", { role: "cell" },
@@ -420,10 +420,11 @@ function marketBody(ctx, page, actions) {
           h("div.lr-sub", `${kindLine(row)} · `, time))),
       h("div.listing-qty", { role: "cell" }, h("span.listing-l", "Left"), fmtWhole(num(row.qty_left))),
       h("div.listing-price", { role: "cell" }, h("span.listing-l", "Each"), fmtGold(num(row.price_each))),
+      // No "Yours" badge: a pill that isn't a button reads as one. The row's own
+      // tint and left accent (.listing.is-mine) carry it instead.
       h("div.listing-seller", { role: "cell" },
         h("span.listing-l", "Seller"),
-        h("span.truncate", display(row.seller_name)),
-        own ? h("span.tag.tag-violet", "Yours") : null),
+        h("span.truncate", display(row.seller_name))),
       h("div.listing-buy", { role: "cell" }, buy));
     return { row, node, buy, time, own };
   }
@@ -512,7 +513,7 @@ function marketBody(ctx, page, actions) {
       const sold = qty - num(row.qty_left);
       const sub = h("div.lr-sub");
       const cancel = status === "open"
-        ? h("button.btn.btn-quiet.btn-sm", { type: "button", "data-act": "cancel", "aria-label": `Take ${row.item_name} off the market` }, "Cancel")
+        ? h("button.btn.btn-quiet.btn-sm", { type: "button", "data-act": "cancel", "aria-label": `Take ${row.item_name} off the market` }, "Remove")
         : null;
       // How much of it has sold, as the kit's thin gold bar.
       let bar = null;
@@ -527,7 +528,9 @@ function marketBody(ctx, page, actions) {
           h("div.lr-title", `${row.item_name} · ${fmtGold(num(row.price_each))} each`),
           sub,
           bar),
-        h("div.lr-end", h("span.tag", { class: tone }, label), cancel));
+        // "Open" needs no badge: the Remove button already says the listing is live.
+        // Sold, Expired and Taken back still carry something worth reading.
+        h("div.lr-end", status === "open" ? null : h("span.tag", { class: tone }, label), cancel));
       return { row, node, sub, cancel };
     });
     mineBox.replaceChildren(h("div.list", mineShown.map((s) => s.node)));

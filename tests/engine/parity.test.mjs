@@ -1,13 +1,86 @@
 /* Parity with v4. The v4 scripts run in a vm context; the v5 modules are
    imported; the same questions go to both and the answers must match, value
-   for value. Projections must match exactly (same seeds, same floats): that
-   is the proof the encounter engine was ported faithfully.
+   for value. Projections match exactly (same seeds, same floats) wherever the
+   rules have not moved: that is the proof the encounter engine was ported
+   faithfully.
+
+   Where the balance has deliberately moved on from v4, the comparison is listed
+   in DIVERGED below with the reason. Those report as CHANGED and are counted on
+   their own. Everything else still has to match v4 value for value, so
+   accidental drift is still a failure.
 
      node tests/engine/parity.test.mjs */
 
-import { run, check, section, same, loadV4, shared, clone, gearSet } from "./harness.mjs";
+import { run, check, section, same as sameExact, firstDiff, loadV4, shared, clone, gearSet } from "./harness.mjs";
 
 const range = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+
+/* ================= INTENTIONAL DIVERGENCE ================= */
+
+/* Keys are assertion names, or the start of one where the name carries the run's
+   own numbers. `at` names the fields that were meant to move: they are dropped
+   from both sides and the rest of that answer still has to match v4 exactly. A
+   path is dotted from the root, as in "zone.power"; a lone name drops that field
+   wherever it sits. A listing whose two sides have come back together is a
+   failure, so this map cannot quietly rot. */
+const DIVERGED = {
+  threatKey: { why: "Threat is region-wide now, so the key is the tier alone and the zone no longer parts it" },
+  combatPlan: {
+    why: "the stored xpRate became XP/hr and DPS read live off the rolling window, and the zone row the plan carries has power in place of its Threat multiplier",
+    at: ["xpRate", "dps", "zone.threat", "zone.power", "zone.mix", "zone.elite"],
+  },
+  "projectOnce case ": { why: "the zone mix, the elite chances, the depth's power on foe health and damage, the hour-long hide and Threat that no longer clears on a pass or a retreat all move the fight" },
+  "projectHunt case ": { why: "the same fight, summed over three runs" },
+  "huntOddsOpts + projectHunt = huntOddsLater's answer": { why: "the same fight, as the zone popup plays it" },
+};
+
+// Each listing, and how many comparisons it covered.
+const divergences = new Map();
+let changed = 0;
+
+function divergenceOf(name) {
+  const keys = Object.keys(DIVERGED).filter((k) => k === name || name.startsWith(k));
+  const key = keys.sort((a, b) => b.length - a.length)[0];
+  return key ? { key, ...DIVERGED[key] } : null;
+}
+
+// A copy of value with the listed paths dropped, each matched by its full path or its own name.
+function without(value, paths, at = "") {
+  if (Array.isArray(value)) return value.map((v, i) => without(v, paths, `${at}[${i}]`));
+  if (value && typeof value === "object") {
+    const out = {};
+    Object.keys(value).forEach((k) => {
+      const path = at ? `${at}.${k}` : k;
+      if (paths.includes(path) || paths.includes(k)) return;
+      out[k] = without(value[k], paths, path);
+    });
+    return out;
+  }
+  return value;
+}
+
+const nullish = (v) => v === null || v === undefined;
+const diff = (a, b, tolerance) => firstDiff(clone(a === undefined ? null : a), clone(b === undefined ? null : b), "$", tolerance);
+
+/* PASS when the two agree, CHANGED when they differ and the difference is a
+   listed one, FAIL otherwise. A listed comparison that agrees is a FAIL too: the
+   listing is stale. So is one where v5 has stopped answering at all. CHANGED
+   comes back as "changed", which is neither of check()'s answers. */
+function same(name, a, b, tolerance = 0) {
+  const d = divergenceOf(name);
+  if (!d) return sameExact(name, a, b, tolerance);
+  if (!diff(a, b, tolerance)) return check(name, false, "listed in DIVERGED, but v4 and v5 agree: take it out");
+  if (nullish(a) !== nullish(b)) return check(name, false, `one side has stopped answering: ${JSON.stringify(a)} vs ${JSON.stringify(b)}`);
+  // Everything the divergence does not cover still has to match v4 exactly.
+  if (d.at) {
+    const rest = diff(without(a, d.at), without(b, d.at), tolerance);
+    if (rest) return check(name, false, `moved outside ${d.at.join(", ")}: ${rest}`);
+  }
+  changed++;
+  divergences.set(d.key, (divergences.get(d.key) || 0) + 1);
+  console.log(`CHANGED ${name} (${d.why})`);
+  return "changed";
+}
 
 await run(async () => {
   section("Loading");
@@ -264,7 +337,8 @@ await run(async () => {
     hunt.foes = [{ uid: 1, id: "mob_t3_brute", elite: true, hp: 50, max: 200, ambush: false, timer: 10, bleed: 0, bleedTimer: 0 }];
     hunt.xpRate = 1234.5;
     hunt.elapsed = 5000;
-    const s = both((st) => { st.tasks.combat = hunt; st.threat = { "3:inner": 42 }; });
+    // The same Threat in both dialects: v4 reads it per zone, v5 per region.
+    const s = both((st) => { st.tasks.combat = hunt; st.threat = { "3:inner": 42, 3: 42 }; });
     same("combatPlan", v4("combatPlan()"), Cb.combatPlan(s));
   }
 
@@ -288,14 +362,21 @@ await run(async () => {
       { tier: 6, zone: "outer", hide: false, lo: { level: 55, klass: "warrior", equipment: { ...gearSet(GameData, 6, "warrior", "rare"), weapon: "star_greatsword|relic|4|furious", offhand: null, head: "star_helm|relic|4|resilient", feet: "star_hboots|relic|4|stalwart" } }, remedies: heals(15, 380) },
     ];
     let exact = 0;
+    let moved = 0;
     for (const [i, c] of cases.entries()) {
       const stats = St.combatStats(c.lo);
       const opts = { stats, hide: c.hide, remedies: c.remedies || [], threat: c.threat || 0, xpMult: c.xpMult, hp: c.hp, horizonMs: c.horizonMs, chunkMs: c.chunkMs, seed: 11 + i };
       const a = v4.call("projectOnce", c.tier, c.zone, clone(opts));
       const b = Cb.projectOnce(c.tier, c.zone, clone(opts));
-      if (same(`projectOnce case ${i + 1}: Lv ${c.lo.level} ${c.lo.klass || "Brute Force"}, tier ${c.tier} ${c.zone}${c.hide ? ", hiding" : ""} (${b.kills} kills, ${b.died ? "died" : "lasted"})`, a, b)) exact++;
+      const got = same(`projectOnce case ${i + 1}: Lv ${c.lo.level} ${c.lo.klass || "Brute Force"}, tier ${c.tier} ${c.zone}${c.hide ? ", hiding" : ""} (${b.kills} kills, ${b.died ? "died" : "lasted"})`, a, b);
+      if (got === true) exact++;
+      if (got === "changed") moved++;
     }
-    check("at least 12 projection cases match exactly", exact >= 12 && exact === cases.length, `${exact} of ${cases.length}`);
+    /* The fight itself has moved on, so these no longer match v4 run for run. What
+       the suite still holds is that every case lands on one side or the other: an
+       exact match, or a divergence recorded above with its reason. A case that is
+       neither has drifted by accident. */
+    check("every projection case either matches v4 exactly or is a recorded divergence", exact + moved === cases.length, `${exact} exact, ${moved} changed, of ${cases.length}`);
     for (const [i, c] of cases.slice(0, 6).entries()) {
       const opts = { stats: St.combatStats(c.lo), hide: c.hide, remedies: c.remedies || [], threat: c.threat || 0, runs: 3, horizonMs: 4 * 3600000 };
       same(`projectHunt case ${i + 1} (three runs, summed)`, v4.call("projectHunt", c.tier, c.zone, clone(opts)), Cb.projectHunt(c.tier, c.zone, clone(opts)));
@@ -310,7 +391,8 @@ await run(async () => {
       st.equipment = gearSet(GameData, 3, "warrior");
       st.inv.items.provision_t3 = 12; st.inv.order.push("provision_t3");
       st.bank.items.provision_t1 = 30; st.bank.order.push("provision_t1");
-      st.threat = { "3:middle": 60 };
+      // The same Threat in both dialects: v4 reads it per zone, v5 per region.
+      st.threat = { "3:middle": 60, 3: 60 };
       st.settings.hideSovereign = true;
       st.companions = { owned: { hound: { bond: 100, rank: 2, dupes: 0 } }, active: "hound" };
     });
@@ -323,4 +405,11 @@ await run(async () => {
     check("oddsSignature = huntOddsLater's cache signature", v4("oddsCache.sig") === Cb.oddsSignature(opts, 3, "middle"), `${v4("oddsCache.sig").slice(0, 80)} vs ${Cb.oddsSignature(opts, 3, "middle").slice(0, 80)}`);
     v4.set("setTimeout", () => 0);
   }
+
+  section("Intentional divergences from v4");
+  check("every listing in DIVERGED was reached and carries a reason",
+    divergences.size === Object.keys(DIVERGED).length && [...divergences.keys()].every((k) => DIVERGED[k].why.length > 10),
+    `reached ${[...divergences.keys()].join(", ")} of ${Object.keys(DIVERGED).length} listed`);
+  divergences.forEach((n, key) => console.log(`  ${key}${n > 1 ? ` (${n} comparisons)` : ""}: ${DIVERGED[key].why}`));
+  console.log(`  ${changed} comparisons changed, ${divergences.size} reasons`);
 });

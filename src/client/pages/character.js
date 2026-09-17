@@ -1,19 +1,38 @@
 /* ============================================================
    Respite · pages/character.js · The Muster
    ------------------------------------------------------------
-   #/character, the page the camp opens on. Who you are and where,
-   what the crews and the hunt are doing right now, how you stand
-   in a fight, and every skill at a glance. Nothing a discipline
-   brings (its tag, the Veil) shows before one is chosen.
+   #/character, the page the camp opens on. The hero says who you
+   are and where; four tabs under it hold the rest.
+
+   Character  what you wear beside what it makes of you, and what
+              the crews and the hunt are doing right now
+   Skills     every skill at a glance
+   Collection the bestiary: one entry a foe, a name until you have
+              put one down
+   Record     what the camp has done since it was founded
+
+   The paperdoll and the Standing panel are the Satchel's own
+   (pages/armaments.js exports both), so there is one of each in
+   the repo. Nothing a discipline brings (its tag, the Veil) shows
+   before one is chosen.
+
+   Only the tab on screen is updated, so three quarters of the page
+   costs nothing on a frame; every panel builds once and is rebuilt
+   only when its shape changes.
    ============================================================ */
 
-import { h, setText, setWidth, setAttr, toggleClass } from "../ui/dom.js";
+import { h, on, setText, setWidth, setAttr, toggleClass } from "../ui/dom.js";
 import { iconEl } from "../ui/icons.js";
-import { fmt, fmtWhole, fmtGold, fmtTime, fmtStat, chancePct, titleCase } from "../ui/format.js";
+import { fmt, fmtWhole, fmtGold, fmtTime, fmtStat, titleCase } from "../ui/format.js";
 import { chipNode } from "../ui/popups/action.js";
+import { monsterArt, foeKills, foeFalls } from "../ui/popups/foe.js";
+import { openPopup } from "../ui/widgets.js";
+import { dollCard, standingCard } from "./armaments.js";
 import { CONFIG } from "../../shared/config.js";
-import { ARTISAN_ORDER, GameData, SKILL_ORDER, TRADE_ORDER, getSkill, getClass } from "../../shared/registry.js";
-import { totalLevel, xpProgress, statsOf } from "../../shared/stats.js";
+import {
+  ARTISAN_ORDER, GameData, SKILL_ORDER, TRADE_ORDER, getSkill, getClass, foesOf, sovereignOf, regionOfTier,
+} from "../../shared/registry.js";
+import { totalLevel, xpProgress } from "../../shared/stats.js";
 import { skillPlan } from "../../shared/skills.js";
 import { combatPlan } from "../../shared/combat.js";
 import { currentRegion } from "../../shared/world.js";
@@ -178,59 +197,42 @@ function huntCard(ctx) {
     const c = cp.c;
     toggleClass(live.fill, "nojump", cp.pct < 6);
     setWidth(live.fill, cp.pct);
-    const kills = c.limit == null ? `${fmtWhole(c.done)} kills` : `${fmtWhole(c.done)} of ${fmtWhole(c.limit)} kills`;
+    const kills = `${fmtWhole(c.done)} kills`;
     setText(live.count, c.phase === "hide"
       ? `${kills} · Hiding, ${fmtTime(c.wait)} left`
-      : `${kills} · ${c.xpRate == null ? "XP/hr soon" : `${fmt(Math.round(c.xpRate))} XP/hr`}`);
+      : `${kills} · ${cp.xpRate == null ? "Reckoning" : `${fmt(Math.round(cp.xpRate))} XP/hr`}`);
     setText(live.left, `${fmtTime(cp.timeLeft)} left`);
   };
   return card;
 }
 
-/* ================= 3. STANDING ================= */
+/* ================= 3. TAB: CHARACTER ================= */
+/* The Satchel's paperdoll and its Standing, side by side rather than
+   stacked, with what is running under them. The slot grid is the Satchel's
+   own and is not touched here, only put somewhere else. */
 
-// Six numbers for everyone; a discipline opens three more of the fight, the Veil among them.
-function standingRows(state) {
-  const s = statsOf(state);
-  const st = state.stats;
-  const rows = [["Health", fmtWhole(s.maxHp)], ["Attack", fmtStat(s.attack)], ["Defence", fmtStat(s.defence)]];
-  if (state.player.klass) {
-    rows.push(
-      ["Crit chance", chancePct(s.crit)],
-      ["Swing", `${(s.speed / 1000).toFixed(1)}s`],
-      s.klass === "mage" ? ["Veil a second", fmtStat(s.absorb)] : ["Veil a blow", fmtStat(s.veilGain)],
-    );
-  }
-  rows.push(["Kills", fmtWhole(st.kills)], ["Deaths", fmtWhole(st.deaths)], ["Gold earned", fmtGold(st.goldEarned), "gold"]);
-  return rows;
-}
+function faceView(ctx) {
+  const doll = dollCard(ctx, { link: { href: "#/armaments", label: "Satchel" } });
+  const standing = standingCard();
+  const bench = benchCard(ctx);
+  const hunt = huntCard(ctx);
 
-function standingView() {
-  const grid = h("div.standing");
-  const node = h("section.card",
-    h("div.card-head",
-      h("div", h("h2.card-title", "Standing")),
-      h("div.card-actions", h("a.btn.btn-sm.btn-quiet", { href: "#/armaments" }, "Armaments", iconEl("arrow-right")))),
-    grid);
-  let labels = null;
-  let values = [];
+  const node = h("div.char-stack",
+    h("div.char-face", doll.node, standing.node),
+    h("div.grid-cards.max-2", bench.node, hunt.node));
 
   return {
     node,
-    update(state) {
-      const rows = standingRows(state);
-      const sig = rows.map((r) => r[0]).join("|");
-      if (sig !== labels) {
-        labels = sig;
-        values = rows.map(([, , tone]) => h("div.v", { class: tone && `t-${tone}` }));
-        grid.replaceChildren(...rows.map(([l], i) => h("div.standing-cell", values[i], h("div.eyebrow.l", l))));
-      }
-      rows.forEach((r, i) => setText(values[i], r[1]));
+    update(next, state) {
+      doll.update(next);
+      standing.update(next);
+      bench.update(state);
+      hunt.update(state);
     },
   };
 }
 
-/* ================= 4. SKILLS ================= */
+/* ================= 4. TAB: SKILLS ================= */
 
 function skillsView() {
   const cards = SKILL_ORDER.map((id) => {
@@ -263,7 +265,7 @@ function skillsView() {
 
   return {
     node,
-    update(state) {
+    update(next, state) {
       const task = state.tasks.skilling;
       const hunting = !!state.tasks.combat;
       cards.forEach((c) => {
@@ -287,7 +289,298 @@ function numberWord(n) {
   return words[n] || fmtWhole(n);
 }
 
-/* ================= 5. THE PAGE ================= */
+/* ================= 5. TAB: COLLECTION ================= */
+/* Every foe in the world, by region, three of a kind and the Sovereign
+   under them as the quarry lists them. One you have never felled is a
+   name and a lock: no drawing, no numbers, nothing to open. */
+
+// Every monster, region by region, the Sovereign last.
+const BESTIARY = GameData.REGIONS.map((region) => ({
+  region,
+  mobs: foesOf(region.tier).filter(Boolean).concat([sovereignOf(region.tier)]).filter(Boolean),
+}));
+const BESTIARY_COUNT = BESTIARY.reduce((n, r) => n + r.mobs.length, 0);
+
+// What a foe you have met reads under its name.
+function foeLine(state, mob) {
+  const kind = mob.archetype === "sovereign" ? "Sovereign" : GameData.ARCHETYPES[mob.archetype].name;
+  const falls = foeFalls(state, mob.id);
+  const words = [kind, `${fmt(foeKills(state, mob.id))} felled`];
+  if (falls) words.push(`${fmt(falls)} of yours`);
+  return words.join(" · ");
+}
+
+function foundTile(mob) {
+  const sov = mob.archetype === "sovereign";
+  const sub = h("span.foe-tile-sub");
+  const node = h("button.foe-tile", { type: "button", class: { "is-sovereign": sov }, dataset: { monster: mob.id } },
+    h("span.foe-art", { html: monsterArt(mob) }),
+    h("span.foe-tile-main", h("span.foe-tile-name", mob.name), sub),
+    sov ? h("span.tag.tag-sovereign", "Sovereign") : null);
+  return { mob, node, sub, kills: null, falls: null };
+}
+
+function lockedTile(mob) {
+  const sov = mob.archetype === "sovereign";
+  const node = h("div.foe-tile.is-locked", { class: { "is-sovereign": sov } },
+    h("span.foe-art", { "aria-hidden": "true" }, iconEl("lock")),
+    h("span.foe-tile-main",
+      h("span.foe-tile-name", mob.name),
+      // Greying alone says nothing to a reader who cannot see it.
+      h("span.sr-only", "Not felled yet")),
+    sov ? h("span.tag.tag-sovereign", "Sovereign") : null);
+  return { mob, node, sub: null };
+}
+
+function collectionView(ctx) {
+  const foundChip = h("span.chip");
+  const groups = h("div.char-bestiary");
+  const node = h("section.section",
+    h("div.section-head",
+      h("div",
+        h("h2.section-title", "Collection"),
+        h("p.section-sub", "Everything that lives out there. One you have felled opens; one you have not stays a name.")),
+      h("div.card-actions", foundChip)),
+    groups);
+
+  let sig = null;
+  let refs = [];
+
+  // A foe you have met is worth opening, so the record inside the popup has something in it.
+  const offClick = on(groups, "click", ".foe-tile[data-monster]", (e, b) => {
+    openPopup("foe", ctx, b.dataset.monster);
+  });
+
+  return {
+    node,
+    destroy() { offClick(); },
+    update(next, state) {
+      // The shape changes only when something is felled for the first time.
+      const nextSig = BESTIARY.map((r) => r.mobs.map((m) => (foeKills(state, m.id) ? "1" : "0")).join("")).join("");
+      if (nextSig !== sig) {
+        sig = nextSig;
+        refs = [];
+        let found = 0;
+        groups.replaceChildren(...BESTIARY.map(({ region, mobs }) => {
+          const tiles = mobs.map((mob) => {
+            const met = foeKills(state, mob.id) > 0;
+            if (met) found++;
+            const ref = met ? foundTile(mob) : lockedTile(mob);
+            refs.push(ref);
+            return ref.node;
+          });
+          return h("div.skills-group",
+            h("div.eyebrow", `${region.name} · Tier ${region.tier}`),
+            h("div.grid-cards", tiles));
+        }));
+        setText(foundChip, `${fmtWhole(found)} of ${fmtWhole(BESTIARY_COUNT)} felled`);
+      }
+      // Counts move with every kill, so they are written in place, and only the ones that moved.
+      refs.forEach((r) => {
+        if (!r.sub) return;
+        const kills = foeKills(state, r.mob.id);
+        const falls = foeFalls(state, r.mob.id);
+        if (kills === r.kills && falls === r.falls) return;
+        r.kills = kills;
+        r.falls = falls;
+        setText(r.sub, foeLine(state, r.mob));
+      });
+    },
+  };
+}
+
+/* ================= 6. TAB: RECORD ================= */
+/* What the camp has done since it was founded. Every figure is already in
+   the save; nothing here is counted a second time. */
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/* "17 Sep 2026" for the day a camp was founded. UTC, as every reset in the
+   game is, and spelled out by hand so every browser writes it the same
+   (the Sky popup says its days the same way). */
+function fmtDay(ms) {
+  const d = new Date(Number(ms) || 0);
+  if (!Number.isFinite(d.getTime())) return "Unknown";
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
+function bigRows(state) {
+  const st = state.stats;
+  return [
+    ["Felled", fmt(st.kills)],
+    ["Falls", fmtWhole(st.deaths)],
+    ["Sovereigns", fmtWhole(st.bosses || 0)],
+    ["Actions worked", fmt(st.actions)],
+    ["Things made", fmt(st.crafted)],
+    ["Total level", fmtWhole(totalLevel(state))],
+  ];
+}
+
+function detailRows(state, now) {
+  const st = state.stats;
+  const meta = state.meta;
+  const found = BESTIARY.reduce((n, r) => n + r.mobs.filter((m) => foeKills(state, m.id)).length, 0);
+  const region = currentRegion(state);
+  return [
+    ["Founded", fmtDay(meta.createdAt)],
+    ["Standing for", fmtTime(Math.max(0, now - meta.createdAt))],
+    ["Time in camp", fmtTime(meta.playtimeMs)],
+    ["Gold earned", fmtGold(st.goldEarned), "gold"],
+    ["Epics found", fmtWhole(st.epics)],
+    ["Collection", `${fmtWhole(found)} of ${fmtWhole(BESTIARY_COUNT)}`],
+    ["Ground held", `${region.name}, tier ${region.tier}`],
+  ];
+}
+
+function recordView() {
+  const grid = h("div.standing");
+  const list = h("div.stats");
+  const node = h("div.char-stack",
+    h("section.card",
+      h("div.card-head", h("div",
+        h("h2.card-title", "The tally"),
+        h("p.card-sub", "What this camp has done. Nothing but starting over clears it."))),
+      grid),
+    h("section.card",
+      h("div.card-head", h("div",
+        h("h2.card-title", "Since the founding"),
+        h("p.card-sub", "Time in camp is every hour the camp has run, asleep or awake."))),
+      list));
+
+  let bigSig = null;
+  let bigValues = [];
+  let rowSig = null;
+  let rowValues = [];
+
+  return {
+    node,
+    update(next, state) {
+      const big = bigRows(state);
+      const nextBig = big.map((r) => r[0]).join("|");
+      if (nextBig !== bigSig) {
+        bigSig = nextBig;
+        bigValues = big.map(() => h("div.v"));
+        grid.replaceChildren(...big.map(([l], i) => h("div.standing-cell", bigValues[i], h("div.eyebrow.l", l))));
+      }
+      big.forEach((r, i) => setText(bigValues[i], r[1]));
+
+      const rows = detailRows(state, next.now);
+      const nextRows = rows.map((r) => r[0]).join("|");
+      if (nextRows !== rowSig) {
+        rowSig = nextRows;
+        rowValues = rows.map(([, , tone]) => h("span.v", { class: tone && `t-${tone}` }));
+        list.replaceChildren(...rows.map(([l], i) => h("div.stat", h("span.l", l), rowValues[i])));
+      }
+      rows.forEach((r, i) => setText(rowValues[i], r[1]));
+    },
+  };
+}
+
+/* ================= 7. THE TABS ================= */
+/* The chip row on wide screens and a select on phones, the pattern the
+   Leaderboard uses. The row is a tablist with a roving tabindex, so one
+   Tab reaches it and the arrows walk it. */
+
+const TABS = [
+  { id: "character", name: "Character", icon: "person", build: faceView },
+  { id: "skills", name: "Skills", icon: "book", build: skillsView },
+  { id: "collection", name: "Collection", icon: "skull", build: collectionView },
+  { id: "record", name: "Record", icon: "hourglass", build: recordView },
+];
+
+// The tab last opened, for the length of the session (as the Satchel keeps its filter).
+const VIEW = { tab: TABS[0].id };
+
+function tabShell(ctx) {
+  if (!TABS.some((t) => t.id === VIEW.tab)) VIEW.tab = TABS[0].id;
+
+  const row = h("div.char-tabs", { role: "tablist", "aria-label": "Character" },
+    TABS.map((t) => h("button.chip", {
+      type: "button",
+      role: "tab",
+      id: `charTab-${t.id}`,
+      "aria-selected": "false",
+      "aria-controls": `charPanel-${t.id}`,
+      tabindex: "-1",
+      dataset: { tab: t.id },
+    }, iconEl(t.icon), t.name)));
+
+  const select = h("select.select.char-tab-select", { "aria-label": "Character" },
+    TABS.map((t) => h("option", { value: t.id }, t.name)));
+
+  const panels = TABS.map((t) => {
+    const part = t.build(ctx);
+    part.wrap = h("div", {
+      id: `charPanel-${t.id}`,
+      role: "tabpanel",
+      "aria-labelledby": `charTab-${t.id}`,
+      hidden: true,
+    }, part.node);
+    return part;
+  });
+  const at = (id) => panels[TABS.findIndex((t) => t.id === id)];
+
+  function paintPick() {
+    row.querySelectorAll("[role=tab]").forEach((t) => {
+      const picked = t.dataset.tab === VIEW.tab;
+      setAttr(t, "aria-selected", picked ? "true" : "false");
+      setAttr(t, "tabindex", picked ? "0" : "-1");
+    });
+    if (select.value !== VIEW.tab) select.value = VIEW.tab;
+    panels.forEach((p, i) => setAttr(p.wrap, "hidden", TABS[i].id !== VIEW.tab));
+  }
+
+  // A tab only just shown has never been painted, so it is filled before it is seen.
+  function choose(id, { focus = false } = {}) {
+    if (!TABS.some((t) => t.id === id) || id === VIEW.tab) return;
+    VIEW.tab = id;
+    paintPick();
+    at(id).update(ctx, ctx.state);
+    if (!focus) return;
+    const btn = row.querySelector(`[data-tab="${id}"]`);
+    if (btn) {
+      btn.focus();
+      // Keep the chosen tab in view when the row scrolls.
+      if (typeof btn.scrollIntoView === "function") btn.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+  }
+
+  const offs = [
+    on(row, "click", "[role=tab]", (e, t) => choose(t.dataset.tab)),
+    // Arrow keys walk the tabs, as a tablist should.
+    on(row, "keydown", "[role=tab]", (e, t) => {
+      const i = TABS.findIndex((x) => x.id === t.dataset.tab);
+      let next = -1;
+      if (e.key === "ArrowRight") next = (i + 1) % TABS.length;
+      else if (e.key === "ArrowLeft") next = (i - 1 + TABS.length) % TABS.length;
+      else if (e.key === "Home") next = 0;
+      else if (e.key === "End") next = TABS.length - 1;
+      if (next < 0) return;
+      e.preventDefault();
+      choose(TABS[next].id, { focus: true });
+    }),
+  ];
+  const onChange = () => choose(select.value);
+  select.addEventListener("change", onChange);
+
+  paintPick();
+
+  return {
+    nodes: [row, select, ...panels.map((p) => p.wrap)],
+    update(next, state) {
+      at(VIEW.tab).update(next, state);
+    },
+    destroy() {
+      offs.forEach((off) => off());
+      select.removeEventListener("change", onChange);
+      panels.forEach((p) => {
+        if (typeof p.destroy === "function") p.destroy();
+      });
+    },
+  };
+}
+
+/* ================= 8. THE PAGE ================= */
 
 export default {
   id: "character",
@@ -296,27 +589,18 @@ export default {
 
   mount(view, ctx) {
     const hero = heroView();
-    const bench = benchCard(ctx);
-    const hunt = huntCard(ctx);
-    const standing = standingView();
-    const skills = skillsView();
+    const tabs = tabShell(ctx);
 
-    view.appendChild(h("div.page",
-      hero.node,
-      h("div.grid-cards.max-2", bench.node, hunt.node),
-      standing.node,
-      skills.node));
+    view.appendChild(h("div.page", hero.node, ...tabs.nodes));
 
     const handle = {
       update(next) {
         const c = next || ctx;
         const state = c.state;
         hero.update(c, state);
-        bench.update(state);
-        hunt.update(state);
-        standing.update(state);
-        skills.update(state);
+        tabs.update(c, state);
       },
+      unmount() { tabs.destroy(); },
     };
     handle.update(ctx);
     return handle;

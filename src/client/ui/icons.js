@@ -157,7 +157,14 @@ export function icon(name, cls) {
     return `<img class="ico${cls ? " " + cls : ""}" src="${IMAGE_ICONS[name]}" alt="" aria-hidden="true" />`;
   }
   const body = ICONS[name] || ICONS.unknown;
-  return `<svg class="ico${cls ? " " + cls : ""}" viewBox="0 0 24 24" fill="none" stroke="currentColor" ` +
+  // width and height go on as attributes as well as in CSS. An outermost <svg> with only a
+  // viewBox has no intrinsic size: its width and height are auto, which is 100% of whatever
+  // holds it, so the box exists only once the .ico rule has been applied. Safari lays the
+  // icon out from the attributes on the first paint and does not always come back for the
+  // CSS, which leaves the topbar blank until something forces a repaint. A presentation
+  // attribute loses to every author rule, so .ico and every size class still win and no
+  // icon changes size or colour.
+  return `<svg class="ico${cls ? " " + cls : ""}" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" ` +
     `stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${body}</svg>`;
 }
 

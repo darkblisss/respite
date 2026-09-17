@@ -1,0 +1,47 @@
+/* ============================================================
+   Respite · css/leaderboard.css · The Roll of Honour
+   ------------------------------------------------------------
+   The Leaderboard's two rows of tabs, and nothing else. Every
+   other part of the page is the kit as it stands: .card, .chip,
+   .table, .empty, .tag, and the chip-tabs-on-desktop,
+   select-on-phones pair pages.css already carries for this page
+   (.hs-skills, .hs-pick-tabs, .hs-pick-select, .hs-hide-sm).
+
+   Loaded after pages.css.
+   ============================================================ */
+
+/* A board row and the row that narrows it are one control, so they sit closer together than
+   two page sections would. */
+.lb-picks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+/* The second row names what it picks (Discipline, Trade, Bench): without that, two rows of
+   chips read as one long row that happens to wrap. */
+.lb-sub {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+/* .eyebrow already carries the colour and the tracking; it only needs to hold its width. */
+.lb-sub-label { flex-shrink: 0; }
+
+/* The chips scroll inside the row rather than pushing the label off the side. */
+.lb-sub > .hs-skills {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Phones: the chips are gone and the select is full width, so the label goes above it. */
+@media (max-width: 599px) {
+  .lb-sub {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--sp-2);
+  }
+}

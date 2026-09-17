@@ -14,6 +14,7 @@
 import { toast } from "./ui/overlay.js";
 import { hasPopup, openPopup } from "./ui/widgets.js";
 import { fmt, fmtGold, fmtTime } from "./ui/format.js";
+import { CONFIG } from "../shared/config.js";
 import { GameData, getCompanion, getMonster, getRegion, rarityDef, skillName } from "../shared/registry.js";
 import { itemDef, itemName, parseKey } from "../shared/items.js";
 
@@ -104,7 +105,7 @@ const TABLE = {
 
   "hunt:retreat": () => ["You broke away", { kind: "warn" }],
 
-  "hunt:hide": () => ["Hiding for five minutes", { kind: "info", icon: "eye-off" }],
+  "hunt:hide": () => [`Hiding for ${fmtTime(CONFIG.hunt.hideMs)}`, { kind: "info", icon: "eye-off" }],
 
   "loot:lost": () => ["No room for loot", { kind: "warn" }, { every: 60 * 1000, key: "loot:lost" }],
 

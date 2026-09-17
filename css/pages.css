@@ -444,6 +444,15 @@ button.ap-link:hover span { text-decoration: underline; text-decoration-color: v
   font-variant-numeric: tabular-nums;
 }
 
+/* The zone sheet's survival warning. Silence is the good case, so this only ever
+   appears to say something is wrong; the colour does the escalating. */
+.zone-warn {
+  margin-top: var(--sp-3);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
 .ap-plan b { color: var(--bone); font-weight: 600; }
 
 .ip-effect {
@@ -986,6 +995,11 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
 }
 
 /* Zones: two by two. The bar is the zone's Threat. */
+/* Threat moved to the region header, so a card is just art, name and tag. The
+   "threat" row stays named for a card that still carries a meter. */
+.section-end { display: flex; align-items: flex-end; gap: var(--sp-3); flex-wrap: wrap; }
+.region-threat { min-width: 180px; }
+
 .zone-card {
   position: relative;
   display: grid;
@@ -1735,7 +1749,11 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
 .listing-seller { display: flex; align-items: center; gap: 6px; }
 .listing-buy { display: flex; justify-content: flex-end; }
 .listing-l { display: none; }
-.listing.is-mine { background: linear-gradient(90deg, rgba(157, 130, 224, .07), transparent 50%); }
+/* Your own listing: a tint and a thin left accent, in place of the old "Yours" pill. */
+.listing.is-mine {
+  background: linear-gradient(90deg, rgba(157, 130, 224, .07), transparent 50%);
+  box-shadow: inset 2px 0 0 var(--violet-hi);
+}
 
 .listing-head .num,
 .listing-qty,

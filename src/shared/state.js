@@ -110,7 +110,14 @@ function blankState(clock, seed) {
     region: "region_1",
     travel: { unlocked: ["region_1"] },
     companions: { owned: {}, active: null },
+    // Region-wide, keyed by tier. Kept unrounded: Threat per kill is fractional.
     threat: {},
+    // Best time survived on each ground, by "tier:zone", in ms. The zone popup's record line.
+    records: {},
+    // Deaths by the monster that dealt them, for the Collection's bestiary.
+    foeDeaths: {},
+    // What a recent death still costs: { until, mult } on every combat number.
+    debuff: null,
     settings: { hideSovereign: false },
     agents: [],
     requisitions: [],
@@ -316,8 +323,8 @@ function migrateHunt(m, loaded, lastSeen) {
       const hunt = newHunt(m, tier, "outer", limit == null ? null : Math.min(MAX_LIMIT, limit));
       hunt.done = tier === old.tier ? done : 0;
       hunt.elapsed = elapsed;
-      hunt.nextMark = (Math.floor(elapsed / H.xpMarkMs) + 1) * H.xpMarkMs;
-      hunt.marks = [[hunt.nextMark - H.xpMarkMs, 0]];
+      hunt.nextMark = (Math.floor(elapsed / H.rateMarkMs) + 1) * H.rateMarkMs;
+      hunt.marks = [[hunt.nextMark - H.rateMarkMs, 0, 0]];
       m.tasks.combat = hunt;
     } else {
       m.tasks.combat = null;
@@ -565,13 +572,38 @@ function normalise(src, opts) {
 
   normaliseCompanions(s, obj(src.companions));
 
+  /* Threat is region-wide now, keyed by tier alone. A save from when it was keyed
+     "tier:zone" carries its hottest zone forward as the region's Threat. */
   const threat = obj(src.threat);
   keysOf(threat).forEach((k) => {
     const [tier, zone, extra] = k.split(":");
-    if (extra === undefined && /^[1-9]$/.test(tier || "") && ZONE_IDS.includes(zone) && finite(threat[k])) {
-      s.threat[k] = clamp(Math.round(threat[k]), 0, H.threatCap);
+    if (extra !== undefined || !/^[1-9]$/.test(tier || "")) return;
+    if (zone !== undefined && !ZONE_IDS.includes(zone)) return;
+    if (!finite(threat[k])) return;
+    s.threat[tier] = Math.max(s.threat[tier] || 0, clamp(threat[k], 0, H.threatCap));
+  });
+
+  const records = obj(src.records);
+  keysOf(records).forEach((k) => {
+    const [tier, zone, extra] = k.split(":");
+    if (extra === undefined && /^[1-9]$/.test(tier || "") && ZONE_IDS.includes(zone) && finite(records[k])) {
+      s.records[k] = intIn(records[k], 0, IDLE_CAP, 0);
     }
   });
+
+  const foeDeaths = obj(src.foeDeaths);
+  keysOf(foeDeaths).forEach((k) => {
+    if (typeof k === "string" && getMonster(k) && finite(foeDeaths[k])) s.foeDeaths[k] = intIn(foeDeaths[k], 0, BIG, 0);
+  });
+
+  // A death's wound, never longer or deeper than the rules would have made it.
+  const debuff = obj(src.debuff);
+  if (finite(debuff.until) && finite(debuff.mult) && debuff.mult > 0 && debuff.mult < 1) {
+    const until = Math.min(Math.floor(debuff.until), clock + H.recoveryMs + H.deathDebuffMs);
+    const mult = Math.max(debuff.mult, 1 - H.deathDebuff);
+    if (until > clock) s.debuff = { until, mult };
+  }
+
   s.settings.hideSovereign = bool(obj(src.settings).hideSovereign);
 
   normaliseAgents(s, src, ledger);
@@ -835,26 +867,40 @@ function normaliseHunt(s, c, ledger) {
       continue;
     }
     const elite = bool(f.elite);
-    const max = foeNumbers(mob, elite).hp;
+    /* A foe stands at its zone's depth, full stop. Foes never move between zones
+       mid-fight, so there is nothing to carry over and no reason to trust a stored
+       power: a save claiming a softer one would otherwise get a weaker foe, with
+       `max` recomputed from the claim so the ledger check below never noticed. */
+    const zonePower = (GameData.ZONES.find((z) => z.id === c.zone) || {}).power || 1;
+    const power = zonePower;
+    if (finite(f.power) && f.power !== zonePower) ledger.fixed++;
+    const max = foeNumbers(mob, elite, power).hp;
     if (f.max !== max || f.hp > max) ledger.fixed++;
     if (sovereign) sovereigns++;
     foes.push({
-      uid: intIn(f.uid, 1, BIG, 1), id: mob.id, elite, hp: Math.min(f.hp, max), max, ambush: bool(f.ambush),
+      uid: intIn(f.uid, 1, BIG, 1), id: mob.id, elite, power, hp: Math.min(f.hp, max), max, ambush: bool(f.ambush),
       timer: numIn(f.timer, -1e6, 1e6, mob.speed), bleed: intIn(f.bleed, 0, 1e9, 0), bleedTimer: numIn(f.bleedTimer, -1e6, 1e6, 0),
     });
   }
-  // The last hour of marks, read from the end.
-  const keep = 3600000 / H.xpMarkMs + 1;
+  /* The rolling window's samples, read from the end. Each is [elapsed, xp, damage];
+     a save from before DPS was tracked has two-part marks, and its damage starts at
+     the reading it never took. */
+  const keep = H.rateWindowMs / H.rateMarkMs + 1;
   const marks = [];
   for (let i = c.marks.length - 1; i >= 0 && marks.length < keep; i--) {
     const mk = c.marks[i];
-    if (Array.isArray(mk) && mk.length === 2 && finite(mk[0]) && finite(mk[1])) marks.push([mk[0], mk[1]]);
+    if (Array.isArray(mk) && mk.length >= 2 && finite(mk[0]) && finite(mk[1])) {
+      marks.push([mk[0], mk[1], finite(mk[2]) ? mk[2] : 0]);
+    }
   }
   marks.reverse();
   const elapsed = numIn(c.elapsed, 0, IDLE_CAP, 0);
   // The next mark is always just ahead; one far behind would stall the engine on marks.
-  const markOk = finite(c.nextMark) && c.nextMark % H.xpMarkMs === 0 && c.nextMark > elapsed - 1 && c.nextMark <= elapsed + H.xpMarkMs + 1;
-  const nextMark = markOk ? c.nextMark : (Math.floor(elapsed / H.xpMarkMs) + 1) * H.xpMarkMs;
+  const markOk = finite(c.nextMark) && c.nextMark % H.rateMarkMs === 0 && c.nextMark > elapsed - 1 && c.nextMark <= elapsed + H.rateMarkMs + 1;
+  const nextMark = markOk ? c.nextMark : (Math.floor(elapsed / H.rateMarkMs) + 1) * H.rateMarkMs;
+
+  const xp = numIn(c.xp, 0, 1e15, 0);
+  const dmg = numIn(c.dmg, 0, 1e15, 0);
 
   const hunt = {
     tier: c.tier, zone: c.zone, limit, done, elapsed,
@@ -866,8 +912,12 @@ function normaliseHunt(s, c, ledger) {
     swing: numIn(c.swing, -1e6, 1e6, 0), volley: intIn(c.volley, 0, GameData.TECHNIQUE.volley.casts, 0),
     veil: numIn(c.veil, 0, H.veilMax, 0), streak: intIn(c.streak, 0, 1e9, 0),
     peak: bool(c.peak), sovereignNext: bool(c.sovereignNext), encounters: intIn(c.encounters, 0, BIG, 0),
-    xp: numIn(c.xp, 0, 1e15, 0), marks: marks.length ? marks : [[nextMark - H.xpMarkMs, 0]], nextMark,
-    xpRate: finite(c.xpRate) ? c.xpRate : null,
+    xp,
+    dmg,
+    // With no window to fall back on, it starts here: a window that claimed the whole
+    // run's XP over one sample would read as an absurd rate for its first minutes.
+    marks: marks.length ? marks : [[nextMark - H.rateMarkMs, xp, dmg]],
+    nextMark,
     id: Number.isInteger(c.id) && c.id >= 1 && c.id <= ID_MAX ? c.id : 0,
   };
   if (!hunt.id) hunt.id = s.serial++;

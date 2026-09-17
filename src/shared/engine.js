@@ -64,6 +64,8 @@ export function advance(state, target, env = SILENT) {
     // Bounties re-post, and days turn (a day boundary is always a window boundary).
     next = Math.min(next, (windowIndex(clock) + 1) * WINDOW_MS);
     if (state.buff && state.buff.until > clock) next = Math.min(next, state.buff.until);
+    // A death's wound changes every combat number the moment it lifts.
+    if (state.debuff && state.debuff.until > clock) next = Math.min(next, state.debuff.until);
     const dt = next - clock;
 
     state.player.recoveryLeft = Math.max(0, state.player.recoveryLeft - dt);
@@ -86,6 +88,7 @@ export function advance(state, target, env = SILENT) {
 
     state.clock = next;
     if (state.buff && state.buff.until <= state.clock) state.buff = null;
+    if (state.debuff && state.debuff.until <= state.clock) state.debuff = null;
     settleWorld(state, env);
   }
 }
