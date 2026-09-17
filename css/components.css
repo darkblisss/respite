@@ -60,7 +60,7 @@
 .art-lg { width: 56px; height: 56px; border-radius: 14px; }
 .art-lg .ico { width: 30px; height: 30px; }
 .art-xl { width: 72px; height: 72px; border-radius: 18px; }
-.art-xl .ico { width: 40px; height: 40px; }
+.art-xl .ico { width: 56px; height: 56px; }
 
 .art[data-rarity] {
   color: var(--rar);
