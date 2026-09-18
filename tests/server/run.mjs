@@ -239,7 +239,7 @@ async function seedSave(user, seed, edit) {
 /* ================= 3. SUITES ================= */
 
 await section('the schema', async () => {
-  same('migrations ran (twice)', migrationFiles, ['002_server.sql', '003_profiles_from_saves.sql', '004_leaderboard_boards.sql', '005_wealth_board.sql', '006_party_hunts.sql']);
+  same('migrations ran (twice)', migrationFiles, ['002_server.sql', '003_profiles_from_saves.sql', '004_leaderboard_boards.sql', '005_wealth_board.sql', '006_party_hunts.sql', '007_market_pools.sql']);
   same('the expiry sweep has its partial index on open listings',(await q1(`select indexdef from pg_indexes where indexname = 'market_listings_open_expiry_idx'`)).indexdef,
     'CREATE INDEX market_listings_open_expiry_idx ON public.market_listings USING btree (expires_at, id) WHERE (status = \'open\'::text)');
   same('the hourly listing count has its index', (await q1(`select indexdef from pg_indexes where indexname = 'market_listings_seller_created_idx'`)).indexdef,
@@ -552,7 +552,7 @@ await section('commands and their results', async () => {
   }
 });
 
-await section('the market: list, buy in parts, get paid', async () => {
+await section('the market: list, buy out of the pool, get paid', async () => {
   NOW += MINUTE;
   const seller = newUser('seller');
   const buyer = newUser('buyer');
@@ -574,55 +574,245 @@ await section('the market: list, buy in parts, get paid', async () => {
     expires_ms: NOW + CONFIG.economy.marketListingDays * DAY,
   });
 
+  // A material is bought out of its pool, by name, quantity and ceiling. Its id buys nothing,
+  // which is what keeps a buyer from picking one seller out of the pool.
   NOW += 1000;
-  const b1 = await play(buyer, cmd('marketBuy', { listingId: id, qty: 10, price: 0, cost: 0 }));
-  same('buying 10 reports what was bought, at the listed price', b1.results[0].data, { listingId: id, key: 'slag_delve', qty: 10, cost: 70 });
-  same('the buyer paid 70 and holds 10', [b1.state.player.gold, haveQty(b1.state, 'slag_delve')], [930, 10]);
+  same('a material listing cannot be bought by its id', (await play(buyer, cmd('marketBuy', { listingId: id, qty: 1 }))).results[0].error, 'Buy materials from the pool.');
+
+  NOW += 1000;
+  // 10 at 7 is 70 for the goods; the fee is 5% rounded up, 4, and the buyer pays it on top.
+  const b1 = await play(buyer, cmd('marketBuyPool', { key: 'slag_delve', qty: 10, maxEach: 7 }));
+  same('buying 10 out of the pool says what was had and what it cost', b1.results[0].data,
+    { key: 'slag_delve', qty: 10, cost: 74, fee: 4, asked: 10, short: false });
+  same('the buyer paid the ask plus the fee and holds 10', [b1.state.player.gold, haveQty(b1.state, 'slag_delve')], [926, 10]);
   same('10 are gone from the listing', [(await listing(id)).qty_left, (await listing(id)).status], [20, 'open']);
 
   NOW += 1000;
-  const over = await play(buyer, cmd('marketBuy', { listingId: id, qty: 25 }));
-  same('more than is left is refused', [over.results[0].ok, over.results[0].error, over.state.player.gold], [false, 'Only 20 left.', 930]);
-
-  NOW += 1000;
-  const b2 = await play(buyer, cmd('marketBuy', { listingId: id, qty: 20 }));
-  same('the rest sells', [b2.results[0].ok, b2.state.player.gold, haveQty(b2.state, 'slag_delve')], [true, 790, 30]);
+  // More than the pool holds is a short fill, not a refusal: they get what was there.
+  const rest = await play(buyer, cmd('marketBuyPool', { key: 'slag_delve', qty: 25, maxEach: 7 }));
+  same('asking for more than the pool holds fills short and says so', rest.results[0].data,
+    { key: 'slag_delve', qty: 20, cost: 147, fee: 7, asked: 25, short: true });
+  same('and they paid for the 20 there were', [rest.state.player.gold, haveQty(rest.state, 'slag_delve')], [779, 30]);
   same('the listing is sold out', [(await listing(id)).qty_left, (await listing(id)).status], [0, 'sold']);
-  same('a sold listing is gone', (await play(buyer, cmd('marketBuy', { listingId: id, qty: 1 }))).results[0].error, 'That listing is gone.');
+  same('an empty pool has nothing to sell', (await play(buyer, cmd('marketBuyPool', { key: 'slag_delve', qty: 1, maxEach: 7 }))).results[0].error,
+    'Nobody is selling that at your price.');
 
-  const sales = await q('select seller_id::text as s, buyer_id::text as b, item_key, item_name, qty, price_each::int as p, fee::int as fee from public.market_sales where listing_id = $1 order by id', [id]);
-  same('two sales rows with a 5% fee, at least 1', sales, [
-    { s: seller.id, b: buyer.id, item_key: 'slag_delve', item_name: 'Slag Ore', qty: 10, p: 7, fee: 3 },
-    { s: seller.id, b: buyer.id, item_key: 'slag_delve', item_name: 'Slag Ore', qty: 20, p: 7, fee: 7 },
+  const sales = await q(`select seller_id::text as s, buyer_id::text as b, item_key, item_name, qty,
+                                price_each::int as p, fee::int as fee, buyer_fee::int as buyer_fee
+                         from public.market_sales where listing_id = $1 order by id`, [id]);
+  same('two sale rows, each carrying both legs of the fee', sales, [
+    { s: seller.id, b: buyer.id, item_key: 'slag_delve', item_name: 'Slag Ore', qty: 10, p: 7, fee: 4, buyer_fee: 4 },
+    { s: seller.id, b: buyer.id, item_key: 'slag_delve', item_name: 'Slag Ore', qty: 20, p: 7, fee: 7, buyer_fee: 7 },
   ]);
   const letters = await mailOf(seller);
-  same('the seller has two unclaimed gold letters, less the fee', letters.map((l) => [l.kind, l.gold, l.claimed]), [['gold', 67, false], ['gold', 133, false]]);
-  check('a letter names the buyer, the quantity and the item', /buyer/.test(letters[0].note) && /\b10\b/.test(letters[0].note) && /Slag Ore/.test(letters[0].note), letters[0].note);
+  same('the seller has two gold letters, the ask less the fee', letters.map((l) => [l.kind, l.gold, l.claimed]), [['gold', 66, false], ['gold', 133, false]]);
+  check('a letter says what sold and what the market kept, and never who bought it',
+    /Slag Ore/.test(letters[0].note) && /\b10\b/.test(letters[0].note) && !/buyer/i.test(letters[0].note), letters[0].note);
 
   NOW += 1000;
   const paid = await play(seller);
-  same('the seller is paid on the next request, as earned gold', [paid.state.player.gold, paid.state.stats.goldEarned], [200, 200]);
+  same('the seller is paid on the next request, as earned gold', [paid.state.player.gold, paid.state.stats.goldEarned], [199, 199]);
   same('both letters are claimed', (await mailOf(seller)).map((l) => l.claimed), [true, true]);
   const post = paid.events.filter((e) => e.type === 'mail:claimed');
-  same('the response carries the post as news, without the save', [post.length, post[0] && post[0].gold, post[0] && 'state' in post[0]], [1, 200, false]);
+  same('the response carries the post as news, without the save', [post.length, post[0] && post[0].gold, post[0] && 'state' in post[0]], [1, 199, false]);
 
   NOW += 1000;
   const own = await play(seller, cmd('marketList', { key: 'slag_delve', from: 'bank', qty: 5, price: 9 }));
   const ownId = own.results[0].data.listingId;
   NOW += 1000;
-  const self = await play(seller, cmd('marketBuy', { listingId: ownId, qty: 1 }));
-  same('buying your own listing is refused', [self.results[0].ok, self.results[0].error], [false, "You can't buy your own listing."]);
+  const self = await play(seller, cmd('marketBuyPool', { key: 'slag_delve', qty: 1, maxEach: 9 }));
+  same('a seller cannot buy out of their own pool', [self.results[0].ok, self.results[0].error], [false, 'Nobody is selling that at your price.']);
 
   NOW += 1000;
   const cheap = await play(seller, cmd('marketList', { key: 'slag_delve', from: 'bank', qty: 1, price: 1 }));
   const cheapId = cheap.results[0].data.listingId;
   NOW += 1000;
-  const bigBuy = await play(buyer, cmd('marketBuy', { listingId: cheapId, qty: 1 }), cmd('marketBuy', { listingId: ownId, qty: 5 }));
-  same('a 1 gold sale and a 45 gold sale', bigBuy.results.map((r) => r.ok), [true, true]);
-  same('fees of 1 and 2', (await q('select fee::int as fee from public.market_sales where listing_id = any($1::bigint[]) order by id', [[cheapId, ownId]])).map((r) => r.fee), [1, 2]);
+  // 1 at 1 then 5 at 9: the cheap band first, and the fee is charged once on the basket.
+  const across = await play(buyer, cmd('marketBuyPool', { key: 'slag_delve', qty: 6, maxEach: 9 }));
+  same('a buy empties the cheap band first and walks on into the dear one', across.results[0].data,
+    { key: 'slag_delve', qty: 6, cost: 49, fee: 3, asked: 6, short: false });
+  same('and it paid 46 for the goods and 3 for the market', [across.state.player.gold, haveQty(across.state, 'slag_delve')], [730, 36]);
+  same('both listings are sold out', [(await listing(cheapId)).status, (await listing(ownId)).status], ['sold', 'sold']);
+  same("the seller's leg is charged per listing, the buyer's once and shared over them",
+    (await q('select fee::int as fee, buyer_fee::int as buyer_fee from public.market_sales where listing_id = any($1::bigint[]) order by listing_id', [[cheapId, ownId]]))
+      .map((r) => [r.fee, r.buyer_fee]),
+    [[3, 3], [1, 0]]);
   NOW += 1000;
   const paid2 = await play(seller);
-  same('a letter worth nothing is still claimed; 43 gold arrives', [paid2.state.player.gold, (await mailOf(seller)).map((l) => [l.gold, l.claimed])], [243, [[67, true], [133, true], [0, true], [43, true]]]);
+  same('a letter worth nothing is still claimed; 42 gold arrives', [paid2.state.player.gold, (await mailOf(seller)).map((l) => [l.gold, l.claimed])],
+    [241, [[66, true], [133, true], [42, true], [0, true]]]);
+
+  // Gear is not fungible, so it stays one row a piece, bought by id, and anonymous all the same.
+  NOW += 1000;
+  await editSave(seller, (s) => put(s, 'inv', 'slag_sword|legendary|c3.4', 1));
+  const sword = await play(seller, cmd('marketList', { key: 'slag_sword|legendary|c3.4', from: 'inv', qty: 1, price: 500 }));
+  const swordId = sword.results[0].data.listingId;
+  NOW += 1000;
+  const pooled = await play(buyer, cmd('marketBuyPool', { key: 'slag_sword|legendary|c3.4', qty: 1, maxEach: 500 }));
+  same('gear is not sold out of a pool', [pooled.results[0].ok, pooled.results[0].error], [false, 'That is sold piece by piece.']);
+  NOW += 1000;
+  const gear = await play(buyer, cmd('marketBuy', { listingId: swordId, qty: 1 }));
+  same('a piece is bought by id, at the ask plus the fee, under a new market uid', gear.results[0].data,
+    { listingId: swordId, key: `slag_sword|legendary|m${swordId}`, qty: 1, cost: 525, fee: 25 });
+  same('the buyer paid 525', gear.state.player.gold, 205);
+  const swordSale = await q1('select fee::int as fee, buyer_fee::int as buyer_fee from public.market_sales where listing_id = $1', [swordId]);
+  same('a gear sale carries both legs too', [swordSale.fee, swordSale.buyer_fee], [25, 25]);
+  same('and the seller is posted the ask less the fee', (await mailOf(seller)).filter((l) => !l.claimed).map((l) => [l.gold, /buyer/i.test(l.note)]), [[475, false]]);
+});
+
+await section('the market: the fill order, the ceiling and a race', async () => {
+  NOW += MINUTE;
+  // Three sellers, one material, four listings: two at 5 (one older), one at 6, one at 20.
+  const dear = newUser('dear');
+  const early = newUser('early');
+  const late = newUser('late');
+  const taker = newUser('taker');
+  for (const u of [dear, early, late, taker]) await play(u);
+  for (const u of [dear, early, late]) await editSave(u, (s) => put(s, 'bank', 'bitter_fell', 100));
+  await editSave(taker, (s) => { s.player.gold = 5000; });
+
+  NOW += 1000;
+  const a = (await play(early, cmd('marketList', { key: 'bitter_fell', from: 'bank', qty: 10, price: 5 }))).results[0].data.listingId;
+  NOW += 1000;
+  const b = (await play(late, cmd('marketList', { key: 'bitter_fell', from: 'bank', qty: 10, price: 5 }))).results[0].data.listingId;
+  NOW += 1000;
+  const c = (await play(late, cmd('marketList', { key: 'bitter_fell', from: 'bank', qty: 10, price: 6 }))).results[0].data.listingId;
+  NOW += 1000;
+  const d = (await play(dear, cmd('marketList', { key: 'bitter_fell', from: 'bank', qty: 10, price: 20 }))).results[0].data.listingId;
+
+  NOW += 1000;
+  // 12 at a ceiling of 6: the older 5 first, then the newer 5, and the 6 only for what is left.
+  const first = await play(taker, cmd('marketBuyPool', { key: 'bitter_fell', qty: 12, maxEach: 6 }));
+  same('cheapest first, and among equal prices the oldest listing first',
+    (await q('select id, qty_left from public.market_listings where id = any($1::bigint[]) order by id', [[a, b, c, d]])).map((r) => Number(r.qty_left)),
+    [0, 8, 10, 10]);
+  same('and it cost the bands it walked, plus one fee on the basket', first.results[0].data,
+    { key: 'bitter_fell', qty: 12, cost: 63, fee: 3, asked: 12, short: false });
+
+  NOW += 1000;
+  // The ceiling: 20 are asked for at 6, and the 20 gold listing is never touched.
+  const capped = await play(taker, cmd('marketBuyPool', { key: 'bitter_fell', qty: 20, maxEach: 6 }));
+  same('a ceiling fills short rather than reaching into a dearer band', capped.results[0].data,
+    { key: 'bitter_fell', qty: 18, cost: 105, fee: 5, asked: 20, short: true });
+  same('the dear listing is untouched', Number((await listing(d)).qty_left), 10);
+  same('nothing above the ceiling is for sale', (await play(taker, cmd('marketBuyPool', { key: 'bitter_fell', qty: 1, maxEach: 6 }))).results[0].error,
+    'Nobody is selling that at your price.');
+
+  /* Two buyers after one pool. PGlite is one connection, so requests cannot truly overlap here
+     and the lock order is what makes an overlap safe (docs/SERVER.md 2). What is tested is the
+     half a test can reach, and the half that actually bites: both buyers hold the same view of
+     the bands, one of them empties a band, and the other's command is answered from the rows
+     the fill locks rather than from anything the browser saw. */
+  NOW += 1000;
+  const rival = newUser('rival');
+  await play(rival);
+  await editSave(rival, (s) => { s.player.gold = 5000; });
+  await editSave(dear, (s) => put(s, 'bank', 'godsbane_harvest', 20));
+  await editSave(early, (s) => put(s, 'bank', 'godsbane_harvest', 20));
+  NOW += 1000;
+  const cheapPool = (await play(dear, cmd('marketList', { key: 'godsbane_harvest', from: 'bank', qty: 20, price: 10 }))).results[0].data.listingId;
+  const dearPool = (await play(early, cmd('marketList', { key: 'godsbane_harvest', from: 'bank', qty: 20, price: 30 }))).results[0].data.listingId;
+
+  NOW += 1000;
+  // Both see 20 at 10 and 20 at 30. The first takes 15 of the cheap band.
+  const one = await play(taker, cmd('marketBuyPool', { key: 'godsbane_harvest', qty: 15, maxEach: 10 }));
+  same('the first buyer has the 15 they asked for', one.results[0].data, { key: 'godsbane_harvest', qty: 15, cost: 158, fee: 8, asked: 15, short: false });
+  NOW += 1000;
+  // The second asks for the same 15 at the same ceiling: 5 are left, and the dear band is not
+  // reached for the rest. They are never sold what the first buyer took.
+  const two = await play(rival, cmd('marketBuyPool', { key: 'godsbane_harvest', qty: 15, maxEach: 10 }));
+  same('the second is sold only what was left, at the price they were promised', two.results[0].data,
+    { key: 'godsbane_harvest', qty: 5, cost: 53, fee: 3, asked: 15, short: true });
+  same('the cheap pool is empty and the dear one untouched',
+    [Number((await listing(cheapPool)).qty_left), (await listing(cheapPool)).status, Number((await listing(dearPool)).qty_left)], [0, 'sold', 20]);
+  const moved = await q('select qty, price_each::int as p, fee::int as fee, buyer_fee::int as buyer_fee from public.market_sales where listing_id = $1 order by id', [cheapPool]);
+  same('the sale rows add up to the 20 that existed, and no more', moved.reduce((n, r) => n + Number(r.qty), 0), 20);
+  const spent = [one, two].reduce((n, r) => n + r.results[0].data.cost, 0);
+  const owed = moved.reduce((n, r) => n + Number(r.qty) * r.p + Number(r.buyer_fee), 0);
+  same('what the two buyers paid is what the rows say they paid', spent, owed);
+  same('and what they hold is what the rows say moved',
+    [haveQty(one.state, 'godsbane_harvest'), haveQty(two.state, 'godsbane_harvest')], [15, 5]);
+  const gold = moved.reduce((n, r) => n + Number(r.qty) * r.p - Number(r.fee), 0);
+  NOW += 1000;
+  same('the seller is posted the asks less their own leg', (await play(dear)).state.player.gold, gold);
+
+  // Two buys in one request: the second is played after the first, so it reads the first's work.
+  NOW += 1000;
+  await editSave(late, (s) => put(s, 'bank', 'godsbane_weave', 6));
+  const twice = (await play(late, cmd('marketList', { key: 'godsbane_weave', from: 'bank', qty: 6, price: 2 }))).results[0].data.listingId;
+  NOW += 1000;
+  const pair = await play(taker,
+    cmd('marketBuyPool', { key: 'godsbane_weave', qty: 4, maxEach: 2 }),
+    cmd('marketBuyPool', { key: 'godsbane_weave', qty: 4, maxEach: 2 }));
+  same('the second buy in one request sees what the first one took', pair.results.map((r) => r.data.qty), [4, 2]);
+  same('and the listing is drained exactly once', [Number((await listing(twice)).qty_left), (await listing(twice)).status], [0, 'sold']);
+});
+
+await section('the market: nobody learns a name', async () => {
+  NOW += MINUTE;
+  const hidden = newUser('hidden');
+  const nosy = newUser('nosy');
+  await play(hidden);
+  await play(nosy);
+  await editSave(hidden, (s) => put(s, 'bank', 'slag_delve', 40));
+  await editSave(nosy, (s) => { s.player.gold = 500; });
+  NOW += 1000;
+  const mine = (await play(hidden, cmd('marketList', { key: 'slag_delve', from: 'bank', qty: 20, price: 4 }))).results[0].data.listingId;
+  NOW += 1000;
+  await play(nosy, cmd('marketBuyPool', { key: 'slag_delve', qty: 5, maxEach: 4 }));
+
+  // Everything a client can reach, as that client. The tables answer about your own rows only,
+  // and the three functions the market page uses carry no id and no name of anybody else.
+  const asPlayer = async (userId, sql, params = []) => {
+    try {
+      await db.exec('set role authenticated');
+      await db.query('select set_config(\'request.jwt.claim.sub\', $1, false)', [userId]);
+      return { rows: (await db.query(sql, params)).rows, error: null };
+    } catch (e) {
+      return { rows: null, error: e.message };
+    } finally {
+      await db.exec('reset role');
+      await db.query('select set_config(\'request.jwt.claim.sub\', \'\', false)');
+    }
+  };
+
+  const seen = await asPlayer(nosy.id, 'select id, seller_id, seller_name from public.market_listings');
+  same('a buyer reads no listing but their own (they have none)', [seen.error, seen.rows], [null, []]);
+  const ownRows = await asPlayer(hidden.id, 'select id::int as id from public.market_listings order by id');
+  same('a seller still reads their own listings', ownRows.rows.map((r) => r.id), [mine]);
+  const sales = await asPlayer(hidden.id, 'select id from public.market_sales');
+  check('market_sales cannot be read at all', /permission denied/.test(sales.error || ''), sales.error || sales.rows);
+
+  const pools = await asPlayer(nosy.id, 'select * from public.market_pools($1, null, 50, 8)', ['Slag']);
+  const pooled = pools.rows && pools.rows[0];
+  check('market_pools answers with the pool and no seller', !!pooled && Number(pooled.qty_left) === 15 && Number(pooled.price_min) === 4
+    && !/seller|user_id/i.test(Object.keys(pooled).join(',')), pooled);
+  same('and the bands are the prices, not the people', pooled && pooled.bands, [{ each: 4, qty: 15 }]);
+  const ownPool = await asPlayer(hidden.id, 'select * from public.market_pools($1, null, 50, 8)', ['Slag']);
+  same('a seller does not see their own stock in the pool they could buy from', ownPool.rows, []);
+
+  await editSave(hidden, (s) => put(s, 'inv', 'slag_sword|epic|c9.1', 1));
+  NOW += 1000;
+  const piece = (await play(hidden, cmd('marketList', { key: 'slag_sword|epic|c9.1', from: 'inv', qty: 1, price: 300 }))).results[0].data.listingId;
+  const browsed = await asPlayer(nosy.id, 'select * from public.market_browse($1, null, null, $2, 50, 0)', ['', 'price']);
+  const gearRow = browsed.rows && browsed.rows.find((r) => Number(r.id) === piece);
+  check('market_browse hands a stranger the piece with no name on it and mine false',
+    !!gearRow && gearRow.mine === false && !/seller|user_id/i.test(Object.keys(gearRow).join(',')), gearRow || browsed);
+  const ownBrowse = await asPlayer(hidden.id, 'select mine from public.market_browse($1, null, null, $2, 50, 0)', ['', 'price']);
+  same('and tells a seller which of them is theirs', ownBrowse.rows.map((r) => r.mine), [true]);
+  const noMaterials = await asPlayer(nosy.id, 'select count(*)::int as n from public.market_browse($1, $2, null, $3, 50, 0)', ['', 'material', 'price']);
+  same('browsing never returns a material listing', noMaterials.rows[0].n, 0);
+
+  const ledger = await asPlayer(nosy.id, 'select side, item_name, qty, fee::int as fee from public.market_sales_mine(50)');
+  same('a buyer reads their own side of the trade, and nothing of the seller', ledger.rows, [{ side: 'bought', item_name: 'Slag Ore', qty: 5, fee: 1 }]);
+  const sellerLedger = await asPlayer(hidden.id, 'select side, qty, fee::int as fee from public.market_sales_mine(50)');
+  same('and the seller reads theirs', sellerLedger.rows, [{ side: 'sold', qty: 5, fee: 1 }]);
+  const outsider = newUser('outsider');
+  await play(outsider);
+  const stranger = await asPlayer(outsider.id, 'select count(*)::int as n from public.market_sales_mine(50)');
+  same('a third party reads no sale at all', stranger.rows[0].n, 0);
+  const strangerPool = await asPlayer(outsider.id, 'select qty_left from public.market_pools($1, null, 50, 8)', ['Slag']);
+  check('though the pool itself is open to them', strangerPool.rows.length === 1, strangerPool);
 });
 
 await section('the market: refusals', async () => {
@@ -633,24 +823,27 @@ await section('the market: refusals', async () => {
   await play(stall);
   await play(poor);
   await play(full);
-  await editSave(stall, (s) => { put(s, 'bank', 'slag_delve', 50); put(s, 'bank', 'bitter_fell', 12); });
+  await editSave(stall, (s) => { put(s, 'bank', 'slag_delve', 50); put(s, 'bank', 'bitter_fell', 12); put(s, 'bank', 'bitter_stave', 20); });
   await editSave(poor, (s) => { s.player.gold = 5; });
-  await editSave(full, (s) => { s.player.gold = 1000; fillStorage(s, ['slag_delve']); });
+  await editSave(full, (s) => { s.player.gold = 1000; fillStorage(s, ['slag_delve', 'bitter_stave']); });
 
   NOW += 1000;
   const l = await play(stall, cmd('marketList', { key: 'slag_delve', from: 'bank', qty: 20, price: 9 }));
   const id = l.results[0].data.listingId;
+  // A pool nobody else in this suite has stock in, so the cheapest band is known: 9 gold.
+  const only = (await play(stall, cmd('marketList', { key: 'bitter_stave', from: 'bank', qty: 20, price: 9 }))).results[0].data.listingId;
   const salesBefore = (await q1('select count(*)::int as n from public.market_sales')).n;
 
   NOW += 1000;
-  const p = await play(poor, cmd('marketBuy', { listingId: id, qty: 1 }));
+  // 9 plus the market's leg is 10, and there are 5 gold in the purse.
+  const p = await play(poor, cmd('marketBuyPool', { key: 'bitter_stave', qty: 1, maxEach: 9 }));
   check('not enough gold is refused', p.results[0].ok === false && /gold/i.test(p.results[0].error), p.results[0]);
-  same('and nothing moved', [p.state.player.gold, haveQty(p.state, 'slag_delve'), (await listing(id)).qty_left], [5, 0, 20]);
+  same('and nothing moved', [p.state.player.gold, haveQty(p.state, 'bitter_stave'), (await listing(only)).qty_left], [5, 0, 20]);
 
   NOW += 1000;
-  const f = await play(full, cmd('marketBuy', { listingId: id, qty: 1 }));
+  const f = await play(full, cmd('marketBuyPool', { key: 'bitter_stave', qty: 1, maxEach: 9 }));
   check('no room is refused', f.results[0].ok === false && typeof f.results[0].error === 'string', f.results[0]);
-  same('and nothing moved', [f.state.player.gold, haveQty(f.state, 'slag_delve'), (await listing(id)).qty_left], [1000, 0, 20]);
+  same('and nothing moved', [f.state.player.gold, haveQty(f.state, 'bitter_stave'), (await listing(only)).qty_left], [1000, 0, 20]);
   same('no sales were written', (await q1('select count(*)::int as n from public.market_sales')).n, salesBefore);
 
   NOW += 1000;
@@ -662,6 +855,23 @@ await section('the market: refusals', async () => {
     cmd('marketCancel', { listingId: id }));
   same('junk quantities and ids, and cancelling someone else\'s listing', junk.results.map((r) => r.error),
     ['Choose how many to buy.', 'Choose how many to buy.', 'That listing is gone.', 'That listing is gone.', 'That listing is gone.']);
+
+  NOW += 1000;
+  const poolJunk = await play(poor,
+    cmd('marketBuyPool', { key: 'bitter_stave', qty: 0, maxEach: 9 }),
+    cmd('marketBuyPool', { key: 'bitter_stave', qty: 1.5, maxEach: 9 }),
+    cmd('marketBuyPool', { key: 'bitter_stave', qty: 1 }),
+    cmd('marketBuyPool', { key: 'bitter_stave', qty: 1, maxEach: 0 }),
+    cmd('marketBuyPool', { key: 'bitter_stave', qty: 1, maxEach: 1e9 + 1 }),
+    cmd('marketBuyPool', { key: 'no_such_thing', qty: 1, maxEach: 9 }),
+    cmd('marketBuyPool', { key: 'bitter_stave|rare|1', qty: 1, maxEach: 9 }),
+    cmd('marketBuyPool', { qty: 1, maxEach: 9 }));
+  same('junk quantities, ceilings and keys', poolJunk.results.map((r) => r.error), [
+    'Choose how many to buy.', 'Choose how many to buy.',
+    'Name the most you will pay each.', 'Name the most you will pay each.', 'Name the most you will pay each.',
+    'No such item.', 'No such item.', 'No such item.',
+  ]);
+  same('and none of it moved a thing', [poolJunk.state.player.gold, (await listing(only)).qty_left], [5, 20]);
 
   NOW += 1000;
   const refused = await play(stall,

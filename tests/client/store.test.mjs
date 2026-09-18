@@ -16,7 +16,7 @@ import { createState } from "../../src/shared/state.js";
 import { advance, applyCommand, awaySnapshot, makeEnv, summariseAway } from "../../src/shared/engine.js";
 import { createEmitter, emit } from "../../src/shared/events.js";
 import { attachChronicle } from "../../src/shared/chronicle.js";
-import { applyMail, applyPurchase } from "../../src/shared/market.js";
+import { applyMail, applyPurchase, fillPool, marketFee } from "../../src/shared/market.js";
 import { shopStock } from "../../src/shared/world.js";
 import { ENGINE_VERSION } from "../../src/shared/version.js";
 
@@ -172,15 +172,32 @@ function createServer(wall, { skew = 0, latency = 200, seed = 4242, account = "m
         srv.state = next;
         res = { ok: true };
       } else if (cmd.type === "marketBuy") {
+        // Both legs of the fee, as the handler charges them: the ask, plus the market's cut.
         const l = srv.listings.get(cmd.args.listingId);
         if (!l || l.qtyLeft < 1) res = { ok: false, error: "That listing is gone." };
         else if (!(cmd.args.qty >= 1) || cmd.args.qty > l.qtyLeft) res = { ok: false, error: `Only ${l.qtyLeft} left.` };
         else {
-          const cost = l.price * cmd.args.qty;
-          const bought = applyPurchase(srv.state, { key: l.key, qty: cmd.args.qty, cost }, env);
+          const goods = l.price * cmd.args.qty;
+          const fee = marketFee(goods);
+          const bought = applyPurchase(srv.state, { key: l.key, qty: cmd.args.qty, goods, fee }, env);
           if (bought.ok) {
             l.qtyLeft -= cmd.args.qty;
-            res = { ok: true, data: { listingId: cmd.args.listingId, key: l.key, qty: cmd.args.qty, cost } };
+            res = { ok: true, data: { listingId: cmd.args.listingId, key: l.key, qty: cmd.args.qty, cost: goods + fee, fee } };
+          } else res = bought;
+        }
+      } else if (cmd.type === "marketBuyPool") {
+        // The pool: every listing of that key, filled cheapest first by the shared rule.
+        const open = [...srv.listings.entries()]
+          .filter(([, l]) => l.key === cmd.args.key && l.qtyLeft > 0)
+          .map(([id, l]) => ({ id, priceEach: l.price, qtyLeft: l.qtyLeft, at: id }));
+        const plan = fillPool(open, { qty: cmd.args.qty, maxEach: cmd.args.maxEach, gold: srv.state.player.gold });
+        if (!plan.ok) res = plan;
+        else {
+          const { fills, units, goods, fee, total, short } = plan.data;
+          const bought = applyPurchase(srv.state, { key: cmd.args.key, qty: units, goods, fee }, env);
+          if (bought.ok) {
+            fills.forEach((f) => { srv.listings.get(f.id).qtyLeft -= f.qty; });
+            res = { ok: true, data: { key: cmd.args.key, qty: units, cost: total, fee, asked: cmd.args.qty, short } };
           } else res = bought;
         }
       } else {
@@ -497,10 +514,19 @@ async function main() {
     await step(w, 200);
     check("it waits for the server", settled === null);
     const res = await until(w, buying);
-    check("then resolves with the server's result", res.ok && res.data && res.data.cost === 30 && res.data.key === "slag_delve", res);
-    check("with the answer already adopted", store.state.player.gold === 70 && haveAnywhere(store.state, "slag_delve") === 10);
+    check("then resolves with the server's result, the fee included", res.ok && res.data && res.data.cost === 32 && res.data.fee === 2 && res.data.key === "slag_delve", res);
+    check("with the answer already adopted", store.state.player.gold === 68 && haveAnywhere(store.state, "slag_delve") === 10);
     const gone = await until(w, store.dispatch("marketBuy", { listingId: 99, qty: 1 }));
     check("a refusal comes back as the server said it", !gone.ok && gone.error === "That listing is gone.", gone);
+    // A pool buy is a server command too, and the fill is the shared rule's.
+    srv.listings.set(8, { key: "bitter_fell", price: 2, qtyLeft: 4 });
+    srv.listings.set(9, { key: "bitter_fell", price: 5, qtyLeft: 10 });
+    const pooled = await until(w, store.dispatch("marketBuyPool", { key: "bitter_fell", qty: 6, maxEach: 5 }));
+    check("a pool buy walks the cheap band first and pays one fee on the basket",
+      pooled.ok && pooled.data.qty === 6 && pooled.data.cost === 19 && pooled.data.fee === 1, pooled);
+    check("and the answer is adopted", haveAnywhere(store.state, "bitter_fell") === 6 && store.state.player.gold === 49);
+    const dear = await until(w, store.dispatch("marketBuyPool", { key: "bitter_fell", qty: 4, maxEach: 4 }));
+    check("a ceiling under every band left refuses", !dear.ok && dear.error === "Nobody is selling that at your price.", dear);
     await store.dispatch("startSkill", { skillId: "delving", actionId: "delving_t1_raw", limit: null });
     const reset = await until(w, store.dispatch("resetCamp"));
     check("starting over waits too, and the fresh camp is adopted", reset.ok && store.state.player.gold === 0 && !store.state.tasks.skilling && store.state.log[0].m === "You start over from a ruin.");

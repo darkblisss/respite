@@ -95,11 +95,11 @@ Tables to add (all `public`, RLS enabled on every one):
   - Server writes it. No direct client access; clients see it through `party_state()`.
 - `market_listings`
   - Columns: `id bigint generated always as identity primary key`, `seller_id uuid not null`, `seller_name text not null`, `item_key text not null`, `item_base text not null`, `item_name text not null`, `item_kind text not null` (`material`, `gear` or `tool`), `item_tier int`, `rarity text`, `qty int not null check (qty > 0)`, `qty_left int not null check (qty_left >= 0)`, `price_each bigint not null check (price_each between 1 and 1000000000)`, `status text not null default 'open'` (check `open`, `sold`, `cancelled` or `expired`), `created_at timestamptz not null default now()`, `expires_at timestamptz not null`, `updated_at timestamptz not null default now()`.
-  - Indexes: `(status, item_name)`, `(status, price_each)`, `(seller_id, status)`.
-  - Select: authenticated may read rows where `status = 'open'`, and all of their own rows.
+  - Indexes: `(status, item_name)`, `(status, price_each)`, `(seller_id, status)`, and from migration 007 `(item_key, price_each, created_at, id) where status = 'open'` (the pool's aggregate and its fill read the same order).
+  - Select: **own rows only** (migration 007: `seller_id = auth.uid()`). It was `status = 'open' or own`, which handed every signed in player every seller's name. Open listings reach a client through `market_browse()` and `market_pools()` instead.
 - `market_sales`
-  - Columns: `id bigint identity pk`, `listing_id bigint`, `seller_id uuid`, `buyer_id uuid`, `item_key text`, `item_name text`, `qty int`, `price_each bigint`, `fee bigint`, `created_at timestamptz default now()`.
-  - Select: authenticated may read rows where they are the buyer or the seller.
+  - Columns: `id bigint identity pk`, `listing_id bigint`, `seller_id uuid`, `buyer_id uuid`, `item_key text`, `item_name text`, `qty int`, `price_each bigint`, `fee bigint` (the seller's leg), `buyer_fee bigint not null default 0` (the buyer's, migration 007), `created_at timestamptz default now()`.
+  - Select: **nobody** (migration 007: RLS on, no policy, no grant, as with `party_hunts`). Both sides are kept for moderation and for a traders board's distinct-counterparties gate, and neither side may read the other's id: `profiles` would turn a `user_id` into a name. A player reads their own trades through `market_sales_mine()`.
 - `mail`
   - Columns: `id bigint identity pk`, `user_id uuid not null`, `kind text not null` (`gold` or `item`), `gold bigint not null default 0`, `item_key text`, `qty int not null default 0`, `note text not null default ''`, `created_at timestamptz default now()`, `claimed_at timestamptz`.
   - Select: own rows.
@@ -148,6 +148,10 @@ RPCs are all `security definer`, `set search_path = public`, granted `execute` t
   - The body is trimmed, 1 to 240 chars, and the caller must be a member.
   - Rate limit: reject if the caller posted in that party less than 1.5 seconds ago.
   - Keep only the newest 200 messages per party (delete older ones).
+- The market's three doors (migration 007). The market is anonymous by default both ways, so none of them selects a `seller_id`, a `seller_name` or a `buyer_id`, and the tables behind them answer about the caller's own rows alone.
+  - `market_browse(p_q text default '', p_kind text default null, p_tier int default null, p_sort text default 'price', p_limit int default 50, p_offset int default 0) returns table(id, item_key, item_base, item_name, item_kind, item_tier, rarity, qty_left, price_each, created_at, expires_at, mine boolean)`: open, unexpired listings that are **not** materials, one row a listing, `price` or `newest` order, at most 100. `mine` is true on the caller's own and is the only thing here that says whose a listing is. `p_kind = 'material'` returns nothing: materials are a pool.
+  - `market_pools(p_q text default '', p_tier int default null, p_limit int default 50, p_bands int default 8) returns table(item_key, item_base, item_name, item_kind, item_tier, qty_left bigint, price_min bigint, bands jsonb)`: every open material listing aggregated by item key, cheapest pool first. `bands` is the cheapest `p_bands` price bands as `[{ each, qty }]`, cheapest first. The caller's own listings are left out, because the pool is what they can buy.
+  - `market_sales_mine(p_limit int default 50) returns table(id, side text, item_key, item_name, qty, price_each, fee, created_at)`: the caller's own trades, newest first. `side` is `sold` or `bought`, and `fee` is the caller's own leg of it.
 - `party_hunt_view() returns jsonb` (migration 006): `sessionView()` of the live session the caller's party is on, or null. The only way a client reads `party_hunts`, and it selects the `view` column alone: no seed, no dice, no stat lines. The same value rides back on a member's own game request as `party`.
 - `party_state() returns jsonb`
   ```
@@ -196,7 +200,7 @@ The handler runs one transaction:
 
 `startSkill {skillId, actionId, limit|null}`, `stopSkill {}`, `startHunt {tier, zone, limit|null}`, `pullBack {}`, `setHide {on}`, `pickClass {id}`, `equip {key, from}`, `unequip {slot}`, `unequipTool {skillId}`, `moveItem {key, from, to, qty}`, `sellItem {key, from, qty}`, `salvage {key, from}`, `useChest {key, from}`, `repair {key}`, `reorder {pool, key, before}`, `buyRemedy {key, qty}`, `buySmuggler {slot}`, `travel {regionId}`, `claimBounty {}`, `hireAgent {}`, `deployAgent {agentId, itemKey}`, `buyCompanion {id}`, `setCompanion {id|null}`.
 
-Server-only commands, which need the database: `marketList {key, from, qty, price}`, `marketBuy {listingId, qty}`, `marketCancel {listingId}`, `partyHuntStart {tier, zone}`, `partyHuntJoin {}`, `partyHuntLeave {}`. The party's fight is played by the server alone (`src/shared/partyHunt.js`, `public.party_hunts`), so the browser cannot predict one and never tries: it draws what the server reports (docs/SERVER.md section 3).
+Server-only commands, which need the database: `marketList {key, from, qty, price}`, `marketBuy {listingId, qty}` (gear and tools, one listing at a time), `marketBuyPool {key, qty, maxEach}` (a material out of the pool every seller's listing of it makes, cheapest first and oldest first among equal prices, never a unit above `maxEach`), `marketCancel {listingId}`, `partyHuntStart {tier, zone}`, `partyHuntJoin {}`, `partyHuntLeave {}`. The market's fee is taken off both legs (`CONFIG.economy.marketFee`): the buyer pays the ask plus it, the seller receives the ask less it, rounded up and never under 1 gold. The party's fight is played by the server alone (`src/shared/partyHunt.js`, `public.party_hunts`), so the browser cannot predict one and never tries: it draws what the server reports (docs/SERVER.md section 3).
 
 ## Events (shared emitter, `env.emit(type, payload)`)
 
@@ -204,6 +208,6 @@ Server-only commands, which need the database: `marketList {key, from, qty, pric
 - Hunt: `hunt:ended`, `hunt:death`, `hunt:sovereign`, `hunt:felled`, `hunt:retreat`, `hunt:hide`, `hunt:passed`, `hunt:fx`, `loot:lost`, `loot:found`
 - Items and companions: `item:broke`, `item:repaired`, `companion:bond`, `companion:found`, `companion:bought`, `companion:active`
 - Camp: `bounty:complete`, `bounty:paid`, `agent:hired`, `agent:deployed`, `requisitions:returned`, `shop:bought`, `smuggler:bought`, `travel:unlocked`, `travel:moved`, `class:picked`, `class:available`, `chest:opened`, `item:salvaged`, `item:sold`, `item:moved`, `settings:hide`
-- Market: `market:listed`, `market:bought`, `market:cancelled`, `mail:claimed`
+- Market: `market:listed`, `market:bought` (`cost` is what left the purse, the fee included, and `fee` is that fee), `market:cancelled`, `mail:claimed`
 - Sessions: `away`
 - Party hunts (raised by the server when a share is settled, no camp log line of their own): `party:spoils { tier, zone, kills, xp, gold, drops, remedies, died }`. The events the settlement raises as it pays (`skill:level`, `loot:found`, `loot:lost`, `item:broke`, `companion:found`, `hunt:death`) are the rules' own and are logged as ever.

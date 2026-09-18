@@ -19,7 +19,7 @@ import { ENGINE_VERSION } from "../shared/version.js";
 import { createState, migrateSave } from "../shared/state.js";
 import { advance, applyCommand, awaySnapshot, makeEnv, summariseAway } from "../shared/engine.js";
 import { attachChronicle } from "../shared/chronicle.js";
-import { itemDef } from "../shared/items.js";
+import { itemDef, itemName, validKey } from "../shared/items.js";
 import { ORDER, qtyIn, transact } from "../shared/storage.js";
 import {
   applyWear, bestRemedy, campPlan, damageItem, dropLoot, huntPresence, remedyHeals, threatIn, threatKey,
@@ -29,7 +29,7 @@ import { addXp, partyMult, xpMult } from "../shared/progression.js";
 import { bountyProgress } from "../shared/world.js";
 import { makeRng } from "../shared/rng.js";
 import { maxHp, recovering, skillLevel, statsOf, totalLevel } from "../shared/stats.js";
-import { applyMail, applyPurchase, applyReturn, marketFee, prepareListing, remintKey } from "../shared/market.js";
+import { applyMail, applyPurchase, applyReturn, fillPool, marketFee, prepareListing, remintKey } from "../shared/market.js";
 import {
   clearOwed, makeHunter, newSession, nextSessionDue, owedFor, sessionView, stepSession,
 } from "../shared/partyHunt.js";
@@ -534,9 +534,25 @@ async function claimMail(ctx) {
 
 /* ================= 8. THE MARKET ================= */
 /* The rules own the save side (market.js); these own rows, locks and letters.
-   Every refusal comes before the first write, so a refused command changes nothing. */
+   Every refusal comes before the first write, so a refused command changes nothing.
+
+   Two counters, because two kinds of goods:
+
+   - Materials are fungible, so their listings are a pool. A buyer names an item, a
+     quantity and the most they will pay each, and marketBuyPool fills it cheapest
+     first, oldest first among equal prices, across as many sellers as it takes. They
+     never see a listing, an id or a seller, and no listing id of a material's ever
+     reaches a buyer, so there is nothing to aim at.
+   - Gear and tools are not: every piece is its own row, bought by id as before.
+
+   Nobody's name leaves here either way. market_sales keeps both sides (moderation and
+   a later traders board need them) and the letter it posts says what sold, not who
+   bought it. Migration 007 closes the same doors in the database. */
 
 const listingIdOf = (v) => (Number.isSafeInteger(v) && v > 0 ? v : null);
+const FILL_ROWS = 25;                       // listings one pool buy may walk; past that it fills what it can
+const NOT_POOLED = "That is sold piece by piece.";
+const POOLED = "Buy materials from the pool.";
 
 async function marketList(ctx, args) {
   const max = CONFIG.economy.marketMaxListings;
@@ -578,7 +594,7 @@ async function marketBuy(ctx, args) {
   if (!Number.isInteger(qty) || qty < 1) return { ok: false, error: "Choose how many to buy." };
 
   const [l] = await ctx.q(
-    `select seller_id::text as seller_id, item_key, item_name, qty_left, price_each, status,
+    `select seller_id::text as seller_id, item_key, item_name, item_kind, qty_left, price_each, status,
             expires_at <= to_timestamp($2::float8 / 1000) as expired
      from public.market_listings
      where id = $1::bigint
@@ -587,22 +603,26 @@ async function marketBuy(ctx, args) {
   );
   if (!l || l.status !== "open" || l.expired) return GONE;
   if (l.seller_id === ctx.userId.toLowerCase()) return { ok: false, error: "You can't buy your own listing." };
+  /* A material is bought from its pool, by name and by price, never by id: an id is the one
+     thing that could pick a seller out of the pool, so it buys nothing here. */
+  if (l.item_kind === "material") return { ok: false, error: POOLED };
   const left = Number(l.qty_left);
   if (qty > left) return { ok: false, error: `Only ${fmtWhole(left)} left.` };
 
   // The price is the listing's, never the buyer's.
   const priceEach = Number(l.price_each);
-  const cost = priceEach * qty;
-  if (!Number.isSafeInteger(cost)) return { ok: false, error: "Not enough gold." };
-  const fee = marketFee(cost);
+  const goods = priceEach * qty;
+  if (!Number.isSafeInteger(goods)) return { ok: false, error: "Not enough gold." };
+  // Both legs, off the same asking price: the buyer pays it on top, the seller has it taken out.
+  const fee = marketFee(goods);
   const key = remintKey(l.item_key, listingId);
 
-  const bought = applyPurchase(ctx.state, { key, qty, cost }, ctx.env);
+  const bought = applyPurchase(ctx.state, { key, qty, goods, fee }, ctx.env);
   if (!isObject(bought) || !bought.ok) return { ok: false, error: bought && bought.error };
 
   // Paid for: from here on nothing refuses. One statement moves the stock, logs the sale and
-  // posts the seller's gold.
-  const note = `${ctx.account} bought ${fmtWhole(qty)} ${l.item_name} for ${fmtGold(cost)}. The market kept ${fmtGold(fee)}.`;
+  // posts the seller's gold. The letter says what sold, never who bought it.
+  const note = `Sold ${fmtWhole(qty)} ${l.item_name} for ${fmtGold(goods)}. The market kept ${fmtGold(fee)}.`;
   await ctx.q(
     `with sold as (
        update public.market_listings
@@ -612,16 +632,105 @@ async function marketBuy(ctx, args) {
        where id = $1::bigint
        returning id, seller_id, item_key, item_name, price_each
      ), sale as (
-       insert into public.market_sales (listing_id, seller_id, buyer_id, item_key, item_name, qty, price_each, fee)
-       select id, seller_id, $3::uuid, item_key, item_name, $2::int, price_each, $4::bigint
+       insert into public.market_sales (listing_id, seller_id, buyer_id, item_key, item_name, qty, price_each, fee, buyer_fee)
+       select id, seller_id, $3::uuid, item_key, item_name, $2::int, price_each, $4::bigint, $4::bigint
        from sold
      )
      insert into public.mail (user_id, kind, gold, note)
      select seller_id, 'gold', $5::bigint, $6
      from sold`,
-    [listingId, qty, ctx.userId, fee, cost - fee, note],
+    [listingId, qty, ctx.userId, fee, goods - fee, note],
   );
-  return { ok: true, data: { listingId, key, qty, cost } };
+  return { ok: true, data: { listingId, key, qty, cost: goods + fee, fee } };
+}
+
+/* A pool buy. The buyer names the item, how many and the most they will pay each, which is
+   the dearest price the market showed them; anything above it is left alone, so a band
+   drained by somebody else between the drawing and the press refuses instead of quietly
+   charging more. Partial fills are ordinary and the result says how many were had.
+
+   The race: the rows are locked in exactly the order they are filled (price, then age, then
+   id), which is the order every other buyer takes them in too, so two buyers after one pool
+   queue up rather than deadlock. The second one's select waits, then re-reads the rows the
+   first one left behind (Postgres hands a locked row back at its new version), so it fills
+   from what is actually there. Nothing is written until the buyer's gold and the room for
+   the goods are both settled, and it is all one transaction with the save. */
+async function marketBuyPool(ctx, args) {
+  const key = args.key;
+  const d = validKey(key) ? itemDef(key) : null;
+  if (!d) return { ok: false, error: "No such item." };
+  if (d.kind !== "material") return { ok: false, error: NOT_POOLED };
+  const qty = args.qty;
+  if (!Number.isInteger(qty) || qty < 1) return { ok: false, error: "Choose how many to buy." };
+  if (qty > PG_INT_MAX) return { ok: false, error: "That is too many to buy at once." };
+  const maxEach = args.maxEach;
+  if (!Number.isInteger(maxEach) || maxEach < 1 || maxEach > CONFIG.economy.marketMaxPrice) {
+    return { ok: false, error: "Name the most you will pay each." };
+  }
+
+  const rows = await ctx.q(
+    `select id, qty_left, price_each::float8 as price_each,
+            (extract(epoch from created_at) * 1000)::float8 as created_ms
+     from public.market_listings
+     where status = 'open'
+       and item_kind = 'material'
+       and item_key = $1
+       and seller_id <> $2::uuid
+       and qty_left > 0
+       and price_each <= $3::bigint
+       and expires_at > to_timestamp($4::float8 / 1000)
+     order by price_each, created_at, id
+     limit ${FILL_ROWS}
+     for update`,
+    [key, ctx.userId, maxEach, ctx.t],
+  );
+
+  const plan = fillPool(
+    rows.map((r) => ({
+      id: Number(r.id), qtyLeft: Number(r.qty_left), priceEach: Number(r.price_each), at: Number(r.created_ms),
+    })),
+    { qty, maxEach, gold: ctx.state.player.gold },
+  );
+  if (!isObject(plan) || !plan.ok) return { ok: false, error: plan && plan.error };
+  const { fills, units, goods, fee, total, short } = plan.data;
+
+  const bought = applyPurchase(ctx.state, { key, qty: units, goods, fee }, ctx.env);
+  if (!isObject(bought) || !bought.ok) return { ok: false, error: bought && bought.error };
+
+  // Paid for: from here on nothing refuses. Every seller's listing, sale and letter in one go.
+  const name = itemName(key);
+  const legs = fills.map((f) => {
+    const leg = f.qty * f.priceEach;
+    const cut = marketFee(leg);
+    return {
+      id: f.id, qty: f.qty, fee: cut, buyer_fee: f.buyerFee, gold: leg - cut,
+      note: `Sold ${fmtWhole(f.qty)} ${name} for ${fmtGold(leg)}. The market kept ${fmtGold(cut)}.`,
+    };
+  });
+  await ctx.q(
+    `with f as (
+       select * from jsonb_to_recordset($1::text::jsonb)
+         as t(id bigint, qty int, fee bigint, buyer_fee bigint, gold bigint, note text)
+     ), sold as (
+       update public.market_listings l
+       set qty_left = l.qty_left - f.qty,
+           status = case when l.qty_left = f.qty then 'sold' else 'open' end,
+           updated_at = now()
+       from f
+       where l.id = f.id
+       returning l.id, l.seller_id, l.item_key, l.item_name, l.price_each,
+                 f.qty as took, f.fee as fee, f.buyer_fee as buyer_fee, f.gold as gold, f.note as note
+     ), sale as (
+       insert into public.market_sales (listing_id, seller_id, buyer_id, item_key, item_name, qty, price_each, fee, buyer_fee)
+       select id, seller_id, $2::uuid, item_key, item_name, took, price_each, fee, buyer_fee
+       from sold
+     )
+     insert into public.mail (user_id, kind, gold, note)
+     select seller_id, 'gold', gold, note
+     from sold`,
+    [JSON.stringify(legs), ctx.userId],
+  );
+  return { ok: true, data: { key, qty: units, cost: total, fee, asked: qty, short } };
 }
 
 async function marketCancel(ctx, args) {
@@ -645,7 +754,7 @@ async function marketCancel(ctx, args) {
   return { ok: true, data: { listingId, key: l.item_key, qty } };
 }
 
-const MARKET = Object.freeze({ marketList, marketBuy, marketCancel });
+const MARKET = Object.freeze({ marketList, marketBuy, marketBuyPool, marketCancel });
 
 /* ================= 9. PARTY HUNTS ================= */
 
@@ -1163,7 +1272,23 @@ async function resetCamp(ctx) {
   fresh.rolls = { ...old.rolls };
   fresh.serial = old.serial;
   fresh.log = [{ t: fresh.clock, m: "You start over from a ruin." }];
-  await ctx.q("update public.market_listings set status = 'cancelled', updated_at = now() where seller_id = $1::uuid and status = 'open'", [ctx.userId]);
+  /* The only other statement that takes more than one listing lock, so it takes them in the
+     same order a pool buy does (price, then age, then id). Two transactions that agree on the
+     order of any two rows cannot hold half of each other's work. */
+  await ctx.q(
+    `with mine as (
+       select id
+       from public.market_listings
+       where seller_id = $1::uuid and status = 'open'
+       order by price_each, created_at, id
+       for update
+     )
+     update public.market_listings l
+     set status = 'cancelled', updated_at = now()
+     from mine
+     where l.id = mine.id`,
+    [ctx.userId],
+  );
   await ctx.q("delete from public.hunt_presence where user_id = $1::uuid", [ctx.userId]);
   // The party fights on without them: a camp that starts over leaves its share behind with the rest.
   ctx.party.rows.forEach((row) => dropHunter(row, ctx.uid));

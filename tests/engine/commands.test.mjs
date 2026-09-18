@@ -58,7 +58,7 @@ await run(async () => {
     same("server-only commands", E.SERVER_ONLY.map((t) => cmd(s, t, { key: "coal" })), E.SERVER_ONLY.map(() => ({ ok: false, error: "That needs the server." })));
     same("COMMANDS: the predictable ones and the server's", Object.keys(E.COMMANDS).filter((t) => E.COMMANDS[t].predict).sort(),
       ["startSkill", "stopSkill", "startHunt", "pullBack", "setHide", "pickClass", "equip", "unequip", "unequipTool", "moveItem", "sellItem", "salvage", "useChest", "repair", "reorder", "buyRemedy", "buySmuggler", "travel", "claimBounty", "hireAgent", "deployAgent", "buyCompanion", "setCompanion"].sort());
-    check("SERVER_ONLY is the market and the party's fight", E.SERVER_ONLY.join(",") === "marketList,marketBuy,marketCancel,partyHuntStart,partyHuntJoin,partyHuntLeave" && E.SERVER_ONLY.every((t) => E.COMMANDS[t] && !E.COMMANDS[t].predict));
+    check("SERVER_ONLY is the market and the party's fight", E.SERVER_ONLY.join(",") === "marketList,marketBuy,marketBuyPool,marketCancel,partyHuntStart,partyHuntJoin,partyHuntLeave" && E.SERVER_ONLY.every((t) => E.COMMANDS[t] && !E.COMMANDS[t].predict));
     check("args that aren't an object count as none", cmd(s, "stopSkill", "junk").ok && cmd(s, "stopSkill", [1, 2]).ok && cmd(s, "setHide", null).error === "Hiding is on or off.");
   }
 
@@ -460,7 +460,60 @@ await run(async () => {
 
   section("The market's halves");
   {
-    check("marketFee: 5%, floored, at least 1 of any sale", M.marketFee(0) === 0 && M.marketFee(1) === 1 && M.marketFee(19) === 1 && M.marketFee(40) === 2 && M.marketFee(1000) === 50);
+    /* Rounded up, never under 1 gold of a sale worth anything: the house must not round in a
+       player's favour, or a wash trade between two camps costs less than it moves. */
+    check("marketFee: 5%, rounded up, at least 1 of any sale",
+      M.marketFee(0) === 0 && M.marketFee(-5) === 0 && M.marketFee(1) === 1 && M.marketFee(19) === 1
+      && M.marketFee(21) === 2 && M.marketFee(40) === 2 && M.marketFee(41) === 3 && M.marketFee(1000) === 50);
+    check("marketFee never rounds a fee away", [1, 2, 7, 19, 21, 39, 41, 999, 1001, 123456].every((n) => M.marketFee(n) >= n * 0.05 && M.marketFee(n) >= 1));
+
+    // Both legs of a trade: a round trip at the same price always loses gold.
+    {
+      const each = 12;
+      const qty = 40;
+      const goods = each * qty;
+      const fee = M.marketFee(goods);
+      check("a wash trade loses both fees", (goods + fee) - (goods - fee) === 2 * fee && fee === 24);
+    }
+
+    /* One purchase's fee shared over the listings it filled: the parts add up to the whole,
+       every part is a whole number, and the odd gold goes to the largest remainder. */
+    same("splitFee adds up", M.splitFee(10, [100, 100]), [5, 5]);
+    same("splitFee hands the odd gold to the largest remainder", M.splitFee(3, [10, 10, 10]), [1, 1, 1]);
+    same("splitFee with an awkward split", M.splitFee(7, [50, 30, 20]), [4, 2, 1]);
+    same("splitFee ties go to the earlier (cheaper) leg", M.splitFee(1, [10, 10]), [1, 0]);
+    same("splitFee of nothing", [M.splitFee(0, [1, 2]), M.splitFee(5, []), M.splitFee(5, [0, 0])], [[0, 0], [], [0, 0]]);
+    check("splitFee never mints or loses gold", [1, 2, 3, 7, 13, 50, 97].every((fee) => {
+      const parts = M.splitFee(fee, [7, 13, 1, 40, 5]);
+      return parts.reduce((a, b) => a + b, 0) === fee && parts.every((n) => Number.isInteger(n) && n >= 0);
+    }));
+
+    /* The pool's fill: cheapest first, oldest first among equal prices, and never a unit
+       above the ceiling the buyer was shown. */
+    {
+      const pool = [
+        { id: 3, priceEach: 13, qtyLeft: 15, at: 10 },
+        { id: 1, priceEach: 12, qtyLeft: 25, at: 30 },   // dearer age, cheaper price: still first
+        { id: 2, priceEach: 12, qtyLeft: 15, at: 20 },   // same price, older: before id 1
+      ];
+      const walk = (args) => M.fillPool(pool, args);
+      same("fillPool takes the cheapest band, oldest listing first", walk({ qty: 20, maxEach: 13 }).data.fills,
+        [{ id: 2, qty: 15, priceEach: 12, buyerFee: 9 }, { id: 1, qty: 5, priceEach: 12, buyerFee: 3 }]);
+      const across = walk({ qty: 50, maxEach: 13 }).data;
+      same("and walks on into the next band", [across.fills.map((f) => [f.id, f.qty]), across.units, across.goods, across.fee, across.total, across.dearest],
+        [[[2, 15], [1, 25], [3, 10]], 50, 610, 31, 641, 13]);
+      const capped = walk({ qty: 50, maxEach: 12 }).data;
+      same("a ceiling leaves the dearer band alone, and fills short", [capped.units, capped.short, capped.goods, capped.dearest], [40, true, 480, 12]);
+      same("nothing at the price is a refusal", walk({ qty: 5, maxEach: 11 }), { ok: false, error: "Nobody is selling that at your price." });
+      same("an empty pool is the same refusal", M.fillPool([], { qty: 1, maxEach: 99 }), { ok: false, error: "Nobody is selling that at your price." });
+      same("junk quantities and ceilings", [walk({ qty: 0, maxEach: 12 }).error, walk({ qty: 1.5, maxEach: 12 }).error, walk({ qty: 1, maxEach: 0 }).error, walk({ qty: 1 }).error],
+        ["Choose how many to buy.", "Choose how many to buy.", "Name the most you will pay each.", "Name the most you will pay each."]);
+      same("a purse that cannot cover the fee refuses", walk({ qty: 20, maxEach: 13, gold: 251 }), { ok: false, error: "Not enough gold." });
+      check("and one gold more is enough", walk({ qty: 20, maxEach: 13, gold: 252 }).ok === true);
+      const legs = walk({ qty: 50, maxEach: 13 }).data;
+      same("the buyer's fee is shared over the legs, to the gold", legs.fills.reduce((n, f) => n + f.buyerFee, 0), legs.fee);
+      check("a pool with junk rows in it is simply not walked", M.fillPool([{ id: 1, priceEach: 0, qtyLeft: 5 }, { id: 2, priceEach: 5, qtyLeft: 0 }, null], { qty: 1, maxEach: 99 }).ok === false);
+    }
     check("remintKey: unique pieces take the listing's uid, stacks don't change",
       M.remintKey("slag_sword|rare|c1.2", 55) === "slag_sword|rare|m55" && M.remintKey("slag_sword|relic|9|echoing", 7) === "slag_sword|relic|m7|echoing" &&
       M.remintKey("coal", 3) === "coal" && M.remintKey("slag_sword|common", 3) === "slag_sword|common" && I.validKey(M.remintKey("slag_sword|relic|9|echoing", 123456)));
@@ -501,14 +554,19 @@ await run(async () => {
     check("repaired, it lists", cmd(worn, "repair", { key: "slag_sword|epic|s1.4" }).ok && M.prepareListing(worn, { key: "slag_sword|epic|s1.4", from: "inv", qty: 1, price: 500 }, w.env).ok && !S.haveQty(worn, "slag_sword|epic|s1.4"));
 
     s.player.gold = 100;
-    check("applyPurchase pays and takes the goods in", M.applyPurchase(s, { key: "slag_sword|rare|m12", qty: 1, cost: 60 }, w.env).ok && s.player.gold === 40 && s.inv.items["slag_sword|rare|m12"] === 1 && s.stats.goldEarned === 0);
+    // The purse pays the goods and the fee: 60 plus 3 leaves 37, and the event says 63.
+    w.events.length = 0;
+    check("applyPurchase pays the goods and the fee, and takes the goods in",
+      M.applyPurchase(s, { key: "slag_sword|rare|m12", qty: 1, goods: 60, fee: 3 }, w.env).ok
+      && s.player.gold === 37 && s.inv.items["slag_sword|rare|m12"] === 1 && s.stats.goldEarned === 0);
+    same("and the event names what left the purse", w.of("market:bought").map((e) => [e.cost, e.fee]), [[63, 3]]);
     const b2 = clone(s);
-    same("applyPurchase without the gold changes nothing", [M.applyPurchase(s, { key: "coal", qty: 1, cost: 41 }, w.env).error, s], ["Not enough gold.", b2]);
+    same("applyPurchase without the gold changes nothing", [M.applyPurchase(s, { key: "coal", qty: 1, goods: 37, fee: 1 }, w.env).error, s], ["Not enough gold.", b2]);
     const full = fresh();
     full.player.gold = 100;
     fillAll(full);
     const b3 = clone(full);
-    same("applyPurchase with nowhere to put it changes nothing", [M.applyPurchase(full, { key: "provision_t9", qty: 2, cost: 10 }, w.env).error, full], ["Nowhere to put it.", b3]);
+    same("applyPurchase with nowhere to put it changes nothing", [M.applyPurchase(full, { key: "provision_t9", qty: 2, goods: 10, fee: 1 }, w.env).error, full], ["Nowhere to put it.", b3]);
     same("applyReturn with no room", [M.applyReturn(full, { key: "provision_t9", qty: 2 }, w.env).error, full], ["No room to take it back.", b3]);
     check("applyReturn brings a listing home", M.applyReturn(s, { key: "coal", qty: 15 }, w.env).ok && s.bank.items.coal === 20);
 

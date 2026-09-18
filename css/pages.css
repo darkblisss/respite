@@ -1802,7 +1802,8 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
 
 .listing-qty,
 .listing-price,
-.listing-seller {
+.listing-seller,
+.listing-depth {
   min-width: 0;
   font-size: var(--text-md);
   color: var(--bone-dim);
@@ -1813,7 +1814,11 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
 }
 
 .listing-price { font-weight: 600; color: var(--gold-hi); }
-.listing-seller { display: flex; align-items: center; gap: 6px; }
+/* The market names nobody, so the column that held the seller holds the pool's price
+   bands instead ("40 at 12g · 15 at 13g"). .listing-seller stays for the kit's sample. */
+.listing-seller,
+.listing-depth { display: flex; align-items: center; gap: 6px; }
+.listing-depth { font-size: var(--text-sm); }
 .listing-buy { display: flex; justify-content: flex-end; }
 .listing-l { display: none; }
 /* Your own listing: a tint and a thin left accent, in place of the old "Yours" pill. */
@@ -1839,7 +1844,8 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
   .listing-item { grid-area: item; }
   .listing-price { grid-area: price; align-self: start; font-size: var(--text-lg); }
   .listing-qty { grid-area: qty; text-align: left; font-size: var(--text-sm); }
-  .listing-seller { grid-area: seller; font-size: var(--text-sm); }
+  .listing-seller,
+  .listing-depth { grid-area: seller; font-size: var(--text-sm); }
   .listing-buy { grid-area: buy; }
   .listing-l {
     display: inline;

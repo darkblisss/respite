@@ -171,15 +171,19 @@ await run(async () => {
     const dearer = await call(A, "game", [cmd("marketList", { key: "slag_delve", from: "bank", qty: 5, price: 9 })]);
     const dearId = dearer.body.results[0].data.listingId;
 
+    /* The market is anonymous (migration 007): a player reads their own listings and nobody
+       else's, so the table surface is exercised as the seller and the buyer sees nothing. */
     const COLS = "id, seller_name, item_key, item_name, item_kind, qty_left, price_each, status, expires_at";
-    const open = await call(B, "query", "market_listings", COLS, [["eq", "status", "open"]]);
+    const open = await call(A, "query", "market_listings", COLS, [["eq", "status", "open"]]);
     const seen = open.data && open.data.find((r) => r.id === listingId);
-    check("B finds it with from(market_listings).select().eq(status, open)", open.error === null && !!seen, open);
+    check("A finds their own with from(market_listings).select().eq(status, open)", open.error === null && !!seen, open);
     same("with the columns asked for, as PostgREST returns them", seen && { ...seen, expires_at: typeof seen.expires_at },
       { id: listingId, seller_name: "ashen", item_key: "slag_delve", item_name: "Slag Ore", item_kind: "material", qty_left: 30, price_each: 7, status: "open", expires_at: "string" });
+    const spied = await call(B, "query", "market_listings", COLS, [["eq", "status", "open"]]);
+    same("and a buyer reads no listing of anybody else's, ask how they like", [spied.error, spied.data], [null, []]);
 
     const ids = async (steps) => {
-      const res = await call(B, "query", "market_listings", "id", steps);
+      const res = await call(A, "query", "market_listings", "id", steps);
       return res.error ? res.error.message : res.data.map((r) => r.id);
     };
     same("neq, gt, gte, lt and lte", [
@@ -204,21 +208,33 @@ await run(async () => {
     ], [[dearId, listingId], [listingId], [listingId], [listingId]]);
     same("errors come back as { data: null, error: { message } }", [
       await call(B, "query", "hunt_presence", "*").then((r) => [r.data, r.error && r.error.message]),
-      await call(B, "query", "market_listings", "id, nope").then((r) => [r.data, r.error && r.error.message]),
-      await call(B, "query", "market_listings", "id", [["in", "id", 5]]).then((r) => [r.data, r.error && r.error.message]),
+      await call(A, "query", "market_listings", "id, nope").then((r) => [r.data, r.error && r.error.message]),
+      await call(A, "query", "market_listings", "id", [["in", "id", 5]]).then((r) => [r.data, r.error && r.error.message]),
     ], [
       [null, "Could not find the table 'public.hunt_presence' in the schema cache"],
       [null, "column market_listings.nope does not exist"],
       [null, "\"in\" on id needs a list of values."],
     ]);
 
-    const bought = await call(B, "game", [cmd("marketBuy", { listingId, qty: 10 })]);
-    same("B buys 10 of the 30 with marketBuy", bought.body.results[0].data, { listingId, key: "slag_delve", qty: 10, cost: 70 });
-    same("and pays 70 for 10 Slag Ore", [bought.body.state.player.gold, held(bought.body.state, "slag_delve")], [930, 10]);
-    same("20 are left on the listing", (await call(B, "query", "market_listings", "qty_left", [["eq", "id", listingId]])).data, [{ qty_left: 20 }]);
+    // A material is bought out of the pool, by name, quantity and ceiling: the two listings
+    // above are one book, cheapest first, and B never learns whose they are.
+    const pools = await call(B, "rpc", "market_pools", { p_q: "slag" });
+    same("B sees one pool with both bands and no seller in it",
+      (pools.data || []).map((r) => [r.item_key, Number(r.qty_left), Number(r.price_min), r.bands]),
+      [["slag_delve", 35, 7, [{ each: 7, qty: 30 }, { each: 9, qty: 5 }]]]);
+    check("and nothing in the answer names anybody", !/seller|user_id|ashen/i.test(JSON.stringify(pools.data)), pools.data);
+    const bought = await call(B, "game", [cmd("marketBuyPool", { key: "slag_delve", qty: 10, maxEach: 7 })]);
+    same("B buys 10 out of the pool with marketBuyPool", bought.body.results[0].data,
+      { key: "slag_delve", qty: 10, cost: 74, fee: 4, asked: 10, short: false });
+    same("and pays 70 for the ore plus 4 to the market", [bought.body.state.player.gold, held(bought.body.state, "slag_delve")], [926, 10]);
+    same("20 are left on the listing", (await call(A, "query", "market_listings", "qty_left", [["eq", "id", listingId]])).data, [{ qty_left: 20 }]);
+    same("a material listing cannot be bought by its id", (await call(B, "game", [cmd("marketBuy", { listingId, qty: 1 })])).body.results[0].error,
+      "Buy materials from the pool.");
     const paid = await call(A, "game", []);
     const post = paid.body.events.filter((e) => e.type === "mail:claimed");
-    same("A's next call claims the gold by post: 70 less the 3 gold fee", [post.length, post[0] && post[0].gold, paid.body.state.player.gold], [1, 67, 67]);
+    same("A's next call claims the gold by post: 70 less the 4 gold fee", [post.length, post[0] && post[0].gold, paid.body.state.player.gold], [1, 66, 66]);
+    check("and the letter says what sold, not who bought it", !/bram/i.test(JSON.stringify((await call(A, "query", "mail", "note")).data)),
+      (await call(A, "query", "mail", "note")).data);
 
     /* ---------------------------------------------------------- */
     section("row level security");
@@ -226,22 +242,30 @@ await run(async () => {
     const aId = a.userId;
     const bId = b.userId;
     const mailA = await call(A, "query", "mail", "user_id, kind, gold, claimed_at");
-    check("A reads their own letter, claimed", mailA.error === null && mailA.data.length === 1 && mailA.data[0].user_id === aId && mailA.data[0].gold === 67 && !!mailA.data[0].claimed_at, mailA);
+    check("A reads their own letter, claimed", mailA.error === null && mailA.data.length === 1 && mailA.data[0].user_id === aId && mailA.data[0].gold === 66 && !!mailA.data[0].claimed_at, mailA);
     const mailB = await call(B, "query", "mail", "user_id", []);
     const mailBForA = await call(B, "query", "mail", "id", [["eq", "user_id", aId]]);
     same("B cannot read A's mail, even asking for it by id", [mailB.error, mailB.data.some((r) => r.user_id === aId), mailBForA.data], [null, false, []]);
     same("B reads only their own save", (await call(B, "query", "saves", "user_id, username")).data, [{ user_id: bId, username: "bram" }]);
     same("and not A's, even by id", (await call(B, "query", "saves", "data", [["eq", "user_id", aId]])).data, []);
     same("A reads only their own save", (await call(A, "query", "saves", "username")).data, [{ username: "ashen" }]);
-    same("both sides of the sale see it", [
-      (await call(A, "query", "market_sales", "listing_id, qty, fee")).data,
-      (await call(B, "query", "market_sales", "listing_id, qty, fee")).data,
-    ], [[{ listing_id: listingId, qty: 10, fee: 3 }], [{ listing_id: listingId, qty: 10, fee: 3 }]]);
+    // Neither side reads the sales table at all any more: each reads their own side of it.
+    same("market_sales is closed to both sides of the sale", [
+      (await call(A, "query", "market_sales", "listing_id, qty, fee")).error.message,
+      (await call(B, "query", "market_sales", "listing_id, qty, fee")).error.message,
+    ], ["permission denied for table market_sales", "permission denied for table market_sales"]);
+    same("and each reads their own side of it, with their own leg of the fee", [
+      (await call(A, "rpc", "market_sales_mine", {})).data.map((r) => [r.side, r.qty, Number(r.fee)]),
+      (await call(B, "rpc", "market_sales_mine", {})).data.map((r) => [r.side, r.qty, Number(r.fee)]),
+    ], [[["sold", 10, 4]], [["bought", 10, 4]]]);
+    check("with nothing in it that names the other party",
+      !/seller|buyer_id|user_id|ashen|bram/i.test(JSON.stringify((await call(B, "rpc", "market_sales_mine", {})).data)),
+      (await call(B, "rpc", "market_sales_mine", {})).data);
     const cancelled = await call(A, "game", [cmd("marketCancel", { listingId: dearId })]);
     check("A takes the dearer listing back", cancelled.body.results[0].ok === true, cancelled.body.results[0]);
-    same("the seller still sees a cancelled listing; the buyer does not", [
+    same("the seller still sees a cancelled listing; the buyer sees neither it nor the open one", [
       await call(A, "query", "market_listings", "id, status", [["eq", "id", dearId]]).then((r) => r.data),
-      await ids([["eq", "id", dearId]]),
+      await call(B, "query", "market_listings", "id", [["in", "id", [dearId, listingId]]]).then((r) => r.data),
     ], [[{ id: dearId, status: "cancelled" }], []]);
     same("every player reads profiles", (await call(B, "query", "profiles", "username", [["order", "username"]])).data, [{ username: "ashen" }, { username: "bram" }]);
 

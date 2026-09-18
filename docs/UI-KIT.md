@@ -1587,21 +1587,41 @@ Seven columns in one ruled strip; below 900px, seven rows.
 - Page actions: "Sell an item" (`btn-primary`, `tag` icon) opens the sell dialog.
 - Listings card (`card-flush`): `card-head` holds the title and a `.market-bar` (`.input-wrap.market-search` with `search`, a `.seg` of kinds, tier and sort selects).
 
+  The market is anonymous both ways, so no row names anybody: the fourth column is the
+  depth behind the price, not a seller. A row can only ever tell you that it is *yours*
+  (`.is-mine`, from the `mine` flag the realm sends on your own rows).
+
+  Two kinds of row, because two kinds of goods. Materials are fungible, so every open
+  listing of one is merged into a pool: how many there are, the cheapest price, and the
+  price bands behind it. Gear and tools are not, so they stay one row a piece.
+
 ```html
 <div class="listings" role="table" aria-label="Listings">
-  <div class="listing-head" role="row"><span>Item</span><span class="num">Left</span><span class="num">Each</span><span>Seller</span><span></span></div>
+  <div class="listing-head" role="row"><span>Item</span><span class="num">Left</span><span class="num">Each</span><span>Price bands</span><span></span></div>
+
+  <!-- a material pool -->
+  <div class="listing" role="row">
+    <div class="listing-item"><div class="art art-sm" aria-hidden="true"><svg>ore</svg></div>
+      <div class="lr-main"><div class="lr-title">Slag Ore</div><div class="lr-sub">Ores · Tier 1</div></div></div>
+    <div class="listing-qty"><span class="listing-l">Left</span>55</div>
+    <div class="listing-price"><span class="listing-l">From</span>12g</div>
+    <div class="listing-depth"><span class="listing-l">Price bands</span>40 at 12g · 15 at 13g</div>
+    <div class="listing-buy"><button class="btn btn-gold btn-soft btn-sm" type="button">Buy</button></div>
+  </div>
+
+  <!-- one piece of gear -->
   <div class="listing" role="row">                                               <!-- .is-mine for your own -->
     <div class="listing-item"><div class="art art-sm" data-rarity="rare" aria-hidden="true"><svg>blade</svg></div>
       <div class="lr-main"><div class="lr-title rar-rare">Sundering Bog Sword</div><div class="lr-sub">Rare weapon · Tier 2</div></div></div>
     <div class="listing-qty"><span class="listing-l">Left</span>1</div>
     <div class="listing-price"><span class="listing-l">Each</span>420g</div>
-    <div class="listing-seller"><span class="listing-l">Seller</span>Edda</div>
-    <div class="listing-buy"><button class="btn btn-gold btn-soft btn-sm" type="button">Buy</button></div>   <!-- yours: "Cancel" (btn-quiet) -->
+    <div class="listing-depth"></div>
+    <div class="listing-buy"><button class="btn btn-gold btn-soft btn-sm" type="button">Buy</button></div>   <!-- yours: "Remove" (btn-quiet) -->
   </div>
 </div>
 ```
 
-  Below 768px each listing becomes a card: item and price on top, "Left", "Seller" and Buy below (the `.listing-l` labels appear).
+  Below 768px each listing becomes a card: item and price on top, "Left", the bands and Buy below (the `.listing-l` labels appear).
 - Buying: pick a quantity if more than one, then `confirm({ cost })`.
 - "My listings" (`.list`, a thin gold bar of how much sold, Cancel) and "Recent sales" (`.list`, `.price` "+67g" or `.price.is-short` "−420g") share a `.grid-2`.
 - Sell dialog body: a qty picker (no No limit), a price field (`.input-wrap` with `coin` and `.affix` "g", a hint with the lowest listing and the merchant price), and a fee preview:

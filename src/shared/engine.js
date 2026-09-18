@@ -98,7 +98,7 @@ export function advance(state, target, env = SILENT) {
 const needsServer = () => ({ ok: false, error: "That needs the server." });
 
 export const SERVER_ONLY = Object.freeze([
-  "marketList", "marketBuy", "marketCancel",
+  "marketList", "marketBuy", "marketBuyPool", "marketCancel",
   "partyHuntStart", "partyHuntJoin", "partyHuntLeave",
 ]);
 
@@ -126,10 +126,13 @@ export const COMMANDS = Object.freeze({
   deployAgent:  { run: deployAgent, predict: true },
   buyCompanion: { run: buyCompanion, predict: true },
   setCompanion: { run: setCompanion, predict: true },
-  // The market needs the database; the server handles these itself.
-  marketList:   { run: needsServer, predict: false },
-  marketBuy:    { run: needsServer, predict: false },
-  marketCancel: { run: needsServer, predict: false },
+  /* The market needs the database; the server handles these itself. marketBuy takes one
+     listing by its id (gear and tools, one piece a row); marketBuyPool takes a material by
+     name, quantity and price ceiling out of the pool every seller's listing of it makes. */
+  marketList:    { run: needsServer, predict: false },
+  marketBuy:     { run: needsServer, predict: false },
+  marketBuyPool: { run: needsServer, predict: false },
+  marketCancel:  { run: needsServer, predict: false },
   /* A party's fight belongs to the party, not to a save: it is played by the server alone
      (partyHunt.js), so the browser cannot predict one and never tries. */
   partyHuntStart: { run: needsServer, predict: false },

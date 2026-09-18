@@ -110,7 +110,7 @@ store.account()                // { mode, username, userId }
 
 Behaviour:
 - Predictable commands (`COMMANDS[type].predict`) apply locally at once and resolve with the local result; they are queued and sent in a batch (about 1s debounce, at most 25 per request).
-- Server-only commands (`marketList`, `marketBuy`, `marketCancel`, `resetCamp`) flush the queue and wait for the server's result. Guests get `{ ok: false, error: "Sign in to trade." }` (resetCamp in guest mode starts a fresh local camp).
+- Server-only commands (`marketList`, `marketBuy`, `marketBuyPool`, `marketCancel`, `resetCamp`) flush the queue and wait for the server's result. Guests get `{ ok: false, error: "Sign in to trade." }` (resetCamp in guest mode starts a fresh local camp).
 - Reconcile: on every response the store adopts the server state, replays still-unsent commands on top with a quiet env, advances to now quietly, and emits `store:replaced`. Toasts never repeat for replayed time.
 - A predicted command the server refused emits `store:rejected { type, error }`.
 - Server news (`response.events`: `mail:claimed { gold, items, count }`, `away { ms, gains, gold }`) is emitted as `store:news { type, ...payload }`.
@@ -130,9 +130,15 @@ net.signOut()
 net.game(commands)                            // -> response JSON (SERVER.md), used by the store only
 net.rpc(name, args)                           // -> { data, error }  (error is the RPC's human message or null)
 net.market.browse({ q = "", kind = null, tier = null, sort = "price" | "newest", limit = 50, offset = 0 })
-                                              // -> { rows, error }; open, unexpired listings; rows are market_listings columns
+                                              // -> { rows, error }; market_browse(): open gear and tool listings, one row each,
+                                              // no seller anywhere, `mine` true on your own. Materials are never in it
+net.market.pools({ q = "", tier = null, limit = 50, bands = 8 })
+                                              // -> { rows, error }; market_pools(): materials aggregated by item key, cheapest
+                                              // pool first: { item_key, item_name, item_base, item_kind, item_tier, qty_left,
+                                              // price_min, bands: [{ each, qty }] }. Your own listings are not counted
 net.market.mine()                             // -> { rows, error }; the player's own listings, newest first, all statuses, 50
-net.market.sales()                            // -> { rows, error }; market_sales where buyer or seller, newest 50
+net.market.sales()                            // -> { rows, error }; market_sales_mine(): your own trades, newest 50,
+                                              // { id, side: "sold" | "bought", item_key, item_name, qty, price_each, fee, created_at }
 net.party.state()                             // -> { data, error }  party_state()
 net.party.huntView()                          // -> { data, error }  party_hunt_view(): the party's live fight, or null
 net.party.create(name) / invite(username) / cancelInvite(id) / respond(id, accept) / leave() / kick(userId) / say(body)
@@ -174,7 +180,7 @@ Each popup module calls `registerPopup(name, (ctx, ...args) => handle)` at impor
 | `zone` | `tier, zoneId` | hunt | zone popup with projections and the amount picker |
 | `foe` | `monsterId, { back = null }` | hunt | foe popup; `back` is `{ tier, zoneId }` to return to a zone popup |
 | `class` | none | hunt | discipline picker (non-dismissible while choosing is possible) |
-| `sell` | `key, from` | realm | list on the market: quantity, price each, 5% fee preview, `marketList` |
+| `sell` | `key, from` | realm | list on the market: quantity, price each, what the 5% fee leaves you and what a buyer will be quoted (the fee is charged on both legs), `marketList` |
 | `settings` | none | core | account and settings, Start over (`resetCamp`, danger confirm typing RESET) |
 | `account` | `{ mode: "signin" | "create" }` | core | sign in / create account |
 | `sky` | none | camp | today's weather and the week revealed on Sunday |
@@ -234,7 +240,7 @@ Readings the core took where the text above left room. Additions only; nothing a
 - Page modules: `group` and `title` may be strings or `(ctx) => string` and are re-read about once a second (breadcrumb and `document.title` follow). `visible(ctx)` is re-checked about once a second (false redirects to `#/character`), and the nav hides the row of a loaded module that says false (every page module is preloaded 1.5 s after boot). The camp log dock shows under Character by default; a module may export `log: true` or `log: false` to choose.
 - Toasts: at most two per event type in four seconds; news that names one thing (a level, a mastery step, a find, a road, a Bond unlock, a rank) is told once a session. `class:available` opens the picker once per store. Refusal toasts drop the trailing full stop.
 - Accounts: `net.onAuthChange(fn)` hears `{ event: "signed_in" | "signed_out", session, source: "local" | "auth" }`. A sign in from another tab replaces an account camp, never a guest's. A session the server refuses at boot signs out to a guest with a toast. `signIn` takes any password (v4 accounts); `signUp` checks the name and 6 or more characters first.
-- For the harness: the game call is `fetch(url, { method, headers, body, cache: "no-store", signal })`; a 401 calls `auth.refreshSession()` when the fake has it, else `getSession()`; realtime `channel.on(...)` must return the channel, and `removeChannel` gets the object `client.channel()` returned. `market.browse` sorts on one column only.
+- For the harness: the game call is `fetch(url, { method, headers, body, cache: "no-store", signal })`; a 401 calls `auth.refreshSession()` when the fake has it, else `getSession()`; realtime `channel.on(...)` must return the channel, and `removeChannel` gets the object `client.channel()` returned. The market's reads are RPCs now (`market_browse`, `market_pools`, `market_sales_mine`), so the only table the Market page selects from is `market_listings`, filtered to the player's own rows.
 - Engine 2, the party bonus: another member's hunt counts from `started_at` to the earliest of `ended_at ?? ends_by` and `last_seen + 3 minutes`, and a member with no `last_seen` lends nothing (the server's rule). `store.js` exports `huntInterval(member)`, `partyIntervals(party, selfId)`, `PRESENCE_MS` and `serverMs(timestamp)` (Postgres microseconds rounded half up, as the server rounds them); the store's env and `popups/zone.js` `partyHere` both use `huntInterval`. The prediction is tested to match a server applying the rule: no answer moves the Hunt XP.
 - Engine 2, starting over: `resetCamp` always goes as a request of its own, after every command queued before it; commands made while it waits follow in the next request.
 - A store turned away before its first save (outdated or signed out) answers every dispatch with that reason, not "The camp is still waking."
@@ -247,6 +253,13 @@ Readings the core took where the text above left room. Additions only; nothing a
 - **The zone popup** only learns to stop you: while you are out with the party its action reads "Out with your party" and is disabled, because `startHunt` is predictable and the server would otherwise refuse it after the press.
 - **The Hunt page** shows the shared fight in the same `.arena` when `store.partyHunt` names this player. It runs no float or shake layer: those are drawn from `hunt:fx` events raised by the local simulation, and a shared fight has none, so the arena is quieter by design. KPIs become Encounters, Your damage, Party damage, Your share (the split a kill actually pays by) and Time out. A member who joined after an encounter had begun is in the session but not in that fight; the arena says "Waiting · In on the next encounter" and their band row reads "Waiting".
 - **The Party page** asks `party_hunt_view()` only when `store.partyHunt` is empty: the answer to a game request already carries the fight you are out on, and the RPC is worth a request only for the one thing an answer can never say, which is that the rest of the party is out without you.
+
+## The market, anonymous and pooled
+
+- **Nobody is named, either way.** A listing's seller and a sale's buyer never leave the realm (migration 007), so no page can show a name beside a trade and none should try. The only listings the realm will tell a player about are their own: `market_browse` marks them with `mine`, and the My listings card reads them off `market_listings` directly. "Remove" is unchanged.
+- **Materials are a pool, gear is not.** The Listings card draws `net.market.pools()` rows above `net.market.browse()` rows, and the column that held the seller holds the pool's price bands ("40 at 12g · 15 at 13g"; `.listing-depth`, beside the kit's `.listing-seller`). The tabs that are only pools (Materials, Remedies) hide the sort control, because a pool is always cheapest first.
+- **A pool buy carries a ceiling.** The buy sheet walks the bands with `fillPool` from `src/shared/market.js`, the same rule the server fills by, and sends `marketBuyPool { key, qty, maxEach }` with the dearest price that walk reached. A short fill is normal and the toast says so. Without the ceiling a buyer who presses while somebody else drains the cheapest band would pay whatever was left in the book.
+- **The fee is on both legs**, so every number a player is asked to agree to (`confirmSpend`) is the ask plus the market's cut, and the sell sheet shows both what the seller clears and what a buyer will be quoted.
 
 ## Owner's ordering rule
 

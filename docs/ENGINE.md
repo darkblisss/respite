@@ -319,7 +319,8 @@ export function makeEnv({ emitter, party = null, fx = false } = {})   // { emit(
 export function advance(state, target, env)
 export function applyCommand(state, cmd, env)   // cmd { type, args }; unknown type -> { ok: false, error: "Unknown command." }; server-only types -> { ok: false, error: "That needs the server." }
 export const COMMANDS                           // { [type]: { run(state, args, env), predict: boolean } }
-export const SERVER_ONLY = ["marketList", "marketBuy", "marketCancel"]
+export const SERVER_ONLY = ["marketList", "marketBuy", "marketBuyPool", "marketCancel",
+                            "partyHuntStart", "partyHuntJoin", "partyHuntLeave"]
 export function awaySnapshot(state)             // { held: heldEverywhere(state), gold }
 export function summariseAway(before, after, ms) // { ms, gains: [{ key, qty }], gold } from two awaySnapshot()s; emit it yourself as "away" (emit from events.js)
 ```

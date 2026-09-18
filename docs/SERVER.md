@@ -11,6 +11,7 @@ The server is one Supabase Edge Function, `game`. It owns every save: the browse
 | `supabase/migrations/002_server.sql` | Two market indexes. Required. |
 | `supabase/migrations/003_profiles_from_saves.sql` | A profile for every v4 save, so nobody can sign up under a v4 player's name. Required, before the v5 client goes live. |
 | `supabase/migrations/006_party_hunts.sql` | The party hunt table, the RPC a watcher reads it through, and the cron that ticks it. Required for party hunts, and the only thing here that costs money at rest (section 3). |
+| `supabase/migrations/007_market_pools.sql` | The anonymous market: the tables answer about your own rows only, three functions answer everything a market page draws, and material listings are aggregated into pools. Required, and it goes out with the function and the browser bundle. |
 | `.github/workflows/deploy-game.yml` | Deploys on pushes to `main` that touch the rules, the server or the function. |
 | `tests/server/run.mjs` | Integration tests: the real rules against PGlite, optionally through postgres.js. |
 | `package.json` | Dev dependencies and scripts for the local tests. Never deployed. |
@@ -53,7 +54,8 @@ Each command runs at `clamp(at, max(state.clock, now - 10 s), now)`: never in th
 | Type | Args | `data` on success |
 | --- | --- | --- |
 | `marketList` | `{ key, from, qty, price }` (price is gold each) | `{ listingId }` |
-| `marketBuy` | `{ listingId, qty }` (listingId a number, as PostgREST returns it) | `{ listingId, key, qty, cost }`; `key` is what the buyer now holds (unique items get a new uid `m<listingId>`) |
+| `marketBuy` | `{ listingId, qty }` (listingId a number, as PostgREST returns it). Gear and tools only | `{ listingId, key, qty, cost, fee }`; `cost` is what left the purse, fee included; `key` is what the buyer now holds (unique items get a new uid `m<listingId>`) |
+| `marketBuyPool` | `{ key, qty, maxEach }`: a material, how many, and the most it will pay each | `{ key, qty, cost, fee, asked, short }`; `qty` is how many were actually had, `asked` how many were wanted, `short` whether the fill ran out at that price |
 | `marketCancel` | `{ listingId }` | `{ listingId, key, qty }` |
 | `partyHuntStart` | `{ tier, zone }` | `{ tier, zone }` |
 | `partyHuntJoin` | `{}` | `{ tier, zone }` |
@@ -66,6 +68,11 @@ Every other type goes to the rules' `applyCommand`. Refusal messages the server 
 - `You can't buy your own listing.`
 - `Only N left.`
 - `Choose how many to buy.` qty is not a whole number of at least 1.
+- `Buy materials from the pool.` `marketBuy` on a material listing. A material's id buys nothing: it is the one thing that could pick a seller out of the pool.
+- `That is sold piece by piece.` `marketBuyPool` on anything that is not a material.
+- `Name the most you will pay each.` `marketBuyPool` without a whole-number ceiling of 1 to `marketMaxPrice`.
+- `Nobody is selling that at your price.` The pool holds nothing at or under the ceiling (the buyer's own listings never count).
+- `That is too many to buy at once.` A pool quantity past a Postgres int.
 - `You already have 20 listings open.`
 - `Slow down. The market takes 60 listings an hour.` Counts every listing the seller made in the last hour, cancelled or not.
 - `No room to take it back.` (from the rules) The listing stays open.
@@ -100,9 +107,23 @@ Letters in the post are left alone: a request that is only `resetCamp` does not 
 
 The party bonus reads the other members' presence rows as intervals from `started_at` to the earliest of `ended_at ?? ends_by` and `last_seen + 3 minutes`; a member counts at a moment when their interval covers it on the same tier and zone. `last_seen` moves with every game request and every heartbeat, so a member counts while their tab is open. A hunt keeps running for twelve hours with nobody watching, but an alt that sets out and goes quiet stops lending its bonus three minutes later. The browser applies the same rule to `party_state()`'s `last_seen`.
 
-Market maths: `cost = price_each * qty` (from the listing, never the buyer), `fee = max(1, floor(cost * 5%))`, the seller is posted `cost - fee` gold with a note naming the buyer, quantity and item, and `market_sales` gets a row. A 1 gold sale posts a letter worth 0. A seller may have 20 listings open and may make 60 an hour; `created_at` and `expires_at` are on the function's clock.
+### Market maths
 
-Locks, in the order taken: the caller's save row (whole request), expired listings (skip locked, so never waited on), the caller's mail rows, their party hunt rows, a listing being bought or cancelled (from that command to commit), then the caller's profile and presence rows at the very end. Party RPCs lock profile rows too, which is why the profile is written last, and the game function never locks a `parties` row for the same reason. Party hunt rows are taken before any command so two members of one party can never hold half of each other's work. A deadlock or serialization failure is retried once.
+The price is always the listing's, never the buyer's. `goods = price_each * qty`, and `fee = marketFee(goods) = max(1, ceil(goods * 5%))` (`src/shared/market.js`).
+
+**Both legs.** The buyer pays `goods + fee` and the seller is posted `goods - fee`, so a trade of 1,000 gold costs the two of them 100 between them. The fee is rounded **up**, and never under 1 gold of a sale worth gold at all: a fee rounded down is the house paying the difference, and a round trip that costs nothing is what wash trading is made of. A 1 gold sale still posts a letter worth 0. The seller's letter says what sold and what the market kept, and never who bought it.
+
+**Gear and tools** are bought one listing at a time, by id, as they always were.
+
+**Materials** are a pool. `marketBuyPool { key, qty, maxEach }` locks every open listing of that key priced at or under `maxEach` that is not the buyer's own, ordered `price_each, created_at, id` (cheapest first, oldest first among equal prices: classic price-time priority), at most 25 of them, `for update` and never `skip locked`, because skipping a locked row would let a racing buyer jump the queue. `fillPool` in `src/shared/market.js` then walks them in that same order and says how many come from each listing; the browser previews the identical walk over the price bands it was shown, so the price on screen is the price charged. Each seller's listing loses its share of `qty_left`, gets a `market_sales` row and is posted its own leg (`goods_i - marketFee(goods_i)`); the buyer's leg is charged once on the whole basket and shared over the rows by `splitFee`, so `market_sales.buyer_fee` adds up to exactly what left the purse.
+
+A partial fill is ordinary: the result says `qty` (what was had), `asked` and `short`. `maxEach` is what makes that safe. Without it, a buyer who presses while somebody else drains the cheapest band would pay whatever is left in the book; with it, the fill stops at the price they were shown and reports short.
+
+**The race.** Both buyers lock in the same order, so they queue rather than deadlock, and the second one's `select ... for update` hands back the rows at their new versions, so it fills from what is actually left and never from what its browser saw. Nothing is written until the gold and the room for the goods are both settled, and the whole fill is in the same transaction as the save: a buyer never pays for goods they did not receive, and never receives goods they did not pay for.
+
+**Anonymity.** Nothing identifying leaves the server to a third party, for pools or for gear. The server still records both sides in `market_sales` (moderation needs it, and a traders board will need distinct counterparties) and `market_listings.seller_name` is still written, but migration 007 narrows both tables to the caller's own rows and adds the three functions a market page reads: `market_browse` (gear and tools, with a `mine` flag and no other name), `market_pools` (aggregated materials with price bands) and `market_sales_mine` (your side of your own trades). A seller may have 20 listings open and may make 60 an hour; `created_at` and `expires_at` are on the function's clock.
+
+Locks, in the order taken: the caller's save row (whole request), expired listings (skip locked, so never waited on), the caller's mail rows, their party hunt rows, the listings a command buys or cancels (from that command to commit), then the caller's profile and presence rows at the very end. **Where a statement takes more than one listing, it takes them in `price_each, created_at, id` order**: that is the pool's fill order, and `resetCamp`'s mass cancel follows it so the two agree on the order of any two rows and cannot hold half of each other's work. Nothing else locks more than one listing, and the expiry sweep waits for none of them. Party RPCs lock profile rows too, which is why the profile is written last, and the game function never locks a `parties` row for the same reason. Party hunt rows are taken before any command so two members of one party can never hold half of each other's work. A deadlock or serialization failure is retried once.
 
 ## 3. Party hunts
 
@@ -168,7 +189,8 @@ In the Supabase dashboard, SQL Editor, in this order. Each is safe to run again.
 3. `supabase/migrations/003_profiles_from_saves.sql`. Required, and before the v5 client goes live: it gives every v4 save a profile under its name, so a stranger signing up as `name@anywhere` cannot take it first. Where two rows claim one name (a v4 browser could rewrite its own row), the account whose email carries the name wins. These bare profiles show total level 0 until their player's first request fills them in.
 4. `supabase/migrations/004_leaderboard_boards.sql` and `005_wealth_board.sql`. Optional: the boards `hiscores()` cannot answer.
 5. `supabase/migrations/006_party_hunts.sql`. Required for party hunts, and it asks for two values by hand: `RESPITE_TICK_SECRET` in the function's secrets, and the same secret plus the function's URL in `private.settings`. Its header is the instructions. Enable `pg_cron` and `pg_net` first (dashboard, Database, Extensions) or the file says in a notice that the tick is not scheduled and carries on.
-6. The legacy audit in section 5, before announcing the market.
+6. `supabase/migrations/007_market_pools.sql`. Required, and it goes out together with the function and the static client: it closes the market's reads to everyone but the row's owner and opens the three functions the page reads instead, so a browser that predates it shows an empty market until it reloads. Run it again after any later run of `schema.sql`, which recreates the two policies it narrows.
+7. The legacy audit in section 5, before announcing the market.
 
 ## 5. Legacy saves: audit before announcing the market
 
@@ -272,6 +294,8 @@ Automatic, with GitHub Actions: add two repository secrets (Settings, Secrets an
 Every push to `main` that touches `src/shared/**`, `src/server/**`, `supabase/functions/**` or `supabase/config.toml` deploys. The workflow can also be run by hand (Actions, Deploy game function, Run workflow).
 
 Deploy the function and the browser together when `ENGINE_VERSION` changes: old browsers get 409 and must reload. The SQL files are not deployed by the workflow; run new ones by hand (section 4).
+
+Migration 007 is the other case where the three pieces have to go out together, and it does not change `ENGINE_VERSION`: nothing an older browser *predicts* is different, so it is not turned away, but its market page reads listings it may no longer select and calls functions it does not know. Run 007, deploy the function and publish the client in one sitting. A tab left open from before will show an empty market until it is reloaded; bumping `ENGINE_VERSION` is the lever if that is not acceptable, at the price of reloading every tab in the realm.
 
 ## 8. Operations
 

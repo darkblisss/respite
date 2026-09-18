@@ -145,7 +145,10 @@ const economy = {
     { tier: 9, heal: 1800, value: 480, price: 1200, smuggler: true },
   ],
 
-  // The player market, run by the server.
+  /* The player market, run by the server. The fee is taken off BOTH legs of a trade:
+     the buyer pays the asking price plus it, the seller receives the asking price
+     less it, each rounded up and never under 1 gold. A wash trade therefore costs
+     about a tenth of whatever it pretends to move, which is the point. */
   marketFee: 0.05,
   marketMaxListings: 20,
   marketListingDays: 7,

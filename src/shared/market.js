@@ -6,6 +6,11 @@
    save, kept with the rules so the server and the tests agree on
    what listing, buying, taking back and claiming the post do.
    Each one is all or nothing.
+
+   The fee and the material pool's fill order are here too, and
+   for the same reason: the browser has to show a buyer what they
+   will pay and a seller what they will clear before either of
+   them commits, and there must be one answer, not two.
    ============================================================ */
 
 import { CONFIG } from "./config.js";
@@ -17,9 +22,75 @@ const E = CONFIG.economy;
 const refuse = (error) => ({ ok: false, error });
 const TRADEABLE = ["material", "gear", "tool"];
 
-// The house takes its cut: at least 1 gold of any sale worth gold at all.
+/* The house takes its cut off both legs: the buyer pays the ask plus this, the seller
+   receives the ask less this. Rounded up, and never under 1 gold of a sale worth gold
+   at all, because a fee rounded down is the house paying the difference, and a round
+   trip that costs nothing is what wash trading is made of. Up is also the only
+   direction that cannot be split into: ten sales of 1 gold pay 10, one of 10 pays 1
+   either way, and floor would have made the ten free. */
 export function marketFee(total) {
-  return Math.max(total > 0 ? 1 : 0, Math.floor(total * E.marketFee));
+  if (!(total > 0)) return 0;
+  return Math.max(1, Math.ceil(total * E.marketFee));
+}
+
+/* One purchase's fee, shared out over the listings it filled so the rows add up to
+   exactly what was charged: each leg takes its proportion floored, then the gold left
+   over goes to the largest remainders, ties to the cheaper (earlier) leg. Nothing is
+   minted and nothing is lost. */
+export function splitFee(fee, weights) {
+  const w = (Array.isArray(weights) ? weights : []).map((n) => (Number.isFinite(n) && n > 0 ? n : 0));
+  const sum = w.reduce((a, b) => a + b, 0);
+  if (!(fee > 0) || sum <= 0) return w.map(() => 0);
+  const parts = w.map((n) => (fee * n) / sum);
+  const out = parts.map((p) => Math.floor(p));
+  let left = fee - out.reduce((a, b) => a + b, 0);
+  const order = parts
+    .map((p, i) => ({ i, rest: p - Math.floor(p) }))
+    .sort((a, b) => b.rest - a.rest || a.i - b.i);
+  for (let k = 0; left > 0 && k < order.length; k++, left--) out[order[k].i]++;
+  return out;
+}
+
+/* A material pool's fill: cheapest first, and among equal prices the oldest listing
+   first (classic price time priority), walking across as many sellers as it takes. A
+   partial fill is normal; nothing above the buyer's ceiling is ever touched, so a
+   drained band refuses rather than quietly charging more than they were shown.
+
+   Rows are { id, priceEach, qtyLeft, at }: the server hands them over locked and in
+   this order, and the sort is repeated here because this is the rule, and because a
+   browser previews the same walk over the price bands it was shown. */
+export function fillPool(rows, { qty, maxEach, gold = Infinity } = {}) {
+  if (!Number.isInteger(qty) || qty < 1) return refuse("Choose how many to buy.");
+  if (!Number.isInteger(maxEach) || maxEach < 1) return refuse("Name the most you will pay each.");
+  const open = (Array.isArray(rows) ? rows : [])
+    .filter((r) => r && Number.isInteger(r.qtyLeft) && r.qtyLeft > 0
+      && Number.isInteger(r.priceEach) && r.priceEach >= 1 && r.priceEach <= maxEach)
+    .sort((a, b) => a.priceEach - b.priceEach || (a.at || 0) - (b.at || 0) || a.id - b.id);
+
+  const fills = [];
+  let units = 0;
+  let goods = 0;
+  for (const r of open) {
+    if (units >= qty) break;
+    const take = Math.min(r.qtyLeft, qty - units);
+    fills.push({ id: r.id, qty: take, priceEach: r.priceEach });
+    units += take;
+    goods += take * r.priceEach;
+  }
+  if (!units) return refuse("Nobody is selling that at your price.");
+  if (!Number.isSafeInteger(goods)) return refuse("Not enough gold.");
+
+  const fee = marketFee(goods);
+  const total = goods + fee;
+  if (gold < total) return refuse("Not enough gold.");
+  const shares = splitFee(fee, fills.map((f) => f.qty * f.priceEach));
+  return {
+    ok: true,
+    data: {
+      fills: fills.map((f, i) => ({ ...f, buyerFee: shares[i] })),
+      units, goods, fee, total, short: units < qty, dearest: fills[fills.length - 1].priceEach,
+    },
+  };
 }
 
 /* Unique items get a market uid ("m<listingId>") when they change hands, so
@@ -57,11 +128,16 @@ export function prepareListing(state, { key, from, qty, price } = {}, env) {
   return { ok: true, data };
 }
 
-// Pays for a purchase and takes the goods in; key is already reminted.
-export function applyPurchase(state, { key, qty, cost } = {}, env) {
+/* Pays for a purchase and takes the goods in; key is already reminted. `goods` is what
+   the seller asked, `fee` the buyer's leg on top: the purse loses both, and `cost` in
+   the event is what actually left it, so the camp log and the toast name the number
+   the player was charged rather than the shelf price. */
+export function applyPurchase(state, { key, qty, goods, fee = 0 } = {}, env) {
   if (!validKey(key)) return refuse("No such item.");
   if (!Number.isInteger(qty) || qty < 1) return refuse("Buy at least one.");
-  if (!Number.isInteger(cost) || cost < 0) return refuse("That price makes no sense.");
+  if (!Number.isInteger(goods) || goods < 0) return refuse("That price makes no sense.");
+  if (!Number.isInteger(fee) || fee < 0) return refuse("That price makes no sense.");
+  const cost = goods + fee;
   if (state.player.gold < cost) return refuse("Not enough gold.");
 
   const res = transact(state, (tx) => {
@@ -70,7 +146,7 @@ export function applyPurchase(state, { key, qty, cost } = {}, env) {
     tx.stash(key, qty, orderFor(key));
   });
   if (!res.ok) return res;
-  emit(state, env, "market:bought", { key, qty, cost });
+  emit(state, env, "market:bought", { key, qty, cost, fee });
   return { ok: true };
 }
 
