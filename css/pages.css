@@ -744,6 +744,34 @@ button.doll-slot { cursor: pointer; }
 .arena-you .hpbar,
 .arena-you .veilbar { max-width: 240px; }
 
+/* The rest of the warband, under your own bars while the party is out. */
+.arena-band {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  max-width: 240px;
+  margin-top: 2px;
+}
+
+.band-mate {
+  display: grid;
+  grid-template-columns: minmax(0, 72px) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.band-mate.is-down { opacity: .45; }
+
+.band-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--bone-dim);
+}
+
 .veilbar {
   width: 100%;
   height: 6px;
@@ -819,6 +847,16 @@ button.doll-slot { cursor: pointer; }
   min-width: 0;
   min-height: 176px;
 }
+
+/* A party's roster of foes scales with the party, up to a dozen, so they stand two abreast
+   rather than running the card down the page. auto-fit, so one foe is still one wide card. */
+.arena.is-party .arena-foes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  align-content: center;
+}
+
+.arena.is-party .foe-empty { grid-column: 1 / -1; }
 
 .foe-card {
   position: relative;
@@ -1160,6 +1198,11 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
   .arena-portrait { grid-area: art; width: 72px; align-self: start; border-radius: 12px; }
   .arena-name { grid-area: name; text-align: left; font-size: var(--text-lg); }
   .arena-you .hpbar { grid-area: hp; max-width: none; }
+  /* Under your own bars, in the same column: a name that lands under the portrait reads as a
+     label for it. A mate's bar is not your bar, so it keeps out of the areas this grid names. */
+  .arena-band { grid-column: 2; max-width: none; }
+  .arena-band .hpbar { grid-area: auto; }
+  .arena.is-party .arena-foes { grid-template-columns: minmax(0, 1fr); }
   .arena-you .veilbar { grid-area: veil; max-width: none; }
   .arena-you .veil-note { grid-area: note; text-align: left; }
   .arena-you .fx-layer { right: auto; width: 72px; }

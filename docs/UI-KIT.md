@@ -1449,6 +1449,31 @@ Armaments renders a two-handed weapon as one spanning slot instead: `.doll-col.h
 
 Phones (below 768px): the arena is one column: you in a strip (72px portrait beside your bars), the status and timer on one ruled line, then the foe cards at full width with names that wrap rather than truncate. KPIs go two by two; the switch and buttons share a line.
 
+Added with the live page (pages.css, The Hunt), for the party's shared fight:
+
+```html
+<div class="arena is-party">                                <!-- the shared fight, never your own -->
+  <div class="arena-you">
+    ...portrait, name, your hpbar...
+    <div class="arena-band">                                <!-- the rest of the warband; hidden when alone -->
+      <div class="band-mate is-down">                       <!-- .is-down dims a fallen or absent member -->
+        <span class="band-name">Thane</span>
+        <div class="hpbar hpbar-sm"><i></i><span>25 / 25</span></div>
+      </div>
+    </div>
+  </div>
+  ...
+  <div class="arena-foes">
+    <div class="foe-card">
+      ...art, name, hpbar...
+      <div class="small muted mt-1">On Thane</div>           <!-- who the foe is on; existing utilities -->
+    </div>
+  </div>
+</div>
+```
+
+`.arena-band` is a column of rows under your own bars (240px at most, in the same column as your hpbar on phones). `.band-mate` is a 72px name beside the bar; `.band-name` truncates rather than wraps. `.arena.is-party` is the one state class: it turns `.arena-foes` into an `auto-fit` grid of 230px cards, because a party's roster scales with it (up to a dozen) and they should stand two abreast rather than run down the page. One foe still gets one wide card, and below 768px it is one column again. Nothing else about the arena changes.
+
 ### 8.8 Atlas (`?page=atlas`)
 
 ```html

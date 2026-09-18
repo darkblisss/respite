@@ -37,6 +37,7 @@ export const TIMING = Object.freeze({
   maxHoldMs: 4000,            // and no command waits longer (the server moves one older than 10 s)
   batchMax: 25,
   cadenceMs: 5 * 60 * 1000,   // an idle, visible camp checks in this often
+  partyHuntMs: 4000,          // and this often while out with the party (see setPartyHunt)
   heartbeatMs: 60 * 1000,
   onlineMs: 60 * 1000,
   partyMs: 30 * 1000,
@@ -190,6 +191,7 @@ export function createStore({
 
   const status = { conn: kind === "guest" ? "guest" : "connecting", pending: 0, lastSyncAt: null, error: null, catchingUp: false };
   let partyState = null;
+  let partyHunt = null;
   let online = null;
   let visible = true;
   let destroyed = false;
@@ -474,7 +476,10 @@ export function createStore({
       time.sample(Number(res.now), sentAt, receivedAt);
       const behind = reconcile(batch, res);
       lastSuccessAt = wall();
-      nextCadenceAt = lastSuccessAt + T.cadenceMs;
+      /* A party's fight is the server's to play, and it only moves when a member's request
+         asks it to (docs/SERVER.md 3). While this camp is out on one, checking in often is
+         what makes the fight it is watching go on at all. */
+      nextCadenceAt = lastSuccessAt + (partyHunt ? T.partyHuntMs : T.cadenceMs);
       setStatus({ conn: "online", error: null, lastSyncAt: Number(res.now), catchingUp: behind });
       // The server stopped partway through a long absence: straight back for the rest.
       if (behind) syncWanted = true;
@@ -535,6 +540,20 @@ export function createStore({
     return false;
   }
 
+  /* The party's fight, exactly as the server last reported it (sessionView from
+     src/shared/partyHunt.js). It rides back on every answer while this camp is out on one,
+     and is absent otherwise, so an answer without it means they are not out.
+
+     Nothing here plays it and nothing here reads it into the save. Two members are at
+     different clocks and hold dice that cannot be synchronised, so a shared fight cannot be
+     predicted at all: the browser draws what came back and no more. */
+  function setPartyHunt(view) {
+    const next = view && typeof view === "object" && !view.over ? view : null;
+    if (!next && !partyHunt) return;
+    partyHunt = next;
+    bus.emit("store:partyHunt", { partyHunt });
+  }
+
   /* Adopts the server's save. Returns true when the server is still behind its own now. */
   function reconcile(batch, res) {
     const results = new Map();
@@ -588,6 +607,7 @@ export function createStore({
     const first = !state;
     state = next;
     if (first) readyResolve(true);
+    setPartyHunt(res.party);
 
     bus.emit("store:replaced", {});
     for (const r of rejected) bus.emit("store:rejected", r);
@@ -764,6 +784,7 @@ export function createStore({
     bus,
     get status() { return status; },
     get party() { return partyState; },
+    get partyHunt() { return partyHunt; },
     get online() { return online; },
     ready,
     clock: time,

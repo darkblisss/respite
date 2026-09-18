@@ -12,6 +12,13 @@
    the fallen fade out. Blows arrive as hunt:fx events while the
    store plays a frame; they are queued and drawn after the cards
    have caught up, the way v4 drained its combatFx.
+
+   While the party is out and this player is on it, the same arena
+   draws the shared fight instead (store.partyHunt, which is the
+   server's sessionView and nothing else). That fight is not played
+   here and cannot be: two members are at different clocks and hold
+   dice that cannot be synchronised, so the page renders what came
+   back in the last answer and no more.
    ============================================================ */
 
 import { h, on, setAttr, setText, setWidth, toggleClass } from "../ui/dom.js";
@@ -63,6 +70,28 @@ const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : "");
 const atOnce = (zone) => cap(zone.foesText.replace(/\d/g, (d) => WORDS[d] || d));
 const huntKey = (c) => (c.id != null ? c.id : c.startedAt);
 const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+const sameId = (a, b) => a != null && b != null && String(a).toLowerCase() === String(b).toLowerCase();
+
+/* The party's fight, when the server says this player is out on one. It only ever comes off an
+   answer, never off the save, and it is absent the moment they are not in it. */
+function partyFight(ctx) {
+  const view = ctx.store ? ctx.store.partyHunt : null;
+  if (!view || view.over || !Array.isArray(view.hunters)) return null;
+  // A ground this build has never heard of belongs to a newer engine: leave the arena alone.
+  if (!regionOfTier(view.tier)) return null;
+  const me = ctx.account ? ctx.account.userId : null;
+  return me && view.hunters.some((u) => u && sameId(u.userId, me)) ? view : null;
+}
+
+// Party ids are the realm's; only the party roster knows what to call them.
+function namesOf(ctx) {
+  const members = ctx.party && Array.isArray(ctx.party.members) ? ctx.party.members : [];
+  const out = new Map();
+  members.forEach((m) => {
+    if (m && m.user_id) out.set(String(m.user_id).toLowerCase(), cap(String(m.username || "Someone")));
+  });
+  return out;
+}
 
 // The zone last looked at this session: the quiet arena offers to hunt it again.
 let lastZone = "outer";
@@ -93,7 +122,9 @@ export default {
       const t = setTimeout(() => { timers.delete(t); fn(); }, ms);
       timers.add(t);
     };
-    const sigs = { tags: null, next: null, company: null, zones: null, quarry: null };
+    const sigs = { tags: null, next: null, company: null, zones: null, quarry: null, band: null };
+    const mates = new Map();   // the party's other hunters, by user id
+    let wasParty = false;      // which fight the arena was last drawn for
 
     /* ================= HERO ================= */
 
@@ -135,7 +166,9 @@ export default {
     const youName = h("div.arena-name");
     const youFill = h("i");
     const youText = h("span");
-    const you = h("div.arena-you", youFx, youPortrait, youName, h("div.hpbar", youFill, youText));
+    // The rest of the warband, only while the party is out: name and health, one row each.
+    const band = h("div.arena-band", { hidden: true });
+    const you = h("div.arena-you", youFx, youPortrait, youName, h("div.hpbar", youFill, youText), band);
     let veil = null;   // { bar, fill, note }, only once a discipline is held
 
     const status = h("div.arena-status");
@@ -149,10 +182,12 @@ export default {
       h("div.arena-mid", h("div.arena-vs", { "aria-hidden": "true" }, "VS"), status, timer),
       foesBox);
 
+    // The label is a node too: the party's fight has different numbers to report in the same strip.
     const kpi = (label, withBar) => {
+      const l = h("span.l", label);
       const v = h("span.v");
       const fill = withBar ? h("i") : null;
-      return { v, fill, node: h("div.kpi", h("span.l", label), v, withBar ? h("div.bar.bar-ember.bar-thin", fill) : null) };
+      return { l, v, fill, node: h("div.kpi", l, v, withBar ? h("div.bar.bar-ember.bar-thin", fill) : null) };
     };
     const kKills = kpi("Kills");
     const kRate = kpi("XP/hr");
@@ -232,27 +267,31 @@ export default {
 
     /* ================= FOE CARDS ================= */
 
-    const cards = new Map();   // `${hunt}:${uid}` -> { node, art, fx, fill, text, gone }
+    const cards = new Map();   // `${hunt}:${uid}` -> { node, art, fx, fill, text, on, gone }
 
-    function buildCard(f) {
+    function buildCard(f, shared) {
       const mob = getMonster(f.id);
       const sov = mob.archetype === "sovereign";
       const fill = h("i");
       const text = h("span");
       const fx = h("div.fx-layer");
+      // Who a foe is on only matters when there is more than one of you for it to choose between.
+      const on = shared ? h("div.small.muted.mt-1") : null;
       const art = h("button.foe-art", { type: "button", "aria-label": `${mob.name}: details`, dataset: { monster: mob.id }, html: monsterArt(mob, f.elite) });
       const node = h("div.foe-card", { class: { "is-elite": f.elite && !sov, "is-sovereign": sov } },
         fx,
         art,
         h("div.foe-body",
           h("div.foe-name", h("span", mob.name), sov ? h("span.tag.tag-sovereign", "Sovereign") : f.elite ? h("span.tag.tag-elite", "Elite") : null),
-          h("div.hpbar.hpbar-foe", fill, text)));
-      return { node, art, fx, fill, text, gone: false };
+          h("div.hpbar.hpbar-foe", fill, text),
+          on));
+      return { node, art, fx, fill, text, on, gone: false };
     }
 
-    function syncFoes(c) {
-      const foes = c && c.phase === "fight" ? c.foes : [];
-      const hunt = c ? huntKey(c) : null;
+    /* One roster of foe cards for both fights. `shared` is null for your own hunt, where the
+       first foe is the one you are on; for the party's it says who each foe is on, which is the
+       thing that makes the fight read as shared. */
+    function syncFoes(foes, hunt, shared) {
       const standing = new Set(foes.map((f) => `${hunt}:${f.uid}`));
 
       cards.forEach((card, key) => {
@@ -269,13 +308,14 @@ export default {
         const key = `${hunt}:${f.uid}`;
         let card = cards.get(key);
         if (!card) {
-          card = buildCard(f);
+          card = buildCard(f, !!shared);
           cards.set(key, card);
           foesBox.appendChild(card.node);
         }
-        toggleClass(card.node, "is-target", i === 0);
+        toggleClass(card.node, "is-target", shared ? sameId(f.target, shared.me) : i === 0);
         setWidth(card.fill, (f.hp / f.max) * 100);
         setText(card.text, `${fmt(Math.max(0, Math.ceil(f.hp)))} / ${fmt(f.max)}`);
+        if (card.on) setText(card.on, sameId(f.target, shared.me) ? "On you" : `On ${shared.names.get(String(f.target).toLowerCase()) || "the party"}`);
       });
 
       let fading = false;
@@ -341,7 +381,16 @@ export default {
         hideInput.checked = !!ctx.state.settings.hideSovereign;
       });
     });
-    pullBtn.addEventListener("click", () => ctx.dispatch("pullBack"));
+    /* One button, two fights: walking away from the party's is a server-only command, and the
+       answer to it is what takes the shared arena off the page. A refusal toasts itself. */
+    pullBtn.addEventListener("click", () => {
+      if (partyFight(ctx)) {
+        pullBtn.disabled = true;
+        Promise.resolve(ctx.dispatch("partyHuntLeave")).finally(() => { pullBtn.disabled = false; });
+        return;
+      }
+      ctx.dispatch("pullBack");
+    });
     goBtn.addEventListener("click", () => {
       const state = ctx.state;
       const c = state.tasks.combat;
@@ -357,7 +406,7 @@ export default {
 
     /* ================= UPDATE ================= */
 
-    function paintHero(ctx, region, c, kls) {
+    function paintHero(ctx, region, c, kls, party) {
       const state = ctx.state;
       setText(heroEyebrow, `The Field · ${region.name}`);
       const xp = xpProgress(state, "warfare");
@@ -370,8 +419,10 @@ export default {
         heroNext.replaceChildren(...(xp.maxed ? [] : [h("b", fmtWhole(Math.ceil(xp.toNext))), ` to Lv ${xp.level + 1}`]));
       }
 
-      // The discipline, once held, then whatever bends Hunt XP right now.
-      const chips = huntChips(ctx, c ? { tier: c.tier, zoneId: c.zone } : {});
+      /* The discipline, once held, then whatever bends Hunt XP right now. The party's ground
+         counts the same as your own: the server pays a share through partyMult as well. */
+      const ground = c || party;
+      const chips = huntChips(ctx, ground ? { tier: ground.tier, zoneId: ground.zone } : {});
       const tags = `${kls ? kls.name : ""}|${chips.map((x) => x.text).join("|")}`;
       if (tags !== sigs.tags) {
         sigs.tags = tags;
@@ -381,6 +432,20 @@ export default {
         // The hero lays out differently without a tags row, so the row comes and goes.
         if (nodes.length && !heroTags.isConnected) hero.insertBefore(heroTags, heroXp);
         if (!nodes.length && heroTags.isConnected) heroTags.remove();
+      }
+    }
+
+    /* The Veil is your own fight's: the party's view carries none (no stat lines leave the
+       server), so the bar goes while they are out rather than sitting there at nothing. */
+    function setVeil(want) {
+      if (want && !veil) {
+        const fill = h("i");
+        veil = { fill, bar: h("div.veilbar", fill), note: h("div.veil-note") };
+        you.append(veil.bar, veil.note);
+      } else if (!want && veil) {
+        veil.bar.remove();
+        veil.note.remove();
+        veil = null;
       }
     }
 
@@ -410,15 +475,7 @@ export default {
       setText(youText, `${fmt(hp)} / ${fmt(s.maxHp)}`);
       toggleClass(you, "is-down", down);
 
-      if (kls && !veil) {
-        const fill = h("i");
-        veil = { fill, bar: h("div.veilbar", fill), note: h("div.veil-note") };
-        you.append(veil.bar, veil.note);
-      } else if (!kls && veil) {
-        veil.bar.remove();
-        veil.note.remove();
-        veil = null;
-      }
+      setVeil(!!kls);
       if (veil) {
         const v = c ? Math.max(0, Math.min(H.veilMax, c.veil)) : 0;
         setWidth(veil.fill, (v / H.veilMax) * 100);
@@ -461,12 +518,18 @@ export default {
       setText(emptyTitle, et);
       setText(emptySub, es);
 
-      syncFoes(c);
+      syncFoes(c && c.phase === "fight" ? c.foes : [], c ? huntKey(c) : null, null);
       drainFx(ctx.now);
 
       // ---- the numbers ----
       setAttr(kpis, "hidden", !c);
       setAttr(hint, "hidden", !!c);
+      // The strip reports the party's fight while one is out, so its labels come back here.
+      setText(kKills.l, "Kills");
+      setText(kRate.l, "XP/hr");
+      setText(kDps.l, "DPS");
+      setText(kThreat.l, "Threat");
+      setText(kLeft.l, "Time left");
       if (c) {
         setText(kKills.v, fmt(c.done));
         // Live off a rolling window: both figures move every second instead of
@@ -487,8 +550,132 @@ export default {
       const hide = !!state.settings.hideSovereign;
       if (!hidePending && hideInput.checked !== hide) hideInput.checked = hide;
       setAttr(pullBtn, "hidden", !c);
+      setText(pullBtn, "Pull back");
+      setAttr(goBtn, "hidden", false);
       setAttr(goBtn, "disabled", down);
       setText(goBtn, down ? "Recovering" : c ? "Change hunt" : `Hunt the ${getZone(lastZone).name}`);
+      setAttr(band, "hidden", true);
+      toggleClass(arena, "is-party", false);
+    }
+
+    /* The party's fight. Nothing below is worked out here: every number comes off the last
+       answer, which is what makes a disagreement with the server impossible rather than
+       merely unlikely. There is no float or shake layer either, because those come off
+       hunt:fx events raised by a local simulation, and for a shared fight there is no local
+       simulation to raise them. The arena is quieter for it, and that is the right trade. */
+    function paintParty(ctx, view) {
+      const zone = getZone(view.zone);
+      const region = regionOfTier(view.tier);
+      const me = ctx.account ? ctx.account.userId : null;
+      const names = namesOf(ctx);
+      const hunters = Array.isArray(view.hunters) ? view.hunters : [];
+      const mine = hunters.find((u) => sameId(u.userId, me)) || null;
+      const e = view.phase === "fight" ? view.enc : null;
+      const enc = e && Array.isArray(e.foes) && Array.isArray(e.hunters) ? e : null;
+
+      setAttr(huntHead, "hidden", false);
+      setText(huntTitle, `The ${zone.name} of ${region.name}`);
+      setText(huntSub, "The party's hunt · XP and gold split by the damage each of you deals");
+      const chip = `${hunters.length} out together`;
+      if (chip !== sigs.company) {
+        sigs.company = chip;
+        company.replaceChildren(h("span.chip.chip-violet", iconEl("party"), chip));
+      }
+      setAttr(company, "hidden", false);
+
+      // ---- you ----
+      setText(youName, commanderName(ctx));
+      const hp = mine ? Math.max(0, mine.hp) : 0;
+      const max = mine && mine.max > 0 ? mine.max : 1;
+      setWidth(youFill, (hp / max) * 100);
+      setText(youText, `${fmt(hp)} / ${fmt(max)}`);
+      toggleClass(you, "is-down", !!(mine && mine.down));
+      setVeil(false);
+
+      /* Whoever joined after an encounter had begun is in the session but not in that fight:
+         the roster of foes was drawn for the party that walked into it. They are in on the
+         next one, and saying so is the only way their nothing-happening makes sense. */
+      const inEnc = (u) => !enc || enc.hunters.some((x) => sameId(x.userId, u.userId));
+      const fighting = !!(enc && mine && inEnc(mine));
+
+      // ---- the rest of the warband ----
+      syncBand(hunters.filter((u) => !sameId(u.userId, me)), names, inEnc);
+
+      // ---- what is happening ----
+      let st = "Walking";
+      let tm = `Next encounter in ${fmtTime(view.wait)}`;
+      let et = `Searching the ${zone.name}`;
+      let es = "The party walks on to the next one.";
+      if (enc && !fighting) {
+        st = "Waiting";
+        tm = "In on the next encounter";
+        et = `The ${zone.name} lies quiet`;
+        es = "This one was drawn for the party that walked into it.";
+      } else if (enc) {
+        st = enc.kind === "sovereign" ? "A Sovereign" : "Fighting";
+        tm = `Encounter ${fmtWhole(view.encounters)}`;
+        et = `The ${zone.name} lies quiet`;
+        es = "Nothing is left standing here.";
+      }
+      setText(status, st);
+      setText(timer, tm);
+      setText(emptyTitle, et);
+      setText(emptySub, es);
+
+      // A foe this build cannot name is left out rather than drawn as an unknown.
+      syncFoes(enc ? enc.foes.filter((f) => getMonster(f.id)) : [], enc ? `p${view.partyId}:${enc.id}` : null, { me, names });
+      toggleClass(arena, "is-party", true);
+
+      // ---- the numbers ----
+      /* A share is the damage you dealt over the damage the party dealt, which is the one
+         figure worth watching in a fight whose spoils are split that way. */
+      const total = hunters.reduce((n, u) => n + (u.dmg || 0), 0);
+      const share = total > 0 && mine ? (mine.dmg / total) * 100 : 0;
+      setAttr(kpis, "hidden", false);
+      setAttr(hint, "hidden", true);
+      setText(kKills.l, "Encounters");
+      setText(kKills.v, fmtWhole(view.encounters));
+      setText(kRate.l, "Your damage");
+      setText(kRate.v, fmt(Math.round(mine ? mine.dmg : 0)));
+      setText(kDps.l, "Party damage");
+      setText(kDps.v, fmt(Math.round(total)));
+      setText(kThreat.l, "Your share");
+      setText(kThreat.v, `${Math.round(share)}%`);
+      setWidth(kThreat.fill, share);
+      setText(kLeft.l, "Time out");
+      setText(kLeft.v, fmtTime(view.elapsed));
+
+      // Hiding is a lone hunter's trick and the party's fight has no phase for it.
+      setAttr(hideSwitch, "hidden", true);
+      setAttr(pullBtn, "hidden", false);
+      setText(pullBtn, "Break away");
+      setAttr(goBtn, "hidden", true);
+    }
+
+    // One row a member: their name, their health, and a mark on whoever has fallen or is waiting.
+    function syncBand(others, names, inEnc) {
+      const sig = others.map((u) => `${u.userId}:${u.down ? 1 : 0}`).join("|");
+      if (sig !== sigs.band) {
+        sigs.band = sig;
+        mates.clear();
+        band.replaceChildren(...others.map((u) => {
+          const fill = h("i");
+          const text = h("span");
+          const node = h("div.band-mate", { class: { "is-down": u.down } },
+            h("span.band-name", names.get(String(u.userId).toLowerCase()) || "Someone"),
+            h("div.hpbar.hpbar-sm", fill, text));
+          mates.set(String(u.userId).toLowerCase(), { fill, text });
+          return node;
+        }));
+      }
+      others.forEach((u) => {
+        const row = mates.get(String(u.userId).toLowerCase());
+        if (!row) return;
+        const max = u.max > 0 ? u.max : 1;
+        setWidth(row.fill, (Math.max(0, u.hp) / max) * 100);
+        setText(row.text, u.down ? "Fallen" : inEnc(u) ? `${fmt(Math.max(0, u.hp))} / ${fmt(max)}` : "Waiting");
+      });
+      setAttr(band, "hidden", !others.length);
     }
 
     function paintGround(ctx, region, c) {
@@ -532,9 +719,12 @@ export default {
       const c = state.tasks.combat;
       const kls = myClass(state);
       const down = recovering(state);
+      // The server allows one fight a hunter, so these two are never both on.
+      const party = c ? null : partyFight(ctx);
       if (c) lastZone = c.zone;
+      if (party) lastZone = party.zone;
 
-      paintHero(ctx, region, c, kls);
+      paintHero(ctx, region, c, kls, party);
 
       const can = canPickClass(state);
       if (can && !discipline) {
@@ -545,8 +735,20 @@ export default {
         discipline = null;
       }
 
-      paintArena(ctx, region, c, kls, down);
-      paintGround(ctx, region, c);
+      // Cards outlive neither fight: a change of ground clears the roster the other built.
+      if (!!party !== wasParty) {
+        wasParty = !!party;
+        sigs.band = null;
+        sigs.company = null;
+        cards.forEach((card) => card.node.remove());
+        cards.clear();
+        // Blows queued off the fight that just ended have nothing left to float from.
+        fxQueue.length = 0;
+      }
+      if (party) paintParty(ctx, party);
+      else paintArena(ctx, region, c, kls, down);
+      // Both fights hold a tier and a zone, so the ground below marks either one.
+      paintGround(ctx, region, c || party);
     }
 
     update(ctx);

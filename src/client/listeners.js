@@ -13,7 +13,7 @@
 
 import { toast } from "./ui/overlay.js";
 import { hasPopup, openPopup } from "./ui/widgets.js";
-import { fmt, fmtGold, fmtTime } from "./ui/format.js";
+import { fmt, fmtGold, fmtTime, plural } from "./ui/format.js";
 import { CONFIG } from "../shared/config.js";
 import { GameData, getCompanion, getMonster, getRegion, rarityDef, skillName } from "../shared/registry.js";
 import { itemDef, itemName, parseKey } from "../shared/items.js";
@@ -126,6 +126,21 @@ const TABLE = {
     // Engine 2: a letter holding something the rules no longer know is claimed empty.
     if (p.type === "mail:unknown") return ["A letter held something the camp no longer knows", { kind: "warn", icon: "mail" }];
     if (p.type === "away") return [`Welcome back: away ${fmtTime(p.ms)}`, { kind: "info", icon: "hourglass" }];
+    /* A party's share is settled into the save on this camp's own request, and chronicle.js
+       writes no camp line for it, so the toast is the only word the player gets. A member out
+       with their party is paid several times a minute, so the share is spaced like any other
+       trickle; a fall is told every time, because falling is not a trickle. */
+    if (p.type === "party:spoils") {
+      const parts = [];
+      if (p.kills > 0) parts.push(plural(Math.round(p.kills), "kill"));
+      if (p.xp > 0) parts.push(`${fmt(Math.round(p.xp))} XP`);
+      if (p.gold > 0) parts.push(fmtGold(Math.round(p.gold)));
+      if (p.drops > 0) parts.push(plural(p.drops, "drop"));
+      const out = [];
+      if (parts.length) out.push([`Your share: ${parts.join(", ")}`, { kind: "gold", icon: "party" }, { every: 60 * 1000, key: "party:spoils" }]);
+      if (p.died) out.push(["You fell beside your party", { kind: "bad", icon: "skull" }, { once: `partyfell:${p.at}` }]);
+      return out.length ? out : null;
+    }
     return null;
   },
 };

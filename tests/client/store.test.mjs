@@ -62,6 +62,7 @@ function createServer(wall, { skew = 0, latency = 200, seed = 4242, account = "m
     mail: [],
     listings: new Map(),
     partyState: null,
+    partyView: null,      // sessionView(), which rides back on every answer while this camp is out
     calls: [],
     answers: [],
     concurrent: 0,
@@ -191,7 +192,10 @@ function createServer(wall, { skew = 0, latency = 200, seed = 4242, account = "m
     advanceTo(t);
     const awayMs = srv.state.clock - clockBefore;
     if (away && !behind && awayMs > AWAY_MS) emit(srv.state, env, "away", summariseAway(away.before, away.after, awayMs));
-    return { ok: true, v: ENGINE_VERSION, now: t, state: srv.state, results, events: news };
+    const body = { ok: true, v: ENGINE_VERSION, now: t, state: srv.state, results, events: news };
+    // The handler leaves `party` out entirely unless the caller is out on a party's fight.
+    if (srv.partyView) body.party = srv.partyView;
+    return body;
   };
 
   srv.net = {
@@ -883,6 +887,66 @@ async function main() {
     check("a burst of realtime pokes is one read", reads.length === 1, reads.length);
     await run(w, 31 * 1000, 500);
     check("in a party, the party is read again every 30 seconds", reads.length === 2, reads.length);
+  }
+
+  section("The party's fight rides back with the answer");
+  {
+    const w = await boot();
+    const { store, srv } = w;
+    const seen = [];
+    store.bus.on("store:partyHunt", (p) => seen.push(p.partyHunt));
+
+    check("no answer has mentioned one, so there is none", store.partyHunt === null);
+    check("and nothing was said about it", seen.length === 0);
+
+    // sessionView() as partyHunt.js writes it: a fight of two in the Inner, this camp down to 40.
+    const view = (over = null, hp = 40) => ({
+      partyId: "p1", tier: 1, zone: "inner", phase: "fight", wait: 0, elapsed: 90000,
+      encounters: 3, over,
+      enc: {
+        id: 3, tier: 1, zone: "inner", kind: "normal", clock: 12000, over: null,
+        foes: [{ uid: 7, id: "bog_stalker", elite: false, hp: 22, max: 48, target: USER }],
+        hunters: [{ userId: USER, down: false, hp, max: 112, dmg: 640 }, { userId: "u2", down: true, hp: 0, max: 98, dmg: 210 }],
+      },
+      hunters: [{ userId: USER, down: false, hp, max: 112, dmg: 640 }, { userId: "u2", down: true, hp: 0, max: 98, dmg: 210 }],
+    });
+
+    const hpBefore = store.state.player.hp;
+    const goldBefore = store.state.player.gold;
+    srv.partyView = view();
+    await until(w, store.sync());
+    check("an answer carrying one keeps it", !!store.partyHunt && store.partyHunt.partyId === "p1" && store.partyHunt.enc.foes.length === 1, store.partyHunt);
+    check("and says so once", seen.length === 1 && seen[0] === store.partyHunt, seen.length);
+    check("kept word for word, not reshaped", JSON.stringify(store.partyHunt) === JSON.stringify(view()), store.partyHunt);
+
+    // The save is the server's; a fight the browser cannot predict must not write a byte of it.
+    check("it never writes the save", store.state.player.hp === hpBefore && store.state.player.gold === goldBefore && store.state.tasks.combat === null,
+      { hp: store.state.player.hp, hpBefore, combat: store.state.tasks.combat });
+    check("the hunter's health in it is not the camp's", store.partyHunt.hunters[0].hp === 40 && store.state.player.hp !== 40);
+
+    // Out with the party, the camp checks in often: the fight only moves when a member asks it to.
+    const before = srv.calls.length;
+    await run(w, 13 * 1000, 250);
+    const outCalls = srv.calls.length - before;
+    check("while out, the camp checks in every few seconds", outCalls >= 2 && outCalls <= 5, outCalls);
+
+    srv.partyView = view("cleared");
+    await until(w, store.sync());
+    check("a session the server calls over is cleared", store.partyHunt === null, store.partyHunt);
+    check("and the clearing was told", seen.length >= 2 && seen[seen.length - 1] === null);
+
+    srv.partyView = view();
+    await until(w, store.sync());
+    check("it comes back when the server sends one again", !!store.partyHunt);
+    srv.partyView = null;
+    await until(w, store.sync());
+    check("an answer that leaves it out clears it", store.partyHunt === null);
+
+    const quiet = seen.length;
+    const idle = srv.calls.length;
+    await run(w, 13 * 1000, 250);
+    check("nothing is said while there is nothing to say", seen.length === quiet, seen.length - quiet);
+    check("and a camp not out goes back to the slow cadence", srv.calls.length === idle, srv.calls.length - idle);
   }
 }
 

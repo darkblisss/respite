@@ -15,7 +15,7 @@ import { h, el, setText, setWidth, setAttr, toggleClass } from "./dom.js";
 import { iconEl } from "./icons.js";
 import { fmtAgo, fmtTime, fmtWhole, signedPct, titleCase } from "./format.js";
 import { CONFIG } from "../../shared/config.js";
-import { ARTISAN_ORDER, TRADE_ORDER, getSkill, sovereignOf, skillName } from "../../shared/registry.js";
+import { ARTISAN_ORDER, TRADE_ORDER, getSkill, getZone, regionOfTier, sovereignOf, skillName } from "../../shared/registry.js";
 import { skillPlan } from "../../shared/skills.js";
 import { campPlan, combatPlan } from "../../shared/combat.js";
 import { maxHp, recovering, skillLevel } from "../../shared/stats.js";
@@ -139,8 +139,11 @@ export function createShell(app) {
 
   const phone = typeof matchMedia === "function" ? matchMedia("(max-width: 599px)") : { matches: false };
 
+  // Set by paintHunt: the stop button has two meanings and only one place to press it.
+  let outWithParty = false;
+
   $.benchStop.addEventListener("click", () => app.dispatch("stopSkill"));
-  $.huntStop.addEventListener("click", () => app.dispatch("pullBack"));
+  $.huntStop.addEventListener("click", () => app.dispatch(outWithParty ? "partyHuntLeave" : "pullBack"));
   $.conn.addEventListener("click", () => app.openSettings());
   $.settings.addEventListener("click", () => app.openSettings());
 
@@ -191,10 +194,46 @@ export function createShell(app) {
     setWidth($.benchBar, plan.pct);
   }
 
-  function paintHunt(s) {
+  /* The party's fight touches no save, so combatPlan knows nothing about it. Without
+     this the chip reads "Nobody is hunting" at a member who is out with their party
+     and watching the arena do it. Taken straight off the last answer, never predicted. */
+  function partyLook(store) {
+    const view = store.partyHunt;
+    if (!view || view.over || !Array.isArray(view.hunters)) return null;
+    const acc = typeof store.account === "function" ? store.account() : null;
+    const me = acc && acc.userId ? String(acc.userId).toLowerCase() : "";
+    const mine = me && view.hunters.find((u) => u && String(u.userId).toLowerCase() === me);
+    if (!mine) return null;
+    const region = regionOfTier(view.tier);
+    const zone = getZone(view.zone);
+    const where = `${zone.name} · ${region ? region.name : "The realm"}`;
+    if (mine.down) {
+      return {
+        state: "recovering", icon: "skull", name: "Fallen", short: "Fallen",
+        meta: `${where} · your party fights on`, pct: 0, stop: "Break away from the party's hunt",
+      };
+    }
+    const up = view.hunters.filter((u) => !u.down).length;
+    const meta = view.phase === "search"
+      ? `With your party · walking, ${fmtTime(Math.max(0, view.wait))} to go`
+      : `With your party · ${up} standing · ${fmtWhole(Math.round(mine.dmg))} damage`;
+    return {
+      state: "hunting", icon: zoneIcon(view.zone), name: where, short: zone.name,
+      meta,
+      // Your own health, which is the one thing on this chip that is about you.
+      pct: mine.max > 0 ? (mine.hp / mine.max) * 100 : 0,
+      stop: "Break away from the party's hunt",
+    };
+  }
+
+  function paintHunt(s, store) {
     const plan = combatPlan(s);
+    const party = plan ? null : partyLook(store);
+    outWithParty = !!party;
     let look;
-    if (plan && plan.phase === "hide") {
+    if (party) {
+      look = party;
+    } else if (plan && plan.phase === "hide") {
       const sov = sovereignOf(plan.c.tier);
       const wait = Math.max(0, plan.c.wait);
       look = {
@@ -481,7 +520,7 @@ export function createShell(app) {
     const now = s.clock;
     const current = app.router ? app.router.current : null;
     paintBench(s);
-    paintHunt(s);
+    paintHunt(s, store);
     paintStats(s);
     paintNav(s, store, current ? current.route : null);
     paintWeather(now);

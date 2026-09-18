@@ -12,17 +12,26 @@
    are built when the roster changes and repaint in place; chat
    appends what is new and only follows the bottom when you are
    already there. Guests get a sign-in card instead.
+
+   Setting out together lives here rather than in the zone sheet:
+   that sheet is a lone hunter's projection of their own twelve
+   hours, and it is opened by the many players who have no party.
+   Founding, joining and leaving are already here, and this is the
+   one page that can see whether the party is out at all. The
+   fight itself is the server's; this page only names it and the
+   Hunt page draws it.
    ============================================================ */
 
 import { h, setText, setAttr, toggleClass } from "../ui/dom.js";
 import { iconEl } from "../ui/icons.js";
 import { confirm, openModal, toast } from "../ui/overlay.js";
-import { fmtWhole, fmtTime, fmtAgo } from "../ui/format.js";
+import { fmtWhole, fmtTime, fmtAgo, plural } from "../ui/format.js";
 import { openPopup } from "../ui/widgets.js";
 import { CONFIG } from "../../shared/config.js";
-import { findAction, getSkill, getZone, regionOfTier } from "../../shared/registry.js";
+import { GameData, findAction, getSkill, getZone, regionOfTier } from "../../shared/registry.js";
 import { partyMult } from "../../shared/progression.js";
-import { totalLevel } from "../../shared/stats.js";
+import { recovering, totalLevel } from "../../shared/stats.js";
+import { currentRegion } from "../../shared/world.js";
 
 const P = CONFIG.party;
 const ONLINE_MS = 3 * 60 * 1000;   // last_seen this recent counts as online, as online_count() does
@@ -191,6 +200,7 @@ export default {
 function partyBody(ctx, page) {
   let alive = true;
   let local = null;        // party_state asked for directly, while the store has none
+  let remoteFight = null;  // party_hunt_view(), for a fight this camp is not out on
   let failed = null;       // why the first answer never came
   let inFlight = false;
   let again = false;
@@ -204,6 +214,16 @@ function partyBody(ctx, page) {
 
   const current = () => ctx.party || local;
   const meId = () => ctx.account.userId;
+
+  /* The party's fight. The store has it whenever this camp is out on one, because the server
+     sends it back with every answer; nobody else is ever told that way, so a member who has
+     not joined asks the realm for it. Whichever it is, it is the server's word and nothing
+     here plays it forward. */
+  const liveFight = () => (ctx.store && ctx.store.partyHunt) || remoteFight;
+  const outOn = (fight) => {
+    const me = meId();
+    return !!(fight && Array.isArray(fight.hunters) && fight.hunters.some((u) => u && sameId(u.userId, me)));
+  };
 
   /* ---------- asking the realm ---------- */
 
@@ -228,6 +248,7 @@ function partyBody(ctx, page) {
       local = null;
       failed = null;
     }
+    if (alive) await refreshFight();
     inFlight = false;
     if (!alive) return;
     paint(true);
@@ -235,6 +256,25 @@ function partyBody(ctx, page) {
       again = false;
       refresh();
     }
+  }
+
+  /* Only when the store has none of its own: the answer to a game request carries the fight this
+     camp is out on, and that costs nothing. A request of its own is worth spending only for the
+     one thing an answer can never say, which is that the rest of the party is out without you. */
+  async function refreshFight() {
+    if (ctx.store && ctx.store.partyHunt) {
+      remoteFight = null;
+      return;
+    }
+    const st = current();
+    if (!st || !st.party || typeof ctx.net.party.huntView !== "function") {
+      remoteFight = null;
+      return;
+    }
+    const res = await ask(() => ctx.net.party.huntView());
+    if (!alive) return;
+    const view = !res.error && res.data && typeof res.data === "object" ? res.data : null;
+    remoteFight = view && !view.over ? view : null;
   }
 
   // Realtime pokes come in bursts (a message, a member row, an invite): one refresh for the lot.
@@ -401,6 +441,116 @@ function partyBody(ctx, page) {
       h("div.lr-end", decline, accept));
   }
 
+  /* ---------- setting out together ---------- */
+
+  /* One card with the whole of it: where the party is, and the one press that changes that.
+     The fight is drawn on the Hunt page, never here: this card only names it. */
+  function huntPanel() {
+    const sub = h("p.card-sub");
+    const chipBox = h("div.card-actions");
+    const body = h("div");
+    const node = h("section.card", { "data-tone": "ember" },
+      h("div.card-head",
+        h("div", h("h2.card-title", iconEl("swords"), "The party's hunt"), sub),
+        chipBox),
+      body);
+    let shape = null;
+    let chipSig = null;
+    let refs = null;        // { btn, hint } of whatever this shape offers
+    let sending = false;
+
+    async function send(type, args, btn, said) {
+      sending = true;
+      busy(btn, true);
+      let res;
+      try {
+        res = await ctx.dispatch(type, args || {});
+      } catch (err) {
+        res = { ok: false };
+        toast("The realm did not answer", { kind: "warn" });
+      }
+      sending = false;
+      if (!alive) return res;
+      busy(btn, false);
+      // A refusal has already been toasted by dispatch, in the words the server used.
+      if (res && res.ok) said(res.data || {});
+      refresh();
+      return res;
+    }
+
+    function build(kind, tier) {
+      shape = `${kind}|${tier}`;
+      refs = null;
+
+      if (kind === "mine") {
+        const watch = h("a.btn.btn-ember", { href: "#/skill/warfare" }, iconEl("swords"), "Watch the fight");
+        const away = h("button.btn.btn-quiet", { type: "button" }, "Break away");
+        away.addEventListener("click", () => send("partyHuntLeave", {}, away, (data) => {
+          toast(data.kills > 0 ? `You break away: ${plural(data.kills, "kill")}` : "You break away", { kind: "info" });
+        }));
+        body.replaceChildren(h("div.btn-row", watch, away));
+        return;
+      }
+
+      const hint = h("span.field-hint.t-bad.mt-2", { hidden: true, role: "alert" });
+
+      if (kind === "theirs") {
+        const join = h("button.btn.btn-ember", { type: "button" }, iconEl("party"), "Join them");
+        join.addEventListener("click", () => send("partyHuntJoin", {}, join, () => {
+          toast("You fall in with the party", { kind: "good", icon: "party" });
+        }));
+        refs = { btn: join, hint };
+        body.replaceChildren(h("div.btn-row", join), hint);
+        return;
+      }
+
+      // The ground is the one you stand in, as on the Hunt page; the server checks it is open to you.
+      const select = h("select.select.grow", { "aria-label": "Ground" },
+        GameData.ZONES.map((z) => h("option", { value: z.id }, `${z.name} · ×${z.xp} XP a kill`)));
+      const go = h("button.btn.btn-ember", { type: "button" }, iconEl("swords"), "Set out together");
+      go.addEventListener("click", () => send("partyHuntStart", { tier, zone: select.value }, go, () => {
+        toast(`The party sets out for ${ground(tier, select.value)}`, { kind: "good", icon: "swords" });
+      }));
+      refs = { btn: go, hint };
+      body.replaceChildren(h("div.hstack.gap-2", select, go), hint);
+    }
+
+    return {
+      node,
+      paint(fight) {
+        const state = ctx.state;
+        const mine = outOn(fight);
+        const kind = mine ? "mine" : fight ? "theirs" : "idle";
+        const tier = currentRegion(state).tier;
+        if (`${kind}|${tier}` !== shape) build(kind, tier);
+
+        const hunters = fight && Array.isArray(fight.hunters) ? fight.hunters.length : 0;
+        setText(sub, fight
+          ? mine
+            ? `You are out in ${ground(fight.tier, fight.zone)}. The Hunt page draws the fight.`
+            : `Your party is out in ${ground(fight.tier, fight.zone)}. Join them and you come in on the walk, never into the middle of an encounter.`
+          : "Set out on one ground together. The foes come in numbers to match you, and every kill splits its XP and gold by the damage each of you dealt.");
+
+        const chip = fight ? `${fmtWhole(hunters)} out · ${fmtTime(fight.elapsed)}` : "";
+        if (chip !== chipSig) {
+          chipSig = chip;
+          chipBox.replaceChildren(...(chip ? [h("span.chip.chip-ember", iconEl("swords"), chip)] : []));
+        }
+        setAttr(chipBox, "hidden", !chip);
+
+        // The server's own two refusals, said before the press instead of after it.
+        if (refs) {
+          const no = ctx.state.tasks.combat
+            ? "Pull back before you set out with your party."
+            : recovering(ctx.state) ? `You're still recovering. Back on your feet in ${fmtTime(ctx.state.player.recoveryLeft)}.` : null;
+          setText(refs.hint, no || "");
+          setAttr(refs.hint, "hidden", !no);
+          refs.btn.disabled = sending || !!no;
+        }
+      },
+    };
+  }
+
   /* ---------- in a party ---------- */
 
   function partyView() {
@@ -422,12 +572,14 @@ function partyBody(ctx, page) {
 
     const onlineChip = h("span.chip.chip-good", iconEl("online"), h("span"));
     const chat = chatPanel();
+    const fightCard = huntPanel();
 
     // The chat takes the full width the invites card used to share with it.
     page.replaceChildren(
       h("header.page-head",
         h("div", eyebrow, title, h("p.page-sub", RULE), h("div.chip-row.mt-3", bonusChip)),
         actions),
+      fightCard.node,
       grid,
       h("section.card.card-flush.chat", cardHead("Party chat", { actions: onlineChip }), chat.log, chat.alert, chat.form));
 
@@ -669,7 +821,11 @@ function partyBody(ctx, page) {
         const leader = sameId(st.party.leader_id, me);
         const members = list(st.members);
         const c = ctx.state.tasks.combat;
-        const myHunt = c ? { tier: c.tier, zone: c.zone, start: c.startedAt } : null;
+        const fight = liveFight();
+        /* Out with the party is still hunting, and the save knows nothing of it: the session
+           says how long it has run, so the start is the only thing worked out here. */
+        const myHunt = c ? { tier: c.tier, zone: c.zone, start: c.startedAt }
+          : outOn(fight) ? { tier: fight.tier, zone: fight.zone, start: now - fight.elapsed } : null;
 
         // The rules' own sum, over everyone else's presence.
         const intervals = members
@@ -692,6 +848,7 @@ function partyBody(ctx, page) {
         const online = members.filter((m) => sameId(m.user_id, me) || (when(m.last_seen) != null && now - when(m.last_seen) < ONLINE_MS)).length;
         setText(onlineChip.lastChild, `${fmtWhole(online)} online`);
 
+        fightCard.paint(fight);
         paintActions(st, leader);
         paintMembers(st, now, myHunt, bonus);
         paintInvites(st, now, leader);

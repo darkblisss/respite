@@ -382,6 +382,12 @@ export function createNet({
     kick: (userId) => rpc("party_kick", { p_user_id: userId }),
     say: (body) => rpc("party_say", { p_body: body }),
 
+    /* The party's live fight as a watcher may see it, or null when nobody is out. The same
+       shape rides back on a member's own game request as `party`, so this is for the members
+       who are not out on it and never get one: it is how they learn there is a fight to join.
+       It selects one column the server wrote, so no seed and no dice ever leave the realm. */
+    huntView: () => rpc("party_hunt_view"),
+
     /* Pokes onChange when the party's chat, roster or invites change, and when an invite
        to you arrives (so a player with no party still hears one). Returns unsubscribe. */
     subscribe(partyId, onChange) {

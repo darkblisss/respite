@@ -99,6 +99,7 @@ store.now()                    // server-aligned ms
 store.bus                      // createEmitter(): live engine events + store events
 store.status                   // { conn: "guest" | "connecting" | "online" | "syncing" | "offline" | "outdated", pending, lastSyncAt, error }
 store.party                    // party_state or null (account mode only)
+store.partyHunt                // sessionView() of the party fight this camp is out on, or null
 store.online                   // players online (number) or null
 store.dispatch(type, args)     // -> Promise<{ ok, error?, data? }>
 store.frame()                  // advance the predicted save to now with the live env
@@ -115,7 +116,8 @@ Behaviour:
 - Server news (`response.events`: `mail:claimed { gold, items, count }`, `away { ms, gains, gold }`) is emitted as `store:news { type, ...payload }`.
 - Cadence (account mode): sync on load, on focus/visibility, after commands (debounced), and every 5 minutes while visible; never overlapping; again soon when the answer's `state.clock < now`. Heartbeat RPC every 60s while visible (activity `{ skill, action, hunt: { tier, zone } | null }`). `online_count` every 60s. Party state every 30s while in a party or on the Party page, plus realtime pokes.
 - Returning to a tab hidden more than 5 minutes: sync first (the server does the catch-up), then adopt.
-- `store.bus` events: every engine event from live frames (payloads carry `at` and `state`; see ENGINE.md 17 "Events"), plus `store:replaced {}`, `store:status { status }`, `store:rejected { type, error }`, `store:news { type, ... }`, `store:party { party }`, `store:online { online }`.
+- `store.bus` events: every engine event from live frames (payloads carry `at` and `state`; see ENGINE.md 17 "Events"), plus `store:replaced {}`, `store:status { status }`, `store:rejected { type, error }`, `store:news { type, ... }`, `store:party { party }`, `store:partyHunt { partyHunt }`, `store:online { online }`.
+- Party hunts: the answer to a game request carries `party`, `sessionView()` of the shared fight this camp is out on (CONTRACT.md), and leaves it out otherwise. `store.partyHunt` is that value, kept word for word and cleared the moment an answer omits it or calls it `over`. Nothing reads it into the save and nothing plays it forward: a shared fight cannot be predicted at all (`src/shared/partyHunt.js`), so a page draws what came back and no more. While one is live the sync cadence drops from five minutes to `TIMING.partyHuntMs` (4 s) while the tab is visible, because that request is what plays the party's fight forward (docs/SERVER.md 3); `party_hunt_view()` would cost a request and move nothing.
 
 ## 5. Net (core implements; realm pages call)
 
@@ -132,6 +134,7 @@ net.market.browse({ q = "", kind = null, tier = null, sort = "price" | "newest",
 net.market.mine()                             // -> { rows, error }; the player's own listings, newest first, all statuses, 50
 net.market.sales()                            // -> { rows, error }; market_sales where buyer or seller, newest 50
 net.party.state()                             // -> { data, error }  party_state()
+net.party.huntView()                          // -> { data, error }  party_hunt_view(): the party's live fight, or null
 net.party.create(name) / invite(username) / cancelInvite(id) / respond(id, accept) / leave() / kick(userId) / say(body)
                                               // -> { data, error }
 net.party.subscribe(partyId, onChange)        // realtime on party_messages, party_members, party_invites; -> unsubscribe
@@ -187,7 +190,7 @@ Only live events toast (never replays or long catch-ups). Kinds from UI-KIT 6.3.
 - `agent:hired` "Agent hired: Silt"; `requisitions:returned` "Requisitions returned" (good)
 - `travel:unlocked` "Gallowmoor unlocked" (gold); `companion:bought` "Veil Hound joins you" (good); `companion:bond` one per unlock "Veil Hound: +10% gold from kills" (good); `companion:found` "Veil Hound found" or on rank up "Veil Hound: Rank III" (good)
 - `hunt:ended` limit "Hunt finished" (good), cap "The hunt stood down" (info); `hunt:death` "You fell" (bad); `hunt:sovereign` "The Drowned Bailiff comes up out of the dark" (bad); `hunt:felled` "Sovereign felled: Epic Blood Bow" (gold); `hunt:retreat` "You broke away" (warn); `hunt:hide` "Hiding for five minutes" (info); `loot:lost` "No room for loot" (warn); `loot:found` "Found: Rare Bog Helm" (gold); `item:broke` "Bog Helm broke" (bad)
-- `store:rejected` the error (warn); `store:news` mail: "The post: 200g" or "The post: 12 Slag Ore" (gold); away: "Welcome back: away 3h 12m" (info)
+- `store:rejected` the error (warn); `store:news` mail: "The post: 200g" or "The post: 12 Slag Ore" (gold); away: "Welcome back: away 3h 12m" (info); `party:spoils` "Your share: 4 kills, 1,210 XP, 96g" (gold, party icon, once a minute at most) and, on a fall, "You fell beside your party" (bad). `chronicle.js` writes no camp line for a share, so these toasts are the only word the player gets.
 - Market command results are toasted by the page that sent them.
 
 ## 8. Hidden features (shell and pages)
@@ -237,6 +240,13 @@ Readings the core took where the text above left room. Additions only; nothing a
 - A store turned away before its first save (outdated or signed out) answers every dispatch with that reason, not "The camp is still waking."
 - Engine 2, health at camp: the topbar meter shows `campPlan(state, now).hp` when no hunt is out (the save keeps the health the hunter came back with). Pages that show health outside a hunt should read it the same way.
 - `store:news` of type `mail:unknown` toasts "A letter held something the camp no longer knows" (warn).
+
+## Party hunts on the pages
+
+- **Starting one lives on the Party page**, in a "The party's hunt" card: a zone picker for the region you stand in and "Set out together", then "Join them" or "Break away" once the party is out. Not in the zone popup: that sheet is a lone hunter's projection of their own twelve hours from their own Satchel, it is opened by every player whether or not they have a party, and `partyHuntStart` refuses unless you are in one and nobody is out. Founding, inviting and leaving are already on the Party page, and it is the only surface that can see whether the party is out at all.
+- **The zone popup** only learns to stop you: while you are out with the party its action reads "Out with your party" and is disabled, because `startHunt` is predictable and the server would otherwise refuse it after the press.
+- **The Hunt page** shows the shared fight in the same `.arena` when `store.partyHunt` names this player. It runs no float or shake layer: those are drawn from `hunt:fx` events raised by the local simulation, and a shared fight has none, so the arena is quieter by design. KPIs become Encounters, Your damage, Party damage, Your share (the split a kill actually pays by) and Time out. A member who joined after an encounter had begun is in the session but not in that fight; the arena says "Waiting · In on the next encounter" and their band row reads "Waiting".
+- **The Party page** asks `party_hunt_view()` only when `store.partyHunt` is empty: the answer to a game request already carries the fight you are out on, and the RPC is worth a request only for the one thing an answer can never say, which is that the rest of the party is out without you.
 
 ## Owner's ordering rule
 

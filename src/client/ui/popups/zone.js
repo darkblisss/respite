@@ -162,11 +162,21 @@ registerPopup("zone", (ctx, tier, zoneId) => {
     },
   });
 
+  /* Whether this player is out on the party's fight. The rules would happily predict a second
+     hunt and the server would then refuse it ("You're out with your party."), so the sheet says
+     so before the press rather than taking it back afterwards. */
+  const outWithParty = () => {
+    const view = ctx.store ? ctx.store.partyHunt : null;
+    const me = ctx.account ? ctx.account.userId : null;
+    if (!view || view.over || !me || !Array.isArray(view.hunters)) return false;
+    return view.hunters.some((u) => u && String(u.userId).toLowerCase() === String(me).toLowerCase());
+  };
+
   // Recovering, where the hunt is, whether the ground is open and suited, hiding: each changes the buttons or the rows.
   function shapeOf(state) {
     const c = state.tasks.combat;
     return [recovering(state), c ? `${c.tier}:${c.zone}` : "-", state.travel.unlocked.includes(region.id),
-      skillLevel(state, "warfare") < region.level, !!state.settings.hideSovereign].join("|");
+      skillLevel(state, "warfare") < region.level, !!state.settings.hideSovereign, outWithParty()].join("|");
   }
 
   function stat(parent, label, value, tone) {
@@ -259,6 +269,7 @@ registerPopup("zone", (ctx, tier, zoneId) => {
 
     let actions;
     if (recovering(state)) actions = [{ label: "Recovering", kind: "ember", disabled: true }];
+    else if (outWithParty()) actions = [{ label: "Out with your party", kind: "ember", disabled: true }];
     else if (!open) actions = [{ label: "Not open to you", kind: "ember", disabled: true }];
     else if (here) actions = [{ label: "Pull back", kind: "quiet", onClick: pull }];
     else actions = [{ label: c ? "Move the hunt here" : "Start the Hunt", kind: "ember", icon: "swords", onClick: start }];
@@ -330,7 +341,9 @@ registerPopup("zone", (ctx, tier, zoneId) => {
   function paintPlan() {
     if (!refs) return;
     const state = ctx.state;
-    setText(refs.planWarn, recovering(state) ? `Back on your feet in ${fmtTime(state.player.recoveryLeft)}.` : "");
+    setText(refs.planWarn, recovering(state)
+      ? `Back on your feet in ${fmtTime(state.player.recoveryLeft)}.`
+      : outWithParty() ? "Break away from the party's fight before you set out alone." : "");
   }
 
   function update() {
