@@ -998,7 +998,7 @@ const LOOT_LOST_QUIET_MS = 10 * 60 * 1000;
 /* Loot goes straight into storage: Belongings, then the Vault, then the
    Stockpile. A stack already held somewhere grows where it is. When nothing
    fits, the camp log hears about it at most once every ten minutes. */
-function stashLoot(state, key, qty, env, at) {
+export function stashLoot(state, key, qty, env, at) {
   const res = transact(state, (tx) => tx.stash(key, qty, ORDER.loot));
   if (res.ok) return res.value;
   if (state.lootLostAt == null || at - state.lootLostAt > LOOT_LOST_QUIET_MS) {
@@ -1009,7 +1009,7 @@ function stashLoot(state, key, qty, env, at) {
 }
 
 // kN is this kill's index on the k:<tier> counter.
-function dropLoot(state, mob, elite, kN, env, at) {
+export function dropLoot(state, mob, elite, kN, env, at) {
   const seed = state.rng.seed;
   const bonus = 1 + companionBonus(state, "drops");
   const qtyMult = elite ? GameData.ELITE.drops : 1;

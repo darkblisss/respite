@@ -97,7 +97,10 @@ export function advance(state, target, env = SILENT) {
 
 const needsServer = () => ({ ok: false, error: "That needs the server." });
 
-export const SERVER_ONLY = Object.freeze(["marketList", "marketBuy", "marketCancel"]);
+export const SERVER_ONLY = Object.freeze([
+  "marketList", "marketBuy", "marketCancel",
+  "partyHuntStart", "partyHuntJoin", "partyHuntLeave",
+]);
 
 export const COMMANDS = Object.freeze({
   startSkill:   { run: startSkill, predict: true },
@@ -127,6 +130,11 @@ export const COMMANDS = Object.freeze({
   marketList:   { run: needsServer, predict: false },
   marketBuy:    { run: needsServer, predict: false },
   marketCancel: { run: needsServer, predict: false },
+  /* A party's fight belongs to the party, not to a save: it is played by the server alone
+     (partyHunt.js), so the browser cannot predict one and never tries. */
+  partyHuntStart: { run: needsServer, predict: false },
+  partyHuntJoin:  { run: needsServer, predict: false },
+  partyHuntLeave: { run: needsServer, predict: false },
 });
 
 // cmd { type, args }. Untrusted: anything that is not a plain args object counts as none.

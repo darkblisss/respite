@@ -37,6 +37,7 @@ src/shared/                 the game rules (browser + server)
 src/server/handler.js       authoritative request handler (runs in Deno Edge Function, tested in Node)
 src/client/...              browser: store, net, ui
 supabase/schema.sql         run once in the Supabase SQL editor
+supabase/migrations/        run by hand, in order, after schema.sql
 supabase/functions/game/index.ts  Deno wrapper around src/server/handler.js
 tests/                      node test suites (not deployed)
 ```
@@ -116,6 +117,11 @@ Tables to add (all `public`, RLS enabled on every one):
   - Columns: `id bigint identity pk`, `party_id uuid references parties(id) on delete cascade`, `user_id uuid not null`, `username text not null`, `body text not null` (check `char_length(body) between 1 and 240`), `created_at timestamptz default now()`.
   - Select: members of that party.
   - No direct insert; use `party_say`.
+- `party_hunts` (migration 006, not schema.sql): one row a party hunt session, the shared fight the server owns.
+  - Columns: `id bigint identity pk`, `party_id uuid not null references parties(id) on delete cascade`, `tier int not null`, `zone text not null`, `members uuid[] not null default '{}'` (who it still owes a share), `session jsonb not null` (the `partyHunt.js` blob), `view jsonb not null default '{}'` (`sessionView(session)`), `clock bigint not null` and `started_at bigint not null` (world ms, like `saves.clock`), `next_due bigint`, `over boolean not null default false`, `over_at bigint`, `rev bigint not null default 0`, `created_at`, `updated_at`.
+  - Indexes: unique `(party_id) where not over` (one live session a party), `(next_due) where not over` (what the tick reads), gin `(members)` (what a settlement reads), `(over_at) where over` (the sweep).
+  - **No client access of any kind**: no grant, RLS on with no policy. The blob holds the encounter's seed and the dice position, so a client that could read it could play the fight forward and know the result. Clients read `party_hunt_view()` and nothing else.
+  - Only the server writes it, and the tick does so from `POST .../functions/v1/game/tick` (docs/SERVER.md section 3).
 
 Party size is at most 4 members.
 
@@ -142,6 +148,7 @@ RPCs are all `security definer`, `set search_path = public`, granted `execute` t
   - The body is trimmed, 1 to 240 chars, and the caller must be a member.
   - Rate limit: reject if the caller posted in that party less than 1.5 seconds ago.
   - Keep only the newest 200 messages per party (delete older ones).
+- `party_hunt_view() returns jsonb` (migration 006): `sessionView()` of the live session the caller's party is on, or null. The only way a client reads `party_hunts`, and it selects the `view` column alone: no seed, no dice, no stat lines. The same value rides back on a member's own game request as `party`.
 - `party_state() returns jsonb`
   ```
   { party: {id, name, leader_id} | null,
@@ -166,24 +173,30 @@ The script must be idempotent (safe to run twice): `create table if not exists`,
 Response:
 
 ```
-{ ok: true, v, now, state, results: [{ id, ok, error?, data? }] }
+{ ok: true, v, now, state, results: [{ id, ok, error?, data? }], events: [...], party? }
 { ok: false, error: "unauthorized" | "outdated" | "bad_request" | "server_error", v? }
 ```
+
+`party` is `sessionView()` of the party hunt the caller is out on, and absent when they are not.
 
 The handler runs one transaction:
 1. Lock the save row (create a fresh one if none exists).
 2. Migrate it.
 3. Claim mail.
-4. For each command, advance the state to `clamp(at, state.clock, now)` and apply the command.
-5. Advance to now.
-6. Write the save (`rev + 1`), the profile and the hunt presence.
-7. Commit.
+4. Lock the caller's party hunt rows.
+5. For each command, advance the state to `clamp(at, state.clock, now)` and apply the command.
+6. Advance to now.
+7. Play those party sessions up to now and settle the caller's share out of each.
+8. Write the save (`rev + 1`), the profile, the hunt presence and the party hunt rows.
+9. Commit.
+
+`POST .../functions/v1/game/tick` is a second door on the same function for the party hunt cron. It carries no user token: the shared secret `RESPITE_TICK_SECRET` goes in `x-respite-tick`, and it plays every live session forward.
 
 ## Commands (shared `applyCommand(state, {type, args}, env)` → `{ ok, error?, data? }`)
 
 `startSkill {skillId, actionId, limit|null}`, `stopSkill {}`, `startHunt {tier, zone, limit|null}`, `pullBack {}`, `setHide {on}`, `pickClass {id}`, `equip {key, from}`, `unequip {slot}`, `unequipTool {skillId}`, `moveItem {key, from, to, qty}`, `sellItem {key, from, qty}`, `salvage {key, from}`, `useChest {key, from}`, `repair {key}`, `reorder {pool, key, before}`, `buyRemedy {key, qty}`, `buySmuggler {slot}`, `travel {regionId}`, `claimBounty {}`, `hireAgent {}`, `deployAgent {agentId, itemKey}`, `buyCompanion {id}`, `setCompanion {id|null}`.
 
-Server-only commands, which need the database: `marketList {key, from, qty, price}`, `marketBuy {listingId, qty}`, `marketCancel {listingId}`.
+Server-only commands, which need the database: `marketList {key, from, qty, price}`, `marketBuy {listingId, qty}`, `marketCancel {listingId}`, `partyHuntStart {tier, zone}`, `partyHuntJoin {}`, `partyHuntLeave {}`. The party's fight is played by the server alone (`src/shared/partyHunt.js`, `public.party_hunts`), so the browser cannot predict one and never tries: it draws what the server reports (docs/SERVER.md section 3).
 
 ## Events (shared emitter, `env.emit(type, payload)`)
 
@@ -193,3 +206,4 @@ Server-only commands, which need the database: `marketList {key, from, qty, pric
 - Camp: `bounty:complete`, `bounty:paid`, `agent:hired`, `agent:deployed`, `requisitions:returned`, `shop:bought`, `smuggler:bought`, `travel:unlocked`, `travel:moved`, `class:picked`, `class:available`, `chest:opened`, `item:salvaged`, `item:sold`, `item:moved`, `settings:hide`
 - Market: `market:listed`, `market:bought`, `market:cancelled`, `mail:claimed`
 - Sessions: `away`
+- Party hunts (raised by the server when a share is settled, no camp log line of their own): `party:spoils { tier, zone, kills, xp, gold, drops, remedies, died }`. The events the settlement raises as it pays (`skill:level`, `loot:found`, `loot:lost`, `item:broke`, `companion:found`, `hunt:death`) are the rules' own and are logged as ever.

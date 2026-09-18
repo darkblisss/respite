@@ -12,3 +12,8 @@ verify_jwt = false
 # --use-api the CLI follows relative imports from here and uploads every file they reach,
 # src/server and src/shared included, keeping their paths from the project root.
 entrypoint = "./functions/game/index.ts"
+# One secret to set by hand, and only for party hunts: RESPITE_TICK_SECRET, which guards
+# POST .../functions/v1/game/tick, the door pg_cron knocks on to move a party's fight along while
+# nobody is watching it. Set it with `npx supabase secrets set RESPITE_TICK_SECRET=...` and put the
+# same value in private.settings; supabase/migrations/006_party_hunts.sql says how. Unset, the
+# tick path refuses every caller and party hunts only move for members with a tab open.

@@ -227,6 +227,32 @@ await run(async () => {
     check("nextSessionDue agrees", P.nextSessionDue(doomed) === Infinity);
   }
 
+  section("A session that lives in a database");
+  {
+    /* The bug this guards: in memory the session's hunters and the live
+       encounter's are the same objects, so moving one moves both. Through JSON
+       they become two, and only the encounter's copy is the one that gets moved.
+       Without the rebind, owedFor and sessionView read a roster frozen at the
+       last save, so shares, health and damage all come out wrong. */
+    const live = P.newSession({ partyId: "p1", tier: 2, zone: "outer", seed: 191, hunters: band(2, 45) });
+    P.stepSession(live, 8000);
+    check("the round trip happens mid encounter, which is the hard case", live.phase === "fight" && !!live.enc, live.phase);
+
+    const stored = clone(live);
+    stored.hunters.forEach((u, i) => { u.stats = live.hunters[i].stats; });
+    stored.enc.hunters.forEach((u, i) => { u.stats = live.enc.hunters[i].stats; });
+
+    P.stepSession(live, 40000);
+    P.stepSession(stored, 40000);
+
+    const roster = (x) => x.hunters.map((u) => ({ hp: Math.round(u.hp), dmg: Math.round(u.dmg), xp: Math.round(u.owed.xp), down: u.down }));
+    same("a session read back from JSON plays on into the same session", roster(stored), roster(live));
+    check("and its own roster moved, not a copy of it", stored.hunters.some((u) => u.dmg > 0), roster(stored));
+    same("what it owes agrees with what its roster says", 
+      stored.hunters.map((u) => Math.round(u.owed.xp)),
+      stored.hunters.map((u) => Math.round(P.owedFor(stored, u.userId).xp)));
+  }
+
   section("Settling");
   {
     const s = P.newSession({ partyId: "p1", tier: 2, zone: "outer", seed: 77, hunters: band(2, 45) });

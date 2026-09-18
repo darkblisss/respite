@@ -75,7 +75,7 @@ export function makeHunter(userId, stats, { hp = null, heals = [] } = {}) {
     swing: 0, veil: 0, volley: 0, streak: 0,
     down: false,
     dmg: 0,
-    owed: { xp: 0, gold: 0, kills: 0, threat: 0, drops: [], died: null, remedies: 0 },
+    owed: { xp: 0, gold: 0, kills: 0, threat: 0, slain: [], drops: [], died: null, remedies: 0 },
   };
 }
 
@@ -475,12 +475,20 @@ function killFoe(ctx, f) {
     const share = mine / total;
     u.owed.xp += n.xp * z.xp * share;
     u.owed.gold += gold * share;
-    u.owed.kills++;
     // The region notices everyone who was there, so Threat rises as it would alone.
     u.owed.threat += n.threat * H.threatPerKill;
   });
 
-  if (best && bestDmg > 0) best.owed.drops.push({ id: mob.id, elite: !!f.elite });
+  /* One corpse is one kill. Crediting everyone who landed a blow would write four
+     kills into a four's tally and onto the Monsters killed board for a single foe,
+     which the board would be lying about. It goes to whoever hurt it most, with
+     its id, so the slay bounty, the m: counter and the bestiary all see the same
+     kill a lone hunter's would be. The drop follows it: neither can be halved. */
+  if (best && bestDmg > 0) {
+    best.owed.kills++;
+    best.owed.slain.push({ id: mob.id, elite: !!f.elite });
+    best.owed.drops.push({ id: mob.id, elite: !!f.elite });
+  }
 
   if (!e.foes.length) e.over = "cleared";
 }
@@ -572,9 +580,22 @@ function nextEncounter(s) {
   s.phase = "fight";
 }
 
+/* In memory the session's hunters and the live encounter's are the same objects,
+   so moving one moves both. Through JSON they become two, and only the
+   encounter's copy is the one stepEncounter writes to, which leaves owedFor,
+   sessionView and the next encounter reading a roster frozen at the last save.
+   The session owns the hunters, so it points the encounter back at its own
+   before every step. Cheap, and it makes a session read off a database row
+   behave exactly like one that never left memory. */
+function bind(s) {
+  if (!s.enc || !Array.isArray(s.enc.hunters)) return;
+  s.enc.hunters = s.enc.hunters.map((u) => s.hunters.find((x) => x.userId === u.userId) || u);
+}
+
 /* Moves the whole session forward. `hooks.fx` is passed through to the encounter.
    Returns the milliseconds played, which is less than dt once the session is over. */
 export function stepSession(s, dt, hooks = {}) {
+  bind(s);
   let left = dt;
   let played = 0;
   let guard = 0;
@@ -624,7 +645,7 @@ export function owedFor(s, userId) {
 export function clearOwed(s, userId) {
   const u = s.hunters.find((x) => x.userId === String(userId));
   if (!u) return;
-  u.owed = { xp: 0, gold: 0, kills: 0, threat: 0, drops: [], died: null, remedies: 0 };
+  u.owed = { xp: 0, gold: 0, kills: 0, threat: 0, slain: [], drops: [], died: null, remedies: 0 };
 }
 
 // What a watcher sees of the whole session.
