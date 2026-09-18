@@ -36,8 +36,11 @@ const refuse = (error) => ({ ok: false, error });
 
 export const EPS = 1e-6;
 
-// Stochastic rounding: 2.3 lands as 3 three times in ten, as 2 otherwise.
-function landed(x, rng) {
+/* Stochastic rounding: 2.3 lands as 3 three times in ten, as 2 otherwise.
+   Exported, with rollFoe and playerBlow below, because partyHunt.js has to swing
+   for exactly the same numbers a solo hunter would. One implementation, or a
+   party blow quietly stops matching a lone one. */
+export function landed(x, rng) {
   const f = Math.floor(x);
   return f + (rng() < x - f ? 1 : 0);
 }
@@ -90,7 +93,7 @@ export function pickWeighted(pairs, rng) {
   return pairs[pairs.length - 1][0];
 }
 
-function rollFoe(tier, zone, rng) {
+export function rollFoe(tier, zone, rng) {
   const arch = pickWeighted(GameData.ARCHETYPE_ORDER.map((a) => [a, zone.mix[a]]), rng);
   return { mob: foeOf(tier, arch), elite: rng() < zone.elite };
 }
@@ -474,7 +477,7 @@ function enrageStep(ctx) {
 }
 
 // One blow from you: Attack, crit, and the foe's Defence after penetration.
-function playerBlow(s, mob, tier, mult, crit, pen, rng) {
+export function playerBlow(s, mob, tier, mult, crit, pen, rng) {
   const raw = s.attack * mult * (crit ? s.critDmg : 1);
   const mit = mitigation(mob.defence * (1 - Math.min(0.9, pen)), tier);
   return Math.max(1, landed(raw * (1 - mit), rng));

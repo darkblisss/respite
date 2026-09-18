@@ -29,7 +29,7 @@ await run(async () => {
 
   section("src/shared stays pure");
   const expected = ["chronicle.js", "combat.js", "companions.js", "config.js", "engine.js", "events.js", "format.js", "items.js", "lore.js", "market.js",
-    "progression.js", "registry.js", "rng.js", "skills.js", "state.js", "stats.js", "storage.js", "version.js", "weather.js", "world.js"];
+    "partyHunt.js", "progression.js", "registry.js", "rng.js", "skills.js", "state.js", "stats.js", "storage.js", "version.js", "weather.js", "world.js"];
   check("every module the contract lists is here", expected.every((f) => files.includes(f)), expected.filter((f) => !files.includes(f)));
   const BANNED = /\bDate\.now\b|\bMath\.random\b|\bwindow\.|\bdocument\.|\bsetTimeout\b|\blocalStorage\b|\bconsole\./;
   for (const f of files) {
