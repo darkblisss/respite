@@ -524,3 +524,120 @@ export function hunterFrom(userId, state, statsOf, heals) {
   });
   return makeHunter(userId, stats, { hp: state.player.hp, heals: (heals || []).slice() });
 }
+
+/* ================= 6. THE SESSION ================= */
+/* A party hunt is encounters one after another with a walk between, the same
+   rhythm a lone hunter keeps. The session owns that rhythm so the server has one
+   blob to persist and one function to tick: every rule stays here, where it can
+   be tested without a database.
+
+   The session's own dice mint each encounter's seed, so the whole session
+   replays from its stored row exactly as one encounter does. */
+
+export function newSession({ partyId, tier, zone, seed, hunters }) {
+  return {
+    partyId, tier, zone,
+    seed: seed >>> 0,
+    dice: (seed >>> 0) + 7,
+    phase: "search",          // search | fight
+    wait: H.searchMinMs,      // ms left of the walk
+    elapsed: 0,
+    encounters: 0,
+    enc: null,
+    // The warband, kept across encounters: health and remedies carry over, as they do alone.
+    hunters: hunters.slice(),
+    over: null,               // null while it runs: "wiped", "empty"
+  };
+}
+
+/* Health and remedies carry from one encounter to the next, so a warband is worn
+   down over a session rather than healed by the walk. A hunter who fell is out
+   of the session until their save has settled the death and they rejoin. */
+function nextEncounter(s) {
+  const rng = makeRng(s, "dice");
+  const up = s.hunters.filter((u) => !u.down);
+  if (!up.length) {
+    s.over = "wiped";
+    return;
+  }
+  s.encounters++;
+  s.enc = newEncounter({
+    id: s.encounters,
+    partyId: s.partyId,
+    tier: s.tier,
+    zone: s.zone,
+    seed: Math.floor(rng() * 4294967296),
+    hunters: up,
+  });
+  s.phase = "fight";
+}
+
+/* Moves the whole session forward. `hooks.fx` is passed through to the encounter.
+   Returns the milliseconds played, which is less than dt once the session is over. */
+export function stepSession(s, dt, hooks = {}) {
+  let left = dt;
+  let played = 0;
+  let guard = 0;
+  while (!s.over && left > EPS && guard++ < 10000) {
+    if (s.phase === "search") {
+      const step = Math.min(left, Math.max(EPS, s.wait));
+      s.wait -= step;
+      s.elapsed += step;
+      left -= step;
+      played += step;
+      if (s.wait <= EPS) nextEncounter(s);
+      continue;
+    }
+    const ran = stepEncounter(s.enc, left, hooks);
+    s.elapsed += ran;
+    left -= ran;
+    played += ran;
+    if (!s.enc.over) break;
+    // Cleared inside the window, the rest of it is the walk to the next one.
+    const z = getZone(s.zone);
+    if (s.enc.over === "wiped") {
+      s.over = "wiped";
+      break;
+    }
+    s.phase = "search";
+    s.wait = Math.max(H.searchMinMs, z.windowMs - s.enc.clock);
+    s.enc = null;
+    if (!s.hunters.some((u) => !u.down)) s.over = "wiped";
+  }
+  return played;
+}
+
+// Milliseconds until the session's next event, for the scheduler that ticks it.
+export function nextSessionDue(s) {
+  if (!s || s.over) return Infinity;
+  if (s.phase === "search") return Math.max(0, s.wait);
+  return nextEncounterDue(s.enc);
+}
+
+/* What every hunter is owed, and nothing else. The server takes a member's share
+   when that member's own request next comes in, and zeroes it. */
+export function owedFor(s, userId) {
+  const u = s.hunters.find((x) => x.userId === String(userId));
+  return u ? u.owed : null;
+}
+
+export function clearOwed(s, userId) {
+  const u = s.hunters.find((x) => x.userId === String(userId));
+  if (!u) return;
+  u.owed = { xp: 0, gold: 0, kills: 0, threat: 0, drops: [], died: null, remedies: 0 };
+}
+
+// What a watcher sees of the whole session.
+export function sessionView(s) {
+  return {
+    partyId: s.partyId, tier: s.tier, zone: s.zone,
+    phase: s.phase, wait: Math.max(0, Math.round(s.wait)),
+    elapsed: Math.round(s.elapsed), encounters: s.encounters, over: s.over,
+    enc: s.enc ? encounterView(s.enc) : null,
+    hunters: s.hunters.map((u) => ({
+      userId: u.userId, down: u.down,
+      hp: Math.max(0, Math.ceil(u.hp)), max: u.stats.maxHp,
+      dmg: Math.round(u.dmg),
+    })),
+  };
+}

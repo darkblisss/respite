@@ -185,4 +185,61 @@ await run(async () => {
     check("the view carries no seed, no dice and no stat lines", !/\bseed\b|\bdice\b|maxHp|critDmg/.test(text), text.slice(0, 200));
     check("it says who is in it and how they are doing", view.hunters.length === 2 && view.hunters.every((u) => typeof u.hp === "number" && typeof u.dmg === "number"));
   }
+
+  section("A session: encounters one after another");
+  {
+    const sess = (n, o = {}) => P.newSession({
+      partyId: "p1", tier: o.tier || 2, zone: o.zone || "outer", seed: o.seed || 4242,
+      hunters: band(n, o.level || 45, o.heals || []),
+    });
+
+    const s = sess(2);
+    check("a session opens on the walk, not a fight", s.phase === "search" && s.enc === null && s.encounters === 0);
+    P.stepSession(s, 10 * 60 * 1000);
+    check("it works through several encounters", s.encounters > 1, s.encounters);
+    check("and is either walking or fighting, never neither", (s.phase === "search") !== (s.phase === "fight"));
+    check("time played adds up to what it was given", s.elapsed > 0 && s.elapsed <= 10 * 60 * 1000 + 1, s.elapsed);
+    check("everyone has been paid something by now", s.hunters.every((u) => u.owed.xp > 0), s.hunters.map((u) => Math.round(u.owed.xp)));
+
+    // The same promise the encounter makes, over a whole session of them.
+    const whole = sess(3, { seed: 606 });
+    P.stepSession(whole, 5 * 60 * 1000);
+    const bits = sess(3, { seed: 606 });
+    for (let i = 0; i < 300; i++) P.stepSession(bits, 1000);
+    const sig = (x) => clone({
+      elapsed: Math.round(x.elapsed), encounters: x.encounters, phase: x.phase, dice: x.dice, over: x.over,
+      wait: Math.round(x.wait),
+      hunters: x.hunters.map((u) => ({ hp: Math.round(u.hp), down: u.down, dmg: Math.round(u.dmg), xp: Math.round(u.owed.xp) })),
+    });
+    same("a session sliced five hundred ways is the same session", sig(bits), sig(whole));
+
+    // Wearing down: the walk does not heal, so a session is a war of attrition.
+    const worn = sess(1, { level: 20, tier: 5, zone: "core", seed: 31337 });
+    P.stepSession(worn, 3 * 60 * 1000);
+    const u = worn.hunters[0];
+    check("health carries across encounters rather than resetting", u.down || u.hp < u.stats.maxHp, { hp: Math.round(u.hp), max: u.stats.maxHp, down: u.down });
+
+    // A wipe stops the session rather than walking into another fight.
+    const doomed = sess(1, { level: 5, tier: 8, zone: "core", seed: 5 });
+    P.stepSession(doomed, 30 * 60 * 1000);
+    check("a wipe ends the session", doomed.over === "wiped", { over: doomed.over, down: doomed.hunters.map((h) => h.down) });
+    check("and stepping it further plays nothing", P.stepSession(doomed, 60000) === 0);
+    check("nextSessionDue agrees", P.nextSessionDue(doomed) === Infinity);
+  }
+
+  section("Settling");
+  {
+    const s = P.newSession({ partyId: "p1", tier: 2, zone: "outer", seed: 77, hunters: band(2, 45) });
+    P.stepSession(s, 5 * 60 * 1000);
+    const owed = P.owedFor(s, "u0");
+    check("a member's owings can be read by name", owed && owed.xp > 0, owed && Math.round(owed.xp));
+    const other = Math.round(P.owedFor(s, "u1").xp);
+    P.clearOwed(s, "u0");
+    check("clearing one empties only that one", P.owedFor(s, "u0").xp === 0 && Math.round(P.owedFor(s, "u1").xp) === other);
+    check("a name nobody answers to is not an error", P.owedFor(s, "nobody") === null);
+
+    const view = P.sessionView(s);
+    check("the view says where the party is and what it is doing", view.zone === "outer" && (view.phase === "search" || view.phase === "fight"));
+    check("and carries no seed, dice or stat lines", !/\bseed\b|\bdice\b|maxHp|critDmg/.test(JSON.stringify(view)));
+  }
 });
