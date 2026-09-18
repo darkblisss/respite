@@ -81,6 +81,10 @@ const DIVERGED = {
     why: "the same ZONES change, read back through the getter",
     at: ["threat", "power", "mix", "elite"],
   },
+  "CONFIG.storage.names = STORE_NAMES": {
+    why: "the Satchel is a fourth pool, the combat loadout, and v4 had no name for it",
+    at: ["satchel"],
+  },
   "CONFIG.hunt.hideMs = HIDE_MS": { why: "going to ground is a full hour now, not five minutes" },
   "CONFIG.hunt.xpMarkMs = XP_MARK_MS": { why: "the five-minute XP mark gave way to rateMarkMs, rateWindowMs and rateMinSpanMs" },
 };
@@ -275,7 +279,9 @@ async function main() {
   for (const [name, dotted] of CONSTANTS) same(`CONFIG.${dotted} = ${name}`, O[name], at(CONFIG, dotted));
   same("CONFIG.economy.remedies = REMEDY_SPEC numbers", O.REMEDY_SPEC.map(({ name, ...numbers }) => numbers), CONFIG.economy.remedies);
   check("CONFIG.schema is 9 (v4 SCHEMA was 8)", CONFIG.schema === 9 && O.SCHEMA === 8);
-  check("CONFIG.storage.names.bank is Stockpile", JSON.stringify(CONFIG.storage.names) === '{"inv":"Belongings","bank":"Stockpile","vault":"Vault"}');
+  check("CONFIG.storage.names.bank is Stockpile, and the Satchel is the fourth pool",
+    JSON.stringify(CONFIG.storage.names) === '{"inv":"Belongings","bank":"Stockpile","vault":"Vault","satchel":"Satchel"}');
+  check("CONFIG.storage.slots.satchel is a small loadout", CONFIG.storage.slots.satchel >= 2 && CONFIG.storage.slots.satchel < GameData.REMEDIES.length);
   same("CONFIG.economy market settings",
     { marketFee: 0.05, marketMaxListings: 20, marketListingDays: 7, marketMaxPrice: 1000000000 },
     { marketFee: CONFIG.economy.marketFee, marketMaxListings: CONFIG.economy.marketMaxListings,

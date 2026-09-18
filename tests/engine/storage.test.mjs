@@ -23,32 +23,82 @@ await run(async () => {
   };
 
   section("Pools and orders");
-  check("POOLS and names", S.POOLS.join(",") === "inv,bank,vault" && S.poolName("bank") === "Stockpile" && S.poolName("inv") === "Belongings");
+  check("POOLS and names", S.POOLS.join(",") === "inv,bank,vault,satchel" &&
+    S.poolName("bank") === "Stockpile" && S.poolName("inv") === "Belongings" && S.poolName("satchel") === "Satchel");
+  check("isPool knows the four and nothing else", ["inv", "bank", "vault", "satchel"].every(S.isPool) && !S.isPool("attic") && !S.isPool(null));
   same("ORDER", S.ORDER, {
     loot: ["inv", "vault", "bank"], material: ["bank", "vault", "inv"], gear: ["inv", "bank", "vault"], tool: ["bank", "vault", "inv"],
-    remedy: ["inv", "bank", "vault"], spend: ["bank", "vault", "inv"], eat: ["inv", "bank", "vault"], mail: ["inv", "bank", "vault"],
+    remedy: ["inv"], spend: ["bank", "vault", "inv"], eat: ["satchel"], mail: ["inv", "bank", "vault"],
   });
   check("ORDER is frozen", Object.isFrozen(S.ORDER) && Object.isFrozen(S.ORDER.loot));
   check("orderFor: remedies, gear, tools and materials",
     S.orderFor("provision_t4") === S.ORDER.remedy && S.orderFor("slag_sword|rare|c1.2") === S.ORDER.gear &&
     S.orderFor("slag_pick") === S.ORDER.tool && S.orderFor("coal") === S.ORDER.material && S.orderFor("vault_chest") === S.ORDER.material &&
     S.orderFor("nope") === S.ORDER.material);
+  check("canHold: the Satchel takes remedies and nothing else",
+    S.canHold("satchel", "provision_t1") && !S.canHold("satchel", "coal") && !S.canHold("satchel", "slag_sword|rare|c1.2") &&
+    !S.canHold("satchel", "slag_pick") && !S.canHold("satchel", "vault_chest") &&
+    ["inv", "bank", "vault"].every((w) => S.canHold(w, "coal") && S.canHold(w, "provision_t1")));
+  check("unstacked: a remedy takes a slot a bottle in Belongings alone",
+    S.unstacked("inv", "provision_t1") && !S.unstacked("inv", "coal") &&
+    ["bank", "vault", "satchel"].every((w) => !S.unstacked(w, "provision_t1")));
 
   {
     const s = fresh();
-    check("slotCap: Belongings fixed, Stockpile and Vault from the save", S.slotCap(s, "inv") === 10 && S.slotCap(s, "bank") === 30 && S.slotCap(s, "vault") === 50);
+    check("slotCap: Belongings and the Satchel fixed, Stockpile and Vault from the save",
+      S.slotCap(s, "inv") === 10 && S.slotCap(s, "bank") === 30 && S.slotCap(s, "vault") === 50 && S.slotCap(s, "satchel") === CONFIG.storage.slots.satchel);
     s.bank.slots = 45;
-    check("slotCap follows a widened Stockpile", S.slotCap(s, "bank") === 45);
+    s.satchel.slots = 999;
+    check("slotCap follows a widened Stockpile, and the Satchel's size is not the save's to say",
+      S.slotCap(s, "bank") === 45 && S.slotCap(s, "satchel") === CONFIG.storage.slots.satchel);
     check("placeFor: first pool in order with room", S.placeFor(s, "coal") === "bank" && S.placeFor(s, "provision_t1") === "inv" && S.placeFor(s, "slag_sword|common", S.ORDER.loot) === "inv");
     put(s, "vault", "coal", 3);
     check("placeFor: a stack already held grows where it is", S.placeFor(s, "coal") === "vault" && S.placeFor(s, "coal", S.ORDER.loot) === "vault");
     fill(s, "inv");
-    check("placeFor skips a full pool", S.placeFor(s, "provision_t1") === "bank" && S.placeFor(s, "mud_dredge", S.ORDER.loot) === "vault");
+    check("placeFor skips a full pool", S.placeFor(s, "provision_t1") === null && S.placeFor(s, "mud_dredge", S.ORDER.loot) === "vault");
     fill(s, "bank", ["coal"]);
     fill(s, "vault", ["coal"]);
     check("placeFor is null when everything is full and nothing stacks", S.placeFor(s, "provision_t9") === null && S.placeFor(s, "slag_sword|rare|c1.1") === null);
     check("placeFor still finds a held stack when everything is full", S.placeFor(s, "coal") === "vault");
+    check("placeFor never sends anything but a remedy to the Satchel",
+      S.placeFor(s, "coal", ["satchel"]) === null && S.placeFor(s, "provision_t9", ["satchel"]) === "satchel");
     check("isFull and slotsUsed", S.isFull(s, "inv") && S.slotsUsed(s, "inv") === 10 && S.slotsUsed(s, "bank") === 45);
+  }
+
+  section("The Satchel");
+  {
+    const s = fresh();
+    const cap = CONFIG.storage.slots.satchel;
+    check("a remedy stacks in the Satchel: one slot, however many bottles",
+      S.transact(s, (tx) => tx.add("satchel", "provision_t1", 250)).ok && S.slotsUsed(s, "satchel") === 1 && s.satchel.items.provision_t1 === 250);
+    check("and it goes on stacking in the same slot",
+      S.transact(s, (tx) => tx.add("satchel", "provision_t1", 50)).ok && S.slotsUsed(s, "satchel") === 1 && s.satchel.items.provision_t1 === 300);
+    check("the Satchel refuses anything that is not a remedy",
+      S.transact(s, (tx) => tx.add("satchel", "coal", 1)).error === "Satchel only takes remedies." &&
+      S.transact(s, (tx) => tx.add("satchel", "slag_sword|rare|c1.2", 1)).error === "Satchel only takes remedies." &&
+      S.transact(s, (tx) => tx.add("satchel", "slag_pick", 1)).error === "Satchel only takes remedies." &&
+      S.slotsUsed(s, "satchel") === 1);
+    const kinds = GameData.REMEDIES.map((r) => r.id);
+    let i = 1;
+    while (S.slotsUsed(s, "satchel") < cap) S.transact(s, (tx) => tx.add("satchel", kinds[i++], 1));
+    check(`the Satchel holds ${cap} kinds and no more`,
+      S.slotsUsed(s, "satchel") === cap && S.isFull(s, "satchel") &&
+      S.transact(s, (tx) => tx.add("satchel", kinds[i], 1)).error === "Satchel is full.");
+    check("but a kind already packed still grows", S.transact(s, (tx) => tx.add("satchel", "provision_t1", 5)).ok && s.satchel.items.provision_t1 === 305);
+    check("what is packed is still held and still counted", S.haveQty(s, "provision_t1") === 305 && S.heldEverywhere(s).provision_t1 === 305);
+  }
+
+  section("Remedies do not stack in Belongings");
+  {
+    const s = fresh();
+    check("a remedy takes a slot a bottle", S.transact(s, (tx) => tx.add("inv", "provision_t1", 4)).ok && S.slotsUsed(s, "inv") === 4 && s.inv.items.provision_t1 === 4);
+    check("other things still stack to one slot", S.transact(s, (tx) => tx.add("inv", "coal", 900)).ok && S.slotsUsed(s, "inv") === 5);
+    check("growing the stack needs the slots too, and is all or nothing",
+      S.transact(s, (tx) => tx.add("inv", "provision_t1", 6)).error === "Belongings is full." && s.inv.items.provision_t1 === 4);
+    check("what fits, fits", S.transact(s, (tx) => tx.add("inv", "provision_t1", 5)).ok && S.slotsUsed(s, "inv") === 10 && S.isFull(s, "inv"));
+    check("and the same bottles cost one slot in the Stockpile",
+      S.transact(s, (tx) => tx.add("bank", "provision_t1", 900)).ok && S.slotsUsed(s, "bank") === 1);
+    check("Belongings keep one order entry for the stack", s.inv.order.filter((k) => k === "provision_t1").length === 1);
   }
 
   section("Reading");

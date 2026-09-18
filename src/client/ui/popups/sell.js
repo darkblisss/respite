@@ -6,6 +6,12 @@
    server takes the goods and writes the listing (marketList);
    this only asks and shows the sums.
 
+   The cut is taken off both legs, so the price set here is not
+   what a buyer pays: they pay it plus the same percentage. Both
+   numbers are on screen before anything is listed, because a
+   seller pricing against the market is pricing against what a
+   buyer sees.
+
    It opens on top of the item popup, so it keeps to itself: its
    own ticker, no shared state, and it closes nothing but itself.
    Opened with no item (the Market's "Sell an item"), it first
@@ -27,7 +33,7 @@ const TRADEABLE = ["material", "gear", "tool"];   // what prepareListing accepts
 const FEE_PCT = Math.round(E.marketFee * 100);
 const ASK_MS = 15 * 1000;
 const FROM = { inv: "From Belongings", bank: "From the Stockpile", vault: "From the Vault" };
-const IN = { inv: "in Belongings", bank: "in the Stockpile", vault: "in the Vault" };
+const IN = { inv: "in Belongings", bank: "in the Stockpile", vault: "in the Vault", satchel: "in the Satchel" };
 
 // Ids for label and hint wiring; two sell dialogs can be open in a session, never at once.
 let seq = 0;
@@ -47,7 +53,7 @@ function refusal(ctx, key, from) {
   if (worn) return "Worn gear can't go on the market. Take it off first.";
   if (!TRADEABLE.includes(def.kind)) return "Only materials, gear and tools can be traded.";
   if ((ctx.state.wear[key] || 0) > 0) return "Repair it before you list it. The market only takes sound pieces.";
-  if (!isPool(from)) return "Open it from Belongings, the Stockpile or the Vault to list it.";
+  if (!isPool(from)) return "Open it from a store of your own to list it.";
   if (qtyIn(ctx.state, from, key) <= 0) return `There is no ${itemName(key)} left ${IN[from]}.`;
   return null;
 }
@@ -112,6 +118,7 @@ function openSell(ctx, key, from) {
   const hint = h("span.field-hint", { id: `sellHint${id}` }, market);
   const sums = h("div.fee");
   const gone = h("p.cost-note", { hidden: true }, iconEl("alert"), h("span"));
+  const note = h("p.modal-note");
 
   // Digits only; 0 means no valid price.
   function readPrice() {
@@ -130,6 +137,11 @@ function openSell(ctx, key, from) {
       h("div.cost-row", h("span.l", `Listing ${fmtWhole(n)} × ${fmtGold(each)}`), h("span.v", fmtGold(total))),
       h("div.cost-row", h("span.l", `Market fee (${FEE_PCT}%)`), h("span.v", `−${fmtGold(fee)}`)),
       h("div.cost-row.is-total", h("span.l", "You receive when it all sells"), h("span.v", iconEl("coin"), fmtGold(total - fee))));
+    // The other leg: the same cut again, on top of the ask. A seller pricing against the
+    // market has to know what the market will quote for their goods.
+    setText(note, each
+      ? `A buyer pays ${fmtGold(total + fee)} for the lot: the market takes its ${FEE_PCT}% from both sides. Paid by post when it sells. Unsold goods come back by post after ${E.marketListingDays} days.`
+      : `The market takes its ${FEE_PCT}% from both sides. Paid by post when it sells. Unsold goods come back by post after ${E.marketListingDays} days.`);
 
     const bad = !each;
     toggleClass(price, "is-invalid", bad);
@@ -186,7 +198,7 @@ function openSell(ctx, key, from) {
         hint),
       sums,
       gone,
-      h("p.modal-note", `Paid by post when it sells. Unsold items come back by post after ${E.marketListingDays} days.`),
+      note,
     ],
     actions: [
       { label: "Cancel", kind: "quiet" },
@@ -210,10 +222,15 @@ function openSell(ctx, key, from) {
     recalc();
   });
 
-  // The cheapest listing of the same thing is the suggestion; the merchant's price until then,
-  // or for good if the market is slow to say.
+  /* The cheapest the same thing is going for is the suggestion; the merchant's price until
+     then, or for good if the market is slow to say. A material is asked for as a pool (its
+     cheapest band, your own listings not counted, so it is the price to beat), gear and tools
+     as the listings they are. */
+  const pooled = def.kind === "material";
   Promise.race([
-    Promise.resolve().then(() => ctx.net.market.browse({ q: name, sort: "price", limit: 50 })),
+    Promise.resolve().then(() => (pooled
+      ? ctx.net.market.pools({ q: name, limit: 50 })
+      : ctx.net.market.browse({ q: name, kind: def.kind, sort: "price", limit: 50 }))),
     new Promise((resolve) => setTimeout(() => resolve(null), ASK_MS)),
   ])
     .then((res) => {
@@ -221,12 +238,13 @@ function openSell(ctx, key, from) {
       if (!res || res.error) {
         market = `Couldn't ask the market just now. ${merchant}`;
       } else {
-        const same = (Array.isArray(res.rows) ? res.rows : [])
-          .filter((r) => (unique ? r.item_name === name : r.item_key === key))
-          .map((r) => Number(r.price_each))
+        const rows = Array.isArray(res.rows) ? res.rows : [];
+        const same = (pooled
+          ? rows.filter((r) => r.item_key === key).map((r) => Number(r.price_min))
+          : rows.filter((r) => (unique ? r.item_name === name : r.item_key === key)).map((r) => Number(r.price_each)))
           .filter((n) => Number.isFinite(n) && n >= 1);
         const cheapest = same.length ? Math.min(...same) : 0;
-        market = cheapest ? `Cheapest listed now: ${fmtGold(cheapest)}. ${merchant}` : `Nobody is selling ${name} right now. ${merchant}`;
+        market = cheapest ? `Cheapest going now: ${fmtGold(cheapest)}. ${merchant}` : `Nobody is selling ${name} right now. ${merchant}`;
         if (cheapest && !touched) price.value = String(cheapest);
       }
     })

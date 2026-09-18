@@ -1,11 +1,23 @@
 /* ============================================================
    Respite · pages/market.js · The Trading Post
    ------------------------------------------------------------
-   #/market (UI-KIT 8.14): what other commanders are selling,
-   your own listings and your recent trades. The realm owns every
-   row. This page only asks for them (ctx.net.market) and sends
-   marketBuy and marketCancel through ctx.dispatch, which waits
-   on the server. Every gold spend asks first.
+   #/market (UI-KIT 8.14): what the realm has for sale, your own
+   listings and your recent trades. The realm owns every row.
+   This page only asks for them (ctx.net.market) and sends
+   marketBuy, marketBuyPool and marketCancel through
+   ctx.dispatch, which waits on the server. Every gold spend asks
+   first, and the number it asks about is the one that leaves the
+   purse: the market's cut is on top of the asking price.
+
+   Two counters, because two kinds of goods. Materials are
+   fungible, so every open listing of one is merged into a pool:
+   how many are to be had, the cheapest price, and the price
+   bands behind it. A buy names the item, a quantity and the most
+   it will pay each, and the realm fills it cheapest first across
+   whoever is selling. Gear and tools are not fungible, so they
+   stay one row a piece. Nobody's name is on either: the market
+   is anonymous both ways, and the only listings this page can
+   tell you about are your own.
 
    Rows are rebuilt only when what the realm said changes; time
    left and pending buttons repaint in place. Guests get a
@@ -21,6 +33,7 @@ import { CONFIG } from "../../shared/config.js";
 import { itemDef, isRemedy, stacks } from "../../shared/items.js";
 import { GameData, rarityDef, skillName } from "../../shared/registry.js";
 import { placeFor } from "../../shared/storage.js";
+import { fillPool, marketFee } from "../../shared/market.js";
 
 const E = CONFIG.economy;
 const FEE_PCT = Math.round(E.marketFee * 100);
@@ -28,15 +41,17 @@ const REFRESH_MS = 30 * 1000;
 const SEARCH_MS = 300;
 const ASK_MS = 15 * 1000;
 const SHOWN = 50;
+const BANDS_SHOWN = 3;    // price bands in a pool's row; the buy sheet lists the rest
 const INTO = { inv: "into Belongings", bank: "into the Stockpile", vault: "into the Vault" };
 
-// Remedies are materials to the realm, so that split is made here, from a wider page of rows.
+/* Remedies are materials to the realm, so that split is made here. `pool` asks for the
+   aggregated material pools, `kind` for itemised listings of that kind; All wants both. */
 const KINDS = [
-  { id: "all", label: "All", kind: null },
-  { id: "material", label: "Materials", kind: "material", keep: (r) => !isRemedy(r.item_key) },
+  { id: "all", label: "All", kind: null, pool: true },
+  { id: "material", label: "Materials", pool: true, keep: (r) => !isRemedy(r.item_key) },
   { id: "gear", label: "Gear", kind: "gear" },
   { id: "tool", label: "Tools", kind: "tool" },
-  { id: "remedy", label: "Remedies", kind: "material", keep: (r) => isRemedy(r.item_key) },
+  { id: "remedy", label: "Remedies", pool: true, keep: (r) => isRemedy(r.item_key) },
 ];
 
 const STATUS = {
@@ -58,11 +73,25 @@ const when = (iso) => {
   return Number.isFinite(t) ? t : 0;
 };
 
-// Usernames are stored lowercase; on screen they read as names.
-const display = (name) => {
-  const s = String(name == null ? "" : name);
-  return s ? s.charAt(0).toUpperCase() + s.slice(1) : "Someone";
-};
+// A pool's price bands as the realm sent them: cheapest first, and only what it counted.
+function bandsOf(row) {
+  const raw = Array.isArray(row && row.bands) ? row.bands : [];
+  return raw
+    .map((b) => ({ each: Math.floor(num(b && b.each)), qty: Math.floor(num(b && b.qty)) }))
+    .filter((b) => b.each >= 1 && b.qty > 0)
+    .sort((a, b) => a.each - b.each);
+}
+
+// "40 at 12g, 15 at 13g", and what the row could not price is left out of the count.
+function bandText(bands, shown = BANDS_SHOWN) {
+  const said = bands.slice(0, shown).map((b) => `${fmtWhole(b.qty)} at ${fmtGold(b.each)}`);
+  const rest = bands.length - said.length;
+  if (rest > 0) said.push(`${fmtWhole(rest)} more ${rest === 1 ? "band" : "bands"}`);
+  return said.join(" · ");
+}
+
+// The pool as this camp can actually buy it: only the bands the realm priced.
+const poolDepth = (bands) => bands.reduce((n, b) => n + b.qty, 0);
 
 function rarityOf(row) {
   const d = itemDef(row.item_key);
@@ -123,7 +152,7 @@ function skeletonListings(n = 4) {
     h("div.listing-item", h("span.skel.skel-art"), h("div.grow", h("span.skel.skel-line.skel-w-60"), h("span.skel.skel-line.skel-w-35"))),
     h("div.listing-qty", h("span.skel.skel-line.skel-w-50.ml-auto")),
     h("div.listing-price", h("span.skel.skel-line.skel-w-60.ml-auto")),
-    h("div.listing-seller", h("span.skel.skel-line.skel-w-60")),
+    h("div.listing-depth", h("span.skel.skel-line.skel-w-60")),
     h("div.listing-buy", h("span.skel.skel-line.skel-w-80"))));
 }
 
@@ -178,7 +207,7 @@ export default {
         h("div",
           h("div.eyebrow.page-eyebrow", "The Realm"),
           h("h1.page-title", "Market"),
-          h("p.page-sub", `Buy from other commanders, or put your own goods up. The market keeps ${FEE_PCT}% of every sale.`)),
+          h("p.page-sub", `Buy from the realm, or put your own goods up. Nobody is named either way, and the market takes ${FEE_PCT}% off both sides of a trade.`)),
         actions));
       if (guest) page.append(signInCard(ctx));
       else body = marketBody(ctx, page, actions);
@@ -204,21 +233,18 @@ export default {
 function marketBody(ctx, page, actions) {
   let alive = true;
   const filt = { q: "", kind: "all", tier: 0, sort: "price" };
-  const board = { rows: null, error: null, stale: false, token: 0, at: 0, sig: "" };
+  const board = { rows: null, pools: null, error: null, stale: false, token: 0, at: 0, sig: "" };
   const mine = { rows: null, error: null, token: 0, sig: "" };
   const trades = { rows: null, error: null, token: 0, sig: "" };
-  const pending = new Set();   // listing ids waiting on the server
-  let shown = [];              // { row, node, buy, time, own } for the listings on screen
+  const pending = new Set();   // listing ids, and pool keys, waiting on the server
+  let shown = [];              // { row, node, buy, time, pool } for what is on screen
   let mineShown = [];          // { row, node, sub, cancel } for your own
   let lastSecond = -1;
   let searchTimer = 0;
 
   const me = () => ctx.account;
-  const isMine = (row) => {
-    const acc = me();
-    if (acc.userId && row.seller_id != null) return String(row.seller_id).toLowerCase() === String(acc.userId).toLowerCase();
-    return !!acc.username && String(row.seller_name || "").toLowerCase() === acc.username.toLowerCase();
-  };
+  // The realm tells a player about their own listings and nobody else's; `mine` is all there is.
+  const isMine = (row) => row.mine === true;
   const kindDef = () => KINDS.find((k) => k.id === filt.kind) || KINDS[0];
   const filtered = () => !!(filt.q.trim() || filt.kind !== "all" || filt.tier);
 
@@ -250,7 +276,7 @@ function marketBody(ctx, page, actions) {
   const mineChip = h("span.chip", "0 open");
   const mineHead = cardHead("My listings", { sub: `Up to ${E.marketMaxListings} at once. Unsold goods come back by post after ${E.marketListingDays} days.`, actions: mineChip });
   const mineBox = h("div");
-  const tradesHead = cardHead("Recent sales", { sub: `What sold and what you bought. Sales pay by post, less the market's ${FEE_PCT}%.` });
+  const tradesHead = cardHead("Recent sales", { sub: `What you sold and what you bought. Sales pay by post, less the market's ${FEE_PCT}%; buying pays the same ${FEE_PCT}% on top.` });
   const tradesBox = h("div");
 
   page.append(
@@ -277,33 +303,40 @@ function marketBody(ctx, page, actions) {
     }
   }
 
+  /* Two asks, because the realm keeps two books: the material pools and the itemised
+     listings. A tab that wants only one makes only one. */
   async function loadListings({ quiet = false } = {}) {
     const token = ++board.token;
     const k = kindDef();
-    if (!quiet || !board.rows) {
+    const wantPools = !!k.pool;
+    const wantRows = k.id === "all" || !!k.kind;
+    if (!quiet || (!board.rows && !board.pools)) {
       board.rows = null;
+      board.pools = null;
       board.error = null;
       paintListings();
     }
     setAttr(listBox, "aria-busy", "true");
-    const res = await ask(() => ctx.net.market.browse({
-      q: filt.q.trim(),
-      kind: k.kind,
-      tier: filt.tier || null,
-      sort: filt.sort,
-      limit: k.keep ? SHOWN * 2 : SHOWN,
-      offset: 0,
-    }));
+    const [pools, rows] = await Promise.all([
+      wantPools
+        ? ask(() => ctx.net.market.pools({ q: filt.q.trim(), tier: filt.tier || null, limit: k.keep ? SHOWN * 2 : SHOWN }))
+        : { rows: [], error: null },
+      wantRows
+        ? ask(() => ctx.net.market.browse({ q: filt.q.trim(), kind: k.kind, tier: filt.tier || null, sort: filt.sort, limit: SHOWN, offset: 0 }))
+        : { rows: [], error: null },
+    ]);
     if (!alive || token !== board.token) return;
     setAttr(listBox, "aria-busy", "false");
     board.at = Date.now();
-    if (res.error) {
+    const error = pools.error || rows.error;
+    if (error) {
       // A quiet refresh that fails keeps what was on screen and says so.
-      if (quiet && board.rows) board.stale = true;
-      else board.error = String(res.error);
+      if (quiet && (board.rows || board.pools)) board.stale = true;
+      else board.error = String(error);
     } else {
-      const rows = Array.isArray(res.rows) ? res.rows : [];
-      board.rows = (k.keep ? rows.filter(k.keep) : rows).slice(0, SHOWN);
+      const pooled = Array.isArray(pools.rows) ? pools.rows : [];
+      board.pools = (k.keep ? pooled.filter(k.keep) : pooled).slice(0, SHOWN);
+      board.rows = (Array.isArray(rows.rows) ? rows.rows : []).slice(0, SHOWN);
       board.error = null;
       board.stale = false;
     }
@@ -351,7 +384,7 @@ function marketBody(ctx, page, actions) {
       listBox.replaceChildren(failState(board.error, () => loadListings()));
       return;
     }
-    if (!board.rows) {
+    if (!board.rows || !board.pools) {
       board.sig = "loading";
       shown = [];
       setText(listSub, "Asking the realm");
@@ -359,16 +392,23 @@ function marketBody(ctx, page, actions) {
       return;
     }
 
-    const n = board.rows.length;
+    const pools = board.pools;
+    const rows = board.rows;
+    const n = pools.length + rows.length;
+    // A pool is a whole book, not a listing, so it is counted as one and named as what it is.
+    const said = [];
+    if (pools.length) said.push(`${fmtWhole(pools.length)} ${pools.length === 1 ? "pool" : "pools"}`);
+    if (rows.length) said.push(`${fmtWhole(rows.length)} ${rows.length === 1 ? "listing" : "listings"}`);
     let count;
     if (!n) count = filtered() ? "Nothing matches" : "Nothing for sale";
     else if (n >= SHOWN) count = `The ${SHOWN} ${filt.sort === "newest" ? "newest" : "cheapest"}`;
-    else count = `${fmtWhole(n)} ${filtered() ? (n === 1 ? "match" : "matches") : "open"}, ${sortWords}`;
+    else count = `${said.join(" and ")}, ${sortWords}`;
     setText(listSub, board.stale ? `${count}. Couldn't refresh just now.` : count);
     toggleClass(listSub, "t-bad", board.stale);
 
     const acc = me();
-    const sig = `${acc.userId}|${board.rows.map((r) => `${r.id}:${r.qty_left}:${r.price_each}:${r.expires_at}`).join(",")}`;
+    const sig = `${acc.userId}|${pools.map((p) => `${p.item_key}:${p.qty_left}:${p.price_min}:${bandsOf(p).length}`).join(",")}`
+      + `|${rows.map((r) => `${r.id}:${r.qty_left}:${r.price_each}:${r.expires_at}`).join(",")}`;
     if (sig === board.sig) return;
     board.sig = sig;
 
@@ -392,16 +432,41 @@ function marketBody(ctx, page, actions) {
       return;
     }
 
-    shown = board.rows.map(listingRow);
+    // The pools first: a commodity book is what most of a market is.
+    shown = [...board.pools.map(poolRow), ...board.rows.map(listingRow)];
     listBox.replaceChildren(
       h("div.listing-head", { role: "row" },
         h("span", { role: "columnheader" }, "Item"),
-        h("span.num", { role: "columnheader" }, "Left"),
-        h("span.num", { role: "columnheader" }, "Each"),
-        h("span", { role: "columnheader" }, "Seller"),
+        h("span.num", { role: "columnheader" }, "Available"),
+        h("span.num", { role: "columnheader" }, "Cheapest"),
+        h("span", { role: "columnheader" }, "Price bands"),
         h("span", { role: "columnheader" }, h("span.sr-only", "Buy"))),
       ...shown.map((s) => s.node));
     paintClock(true);
+  }
+
+  /* One row an item key, not one a seller: how many are to be had, what the cheapest of
+     them costs, and the bands behind it. Which camps they came out of is not on this page
+     and does not come back from the realm. */
+  function poolRow(row) {
+    const bands = bandsOf(row);
+    const name = String(row.item_name || "Goods");
+    const depth = poolDepth(bands);
+    const total = Math.max(depth, Math.floor(num(row.qty_left)));
+    const buy = h("button.btn.btn-gold.btn-soft.btn-sm", { type: "button", "data-act": "buy", "aria-label": `Buy ${name}` }, "Buy");
+    const node = h("div.listing", { role: "row", dataset: { key: String(row.item_key) } },
+      h("div.listing-item", { role: "cell" },
+        itemArt(row.item_key, "common"),
+        h("div.lr-main",
+          h("button.lr-title.listing-name", { type: "button", "data-act": "item", "aria-label": `${name}: details` }, name),
+          h("div.lr-sub", kindLine(row)))),
+      h("div.listing-qty", { role: "cell" }, h("span.listing-l", "Available"), fmtWhole(total)),
+      h("div.listing-price", { role: "cell" }, h("span.listing-l", "Cheapest"), fmtGold(num(row.price_min))),
+      h("div.listing-depth", { role: "cell" },
+        h("span.listing-l", "Bands"),
+        h("span.truncate", bandText(bands))),
+      h("div.listing-buy", { role: "cell" }, buy));
+    return { row, node, buy, time: null, pool: true, bands, id: `pool:${row.item_key}` };
   }
 
   function listingRow(row) {
@@ -418,15 +483,15 @@ function marketBody(ctx, page, actions) {
         h("div.lr-main",
           h("button.lr-title.listing-name", { type: "button", class: rarity !== "common" && `rar-${rarity}`, "data-act": "item", "aria-label": `${name}: details` }, name),
           h("div.lr-sub", `${kindLine(row)} · `, time))),
-      h("div.listing-qty", { role: "cell" }, h("span.listing-l", "Left"), fmtWhole(num(row.qty_left))),
+      h("div.listing-qty", { role: "cell" }, h("span.listing-l", "Available"), fmtWhole(num(row.qty_left))),
       h("div.listing-price", { role: "cell" }, h("span.listing-l", "Each"), fmtGold(num(row.price_each))),
       // No "Yours" badge: a pill that isn't a button reads as one. The row's own
       // tint and left accent (.listing.is-mine) carry it instead.
-      h("div.listing-seller", { role: "cell" },
-        h("span.listing-l", "Seller"),
-        h("span.truncate", display(row.seller_name))),
+      h("div.listing-depth", { role: "cell" },
+        h("span.listing-l", "Bands"),
+        h("span.truncate", own ? "Yours, one lot" : "One lot")),
       h("div.listing-buy", { role: "cell" }, buy));
-    return { row, node, buy, time, own };
+    return { row, node, buy, time, own, id: String(row.id) };
   }
 
   // Time left and pending buttons, once a second (and right after a rebuild).
@@ -436,9 +501,10 @@ function marketBody(ctx, page, actions) {
     lastSecond = second;
     const now = ctx.now;
     shown.forEach((s) => {
-      const left = when(s.row.expires_at) - now;
-      setText(s.time, left > 0 ? `${fmtTime(left)} left` : "Expired");
-      const wait = pending.has(String(s.row.id));
+      // A pool has no one expiry: the listings under it come and go on their own.
+      const left = s.pool ? 1 : when(s.row.expires_at) - now;
+      if (s.time) setText(s.time, left > 0 ? `${fmtTime(left)} left` : "Expired");
+      const wait = pending.has(s.id);
       toggleClass(s.buy, "is-loading", wait);
       s.buy.disabled = wait || left <= 0;
     });
@@ -552,7 +618,6 @@ function marketBody(ctx, page, actions) {
     }
     // Minute-grained "ago" texts: rebuilding when they change is cheap and rare.
     const now = ctx.now;
-    const acc = me();
     const sig = `${Math.floor(now / 60000)}|${trades.rows.map((r) => r.id).join(",")}`;
     if (sig === trades.sig) return;
     trades.sig = sig;
@@ -562,26 +627,27 @@ function marketBody(ctx, page, actions) {
       return;
     }
 
+    // side is the realm's word for which end of the trade this camp was on. Never who was on
+    // the other one: a sale says what moved and what it cost, and nothing about the stranger.
     tradesBox.replaceChildren(h("div.list", trades.rows.map((r) => {
       const qty = num(r.qty);
       const each = num(r.price_each);
-      const total = qty * each;
+      const goods = qty * each;
       const fee = num(r.fee);
-      const sold = acc.userId && String(r.seller_id || "").toLowerCase() === String(acc.userId).toLowerCase();
       const ago = fmtAgo(now - when(r.created_at));
-      return sold
+      return r.side === "sold"
         ? h("div.list-row",
           h("div.art.art-sm", { "data-tone": "gold", "aria-hidden": "true" }, iconEl("coin")),
           h("div.lr-main",
             h("div.lr-title", `Sold ${fmtWhole(qty)} ${r.item_name}`),
-            h("div.lr-sub", `${fmtWhole(qty)} × ${fmtGold(each)} = ${fmtGold(total)} · the market kept ${fmtGold(fee)} · ${ago}`)),
-          h("div.lr-end", h("span.price", `+${fmtGold(total - fee)}`)))
+            h("div.lr-sub", `${fmtWhole(qty)} × ${fmtGold(each)} = ${fmtGold(goods)} · the market kept ${fmtGold(fee)} · ${ago}`)),
+          h("div.lr-end", h("span.price", `+${fmtGold(goods - fee)}`)))
         : h("div.list-row",
           itemArt(r.item_key, itemRarity(r.item_key)),
           h("div.lr-main",
             h("div.lr-title", `Bought ${fmtWhole(qty)} ${r.item_name}`),
-            h("div.lr-sub", `${fmtWhole(qty)} × ${fmtGold(each)} · ${ago}`)),
-          h("div.lr-end", h("span.price.is-short", `−${fmtGold(total)}`)));
+            h("div.lr-sub", `${fmtWhole(qty)} × ${fmtGold(each)} + ${fmtGold(fee)} fee · ${ago}`)),
+          h("div.lr-end", h("span.price.is-short", `−${fmtGold(goods + fee)}`)));
     })));
   }
 
@@ -592,60 +658,81 @@ function marketBody(ctx, page, actions) {
 
   /* ---------- buying ---------- */
 
-  function landing(key, seller) {
+  function landing(key) {
     const w = placeFor(ctx.state, key);
-    return w ? `From ${seller}. It goes ${INTO[w]}.` : `From ${seller}. Belongings, the Stockpile and the Vault are all full: make room first.`;
+    return w ? `It goes ${INTO[w]}.` : "Belongings, the Stockpile and the Vault are all full: make room first.";
   }
 
-  async function sendBuy(row, qty) {
-    const id = String(row.id);
+  // The market's cut is on top of the asking price, so this is what the purse pays.
+  const feeLine = (goods) => `${fmtGold(goods)} + ${fmtGold(marketFee(goods))} fee = ${fmtGold(goods + marketFee(goods))}`;
+
+  async function send(id, type, args, done) {
     pending.add(id);
     paintClock(true);
     let res;
     try {
-      res = await ctx.dispatch("marketBuy", { listingId: num(row.id), qty });
+      res = await ctx.dispatch(type, args);
     } catch (err) {
       res = { ok: false };
       toast("The market did not answer", { kind: "warn" });
     }
     pending.delete(id);
-    if (res && res.ok) {
-      const data = res.data || {};
-      const got = Number.isFinite(data.qty) ? data.qty : qty;
-      const cost = Number.isFinite(data.cost) ? data.cost : qty * num(row.price_each);
-      toast(`Bought ${fmtWhole(got)} ${row.item_name} for ${fmtGold(cost)}`, { kind: "gold", icon: "market" });
-    }
+    if (res && res.ok) done(res.data || {});
     if (!alive) return res;
     paintClock(true);
     refreshAll();
     return res;
   }
 
-  async function buy(row) {
+  function sendBuy(row, qty) {
+    const each = num(row.price_each);
+    return send(String(row.id), "marketBuy", { listingId: num(row.id), qty }, (data) => {
+      const got = Number.isFinite(data.qty) ? data.qty : qty;
+      const cost = Number.isFinite(data.cost) ? data.cost : qty * each + marketFee(qty * each);
+      toast(`Bought ${fmtWhole(got)} ${row.item_name} for ${fmtGold(cost)}`, { kind: "gold", icon: "market" });
+    });
+  }
+
+  /* A pool buy carries the ceiling the player was shown, so a band drained between the
+     drawing and the press is refused rather than charged for. A short fill is normal and
+     says so in as many words. */
+  function sendPoolBuy(row, qty, maxEach) {
+    const name = String(row.item_name);
+    return send(`pool:${row.item_key}`, "marketBuyPool", { key: row.item_key, qty, maxEach }, (data) => {
+      const got = Number.isFinite(data.qty) ? data.qty : qty;
+      const cost = Number.isFinite(data.cost) ? data.cost : 0;
+      const short = data.short === true && got < qty;
+      toast(short
+        ? `Bought ${fmtWhole(got)} of ${fmtWhole(qty)} ${name} for ${fmtGold(cost)}: that was all at your price`
+        : `Bought ${fmtWhole(got)} ${name} for ${fmtGold(cost)}`, { kind: "gold", icon: "market" });
+    });
+  }
+
+  async function buyListing(row) {
     const left = Math.max(0, Math.floor(num(row.qty_left)));
     const each = num(row.price_each);
     const name = String(row.item_name);
-    const seller = display(row.seller_name);
     if (left < 1 || pending.has(String(row.id))) return;
 
     // One thing (or the last of a stack): straight to the confirmation.
     if (left === 1 || !stacks(row.item_key)) {
       const ok = await confirmSpend(ctx, {
         title: `Buy ${name}?`,
-        body: landing(row.item_key, seller),
-        gold: each,
-        confirmText: `Buy for ${fmtGold(each)}`,
+        body: `${landing(row.item_key)} ${feeLine(each)}.`,
+        gold: each + marketFee(each),
+        confirmText: `Buy for ${fmtGold(each + marketFee(each))}`,
       });
       if (ok && alive) sendBuy(row, 1);
       return;
     }
 
     const gold = () => Math.floor(ctx.state.player.gold);
+    const paid = (n) => n * each + marketFee(n * each);
     let m = null;
     let waiting = false;
     const plan = h("p.ap-plan");
     const picker = qtyPicker({
-      value: Math.max(1, Math.min(left, Math.floor(gold() / Math.max(1, each)))),
+      value: Math.max(1, Math.min(left, Math.floor(gold() / Math.max(1, each + marketFee(each))))),
       max: left,
       allowUnlimited: false,
       presets: [1, 10, 100].filter((n) => n < left),
@@ -655,10 +742,10 @@ function marketBody(ctx, page, actions) {
 
     function paintPlan() {
       const n = picker.pick.n;
-      const total = n * each;
+      const total = paid(n);
       const have = gold();
       plan.replaceChildren(
-        h("span", h("b", `${fmtWhole(n)} × ${name}`), ` · ${fmtGold(total)}`),
+        h("span", h("b", `${fmtWhole(n)} × ${name}`), ` · ${feeLine(n * each)}`),
         total > have ? h("span.t-warn", `Short by ${fmtGold(total - have)}`) : h("span", `${fmtGold(have - total)} left after`));
       if (m && m.buttons[1]) setText(m.buttons[1].lastChild, `Buy for ${fmtGold(total)}`);
     }
@@ -666,12 +753,11 @@ function marketBody(ctx, page, actions) {
     async function go() {
       if (waiting) return;
       const n = picker.pick.n;
-      const total = n * each;
       const ok = await confirmSpend(ctx, {
         title: `Buy ${fmtWhole(n)} ${name}?`,
-        body: landing(row.item_key, seller),
-        gold: total,
-        confirmText: `Buy for ${fmtGold(total)}`,
+        body: `${landing(row.item_key)} ${feeLine(n * each)}.`,
+        gold: paid(n),
+        confirmText: `Buy for ${fmtGold(paid(n))}`,
       });
       if (!ok || m.closed) return;
       waiting = true;
@@ -685,12 +771,91 @@ function marketBody(ctx, page, actions) {
     const d = itemDef(row.item_key);
     m = openModal({
       title: `Buy ${name}`,
-      sub: `${fmtWhole(left)} left · ${fmtGold(each)} each · from ${seller}`,
+      sub: `${fmtWhole(left)} left · ${fmtGold(each)} each, plus the market's ${FEE_PCT}%`,
       art: d ? d.icon : "market",
       artRarity: rarity !== "common" ? rarity : null,
       artTone: "gold",
       size: "sm",
       body: [h("div.ap-block", h("div.eyebrow", "How many"), picker.node), plan],
+      actions: [
+        { label: "Cancel", kind: "quiet" },
+        { label: "Buy", kind: "gold", icon: "coin", onClick: () => { go(); return false; } },
+      ],
+    });
+    paintPlan();
+  }
+
+  /* Buying out of a pool. The sheet walks the bands the realm sent with the same rule the
+     realm fills by (fillPool: cheapest first, oldest first among equals), so the price on
+     screen is the price charged, and the dearest band the walk reaches is the ceiling the
+     command carries. */
+  async function buyPool(entry) {
+    const row = entry.row;
+    const bands = entry.bands;
+    const name = String(row.item_name);
+    const depth = poolDepth(bands);
+    if (depth < 1 || pending.has(entry.id)) return;
+
+    const gold = () => Math.floor(ctx.state.player.gold);
+    const rows = bands.map((b, i) => ({ id: i, priceEach: b.each, qtyLeft: b.qty, at: i }));
+    const ceiling = bands[bands.length - 1].each;
+    const walk = (n) => fillPool(rows, { qty: Math.max(1, Math.min(depth, n)), maxEach: ceiling });
+
+    let m = null;
+    let waiting = false;
+    const plan = h("p.ap-plan");
+    const picker = qtyPicker({
+      value: Math.max(1, Math.min(depth, Math.floor(gold() / Math.max(1, bands[0].each)))),
+      max: depth,
+      allowUnlimited: false,
+      presets: [1, 10, 100].filter((n) => n < depth),
+      onChange: () => paintPlan(),
+    });
+    setAttr(picker.input, "aria-label", `How many ${name} to buy`);
+
+    function paintPlan() {
+      const res = walk(picker.pick.n);
+      const d = res.ok ? res.data : null;
+      const have = gold();
+      const total = d ? d.total : 0;
+      const prices = d && d.fills.length > 1 ? `${fmtGold(d.fills[0].priceEach)} to ${fmtGold(d.dearest)}` : fmtGold(d ? d.dearest : 0);
+      plan.replaceChildren(
+        h("span", h("b", `${fmtWhole(d ? d.units : 0)} × ${name}`), ` · ${prices} · ${d ? feeLine(d.goods) : ""}`),
+        total > have ? h("span.t-warn", `Short by ${fmtGold(total - have)}`) : h("span", `${fmtGold(have - total)} left after`));
+      if (m && m.buttons[1]) setText(m.buttons[1].lastChild, `Buy for ${fmtGold(total)}`);
+    }
+
+    async function go() {
+      if (waiting) return;
+      const res = walk(picker.pick.n);
+      if (!res.ok) return;
+      const d = res.data;
+      const ok = await confirmSpend(ctx, {
+        title: `Buy ${fmtWhole(d.units)} ${name}?`,
+        body: `${landing(row.item_key)} ${feeLine(d.goods)}. Nothing over ${fmtGold(d.dearest)} each is touched, so a band somebody else empties first is left alone.`,
+        gold: d.total,
+        confirmText: `Buy for ${fmtGold(d.total)}`,
+      });
+      if (!ok || m.closed) return;
+      waiting = true;
+      m.buttons.forEach((b) => { b.disabled = true; });
+      toggleClass(m.buttons[1], "is-loading", true);
+      await sendPoolBuy(row, d.units, d.dearest);
+      if (!m.closed) m.close("action");
+    }
+
+    const def = itemDef(row.item_key);
+    m = openModal({
+      title: `Buy ${name}`,
+      sub: `${fmtWhole(Math.max(depth, Math.floor(num(row.qty_left))))} on the market · from ${fmtGold(num(row.price_min))} each`,
+      art: def ? def.icon : "market",
+      artTone: "gold",
+      size: "sm",
+      body: [
+        h("div.ap-block", h("div.eyebrow", "Price bands"), h("p.modal-note", bandText(bands, bands.length))),
+        h("div.ap-block", h("div.eyebrow", "How many"), picker.node),
+        plan,
+      ],
       actions: [
         { label: "Cancel", kind: "quiet" },
         { label: "Buy", kind: "gold", icon: "coin", onClick: () => { go(); return false; } },
@@ -735,6 +900,10 @@ function marketBody(ctx, page, actions) {
 
   function paintSeg() {
     seg.querySelectorAll(".seg-btn").forEach((b) => setAttr(b, "aria-selected", b.dataset.kind === filt.kind ? "true" : "false"));
+    // A pool is always cheapest first: there is no newest in a price band, so on the tabs that
+    // are only pools the sort would decide nothing and is not shown.
+    const k = kindDef();
+    sortSel.hidden = !(k.id === "all" || k.kind);
   }
 
   function clearFilters() {
@@ -751,10 +920,11 @@ function marketBody(ctx, page, actions) {
   const offs = [
     on(listBox, "click", "[data-act]", (e, btn) => {
       const node = btn.closest(".listing");
-      const s = node && shown.find((x) => String(x.row.id) === node.dataset.id);
+      const id = node && (node.dataset.key ? `pool:${node.dataset.key}` : node.dataset.id);
+      const s = id && shown.find((x) => x.id === id);
       if (!s) return;
       if (btn.dataset.act === "item") openPopup("item", ctx, s.row.item_key, { from: null, readOnly: true });
-      else if (btn.dataset.act === "buy") buy(s.row);
+      else if (btn.dataset.act === "buy") (s.pool ? buyPool(s) : buyListing(s.row));
       else if (btn.dataset.act === "cancel") takeBack(s.row);
     }),
     on(mineBox, "click", "[data-act='cancel']", (e, btn) => {
@@ -813,6 +983,7 @@ function marketBody(ctx, page, actions) {
   };
   document.addEventListener("visibilitychange", onVisible);
 
+  paintSeg();
   paintMine();
   paintTrades();
   loadListings();

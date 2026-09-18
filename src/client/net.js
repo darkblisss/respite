@@ -65,16 +65,15 @@ function rpcMessage(error) {
   return m;
 }
 
-// ilike treats % and _ as wildcards; a player's search means them literally.
-const likeEscape = (s) => String(s).replace(/[\\%_]/g, (c) => `\\${c}`);
-
 /* ================= 2. THE COURIER ================= */
 
 /**
  * createNet({ supabase, client, url, key, fetch, now, timeoutMs })
  *   supabase  the supabase-js global (createClient), or pass a ready `client`
  *   fetch     for the game function; injectable for tests and the harness
- *   now       () => ms, the server-aligned clock (listing expiry is judged against it)
+ *   now       () => ms, the server-aligned clock. Nothing here reads it any more: the market's
+ *             reads are RPCs, and they judge a listing's expiry on the database's own clock,
+ *             which is the clock that wrote it
  */
 export function createNet({
   supabase = null,
@@ -340,20 +339,39 @@ export function createNet({
     }
   }
 
+  /* An RPC that answers with rows, in the shape the market page reads. The market is anonymous
+     (migration 007), so nothing a player browses comes off the tables directly any more: three
+     security definer functions decide what leaves the realm, and none of them selects a
+     seller_id, a seller_name or a buyer_id. Only your own listings are still read as rows,
+     because they are yours. */
+  async function rpcRows(name, args) {
+    const res = await rpc(name, args);
+    return { rows: Array.isArray(res.data) ? res.data : [], error: res.error };
+  }
+
+  const clampRows = (n, fallback) => Math.max(1, Math.min(100, Math.floor(Number(n) || fallback)));
+
   const market = {
+    // Gear and tools, one row a listing. `mine` is true on your own; there is no other name on it.
     browse({ q = "", kind = null, tier = null, sort = "price", limit = 50, offset = 0 } = {}) {
-      return rows(() => {
-        const from = Math.max(0, Math.floor(Number(offset) || 0));
-        const count = Math.max(1, Math.min(100, Math.floor(Number(limit) || 50)));
-        let query = client.from("market_listings").select("*")
-          .eq("status", "open")
-          .gt("expires_at", new Date(now()).toISOString());
-        const term = String(q || "").trim();
-        if (term) query = query.ilike("item_name", `%${likeEscape(term)}%`);
-        if (kind) query = query.eq("item_kind", kind);
-        if (tier != null && tier !== "") query = query.eq("item_tier", Number(tier));
-        query = sort === "newest" ? query.order("created_at", { ascending: false }) : query.order("price_each", { ascending: true });
-        return query.range(from, from + count - 1);
+      return rpcRows("market_browse", {
+        p_q: String(q || "").trim(),
+        p_kind: kind || null,
+        p_tier: tier == null || tier === "" ? null : Number(tier),
+        p_sort: sort === "newest" ? "newest" : "price",
+        p_limit: clampRows(limit, 50),
+        p_offset: Math.max(0, Math.floor(Number(offset) || 0)),
+      });
+    },
+    /* Materials, as pools: one row an item key, with how many are to be had, the cheapest price
+       and the price bands behind it. Your own listings are not counted, because you cannot buy
+       them. */
+    pools({ q = "", tier = null, limit = 50, bands = 8 } = {}) {
+      return rpcRows("market_pools", {
+        p_q: String(q || "").trim(),
+        p_tier: tier == null || tier === "" ? null : Number(tier),
+        p_limit: clampRows(limit, 50),
+        p_bands: Math.max(1, Math.min(20, Math.floor(Number(bands) || 8))),
       });
     },
     async mine() {
@@ -364,11 +382,9 @@ export function createNet({
         .order("created_at", { ascending: false })
         .limit(50));
     },
-    // The table's policy already limits it to sales you bought or sold.
+    // Your own ledger: side is "sold" or "bought", and the other party is not in it.
     sales() {
-      return rows(() => client.from("market_sales").select("*")
-        .order("created_at", { ascending: false })
-        .limit(50));
+      return rpcRows("market_sales_mine", { p_limit: 50 });
     },
   };
 
@@ -381,6 +397,12 @@ export function createNet({
     leave: () => rpc("party_leave"),
     kick: (userId) => rpc("party_kick", { p_user_id: userId }),
     say: (body) => rpc("party_say", { p_body: body }),
+
+    /* The party's live fight as a watcher may see it, or null when nobody is out. The same
+       shape rides back on a member's own game request as `party`, so this is for the members
+       who are not out on it and never get one: it is how they learn there is a fight to join.
+       It selects one column the server wrote, so no seed and no dice ever leave the realm. */
+    huntView: () => rpc("party_hunt_view"),
 
     /* Pokes onChange when the party's chat, roster or invites change, and when an invite
        to you arrives (so a player with no party still hears one). Returns unsubscribe. */

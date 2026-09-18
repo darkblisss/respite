@@ -26,7 +26,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 
-import { createGameHandler, CATCHING_UP, MAX_BODY, START_OVER_ALONE } from '../../src/server/handler.js';
+import { createGameHandler, CATCHING_UP, MAX_BODY, PARTY_OUT, START_OVER_ALONE } from '../../src/server/handler.js';
 import { pgliteAdapter, postgresJsAdapter } from '../../src/server/db.js';
 import { CONFIG } from '../../src/shared/config.js';
 import { GameData } from '../../src/shared/registry.js';
@@ -239,7 +239,7 @@ async function seedSave(user, seed, edit) {
 /* ================= 3. SUITES ================= */
 
 await section('the schema', async () => {
-  same('migrations ran (twice)', migrationFiles, ['002_server.sql', '003_profiles_from_saves.sql', '004_leaderboard_boards.sql']);
+  same('migrations ran (twice)', migrationFiles, ['002_server.sql', '003_profiles_from_saves.sql', '004_leaderboard_boards.sql', '005_wealth_board.sql', '006_party_hunts.sql', '007_market_pools.sql']);
   same('the expiry sweep has its partial index on open listings',(await q1(`select indexdef from pg_indexes where indexname = 'market_listings_open_expiry_idx'`)).indexdef,
     'CREATE INDEX market_listings_open_expiry_idx ON public.market_listings USING btree (expires_at, id) WHERE (status = \'open\'::text)');
   same('the hourly listing count has its index', (await q1(`select indexdef from pg_indexes where indexname = 'market_listings_seller_created_idx'`)).indexdef,
@@ -421,7 +421,7 @@ await section('a v4 save migrates on its first request', async () => {
   check('meta.lastSeen is gone', !('lastSeen' in s.meta));
   // 4,000 ms of progress plus two hours at 12 s an action: 600 more, 4,000 ms over.
   same('the crew worked the two hours away', [haveQty(s, 'slag_delve'), s.skills.delving, s.tasks.skilling && s.tasks.skilling.done], [640, 1800, 612]);
-  same('remedies moved into Belongings', [s.inv.items.provision_t1, s.bank.items.provision_t1], [6, undefined]);
+  same('remedies moved into the Satchel', [s.satchel.items.provision_t1, s.bank.items.provision_t1, s.inv.items.provision_t1], [6, undefined, undefined]);
   check('the old log line survives', s.log.some((l) => l.m === 'An old line from v4.'));
   check('a welcome-back line is dated now', s.log.some((l) => l.t === NOW && /Away/i.test(l.m)), s.log.slice(-3));
   const row = await saved(old);
@@ -552,7 +552,7 @@ await section('commands and their results', async () => {
   }
 });
 
-await section('the market: list, buy in parts, get paid', async () => {
+await section('the market: list, buy out of the pool, get paid', async () => {
   NOW += MINUTE;
   const seller = newUser('seller');
   const buyer = newUser('buyer');
@@ -574,55 +574,245 @@ await section('the market: list, buy in parts, get paid', async () => {
     expires_ms: NOW + CONFIG.economy.marketListingDays * DAY,
   });
 
+  // A material is bought out of its pool, by name, quantity and ceiling. Its id buys nothing,
+  // which is what keeps a buyer from picking one seller out of the pool.
   NOW += 1000;
-  const b1 = await play(buyer, cmd('marketBuy', { listingId: id, qty: 10, price: 0, cost: 0 }));
-  same('buying 10 reports what was bought, at the listed price', b1.results[0].data, { listingId: id, key: 'slag_delve', qty: 10, cost: 70 });
-  same('the buyer paid 70 and holds 10', [b1.state.player.gold, haveQty(b1.state, 'slag_delve')], [930, 10]);
+  same('a material listing cannot be bought by its id', (await play(buyer, cmd('marketBuy', { listingId: id, qty: 1 }))).results[0].error, 'Buy materials from the pool.');
+
+  NOW += 1000;
+  // 10 at 7 is 70 for the goods; the fee is 5% rounded up, 4, and the buyer pays it on top.
+  const b1 = await play(buyer, cmd('marketBuyPool', { key: 'slag_delve', qty: 10, maxEach: 7 }));
+  same('buying 10 out of the pool says what was had and what it cost', b1.results[0].data,
+    { key: 'slag_delve', qty: 10, cost: 74, fee: 4, asked: 10, short: false });
+  same('the buyer paid the ask plus the fee and holds 10', [b1.state.player.gold, haveQty(b1.state, 'slag_delve')], [926, 10]);
   same('10 are gone from the listing', [(await listing(id)).qty_left, (await listing(id)).status], [20, 'open']);
 
   NOW += 1000;
-  const over = await play(buyer, cmd('marketBuy', { listingId: id, qty: 25 }));
-  same('more than is left is refused', [over.results[0].ok, over.results[0].error, over.state.player.gold], [false, 'Only 20 left.', 930]);
-
-  NOW += 1000;
-  const b2 = await play(buyer, cmd('marketBuy', { listingId: id, qty: 20 }));
-  same('the rest sells', [b2.results[0].ok, b2.state.player.gold, haveQty(b2.state, 'slag_delve')], [true, 790, 30]);
+  // More than the pool holds is a short fill, not a refusal: they get what was there.
+  const rest = await play(buyer, cmd('marketBuyPool', { key: 'slag_delve', qty: 25, maxEach: 7 }));
+  same('asking for more than the pool holds fills short and says so', rest.results[0].data,
+    { key: 'slag_delve', qty: 20, cost: 147, fee: 7, asked: 25, short: true });
+  same('and they paid for the 20 there were', [rest.state.player.gold, haveQty(rest.state, 'slag_delve')], [779, 30]);
   same('the listing is sold out', [(await listing(id)).qty_left, (await listing(id)).status], [0, 'sold']);
-  same('a sold listing is gone', (await play(buyer, cmd('marketBuy', { listingId: id, qty: 1 }))).results[0].error, 'That listing is gone.');
+  same('an empty pool has nothing to sell', (await play(buyer, cmd('marketBuyPool', { key: 'slag_delve', qty: 1, maxEach: 7 }))).results[0].error,
+    'Nobody is selling that at your price.');
 
-  const sales = await q('select seller_id::text as s, buyer_id::text as b, item_key, item_name, qty, price_each::int as p, fee::int as fee from public.market_sales where listing_id = $1 order by id', [id]);
-  same('two sales rows with a 5% fee, at least 1', sales, [
-    { s: seller.id, b: buyer.id, item_key: 'slag_delve', item_name: 'Slag Ore', qty: 10, p: 7, fee: 3 },
-    { s: seller.id, b: buyer.id, item_key: 'slag_delve', item_name: 'Slag Ore', qty: 20, p: 7, fee: 7 },
+  const sales = await q(`select seller_id::text as s, buyer_id::text as b, item_key, item_name, qty,
+                                price_each::int as p, fee::int as fee, buyer_fee::int as buyer_fee
+                         from public.market_sales where listing_id = $1 order by id`, [id]);
+  same('two sale rows, each carrying both legs of the fee', sales, [
+    { s: seller.id, b: buyer.id, item_key: 'slag_delve', item_name: 'Slag Ore', qty: 10, p: 7, fee: 4, buyer_fee: 4 },
+    { s: seller.id, b: buyer.id, item_key: 'slag_delve', item_name: 'Slag Ore', qty: 20, p: 7, fee: 7, buyer_fee: 7 },
   ]);
   const letters = await mailOf(seller);
-  same('the seller has two unclaimed gold letters, less the fee', letters.map((l) => [l.kind, l.gold, l.claimed]), [['gold', 67, false], ['gold', 133, false]]);
-  check('a letter names the buyer, the quantity and the item', /buyer/.test(letters[0].note) && /\b10\b/.test(letters[0].note) && /Slag Ore/.test(letters[0].note), letters[0].note);
+  same('the seller has two gold letters, the ask less the fee', letters.map((l) => [l.kind, l.gold, l.claimed]), [['gold', 66, false], ['gold', 133, false]]);
+  check('a letter says what sold and what the market kept, and never who bought it',
+    /Slag Ore/.test(letters[0].note) && /\b10\b/.test(letters[0].note) && !/buyer/i.test(letters[0].note), letters[0].note);
 
   NOW += 1000;
   const paid = await play(seller);
-  same('the seller is paid on the next request, as earned gold', [paid.state.player.gold, paid.state.stats.goldEarned], [200, 200]);
+  same('the seller is paid on the next request, as earned gold', [paid.state.player.gold, paid.state.stats.goldEarned], [199, 199]);
   same('both letters are claimed', (await mailOf(seller)).map((l) => l.claimed), [true, true]);
   const post = paid.events.filter((e) => e.type === 'mail:claimed');
-  same('the response carries the post as news, without the save', [post.length, post[0] && post[0].gold, post[0] && 'state' in post[0]], [1, 200, false]);
+  same('the response carries the post as news, without the save', [post.length, post[0] && post[0].gold, post[0] && 'state' in post[0]], [1, 199, false]);
 
   NOW += 1000;
   const own = await play(seller, cmd('marketList', { key: 'slag_delve', from: 'bank', qty: 5, price: 9 }));
   const ownId = own.results[0].data.listingId;
   NOW += 1000;
-  const self = await play(seller, cmd('marketBuy', { listingId: ownId, qty: 1 }));
-  same('buying your own listing is refused', [self.results[0].ok, self.results[0].error], [false, "You can't buy your own listing."]);
+  const self = await play(seller, cmd('marketBuyPool', { key: 'slag_delve', qty: 1, maxEach: 9 }));
+  same('a seller cannot buy out of their own pool', [self.results[0].ok, self.results[0].error], [false, 'Nobody is selling that at your price.']);
 
   NOW += 1000;
   const cheap = await play(seller, cmd('marketList', { key: 'slag_delve', from: 'bank', qty: 1, price: 1 }));
   const cheapId = cheap.results[0].data.listingId;
   NOW += 1000;
-  const bigBuy = await play(buyer, cmd('marketBuy', { listingId: cheapId, qty: 1 }), cmd('marketBuy', { listingId: ownId, qty: 5 }));
-  same('a 1 gold sale and a 45 gold sale', bigBuy.results.map((r) => r.ok), [true, true]);
-  same('fees of 1 and 2', (await q('select fee::int as fee from public.market_sales where listing_id = any($1::bigint[]) order by id', [[cheapId, ownId]])).map((r) => r.fee), [1, 2]);
+  // 1 at 1 then 5 at 9: the cheap band first, and the fee is charged once on the basket.
+  const across = await play(buyer, cmd('marketBuyPool', { key: 'slag_delve', qty: 6, maxEach: 9 }));
+  same('a buy empties the cheap band first and walks on into the dear one', across.results[0].data,
+    { key: 'slag_delve', qty: 6, cost: 49, fee: 3, asked: 6, short: false });
+  same('and it paid 46 for the goods and 3 for the market', [across.state.player.gold, haveQty(across.state, 'slag_delve')], [730, 36]);
+  same('both listings are sold out', [(await listing(cheapId)).status, (await listing(ownId)).status], ['sold', 'sold']);
+  same("the seller's leg is charged per listing, the buyer's once and shared over them",
+    (await q('select fee::int as fee, buyer_fee::int as buyer_fee from public.market_sales where listing_id = any($1::bigint[]) order by listing_id', [[cheapId, ownId]]))
+      .map((r) => [r.fee, r.buyer_fee]),
+    [[3, 3], [1, 0]]);
   NOW += 1000;
   const paid2 = await play(seller);
-  same('a letter worth nothing is still claimed; 43 gold arrives', [paid2.state.player.gold, (await mailOf(seller)).map((l) => [l.gold, l.claimed])], [243, [[67, true], [133, true], [0, true], [43, true]]]);
+  same('a letter worth nothing is still claimed; 42 gold arrives', [paid2.state.player.gold, (await mailOf(seller)).map((l) => [l.gold, l.claimed])],
+    [241, [[66, true], [133, true], [42, true], [0, true]]]);
+
+  // Gear is not fungible, so it stays one row a piece, bought by id, and anonymous all the same.
+  NOW += 1000;
+  await editSave(seller, (s) => put(s, 'inv', 'slag_sword|legendary|c3.4', 1));
+  const sword = await play(seller, cmd('marketList', { key: 'slag_sword|legendary|c3.4', from: 'inv', qty: 1, price: 500 }));
+  const swordId = sword.results[0].data.listingId;
+  NOW += 1000;
+  const pooled = await play(buyer, cmd('marketBuyPool', { key: 'slag_sword|legendary|c3.4', qty: 1, maxEach: 500 }));
+  same('gear is not sold out of a pool', [pooled.results[0].ok, pooled.results[0].error], [false, 'That is sold piece by piece.']);
+  NOW += 1000;
+  const gear = await play(buyer, cmd('marketBuy', { listingId: swordId, qty: 1 }));
+  same('a piece is bought by id, at the ask plus the fee, under a new market uid', gear.results[0].data,
+    { listingId: swordId, key: `slag_sword|legendary|m${swordId}`, qty: 1, cost: 525, fee: 25 });
+  same('the buyer paid 525', gear.state.player.gold, 205);
+  const swordSale = await q1('select fee::int as fee, buyer_fee::int as buyer_fee from public.market_sales where listing_id = $1', [swordId]);
+  same('a gear sale carries both legs too', [swordSale.fee, swordSale.buyer_fee], [25, 25]);
+  same('and the seller is posted the ask less the fee', (await mailOf(seller)).filter((l) => !l.claimed).map((l) => [l.gold, /buyer/i.test(l.note)]), [[475, false]]);
+});
+
+await section('the market: the fill order, the ceiling and a race', async () => {
+  NOW += MINUTE;
+  // Three sellers, one material, four listings: two at 5 (one older), one at 6, one at 20.
+  const dear = newUser('dear');
+  const early = newUser('early');
+  const late = newUser('late');
+  const taker = newUser('taker');
+  for (const u of [dear, early, late, taker]) await play(u);
+  for (const u of [dear, early, late]) await editSave(u, (s) => put(s, 'bank', 'bitter_fell', 100));
+  await editSave(taker, (s) => { s.player.gold = 5000; });
+
+  NOW += 1000;
+  const a = (await play(early, cmd('marketList', { key: 'bitter_fell', from: 'bank', qty: 10, price: 5 }))).results[0].data.listingId;
+  NOW += 1000;
+  const b = (await play(late, cmd('marketList', { key: 'bitter_fell', from: 'bank', qty: 10, price: 5 }))).results[0].data.listingId;
+  NOW += 1000;
+  const c = (await play(late, cmd('marketList', { key: 'bitter_fell', from: 'bank', qty: 10, price: 6 }))).results[0].data.listingId;
+  NOW += 1000;
+  const d = (await play(dear, cmd('marketList', { key: 'bitter_fell', from: 'bank', qty: 10, price: 20 }))).results[0].data.listingId;
+
+  NOW += 1000;
+  // 12 at a ceiling of 6: the older 5 first, then the newer 5, and the 6 only for what is left.
+  const first = await play(taker, cmd('marketBuyPool', { key: 'bitter_fell', qty: 12, maxEach: 6 }));
+  same('cheapest first, and among equal prices the oldest listing first',
+    (await q('select id, qty_left from public.market_listings where id = any($1::bigint[]) order by id', [[a, b, c, d]])).map((r) => Number(r.qty_left)),
+    [0, 8, 10, 10]);
+  same('and it cost the bands it walked, plus one fee on the basket', first.results[0].data,
+    { key: 'bitter_fell', qty: 12, cost: 63, fee: 3, asked: 12, short: false });
+
+  NOW += 1000;
+  // The ceiling: 20 are asked for at 6, and the 20 gold listing is never touched.
+  const capped = await play(taker, cmd('marketBuyPool', { key: 'bitter_fell', qty: 20, maxEach: 6 }));
+  same('a ceiling fills short rather than reaching into a dearer band', capped.results[0].data,
+    { key: 'bitter_fell', qty: 18, cost: 105, fee: 5, asked: 20, short: true });
+  same('the dear listing is untouched', Number((await listing(d)).qty_left), 10);
+  same('nothing above the ceiling is for sale', (await play(taker, cmd('marketBuyPool', { key: 'bitter_fell', qty: 1, maxEach: 6 }))).results[0].error,
+    'Nobody is selling that at your price.');
+
+  /* Two buyers after one pool. PGlite is one connection, so requests cannot truly overlap here
+     and the lock order is what makes an overlap safe (docs/SERVER.md 2). What is tested is the
+     half a test can reach, and the half that actually bites: both buyers hold the same view of
+     the bands, one of them empties a band, and the other's command is answered from the rows
+     the fill locks rather than from anything the browser saw. */
+  NOW += 1000;
+  const rival = newUser('rival');
+  await play(rival);
+  await editSave(rival, (s) => { s.player.gold = 5000; });
+  await editSave(dear, (s) => put(s, 'bank', 'godsbane_harvest', 20));
+  await editSave(early, (s) => put(s, 'bank', 'godsbane_harvest', 20));
+  NOW += 1000;
+  const cheapPool = (await play(dear, cmd('marketList', { key: 'godsbane_harvest', from: 'bank', qty: 20, price: 10 }))).results[0].data.listingId;
+  const dearPool = (await play(early, cmd('marketList', { key: 'godsbane_harvest', from: 'bank', qty: 20, price: 30 }))).results[0].data.listingId;
+
+  NOW += 1000;
+  // Both see 20 at 10 and 20 at 30. The first takes 15 of the cheap band.
+  const one = await play(taker, cmd('marketBuyPool', { key: 'godsbane_harvest', qty: 15, maxEach: 10 }));
+  same('the first buyer has the 15 they asked for', one.results[0].data, { key: 'godsbane_harvest', qty: 15, cost: 158, fee: 8, asked: 15, short: false });
+  NOW += 1000;
+  // The second asks for the same 15 at the same ceiling: 5 are left, and the dear band is not
+  // reached for the rest. They are never sold what the first buyer took.
+  const two = await play(rival, cmd('marketBuyPool', { key: 'godsbane_harvest', qty: 15, maxEach: 10 }));
+  same('the second is sold only what was left, at the price they were promised', two.results[0].data,
+    { key: 'godsbane_harvest', qty: 5, cost: 53, fee: 3, asked: 15, short: true });
+  same('the cheap pool is empty and the dear one untouched',
+    [Number((await listing(cheapPool)).qty_left), (await listing(cheapPool)).status, Number((await listing(dearPool)).qty_left)], [0, 'sold', 20]);
+  const moved = await q('select qty, price_each::int as p, fee::int as fee, buyer_fee::int as buyer_fee from public.market_sales where listing_id = $1 order by id', [cheapPool]);
+  same('the sale rows add up to the 20 that existed, and no more', moved.reduce((n, r) => n + Number(r.qty), 0), 20);
+  const spent = [one, two].reduce((n, r) => n + r.results[0].data.cost, 0);
+  const owed = moved.reduce((n, r) => n + Number(r.qty) * r.p + Number(r.buyer_fee), 0);
+  same('what the two buyers paid is what the rows say they paid', spent, owed);
+  same('and what they hold is what the rows say moved',
+    [haveQty(one.state, 'godsbane_harvest'), haveQty(two.state, 'godsbane_harvest')], [15, 5]);
+  const gold = moved.reduce((n, r) => n + Number(r.qty) * r.p - Number(r.fee), 0);
+  NOW += 1000;
+  same('the seller is posted the asks less their own leg', (await play(dear)).state.player.gold, gold);
+
+  // Two buys in one request: the second is played after the first, so it reads the first's work.
+  NOW += 1000;
+  await editSave(late, (s) => put(s, 'bank', 'godsbane_weave', 6));
+  const twice = (await play(late, cmd('marketList', { key: 'godsbane_weave', from: 'bank', qty: 6, price: 2 }))).results[0].data.listingId;
+  NOW += 1000;
+  const pair = await play(taker,
+    cmd('marketBuyPool', { key: 'godsbane_weave', qty: 4, maxEach: 2 }),
+    cmd('marketBuyPool', { key: 'godsbane_weave', qty: 4, maxEach: 2 }));
+  same('the second buy in one request sees what the first one took', pair.results.map((r) => r.data.qty), [4, 2]);
+  same('and the listing is drained exactly once', [Number((await listing(twice)).qty_left), (await listing(twice)).status], [0, 'sold']);
+});
+
+await section('the market: nobody learns a name', async () => {
+  NOW += MINUTE;
+  const hidden = newUser('hidden');
+  const nosy = newUser('nosy');
+  await play(hidden);
+  await play(nosy);
+  await editSave(hidden, (s) => put(s, 'bank', 'slag_delve', 40));
+  await editSave(nosy, (s) => { s.player.gold = 500; });
+  NOW += 1000;
+  const mine = (await play(hidden, cmd('marketList', { key: 'slag_delve', from: 'bank', qty: 20, price: 4 }))).results[0].data.listingId;
+  NOW += 1000;
+  await play(nosy, cmd('marketBuyPool', { key: 'slag_delve', qty: 5, maxEach: 4 }));
+
+  // Everything a client can reach, as that client. The tables answer about your own rows only,
+  // and the three functions the market page uses carry no id and no name of anybody else.
+  const asPlayer = async (userId, sql, params = []) => {
+    try {
+      await db.exec('set role authenticated');
+      await db.query('select set_config(\'request.jwt.claim.sub\', $1, false)', [userId]);
+      return { rows: (await db.query(sql, params)).rows, error: null };
+    } catch (e) {
+      return { rows: null, error: e.message };
+    } finally {
+      await db.exec('reset role');
+      await db.query('select set_config(\'request.jwt.claim.sub\', \'\', false)');
+    }
+  };
+
+  const seen = await asPlayer(nosy.id, 'select id, seller_id, seller_name from public.market_listings');
+  same('a buyer reads no listing but their own (they have none)', [seen.error, seen.rows], [null, []]);
+  const ownRows = await asPlayer(hidden.id, 'select id::int as id from public.market_listings order by id');
+  same('a seller still reads their own listings', ownRows.rows.map((r) => r.id), [mine]);
+  const sales = await asPlayer(hidden.id, 'select id from public.market_sales');
+  check('market_sales cannot be read at all', /permission denied/.test(sales.error || ''), sales.error || sales.rows);
+
+  const pools = await asPlayer(nosy.id, 'select * from public.market_pools($1, null, 50, 8)', ['Slag']);
+  const pooled = pools.rows && pools.rows[0];
+  check('market_pools answers with the pool and no seller', !!pooled && Number(pooled.qty_left) === 15 && Number(pooled.price_min) === 4
+    && !/seller|user_id/i.test(Object.keys(pooled).join(',')), pooled);
+  same('and the bands are the prices, not the people', pooled && pooled.bands, [{ each: 4, qty: 15 }]);
+  const ownPool = await asPlayer(hidden.id, 'select * from public.market_pools($1, null, 50, 8)', ['Slag']);
+  same('a seller does not see their own stock in the pool they could buy from', ownPool.rows, []);
+
+  await editSave(hidden, (s) => put(s, 'inv', 'slag_sword|epic|c9.1', 1));
+  NOW += 1000;
+  const piece = (await play(hidden, cmd('marketList', { key: 'slag_sword|epic|c9.1', from: 'inv', qty: 1, price: 300 }))).results[0].data.listingId;
+  const browsed = await asPlayer(nosy.id, 'select * from public.market_browse($1, null, null, $2, 50, 0)', ['', 'price']);
+  const gearRow = browsed.rows && browsed.rows.find((r) => Number(r.id) === piece);
+  check('market_browse hands a stranger the piece with no name on it and mine false',
+    !!gearRow && gearRow.mine === false && !/seller|user_id/i.test(Object.keys(gearRow).join(',')), gearRow || browsed);
+  const ownBrowse = await asPlayer(hidden.id, 'select mine from public.market_browse($1, null, null, $2, 50, 0)', ['', 'price']);
+  same('and tells a seller which of them is theirs', ownBrowse.rows.map((r) => r.mine), [true]);
+  const noMaterials = await asPlayer(nosy.id, 'select count(*)::int as n from public.market_browse($1, $2, null, $3, 50, 0)', ['', 'material', 'price']);
+  same('browsing never returns a material listing', noMaterials.rows[0].n, 0);
+
+  const ledger = await asPlayer(nosy.id, 'select side, item_name, qty, fee::int as fee from public.market_sales_mine(50)');
+  same('a buyer reads their own side of the trade, and nothing of the seller', ledger.rows, [{ side: 'bought', item_name: 'Slag Ore', qty: 5, fee: 1 }]);
+  const sellerLedger = await asPlayer(hidden.id, 'select side, qty, fee::int as fee from public.market_sales_mine(50)');
+  same('and the seller reads theirs', sellerLedger.rows, [{ side: 'sold', qty: 5, fee: 1 }]);
+  const outsider = newUser('outsider');
+  await play(outsider);
+  const stranger = await asPlayer(outsider.id, 'select count(*)::int as n from public.market_sales_mine(50)');
+  same('a third party reads no sale at all', stranger.rows[0].n, 0);
+  const strangerPool = await asPlayer(outsider.id, 'select qty_left from public.market_pools($1, null, 50, 8)', ['Slag']);
+  check('though the pool itself is open to them', strangerPool.rows.length === 1, strangerPool);
 });
 
 await section('the market: refusals', async () => {
@@ -633,24 +823,27 @@ await section('the market: refusals', async () => {
   await play(stall);
   await play(poor);
   await play(full);
-  await editSave(stall, (s) => { put(s, 'bank', 'slag_delve', 50); put(s, 'bank', 'bitter_fell', 12); });
+  await editSave(stall, (s) => { put(s, 'bank', 'slag_delve', 50); put(s, 'bank', 'bitter_fell', 12); put(s, 'bank', 'bitter_stave', 20); });
   await editSave(poor, (s) => { s.player.gold = 5; });
-  await editSave(full, (s) => { s.player.gold = 1000; fillStorage(s, ['slag_delve']); });
+  await editSave(full, (s) => { s.player.gold = 1000; fillStorage(s, ['slag_delve', 'bitter_stave']); });
 
   NOW += 1000;
   const l = await play(stall, cmd('marketList', { key: 'slag_delve', from: 'bank', qty: 20, price: 9 }));
   const id = l.results[0].data.listingId;
+  // A pool nobody else in this suite has stock in, so the cheapest band is known: 9 gold.
+  const only = (await play(stall, cmd('marketList', { key: 'bitter_stave', from: 'bank', qty: 20, price: 9 }))).results[0].data.listingId;
   const salesBefore = (await q1('select count(*)::int as n from public.market_sales')).n;
 
   NOW += 1000;
-  const p = await play(poor, cmd('marketBuy', { listingId: id, qty: 1 }));
+  // 9 plus the market's leg is 10, and there are 5 gold in the purse.
+  const p = await play(poor, cmd('marketBuyPool', { key: 'bitter_stave', qty: 1, maxEach: 9 }));
   check('not enough gold is refused', p.results[0].ok === false && /gold/i.test(p.results[0].error), p.results[0]);
-  same('and nothing moved', [p.state.player.gold, haveQty(p.state, 'slag_delve'), (await listing(id)).qty_left], [5, 0, 20]);
+  same('and nothing moved', [p.state.player.gold, haveQty(p.state, 'bitter_stave'), (await listing(only)).qty_left], [5, 0, 20]);
 
   NOW += 1000;
-  const f = await play(full, cmd('marketBuy', { listingId: id, qty: 1 }));
+  const f = await play(full, cmd('marketBuyPool', { key: 'bitter_stave', qty: 1, maxEach: 9 }));
   check('no room is refused', f.results[0].ok === false && typeof f.results[0].error === 'string', f.results[0]);
-  same('and nothing moved', [f.state.player.gold, haveQty(f.state, 'slag_delve'), (await listing(id)).qty_left], [1000, 0, 20]);
+  same('and nothing moved', [f.state.player.gold, haveQty(f.state, 'bitter_stave'), (await listing(only)).qty_left], [1000, 0, 20]);
   same('no sales were written', (await q1('select count(*)::int as n from public.market_sales')).n, salesBefore);
 
   NOW += 1000;
@@ -662,6 +855,23 @@ await section('the market: refusals', async () => {
     cmd('marketCancel', { listingId: id }));
   same('junk quantities and ids, and cancelling someone else\'s listing', junk.results.map((r) => r.error),
     ['Choose how many to buy.', 'Choose how many to buy.', 'That listing is gone.', 'That listing is gone.', 'That listing is gone.']);
+
+  NOW += 1000;
+  const poolJunk = await play(poor,
+    cmd('marketBuyPool', { key: 'bitter_stave', qty: 0, maxEach: 9 }),
+    cmd('marketBuyPool', { key: 'bitter_stave', qty: 1.5, maxEach: 9 }),
+    cmd('marketBuyPool', { key: 'bitter_stave', qty: 1 }),
+    cmd('marketBuyPool', { key: 'bitter_stave', qty: 1, maxEach: 0 }),
+    cmd('marketBuyPool', { key: 'bitter_stave', qty: 1, maxEach: 1e9 + 1 }),
+    cmd('marketBuyPool', { key: 'no_such_thing', qty: 1, maxEach: 9 }),
+    cmd('marketBuyPool', { key: 'bitter_stave|rare|1', qty: 1, maxEach: 9 }),
+    cmd('marketBuyPool', { qty: 1, maxEach: 9 }));
+  same('junk quantities, ceilings and keys', poolJunk.results.map((r) => r.error), [
+    'Choose how many to buy.', 'Choose how many to buy.',
+    'Name the most you will pay each.', 'Name the most you will pay each.', 'Name the most you will pay each.',
+    'No such item.', 'No such item.', 'No such item.',
+  ]);
+  same('and none of it moved a thing', [poolJunk.state.player.gold, (await listing(only)).qty_left], [5, 20]);
 
   NOW += 1000;
   const refused = await play(stall,
@@ -765,7 +975,8 @@ await section('party hunts share ground', async () => {
   const [a, b, solo, d, e, farm, alt] = names.map((n) => newUser(n));
   const everyone = [a, b, solo, d, e, farm, alt];
   // Everyone gets the same seed and the same camp, so only the party can make a difference.
-  const hardy = (s) => { s.skills.warfare = 2000; put(s, 'inv', 'provision_t1', 60); };
+  // Packed, not carried: only the Satchel is reachable in a fight.
+  const hardy = (s) => { s.skills.warfare = 2000; put(s, 'satchel', 'provision_t1', 60); };
   for (const u of everyone) await seedSave(u, 4242, hardy);
   for (const u of everyone) await play(u);
 
@@ -800,11 +1011,277 @@ await section('party hunts share ground', async () => {
   }
   check('the hunts ran the hour', states.lone.tasks.combat && states.lone.stats.kills > 0, { kills: states.lone.stats.kills, task: !!states.lone.tasks.combat });
   check('two members on the same ground both out-earn the solo hunter', xp.wolf_a > xp.lone && xp.wolf_b > xp.lone, xp);
-  check('by a margin like the 10% bonus', xp.wolf_a >= xp.lone * 1.05, xp);
+  // The bonus is 5% a member now. The margin lands on it exactly, so an exact
+  // comparison sits a float's width under it: allow that width.
+  check('by a margin like the 5% bonus', xp.wolf_a >= xp.lone * 1.05 - 1e-6, xp);
   same('a member on other ground gives nothing: pack_d earns exactly what the solo hunter did', xp.pack_d, xp.lone);
   same('and hunts exactly the same hour', { ...states.pack_d, meta: null, log: null }, { ...states.lone, meta: null, log: null });
   check('an alt that set out and went quiet lends its bonus only for the three minutes after it was seen',
     xp.farm >= xp.lone && xp.farm - xp.lone < (xp.wolf_a - xp.lone) / 4, xp);
+});
+
+await section('a party hunt, together', async () => {
+  NOW += MINUTE;
+  const T0 = NOW;
+  const TICK_SECRET = 'tick_secret_long_enough_to_be_one';
+  const ticker = createGameHandler({ db: adapter, getUser, now: () => NOW, log, tickSecret: TICK_SECRET });
+  // The cron's door: no user token, a path of its own, and the secret in a header.
+  const tick = async (secret = TICK_SECRET, via = ticker) => {
+    const res = await via({
+      method: 'POST',
+      headers: secret == null ? {} : { 'x-respite-tick': secret },
+      bodyText: '{"tick":true}',
+      url: 'https://x.supabase.co/functions/v1/game/tick',
+    });
+    return { status: res.status, body: JSON.parse(res.body) };
+  };
+  const inParty = async (name, ...users) => {
+    const pid = randomUUID();
+    await db.query('insert into public.parties (id, name, leader_id) values ($1, $2, $3)', [pid, name, users[0].id]);
+    for (const u of users) {
+      await db.query('insert into public.party_members (party_id, user_id, username) values ($1, $2, $3)', [pid, u.id, u.name]);
+    }
+    return pid;
+  };
+  const huntRow = (pid) => q1(
+    `select id::int as id, tier, zone, over, clock::float8 as clock, started_at::float8 as started_at,
+            next_due::float8 as next_due, over_at::float8 as over_at, view, session,
+            (select coalesce(jsonb_agg(m::text), '[]'::jsonb) from unnest(members) m) as members
+     from public.party_hunts where party_id = $1 order by id`,
+    [pid],
+  );
+
+  const sword = 'slag_sword|common';
+  const everywhere = GameData.REGIONS.map((r) => r.id);
+  // A sword to wear out, remedies packed, and every ground open so the hard ones can be tried.
+  const kit = (xp) => (s) => {
+    s.skills.warfare = xp;
+    put(s, 'satchel', 'provision_t1', 80);
+    s.equipment.weapon = sword;
+    s.travel.unlocked = everywhere;
+  };
+  const [ann, bex, cade, lone] = ['band_a', 'band_b', 'band_c', 'band_solo'].map((n) => newUser(n));
+  await seedSave(ann, 909, kit(200000));
+  await seedSave(bex, 909, kit(6000));
+  await seedSave(cade, 909, kit(6000));
+  await seedSave(lone, 909, kit(6000));
+  for (const u of [ann, bex, cade, lone]) await play(u);
+  const pid = await inParty('the band', ann, bex, cade);
+
+  const out = await play(ann, cmd('partyHuntStart', { tier: 1, zone: 'outer' }));
+  same('a member sets the party out', out.results[0], { id: `c${serial - 1}`, ok: true, data: { tier: 1, zone: 'outer' } });
+  const started = await huntRow(pid);
+  check('the party has a session of its own, live and stamped', !!started && started.over === false && started.clock === T0 && started.started_at === T0,
+    started && { over: started.over, clock: started.clock, started: started.started_at });
+  same('with the member who set out on its roster', started.members, [ann.id]);
+
+  same('another member joins it', (await play(bex, cmd('partyHuntJoin'))).results[0].ok, true);
+  same('and a third', (await play(cade, cmd('partyHuntJoin'))).results[0].ok, true);
+  same('a second start is refused', (await play(ann, cmd('partyHuntStart', { tier: 1, zone: 'outer' }))).results[0].error, 'Your party is already out.');
+  same('so is joining the one you are already in', (await play(bex, cmd('partyHuntJoin'))).results[0].error, PARTY_OUT);
+  same('setting out alone while out with the party is refused', (await play(ann, cmd('startHunt', { tier: 1, zone: 'outer', limit: null }))).results[0].error, PARTY_OUT);
+  same('and nothing came of any of it', (await huntRow(pid)).session.hunters.length, 3);
+
+  same('a player in no party cannot set one out', (await play(lone, cmd('partyHuntStart', { tier: 1, zone: 'outer' }))).results[0].error, 'You are not in a party.');
+  same('nor join one', (await play(lone, cmd('partyHuntJoin'))).results[0].error, 'You are not in a party.');
+  same('nor leave one', (await play(lone, cmd('partyHuntLeave'))).results[0].error, 'Your party isn\'t out.');
+
+  // A party of their own, so the refusals can be tried without disturbing the band.
+  const [gil, hob] = ['band_g', 'band_h'].map((n) => newUser(n));
+  await seedSave(gil, 77, kit(6000));
+  await seedSave(hob, 77, (s) => { s.skills.warfare = 6000; });
+  await play(gil);
+  await play(hob);
+  await inParty('the pair', gil, hob);
+  same('ground the party cannot walk is refused', (await play(hob, cmd('partyHuntStart', { tier: 5, zone: 'outer' }))).results[0].error, 'That ground isn\'t open.');
+  same('a tier that is not one is refused', (await play(gil, cmd('partyHuntStart', { tier: 99, zone: 'outer' }))).results[0].error, 'That ground isn\'t open.');
+  same('a zone that is not one is refused', (await play(gil, cmd('partyHuntStart', { tier: 1, zone: 'nowhere' }))).results[0].error, 'No such zone.');
+  await play(gil, cmd('startHunt', { tier: 1, zone: 'outer', limit: null }));
+  same('a hunter already out alone is told to come back first', (await play(gil, cmd('partyHuntStart', { tier: 1, zone: 'outer' }))).results[0].error, 'Pull back before you set out with your party.');
+  same('and their own hunt is untouched', !!(await saved(gil)).data.tasks.combat, true);
+
+  same('the tick refuses a wrong secret', (await tick('nope')).status, 401);
+  same('and one that brings no secret at all', (await tick(null)).status, 401);
+  const quiet = logged.length;
+  const unset = createGameHandler({ db: adapter, getUser, now: () => NOW, log });
+  same('a function with no secret set refuses every tick', (await tick(TICK_SECRET, unset)).status, 401);
+  check('and says why in the log', logged.length === quiet + 1 && /no tick secret/.test(logged[logged.length - 1]), logged.slice(quiet));
+  logged.length = quiet;
+
+  NOW = T0 + 20 * MINUTE;
+  const ticked = await tick();
+  same('the tick plays every live session', [ticked.status, ticked.body.ok, ticked.body.ticked > 0], [200, true, true]);
+  const fought = await huntRow(pid);
+  check('the session is up to date and has been through encounters',
+    fought.clock === NOW && fought.session.encounters > 0 && fought.session.elapsed > 0,
+    { clock: fought.clock, now: NOW, encounters: fought.session.encounters });
+  /* Everyone who landed a blow is owed XP, by share of the damage. Kills are not shared:
+     one corpse is one kill, to whoever hurt it most, or a four would write four kills and
+     the Monsters killed board would be lying. */
+  check('and everyone in it is owed XP for what they hurt', fought.session.hunters.every((u) => u.owed.xp > 0),
+    fought.session.hunters.map((u) => ({ xp: Math.round(u.owed.xp), kills: u.owed.kills })));
+  const corpses = fought.session.hunters.reduce((n, u) => n + u.owed.kills, 0);
+  check('and a corpse is counted once, not once a hunter', corpses > 0 && corpses === fought.session.hunters.reduce((n, u) => n + u.owed.slain.length, 0),
+    fought.session.hunters.map((u) => ({ kills: u.owed.kills, slain: u.owed.slain.length })));
+
+  /* Written and read back inside one encounter, which is the case that catches a session coming
+     out of jsonb as two copies of every hunter: the roster and the live encounter share them in
+     memory, and a tick that never crosses an encounter boundary only moves the fight's copy. A
+     share settled off the other one would pay for the blows landed before the row was written.
+     Deep ground, because the encounters there last long enough to be caught twice. */
+  const [rud, sam] = ['band_r', 'band_s'].map((n) => newUser(n));
+  await seedSave(rud, 1234, kit(6000));
+  await seedSave(sam, 1234, kit(6000));
+  await play(rud);
+  await play(sam);
+  await inParty('the deep pair', rud, sam);
+  await play(rud, cmd('partyHuntStart', { tier: 5, zone: 'core' }));
+  await play(sam, cmd('partyHuntJoin'));
+  const deep = await q1('select party_id from public.party_hunts where $1::uuid = any(members)', [rud.id]);
+  let mid = null;
+  for (let i = 0; i < 40 && !mid; i++) {
+    const was = await huntRow(deep.party_id);
+    NOW += 1000;
+    await tick();
+    const now = await huntRow(deep.party_id);
+    if (was.session.enc && now.session.enc && was.session.enc.id === now.session.enc.id) mid = now;
+  }
+  check('a tick can land twice inside one encounter', !!mid, 'the fight was never caught twice');
+  check('and the session comes back with one copy of each hunter, not two', !!mid && mid.session.enc.hunters.every((u) => {
+    const one = mid.session.hunters.find((x) => x.userId === u.userId);
+    return one && Math.round(one.dmg) === Math.round(u.dmg) && Math.round(one.owed.xp) === Math.round(u.owed.xp);
+  }), mid && {
+    roster: mid.session.hunters.map((u) => Math.round(u.dmg)),
+    fight: mid.session.enc.hunters.map((u) => Math.round(u.dmg)),
+  });
+
+  const band = await huntRow(pid);
+  const dmg = Object.fromEntries(band.view.hunters.map((u) => [u.userId, u.dmg]));
+
+  // Everyone kept a tab open, so the party's own bonus is live for all of them alike.
+  await db.query('update public.profiles set last_seen = to_timestamp($1::float8 / 1000) where user_id = any($2::uuid[])',
+    [NOW, [ann, bex, cade].map((u) => u.id)]);
+  const paid = { [ann.id]: await play(ann), [bex.id]: await play(bex) };
+  const xp = { [ann.id]: paid[ann.id].state.skills.warfare - 200000, [bex.id]: paid[bex.id].state.skills.warfare - 6000 };
+  check('each member is paid on their own request', xp[ann.id] > 0 && xp[bex.id] > 0, xp);
+  check('gold, kills and loot came with it', paid[ann.id].state.player.gold > 0 && paid[ann.id].state.stats.kills > 0, {
+    gold: paid[ann.id].state.player.gold, kills: paid[ann.id].state.stats.kills,
+  });
+  const share = (id) => xp[id] / (xp[ann.id] + xp[bex.id]);
+  const dealt = (id) => dmg[id] / (dmg[ann.id] + dmg[bex.id]);
+  check('the stronger hunter did more and was paid more', dmg[ann.id] > dmg[bex.id] && xp[ann.id] > xp[bex.id], { dmg, xp });
+  check('and the shares follow the damage', Math.abs(share(ann.id) - dealt(ann.id)) < 0.2, { xp: share(ann.id), dmg: dealt(ann.id) });
+  check('the browser hears what the share was, without the save', paid[ann.id].events.some((e) => e.type === 'party:spoils' && e.kills > 0 && !('state' in e)),
+    paid[ann.id].events.map((e) => e.type));
+
+  const again = await play(ann);
+  same('settling again in the same moment pays nothing twice', [again.state.skills.warfare, again.state.stats.kills],
+    [paid[ann.id].state.skills.warfare, paid[ann.id].state.stats.kills]);
+  check('and says nothing about a share that was not there', !again.events.some((e) => e.type === 'party:spoils'),
+    again.events.map((e) => e.type));
+  /* Settling empties the settler's owings and nobody else's. Measured on XP rather than
+     kills: kills go to whoever hurt a foe most, so a weaker member can honestly be owed
+     XP and no kills at all. */
+  const roster = (await huntRow(pid)).session.hunters;
+  const owing = (id) => {
+    const u = roster.find((x) => x.userId === id);
+    return u ? u.owed.xp > 0 : null;
+  };
+  same('settling empties the settler\'s owings', [owing(ann.id), owing(bex.id)], [false, false]);
+  check('and leaves the member who has not been back still owed', roster.some((u) => u.owed.xp > 0),
+    roster.map((u) => ({ id: u.userId.slice(0, 8), xp: Math.round(u.owed.xp), kills: u.owed.kills })));
+
+  const pres = await presenceOf(ann);
+  same('a party hunt writes the presence row like any other hunt', [pres.tier, pres.zone, pres.started, pres.ended],
+    [1, 'outer', T0, null]);
+  same('and says how long it can last', pres.ends_by, T0 + CONFIG.time.idleCapMs);
+
+  const reply = paid[ann.id];
+  check('the reply carries the fight as a watcher may see it', !!reply.party && reply.party.zone === 'outer' && reply.party.hunters.length === 3, reply.party);
+  check('and no seed, no dice and no stat lines with it', !/"seed"|"dice"|maxHp|critDmg/.test(JSON.stringify(reply.party)),
+    JSON.stringify(reply.party).slice(0, 200));
+
+  let denied = '';
+  let watched = null;
+  try {
+    await db.exec('set role authenticated');
+    await db.query('select set_config(\'request.jwt.claim.sub\', $1, false)', [ann.id]);
+    try {
+      await db.query('select session from public.party_hunts');
+    } catch (e) {
+      denied = e.message;
+    }
+    watched = (await db.query('select public.party_hunt_view() as v')).rows[0].v;
+  } finally {
+    await db.exec('reset role');
+    await db.query('select set_config(\'request.jwt.claim.sub\', \'\', false)');
+  }
+  check('a client cannot read the session row at all', /permission denied/.test(denied), denied || 'it was read');
+  check('and the RPC hands it the watcher view and nothing else',
+    !!watched && watched.zone === 'outer' && !/"seed"|"dice"|maxHp|critDmg/.test(JSON.stringify(watched)), watched);
+
+  NOW += MINUTE;
+  const left = await play(bex, cmd('partyHuntLeave'));
+  same('a member can walk away, and is paid on the way out', left.results[0].ok, true);
+  check('with what they earned since they last settled', left.state.skills.warfare > paid[bex.id].state.skills.warfare,
+    { before: paid[bex.id].state.skills.warfare, after: left.state.skills.warfare });
+  const short = await huntRow(pid);
+  check('and they are off the roster and out of the fight', !short.members.includes(bex.id) && short.session.hunters.length === 2, short.members);
+  check('their presence row is closed', typeof (await presenceOf(bex)).ended === 'number', await presenceOf(bex));
+  same('leaving twice is refused', (await play(bex, cmd('partyHuntLeave'))).results[0].error, 'Your party isn\'t out.');
+  NOW += 1000;
+  same('and they can set out with them again', (await play(bex, cmd('partyHuntJoin'))).results[0].ok, true);
+
+  NOW += 1000;
+  same('starting over leaves the party fighting without them', (await play(bex, cmd('resetCamp'))).results[0].ok, true);
+  const without = await huntRow(pid);
+  check('and the share they had not taken goes with the old camp', !without.members.includes(bex.id) && without.session.hunters.length === 2, without.members);
+
+  // A fall, settled as a fall: the recovery, the wound, the wear and the bestiary.
+  NOW += MINUTE;
+  const [dread, doom] = ['band_d', 'band_e'].map((n) => newUser(n));
+  const green = (s) => { s.equipment.weapon = sword; s.travel.unlocked = everywhere; };
+  await seedSave(dread, 5, green);
+  await seedSave(doom, 5, green);
+  await play(dread);
+  await play(doom);
+  const pid2 = await inParty('the doomed', dread, doom);
+  await play(dread, cmd('partyHuntStart', { tier: 8, zone: 'core' }));
+  await play(doom, cmd('partyHuntJoin'));
+  NOW += 30 * MINUTE;
+  for (let i = 0; i < 5 && !(await huntRow(pid2)).over; i++) await tick();
+  const wiped = await huntRow(pid2);
+  same('a warband that cannot hold the ground is wiped out', [wiped.over, wiped.session.over], [true, 'wiped']);
+
+  const fell = await play(dread);
+  const H = CONFIG.hunt;
+  same('a fall in a party is a real death', [fell.state.stats.deaths, fell.state.player.recoveryLeft], [1, H.recoveryMs]);
+  same('with the wound that follows one', fell.state.debuff, { until: NOW + H.recoveryMs + H.deathDebuffMs, mult: 1 - H.deathDebuff });
+  check('the gear is the worse for it', fell.state.wear[sword] >= H.deathWear, fell.state.wear);
+  check('the bestiary remembers what did it', Object.values(fell.state.foeDeaths).reduce((a, b) => a + b, 0) === 1, fell.state.foeDeaths);
+  check('and the camp log says so', fell.state.log.some((l) => /put you down/.test(l.m)), fell.state.log.slice(-3));
+  check('the fallen are out of the session until they rejoin', !(await huntRow(pid2)).members.includes(dread.id), (await huntRow(pid2)).members);
+  await play(doom);
+  same('and a session that owes nobody anything is gone', await huntRow(pid2), undefined);
+
+  /* The member who never comes back. cade joined and was never heard from again: the others go on
+     being paid, and the cap closes the session without them. */
+  await db.query('update public.party_hunts set started_at = started_at - $2::bigint where party_id = $1', [pid, CONFIG.time.idleCapMs]);
+  NOW += MINUTE;
+  await tick();
+  const capped = await huntRow(pid);
+  same('a party hunt runs no longer than a lone one', [capped.over, capped.session.over, capped.next_due], [true, 'cap', null]);
+  const last = await play(ann);
+  check('the last share still comes out of a closed session', last.state.skills.warfare > again.state.skills.warfare,
+    { before: again.state.skills.warfare, after: last.state.skills.warfare });
+  same('no party hunt is left to watch', last.party, undefined);
+  const waiting = await huntRow(pid);
+  check('and the row waits for the one who never came back', !!waiting && waiting.members.includes(cade.id) && !waiting.members.includes(ann.id), waiting && waiting.members);
+
+  NOW += 8 * DAY;
+  const swept = await tick();
+  same('a closed session nobody came back for is swept up', [swept.body.swept > 0, await huntRow(pid)], [true, undefined]);
+  same('and the sweep pays what it never delivered to nobody', (await saved(cade)).data.skills.warfare, 6000);
 });
 
 await section('hunt presence', async () => {
@@ -893,7 +1370,7 @@ await section('a long absence is caught up in slices', async () => {
   const T0 = NOW;
   const quick = newUser('quick');
   const slow = newUser('slow');
-  const busy = (s) => { s.skills.warfare = 2000; put(s, 'inv', 'provision_t1', 40); };
+  const busy = (s) => { s.skills.warfare = 2000; put(s, 'satchel', 'provision_t1', 40); };
   await seedSave(quick, 777, busy);
   await seedSave(slow, 777, busy);
   const setOut = () => [cmd('startSkill', { skillId: 'felling', actionId: 'felling_t1_raw', limit: null }), cmd('startHunt', { tier: 1, zone: 'outer', limit: null })];

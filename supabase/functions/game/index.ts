@@ -38,10 +38,15 @@ async function getUser(authorization: string): Promise<{ id: string; email: stri
   return { id: user.id, email: typeof user.email === "string" ? user.email : null };
 }
 
+/* The party hunt tick (POST .../game/tick) carries no user token: pg_cron and pg_net call it, and
+   this secret is the only thing in front of it. Set it with
+   `npx supabase secrets set RESPITE_TICK_SECRET=...` and put the same value in private.settings
+   (supabase/migrations/006_party_hunts.sql says how). Unset, the tick path refuses everything. */
 const handle = createGameHandler({
   db: postgresJsAdapter(sql),
   getUser,
   log: (...args: unknown[]) => console.error(...args),
+  tickSecret: Deno.env.get("RESPITE_TICK_SECRET") ?? "",
 });
 
 function respond(status: number, headers: Record<string, string>, body: string | null): Response {
@@ -64,6 +69,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return respond(400, { "content-type": "application/json; charset=utf-8" }, JSON.stringify({ ok: false, error: "bad_request" }));
   }
 
-  const res = await handle({ method: req.method, headers: req.headers, bodyText });
+  // The URL goes in so the handler can tell the game's door from the tick's.
+  const res = await handle({ method: req.method, headers: req.headers, bodyText, url: req.url });
   return respond(res.status, res.headers, res.body);
 });

@@ -72,7 +72,9 @@ await run(async () => {
       JSON.stringify(m.rolls) === "{}" && m.serial === 1 && m.lootLostAt === null && m.player.camp === null);
     check("the account and user come from the server", m.meta.userId === "u-1" && m.meta.account === "wren");
     check("createdAt, playtime and v4's log kept", m.meta.createdAt === raw.meta.createdAt && m.meta.playtimeMs === raw.meta.playtimeMs && JSON.stringify(m.log) === JSON.stringify(raw.log));
-    check("stats gain bosses", m.stats.bosses === 0 && Object.keys(m.stats).length === 7);
+    // v4 kept five; v5 added bosses, and the Wealth board added selfMade. A v4 save
+    // starts both at zero: nothing is invented for work done before they were counted.
+    check("stats gain bosses and selfMade", m.stats.bosses === 0 && m.stats.selfMade === 0 && Object.keys(m.stats).length === 8);
     same("the bounty v4 posted is kept", m.bounty, raw.bounty);
     check("migrateSave leaves its input alone", JSON.stringify(raw) === JSON.stringify(v4Save()));
   }
@@ -213,11 +215,48 @@ await run(async () => {
     `);
     check("v4 bought its remedies into Provisions", raw.bank.items.provision_t1 === 10 && raw.bank.items.provision_t6 === 10);
     const m = migrateSave(clone(raw), opts);
-    same("remedies move into Belongings while there is room, best heal first, merging a held stack",
-      [m.inv.items.provision_t9, m.inv.items.provision_t6, m.inv.items.provision_t3, m.inv.items.provision_t1, m.bank.items.provision_t1, m.vault.items.provision_t9, Object.keys(m.inv.items).length],
-      [2, 10, 14, undefined, 10, undefined, 10]);
-    check("one line says so", m.log.filter((l) => l.m === "Remedies are kept in Belongings now. 3 stacks were moved.").length === 1);
+    same("remedies are packed into the Satchel, best heal first, every stack of a kind merged",
+      [m.satchel.items, m.satchel.order, m.inv.items.provision_t3, m.bank.items.provision_t1, m.vault.items.provision_t9, Object.keys(m.inv.items).length],
+      [{ provision_t9: 2, provision_t6: 10, provision_t3: 14, provision_t1: 10 }, ["provision_t9", "provision_t6", "provision_t3", "provision_t1"], undefined, undefined, undefined, 7]);
+    check("one line says so", m.log.filter((l) => l.m === "Remedies are carried in the Satchel now. 5 stacks were moved.").length === 1);
     same("nothing is lost", heldOf(m), heldOf(v4Migrate(raw)));
+    check("the hunt can reach them all", Cb.remedyHeals(m).length === 36 && Cb.bestRemedy(m) === "provision_t9");
+    const twice = migrateSave(clone(m), opts);
+    check("migrating again packs nothing more and says nothing", JSON.stringify(twice.satchel) === JSON.stringify(m.satchel) &&
+      twice.log.filter((l) => /carried in the Satchel/.test(l.m)).length === 1);
+  }
+  {
+    // A save written before the Satchel existed: remedies bought into Belongings,
+    // more kinds than the Satchel has slots, and the rest left where they lie.
+    const s = createState({ now: NOW, seed: 5 });
+    s.player.gold = 99999;
+    GameData.REMEDIES.forEach((r, i) => { s.bank.items[r.id] = (i + 1) * 3; s.bank.order.push(r.id); });
+    put(s, "inv", "provision_t1", 6);
+    put(s, "inv", "coal", 4);
+    const before = heldOf(s);
+    const raw = JSON.parse(JSON.stringify(s));
+    delete raw.satchel;
+    const m = migrateSave(raw, opts);
+    check("the four best kinds are packed; the weakest two stay in the Stockpile",
+      JSON.stringify(m.satchel.order) === JSON.stringify(["provision_t9", "provision_t7", "provision_t6", "provision_t4"]) &&
+      m.satchel.items.provision_t9 === 18 && m.satchel.items.provision_t4 === 9 &&
+      m.bank.items.provision_t3 === 6 && m.bank.items.provision_t1 === 3, [m.satchel, m.bank.items]);
+    check("the bottles in Belongings came with the kind they belong to", m.satchel.items.provision_t1 === undefined && m.inv.items.provision_t1 === 6 && S.slotsUsed(m, "inv") === 7);
+    same("and not a bottle was lost", heldOf(m), before);
+    check("a Satchel a save claims to hold gear is emptied of it", (() => {
+      const junk = JSON.parse(JSON.stringify(m));
+      junk.satchel.items = { coal: 5, "slag_sword|rare|c1.2": 1, provision_t6: 7 };
+      junk.satchel.order = ["coal", "slag_sword|rare|c1.2", "provision_t6"];
+      const fixed = migrateSave(junk, opts);
+      return JSON.stringify(fixed.satchel.items) === JSON.stringify({ provision_t6: 7 }) && JSON.stringify(fixed.satchel.order) === JSON.stringify(["provision_t6"]);
+    })());
+    check("and its size is the rules', not the save's", (() => {
+      const wide = JSON.parse(JSON.stringify(m));
+      wide.satchel.slots = 500;
+      GameData.REMEDIES.forEach((r) => { wide.satchel.items[r.id] = 2; if (!wide.satchel.order.includes(r.id)) wide.satchel.order.push(r.id); });
+      const fixed = migrateSave(wide, opts);
+      return fixed.satchel.slots === CONFIG.storage.slots.satchel && Object.keys(fixed.satchel.items).length === CONFIG.storage.slots.satchel;
+    })());
   }
 
   section("Companions and Bond");

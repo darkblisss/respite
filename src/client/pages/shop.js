@@ -21,18 +21,25 @@ import { ORDER, placeFor, qtyIn, haveQty } from "../../shared/storage.js";
 const MAX_BUY = 1000;   // buyRemedy takes 1 to 1,000 at a time
 
 // Pool names as they sit in a sentence.
-const INTO = { inv: "Belongings", bank: "the Stockpile", vault: "the Vault" };
+const INTO = { inv: "Belongings", bank: "the Stockpile", vault: "the Vault", satchel: "the Satchel" };
 
 const clampQty = (n) => Math.max(1, Math.min(MAX_BUY, Math.floor(n) || 1));
 
-// "They go into Belongings, ready for the hunt." Where a buy of n would land right now.
+/* "They go into Belongings, pack them in the Satchel." Where a buy of n would land
+   right now. The quantity matters: a remedy takes a slot a bottle in Belongings, so
+   a lot that does not fit has to say so rather than promising a pool it cannot reach. */
 function landing(state, key, order, n) {
-  const w = placeFor(state, key, order);
+  const w = placeFor(state, key, order, n);
   const one = n === 1;
-  if (!w) return "Belongings, the Stockpile and the Vault are all full. Make room first.";
+  if (!w) {
+    const names = order.map((p) => INTO[p]);
+    const where = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+    return `${where.replace(/^the /, "The ")} ${names.length === 1 ? "is" : "are all"} full. Make room first.`;
+  }
   const held = qtyIn(state, w, key);
   if (held > 0) return `${one ? "It joins" : "They join"} the ${fmtWhole(held)} in ${INTO[w]}.`;
-  if (w === order[0]) return `${one ? "It goes" : "They go"} into ${INTO[w]}${w === "inv" ? ", ready for the hunt" : ""}.`;
+  // Belongings is not the hunt's reach any more: it has to be packed first.
+  if (w === order[0]) return `${one ? "It goes" : "They go"} into ${INTO[w]}${w === "inv" ? ", to pack in the Satchel" : ""}.`;
   return `${INTO[order[0]].replace(/^the /, "The ")} is full, so ${one ? "it goes" : "they go"} into ${INTO[w]}.`;
 }
 

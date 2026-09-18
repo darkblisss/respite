@@ -16,7 +16,7 @@ import {
 } from "./registry.js";
 import { itemDef, itemName, parseKey, validKey, agentRarityFromRoll } from "./items.js";
 import {
-  ORDER, isPool, poolName, qtyIn, placeFor, orderedKeys, transact,
+  ORDER, canHold, isPool, poolName, qtyIn, haveQty, placeFor, orderedKeys, transact,
 } from "./storage.js";
 import { skillLevel, maxHp, canPickClass } from "./stats.js";
 import { dayIndex, windowIndex } from "./weather.js";
@@ -239,9 +239,12 @@ export function buyRemedy(state, { key, qty } = {}, env) {
   const price = entry.price * qty;
   if (state.player.gold < price) return refuse("Not enough gold.");
 
+  /* Bought remedies go into Belongings, where they cost a slot a bottle. The
+     hunter packs what they want to drink into the Satchel afterwards, so the
+     loadout is always a choice and never the shop's. */
   const res = transact(state, (tx) => {
     tx.gold(-price);
-    if (!placeFor(state, key, ORDER.remedy)) tx.fail("Nowhere to put it.");
+    if (!placeFor(state, key, ORDER.remedy, qty)) tx.fail("Nowhere to put it.");
     tx.stash(key, qty, ORDER.remedy);
   });
   if (!res.ok) return res;
@@ -297,7 +300,7 @@ export function travel(state, { regionId } = {}, env) {
 }
 
 /* ================= ITEMS & EQUIPMENT ================= */
-/* `from` is the pool an item sits in: "inv", "bank" or "vault". */
+/* `from` is the pool an item sits in: "inv", "bank", "vault" or "satchel". */
 
 // A preferred pool first, then Belongings, the Stockpile, the Vault.
 const stowOrder = (preferred) => [preferred, "inv", "bank", "vault"].filter((w, i, all) => all.indexOf(w) === i);
@@ -312,7 +315,7 @@ function held(state, key, from) {
 
 // Wear is kept for what the camp still holds or wears: once the last of a piece has gone, so has its wear.
 function forgetWear(tx, state, key) {
-  if (!Object.hasOwn(state.wear, key) || qtyIn(state, "inv", key) || qtyIn(state, "bank", key) || qtyIn(state, "vault", key)) return;
+  if (!Object.hasOwn(state.wear, key) || haveQty(state, key) > 0) return;
   if (!Object.values(state.equipment).includes(key)) tx.del(state.wear, key);
 }
 
@@ -408,6 +411,8 @@ export function moveItem(state, { key, from, to, qty } = {}, env) {
   if (bad) return refuse(bad);
   if (!isPool(to)) return refuse("No such store.");
   if (from === to) return refuse("It's already there.");
+  // The Satchel is what a fight can reach, so only what a fight can use goes in.
+  if (!canHold(to, key)) return refuse(`${poolName(to)} only takes remedies.`);
   const n = amountOf(qty, qtyIn(state, from, key));
   if (!n) return refuse("Pick an amount to move.");
 

@@ -16,7 +16,7 @@ import { createState } from "../../src/shared/state.js";
 import { advance, applyCommand, awaySnapshot, makeEnv, summariseAway } from "../../src/shared/engine.js";
 import { createEmitter, emit } from "../../src/shared/events.js";
 import { attachChronicle } from "../../src/shared/chronicle.js";
-import { applyMail, applyPurchase } from "../../src/shared/market.js";
+import { applyMail, applyPurchase, fillPool, marketFee } from "../../src/shared/market.js";
 import { shopStock } from "../../src/shared/world.js";
 import { ENGINE_VERSION } from "../../src/shared/version.js";
 
@@ -62,6 +62,7 @@ function createServer(wall, { skew = 0, latency = 200, seed = 4242, account = "m
     mail: [],
     listings: new Map(),
     partyState: null,
+    partyView: null,      // sessionView(), which rides back on every answer while this camp is out
     calls: [],
     answers: [],
     concurrent: 0,
@@ -171,15 +172,32 @@ function createServer(wall, { skew = 0, latency = 200, seed = 4242, account = "m
         srv.state = next;
         res = { ok: true };
       } else if (cmd.type === "marketBuy") {
+        // Both legs of the fee, as the handler charges them: the ask, plus the market's cut.
         const l = srv.listings.get(cmd.args.listingId);
         if (!l || l.qtyLeft < 1) res = { ok: false, error: "That listing is gone." };
         else if (!(cmd.args.qty >= 1) || cmd.args.qty > l.qtyLeft) res = { ok: false, error: `Only ${l.qtyLeft} left.` };
         else {
-          const cost = l.price * cmd.args.qty;
-          const bought = applyPurchase(srv.state, { key: l.key, qty: cmd.args.qty, cost }, env);
+          const goods = l.price * cmd.args.qty;
+          const fee = marketFee(goods);
+          const bought = applyPurchase(srv.state, { key: l.key, qty: cmd.args.qty, goods, fee }, env);
           if (bought.ok) {
             l.qtyLeft -= cmd.args.qty;
-            res = { ok: true, data: { listingId: cmd.args.listingId, key: l.key, qty: cmd.args.qty, cost } };
+            res = { ok: true, data: { listingId: cmd.args.listingId, key: l.key, qty: cmd.args.qty, cost: goods + fee, fee } };
+          } else res = bought;
+        }
+      } else if (cmd.type === "marketBuyPool") {
+        // The pool: every listing of that key, filled cheapest first by the shared rule.
+        const open = [...srv.listings.entries()]
+          .filter(([, l]) => l.key === cmd.args.key && l.qtyLeft > 0)
+          .map(([id, l]) => ({ id, priceEach: l.price, qtyLeft: l.qtyLeft, at: id }));
+        const plan = fillPool(open, { qty: cmd.args.qty, maxEach: cmd.args.maxEach, gold: srv.state.player.gold });
+        if (!plan.ok) res = plan;
+        else {
+          const { fills, units, goods, fee, total, short } = plan.data;
+          const bought = applyPurchase(srv.state, { key: cmd.args.key, qty: units, goods, fee }, env);
+          if (bought.ok) {
+            fills.forEach((f) => { srv.listings.get(f.id).qtyLeft -= f.qty; });
+            res = { ok: true, data: { key: cmd.args.key, qty: units, cost: total, fee, asked: cmd.args.qty, short } };
           } else res = bought;
         }
       } else {
@@ -191,7 +209,10 @@ function createServer(wall, { skew = 0, latency = 200, seed = 4242, account = "m
     advanceTo(t);
     const awayMs = srv.state.clock - clockBefore;
     if (away && !behind && awayMs > AWAY_MS) emit(srv.state, env, "away", summariseAway(away.before, away.after, awayMs));
-    return { ok: true, v: ENGINE_VERSION, now: t, state: srv.state, results, events: news };
+    const body = { ok: true, v: ENGINE_VERSION, now: t, state: srv.state, results, events: news };
+    // The handler leaves `party` out entirely unless the caller is out on a party's fight.
+    if (srv.partyView) body.party = srv.partyView;
+    return body;
   };
 
   srv.net = {
@@ -493,10 +514,19 @@ async function main() {
     await step(w, 200);
     check("it waits for the server", settled === null);
     const res = await until(w, buying);
-    check("then resolves with the server's result", res.ok && res.data && res.data.cost === 30 && res.data.key === "slag_delve", res);
-    check("with the answer already adopted", store.state.player.gold === 70 && haveAnywhere(store.state, "slag_delve") === 10);
+    check("then resolves with the server's result, the fee included", res.ok && res.data && res.data.cost === 32 && res.data.fee === 2 && res.data.key === "slag_delve", res);
+    check("with the answer already adopted", store.state.player.gold === 68 && haveAnywhere(store.state, "slag_delve") === 10);
     const gone = await until(w, store.dispatch("marketBuy", { listingId: 99, qty: 1 }));
     check("a refusal comes back as the server said it", !gone.ok && gone.error === "That listing is gone.", gone);
+    // A pool buy is a server command too, and the fill is the shared rule's.
+    srv.listings.set(8, { key: "bitter_fell", price: 2, qtyLeft: 4 });
+    srv.listings.set(9, { key: "bitter_fell", price: 5, qtyLeft: 10 });
+    const pooled = await until(w, store.dispatch("marketBuyPool", { key: "bitter_fell", qty: 6, maxEach: 5 }));
+    check("a pool buy walks the cheap band first and pays one fee on the basket",
+      pooled.ok && pooled.data.qty === 6 && pooled.data.cost === 19 && pooled.data.fee === 1, pooled);
+    check("and the answer is adopted", haveAnywhere(store.state, "bitter_fell") === 6 && store.state.player.gold === 49);
+    const dear = await until(w, store.dispatch("marketBuyPool", { key: "bitter_fell", qty: 4, maxEach: 4 }));
+    check("a ceiling under every band left refuses", !dear.ok && dear.error === "Nobody is selling that at your price.", dear);
     await store.dispatch("startSkill", { skillId: "delving", actionId: "delving_t1_raw", limit: null });
     const reset = await until(w, store.dispatch("resetCamp"));
     check("starting over waits too, and the fresh camp is adopted", reset.ok && store.state.player.gold === 0 && !store.state.tasks.skilling && store.state.log[0].m === "You start over from a ruin.");
@@ -883,6 +913,66 @@ async function main() {
     check("a burst of realtime pokes is one read", reads.length === 1, reads.length);
     await run(w, 31 * 1000, 500);
     check("in a party, the party is read again every 30 seconds", reads.length === 2, reads.length);
+  }
+
+  section("The party's fight rides back with the answer");
+  {
+    const w = await boot();
+    const { store, srv } = w;
+    const seen = [];
+    store.bus.on("store:partyHunt", (p) => seen.push(p.partyHunt));
+
+    check("no answer has mentioned one, so there is none", store.partyHunt === null);
+    check("and nothing was said about it", seen.length === 0);
+
+    // sessionView() as partyHunt.js writes it: a fight of two in the Inner, this camp down to 40.
+    const view = (over = null, hp = 40) => ({
+      partyId: "p1", tier: 1, zone: "inner", phase: "fight", wait: 0, elapsed: 90000,
+      encounters: 3, over,
+      enc: {
+        id: 3, tier: 1, zone: "inner", kind: "normal", clock: 12000, over: null,
+        foes: [{ uid: 7, id: "bog_stalker", elite: false, hp: 22, max: 48, target: USER }],
+        hunters: [{ userId: USER, down: false, hp, max: 112, dmg: 640 }, { userId: "u2", down: true, hp: 0, max: 98, dmg: 210 }],
+      },
+      hunters: [{ userId: USER, down: false, hp, max: 112, dmg: 640 }, { userId: "u2", down: true, hp: 0, max: 98, dmg: 210 }],
+    });
+
+    const hpBefore = store.state.player.hp;
+    const goldBefore = store.state.player.gold;
+    srv.partyView = view();
+    await until(w, store.sync());
+    check("an answer carrying one keeps it", !!store.partyHunt && store.partyHunt.partyId === "p1" && store.partyHunt.enc.foes.length === 1, store.partyHunt);
+    check("and says so once", seen.length === 1 && seen[0] === store.partyHunt, seen.length);
+    check("kept word for word, not reshaped", JSON.stringify(store.partyHunt) === JSON.stringify(view()), store.partyHunt);
+
+    // The save is the server's; a fight the browser cannot predict must not write a byte of it.
+    check("it never writes the save", store.state.player.hp === hpBefore && store.state.player.gold === goldBefore && store.state.tasks.combat === null,
+      { hp: store.state.player.hp, hpBefore, combat: store.state.tasks.combat });
+    check("the hunter's health in it is not the camp's", store.partyHunt.hunters[0].hp === 40 && store.state.player.hp !== 40);
+
+    // Out with the party, the camp checks in often: the fight only moves when a member asks it to.
+    const before = srv.calls.length;
+    await run(w, 13 * 1000, 250);
+    const outCalls = srv.calls.length - before;
+    check("while out, the camp checks in every few seconds", outCalls >= 2 && outCalls <= 5, outCalls);
+
+    srv.partyView = view("cleared");
+    await until(w, store.sync());
+    check("a session the server calls over is cleared", store.partyHunt === null, store.partyHunt);
+    check("and the clearing was told", seen.length >= 2 && seen[seen.length - 1] === null);
+
+    srv.partyView = view();
+    await until(w, store.sync());
+    check("it comes back when the server sends one again", !!store.partyHunt);
+    srv.partyView = null;
+    await until(w, store.sync());
+    check("an answer that leaves it out clears it", store.partyHunt === null);
+
+    const quiet = seen.length;
+    const idle = srv.calls.length;
+    await run(w, 13 * 1000, 250);
+    check("nothing is said while there is nothing to say", seen.length === quiet, seen.length - quiet);
+    check("and a camp not out goes back to the slow cadence", srv.calls.length === idle, srv.calls.length - idle);
   }
 }
 

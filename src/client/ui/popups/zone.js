@@ -3,7 +3,8 @@
    ------------------------------------------------------------
    Where a hunt is taken up. What a zone fields, then the hunt played
    out ahead of time: three twelve-hour runs from full health with the
-   remedies you hold. The runs are played one at a time after the
+   remedies in the Satchel, which are the only ones a fight can
+   reach. The runs are played one at a time after the
    popup has painted, and kept by signature while nothing that
    matters has changed, as v4 did.
 
@@ -118,7 +119,9 @@ function remember(sig, value) {
   while (ODDS.size > ODDS_KEEP) ODDS.delete(ODDS.keys().next().value);
 }
 
-// Remedies the hunt can reach, counted whole (remedyHeals stops counting at 400).
+/* Remedies the hunt can reach, counted whole (remedyHeals stops counting at
+   400). ORDER.eat is the Satchel, so a bottle in Belongings counts for
+   nothing here, exactly as it counts for nothing in the fight. */
 function remediesHeld(state) {
   let n = 0;
   ORDER.eat.forEach((w) => {
@@ -159,11 +162,21 @@ registerPopup("zone", (ctx, tier, zoneId) => {
     },
   });
 
+  /* Whether this player is out on the party's fight. The rules would happily predict a second
+     hunt and the server would then refuse it ("You're out with your party."), so the sheet says
+     so before the press rather than taking it back afterwards. */
+  const outWithParty = () => {
+    const view = ctx.store ? ctx.store.partyHunt : null;
+    const me = ctx.account ? ctx.account.userId : null;
+    if (!view || view.over || !me || !Array.isArray(view.hunters)) return false;
+    return view.hunters.some((u) => u && String(u.userId).toLowerCase() === String(me).toLowerCase());
+  };
+
   // Recovering, where the hunt is, whether the ground is open and suited, hiding: each changes the buttons or the rows.
   function shapeOf(state) {
     const c = state.tasks.combat;
     return [recovering(state), c ? `${c.tier}:${c.zone}` : "-", state.travel.unlocked.includes(region.id),
-      skillLevel(state, "warfare") < region.level, !!state.settings.hideSovereign].join("|");
+      skillLevel(state, "warfare") < region.level, !!state.settings.hideSovereign, outWithParty()].join("|");
   }
 
   function stat(parent, label, value, tone) {
@@ -197,9 +210,9 @@ registerPopup("zone", (ctx, tier, zoneId) => {
        staring at the rate. What is left is a record to beat and an honest warning. */
     const played = h("div.stats");
     const best = stat(played, "Best run", h("small", "Reckoning"));
-    const remedies = stat(played, "Remedies", "");
+    const remedies = stat(played, "In the Satchel", "");
     const warn = h("p.zone-warn", { hidden: true });
-    const stock = h("p.zone-warn.t-warn", { hidden: true }, "You should stock up on some remedies!");
+    const stock = h("p.zone-warn.t-warn", { hidden: true }, "Nothing is packed. Put remedies in your Satchel before you set out.");
 
     const runTop = h("span");
     const runRate = h("b");
@@ -256,6 +269,7 @@ registerPopup("zone", (ctx, tier, zoneId) => {
 
     let actions;
     if (recovering(state)) actions = [{ label: "Recovering", kind: "ember", disabled: true }];
+    else if (outWithParty()) actions = [{ label: "Out with your party", kind: "ember", disabled: true }];
     else if (!open) actions = [{ label: "Not open to you", kind: "ember", disabled: true }];
     else if (here) actions = [{ label: "Pull back", kind: "quiet", onClick: pull }];
     else actions = [{ label: c ? "Move the hunt here" : "Start the Hunt", kind: "ember", icon: "swords", onClick: start }];
@@ -327,7 +341,9 @@ registerPopup("zone", (ctx, tier, zoneId) => {
   function paintPlan() {
     if (!refs) return;
     const state = ctx.state;
-    setText(refs.planWarn, recovering(state) ? `Back on your feet in ${fmtTime(state.player.recoveryLeft)}.` : "");
+    setText(refs.planWarn, recovering(state)
+      ? `Back on your feet in ${fmtTime(state.player.recoveryLeft)}.`
+      : outWithParty() ? "Break away from the party's fight before you set out alone." : "");
   }
 
   function update() {
@@ -353,7 +369,7 @@ registerPopup("zone", (ctx, tier, zoneId) => {
 
     const held = remediesHeld(state);
     const perHour = odds ? odds.remediesPerHour : 0;
-    setText(refs.remedies, held ? `${fmt(held)} held${perHour >= 0.05 ? ` · about ${fmtStat(perHour)} used an hour` : ""}` : "None held");
+    setText(refs.remedies, held ? `${fmt(held)} packed${perHour >= 0.05 ? ` · about ${fmtStat(perHour)} used an hour` : ""}` : "None packed");
     toggleClass(refs.remedies, "t-bad", !held);
     setAttr(refs.stock, "hidden", held > 0);
 

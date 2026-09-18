@@ -82,12 +82,17 @@ Each tier is built from a tier-1 Stalker: 40 health, 0.026 Attack a blow and 1 X
 
 ### Zones
 
-| Zone | Foes at start | Window | Elites | XP | Threat | Mix Sk/St/Br | Sovereign at 100 | Escorts |
+`Power` multiplies a foe's health and damage at that depth, so the same Stalker is harder in the
+Core than at the edge. It climbs to ×1.4 while XP climbs to ×2.2, so deeper ground stays a better
+deal and not just a longer slog. Threat has no zone dial at all: the mix sending up more Brutes
+does that work on its own.
+
+| Zone | Foes at start | Window | Elites | XP | Power | Mix Sk/St/Br | Sovereign at max | Escorts |
 |---|---|---|---|---|---|---|---|---|
-| Outer | 1 (75%) or 2 | 60s | 4% | ×1 | ×1 | 40/40/20 | 40% | 0 |
-| Middle | 1 or 2 (50/50) | 50s | 8% | ×1.3 | ×1.25 | 35/40/25 | 60% | 0 |
-| Inner | 2 or 3 (50/50) | 40s | 14% | ×1.7 | ×1.5 | 30/40/30 | 80% | 1 |
-| Core | 3 | 30s | 22% | ×2.2 | ×2 | 25/40/35 | always | 2 |
+| Outer | 1 (75%) or 2 | 60s | 4% | ×1 | ×1 | 70/20/10 | 40% | 0 |
+| Middle | 1 or 2 (50/50) | 50s | 10% | ×1.3 | ×1.15 | 50/30/20 | 60% | 0 |
+| Inner | 2 or 3 (50/50) | 40s | 16% | ×1.7 | ×1.27 | 20/45/35 | 80% | 1 |
+| Core | 3 | 30s | 22% | ×2.2 | ×1.4 | 15/35/50 | always | 2 |
 
 ### Encounters
 
@@ -96,18 +101,20 @@ Each tier is built from a tier-1 Stalker: 40 health, 0.026 Attack a blow and 1 X
   - Cleared inside it, the rest of the window is the walk to the next encounter (at least 3s).
   - Still fighting when it runs out, a reinforcement joins, but only if fewer than 3 foes are up. Never a fourth, and nothing queues. The window then starts again.
   - A reinforcement swings within 0.3 to 0.7s, and its first blow lands ×1.5.
-- **Threat** is kept per region and zone, 0 to 100, in whole numbers. A kill adds its Threat × the zone multiplier. A peak is settled when the encounter ends:
-  - With **Hide when Threat peaks** ticked: you go to ground for 5 minutes with no combat, Threat resets, it goes on the log, and the hunt resumes by itself. Ticking it after a Sovereign has already set out still works.
+- **Threat** is the whole region's, 0 to 100, one counter shared by its four zones. It is kept unrounded, because a kill adds its archetype's Threat (Skirmisher 1, Stalker 2, Brute 3) times 0.7, and rounding each of those away would wreck the pacing. A peak is settled when the encounter ends:
+  - With **Hide when Threat peaks** ticked: you go to ground for a full hour with no combat, it goes on the log, and the hunt resumes by itself. Threat clears when the hour has been **sat out**, not when you go to ground, so breaking off early buys nothing. Ticking it after a Sovereign has already set out still works.
   - Otherwise the zone's chance decides whether the Sovereign comes. It arrives with its escorts (Elites) after a 3s walk.
-  - If it doesn't come, Threat resets and the log says so.
+  - If it doesn't come, the region stays at its peak and it may come after the next encounter instead. Nothing resets.
 - **Sovereign fights:**
   - No reinforcements join.
   - Its Attack rises 15% every 30s.
   - At 25% health or less you break away and the hunt goes on.
-  - Its Threat resets when you fell it, break away or die to it.
-- **Remedies:** at 45% health or less the strongest remedy you hold is taken.
-- **Death:** 5 minutes' recovery counted in game time, so it also runs offline. Every worn piece loses 25 durability, and the log names the killer and how long the hunt lasted.
-- **Hunt ends:** at its kill limit, at twelve hours, or at once when you pull back.
+  - **Felling it is one of only two things that clears the region's Threat**, the other being a full hour hidden. Breaking away clears nothing, and neither does dying to it.
+- **Remedies:** at 45% health or less the strongest remedy in the Satchel is drunk.
+- **Death:** 5 minutes' recovery counted in game time, so it also runs offline, and then a wound: every combat stat down 15% for 10 more minutes, counted from the moment you are back on your feet rather than from the fall. Every worn piece loses 25 durability, and the log names the killer and how long the hunt lasted. **A death clears no Threat**, whatever put you down, so it is never a cheaper way out than hiding.
+- **Remedies:** only what is packed in the **Satchel** is drunk. A remedy in Belongings is dead weight, and there it costs a slot a bottle, which is the nudge to pack it.
+- **Records:** every hunt banks the time it lasted on that ground, however it ended, and the zone sheet shows the best. Pulling out early banks the lower time it earned.
+- **Hunt ends:** at twelve hours, or at once when you pull back. There is no kill target to set any more: a hunt runs until you stop it or it stops you.
 - **At camp:** health comes back over five minutes (full after five minutes at camp). A hunt that sets out sooner leaves with what has come back, and still has to finish the walk the last hunt was on. Moving ground mid-hunt keeps your health and the walk. (Pulling back and setting out again after every fight used to skip the walk and refill health; it no longer gains anything.)
 - **The dice:** every fight draws from one stream kept in the save, carried across hunts, pull backs and falls, so no command can pick the next fight's luck. Drops, finds and Sovereign pieces use counters that only grow when the kill happens.
 - **XP/hr:** measured every 5 minutes over the last hour, or over the hunt so far if it is under an hour.

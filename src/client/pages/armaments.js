@@ -1,13 +1,19 @@
 /* ============================================================
    Respite · pages/armaments.js · The Satchel
    ------------------------------------------------------------
-   What you carry and what you wear: Belongings (the slot grid
-   the Stockpile page builds), the paperdoll and your Standing.
-   Remedies live in Belongings, so the hunter has them to hand.
+   What you carry and what you wear: Belongings and the Satchel
+   (both the slot grid the Stockpile page builds), the paperdoll
+   and your Standing.
+
+   The Satchel is the combat loadout. A remedy bought lands in
+   Belongings, where it takes a slot a bottle; only what is moved
+   into the Satchel is drunk in a fight, and there they stack. It
+   takes remedies and nothing else: gear is changed at camp, on the
+   Worn grid beside it.
 
    The discipline and the Veil appear only once a discipline is
-   chosen. Nothing here writes the save: worn pieces open the item
-   popup, which sends the commands.
+   chosen. Nothing here writes the save: worn pieces and slots open
+   the item popup, which sends the commands.
 
    `dollCard` and `standingCard` are exported: the Character page's
    first tab shows the same two beside each other, and one paperdoll
@@ -19,8 +25,9 @@ import { iconEl } from "../ui/icons.js";
 import { fmtWhole, fmtStat } from "../ui/format.js";
 import { openPopup } from "../ui/widgets.js";
 import { storageCard } from "./stockpile.js";
+import { CONFIG } from "../../shared/config.js";
 import { itemDef, itemName } from "../../shared/items.js";
-import { wearPct } from "../../shared/combat.js";
+import { wearPct, bestRemedy, remedyHeals } from "../../shared/combat.js";
 import { GameData } from "../../shared/registry.js";
 import { statsOf, myClass, skillLevel } from "../../shared/stats.js";
 import { currentRegion } from "../../shared/world.js";
@@ -178,10 +185,46 @@ export function standingCard() {
   };
 }
 
-/* ================= 3. THE PAGE ================= */
+/* ================= 3. THE SATCHEL ================= */
 
-// The filter and sort Belongings shows, for the length of the session.
+/* The loadout's own grid, and the line under it that says what the hunt can
+   reach. `bestRemedy` is the engine's own answer to "which goes first", so
+   the page never guesses the order the fight will drink in. */
+function satchelCard(ctx, view) {
+  const card = storageCard(ctx, {
+    pools: ["satchel"],
+    view,
+    idBase: "sat",
+    filters: false,
+    hint: `Only what is packed here is drunk in a fight, at ${Math.round(CONFIG.hunt.remedyAt * 100)}% health, the strongest first. Remedies stack here; in Belongings they take a slot each.`,
+  });
+  const next = h("div.well.satchel-next");
+  const node = h("div.satchel", card.node, next);
+  let sig = null;
+
+  return {
+    node,
+    update(nextCtx) {
+      card.update(nextCtx);
+      const state = nextCtx.state;
+      const key = bestRemedy(state);
+      const held = remedyHeals(state).length;
+      const line = `${key || "-"}|${held}`;
+      if (line === sig) return;
+      sig = line;
+      next.replaceChildren(iconEl(key ? "heart" : "warn"), h("span", key
+        ? ["Next draught: ", h("b", itemName(key)), `. ${fmtWhole(held)} within reach.`]
+        : ["Nothing packed. ", h("b", "The hunt goes without."), " Move a remedy in from Belongings."]));
+    },
+    destroy() { card.destroy(); },
+  };
+}
+
+/* ================= 4. THE PAGE ================= */
+
+// The filter and sort each grid shows, for the length of the session.
 const VIEW = { pool: "inv", filter: "all", sort: "custom" };
+const SATCHEL_VIEW = { pool: "satchel", filter: "all", sort: "custom" };
 
 export default {
   id: "armaments",
@@ -190,6 +233,7 @@ export default {
 
   mount(view, ctx) {
     const store = storageCard(ctx, { pools: ["inv"], view: VIEW, idBase: "arm" });
+    const satchel = satchelCard(ctx, SATCHEL_VIEW);
     const doll = dollCard(ctx);
     const standing = standingCard();
 
@@ -197,13 +241,14 @@ export default {
       h("header.page-head", h("div",
         h("div.eyebrow.page-eyebrow", "The Vanguard"),
         h("h1.page-title", "Satchel"),
-        h("p.page-sub", "What you carry into the hunt and what you wear there. Remedies live here, in Belongings."))),
+        h("p.page-sub", "What you carry into the hunt and what you wear there. Pack the Satchel before you set out."))),
       h("div.storage",
-        store.node,
+        h("div.storage-stack", store.node, satchel.node),
         h("aside.storage-side", { "aria-label": "Worn and standing" }, doll.node, standing.node))));
 
     const update = (next) => {
       store.update(next);
+      satchel.update(next);
       doll.update(next);
       standing.update(next);
     };
@@ -211,7 +256,10 @@ export default {
 
     return {
       update,
-      unmount() { store.destroy(); },
+      unmount() {
+        store.destroy();
+        satchel.destroy();
+      },
     };
   },
 };

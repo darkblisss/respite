@@ -473,7 +473,7 @@ Resolves `true` only on Confirm; Cancel, Escape, the backdrop and a swipe resolv
 ```js
 if (!(await confirm({
   title: `Buy ${qty} × ${name}?`,
-  body: "They go straight into Belongings, ready for the hunt.",
+  body: "They go into Belongings, to pack in the Satchel.",
   confirmText: `Buy for ${fmtGold(price * qty)}`,
   cost: { gold: price * qty, have: state.player.gold },
 }))) return;
@@ -600,7 +600,7 @@ To change the narrowest card, set `--grid-min` on a page class in pages.css (`.s
     <div>
       <div class="eyebrow">The Camp</div>                      <!-- optional -->
       <h2 class="card-title"><svg class="ico">bonesetter</svg>The Bonesetter</h2>   <!-- icon optional -->
-      <p class="card-sub">Always open. Remedies go straight into Belongings.</p>
+      <p class="card-sub">Always open. Remedies go into Belongings, to pack in the Satchel.</p>
     </div>
     <div class="card-actions"><!-- chips or small buttons --></div>
   </div>
@@ -1078,6 +1078,8 @@ Phones (below 768px): the stats wrap under the name as compact chips (24px), the
 - Fill the grid to the pool's capacity with empty slots.
 - `.capacity.is-full` turns the count ember.
 - Five across; four at 479px and below. The toolbar wraps; on phones the sort select takes its own full line.
+- `.storage-stack` is a column of two `storageCard`s, used by the Satchel page to put Belongings above the Satchel. `.satchel` is the second card's tighter grid, and `.satchel-next` the line under it naming the draught the next fight would reach (off `bestRemedy`).
+- A `storageCard` takes `filters: false` where a pool holds one kind (the Satchel), and a `hint` for a line under its capacity bar. A remedy in Belongings costs a slot a bottle, so it draws as separate cells of 1 rather than one stack, and the capacity line counts them that way.
 - Drag to reorder (pages/stockpile.js `storageCard`): set `data-reorder` on `.slot-grid` while the view is in custom order (it also stops a held finger selecting the name or opening the touch callout). While dragging the grid carries `.is-sorting` (a grabbing cursor), the lifted slot `.is-selected` and the place it would take `.is-dragover`; the drop sends `reorder { pool, key, before }`. Mouse: press and move 5px. Touch: hold still 380ms, then move; a finger that moves first scrolls the page. Near the top or bottom edge the page scrolls under the drag; Escape cancels.
 
 ### 7.14 Tooltip content classes
@@ -1447,6 +1449,31 @@ Armaments renders a two-handed weapon as one spanning slot instead: `.doll-col.h
 
 Phones (below 768px): the arena is one column: you in a strip (72px portrait beside your bars), the status and timer on one ruled line, then the foe cards at full width with names that wrap rather than truncate. KPIs go two by two; the switch and buttons share a line.
 
+Added with the live page (pages.css, The Hunt), for the party's shared fight:
+
+```html
+<div class="arena is-party">                                <!-- the shared fight, never your own -->
+  <div class="arena-you">
+    ...portrait, name, your hpbar...
+    <div class="arena-band">                                <!-- the rest of the warband; hidden when alone -->
+      <div class="band-mate is-down">                       <!-- .is-down dims a fallen or absent member -->
+        <span class="band-name">Thane</span>
+        <div class="hpbar hpbar-sm"><i></i><span>25 / 25</span></div>
+      </div>
+    </div>
+  </div>
+  ...
+  <div class="arena-foes">
+    <div class="foe-card">
+      ...art, name, hpbar...
+      <div class="small muted mt-1">On Thane</div>           <!-- who the foe is on; existing utilities -->
+    </div>
+  </div>
+</div>
+```
+
+`.arena-band` is a column of rows under your own bars (240px at most, in the same column as your hpbar on phones). `.band-mate` is a 72px name beside the bar; `.band-name` truncates rather than wraps. `.arena.is-party` is the one state class: it turns `.arena-foes` into an `auto-fit` grid of 230px cards, because a party's roster scales with it (up to a dozen) and they should stand two abreast rather than run down the page. One foe still gets one wide card, and below 768px it is one column again. Nothing else about the arena changes.
+
 ### 8.8 Atlas (`?page=atlas`)
 
 ```html
@@ -1560,21 +1587,41 @@ Seven columns in one ruled strip; below 900px, seven rows.
 - Page actions: "Sell an item" (`btn-primary`, `tag` icon) opens the sell dialog.
 - Listings card (`card-flush`): `card-head` holds the title and a `.market-bar` (`.input-wrap.market-search` with `search`, a `.seg` of kinds, tier and sort selects).
 
+  The market is anonymous both ways, so no row names anybody: the fourth column is the
+  depth behind the price, not a seller. A row can only ever tell you that it is *yours*
+  (`.is-mine`, from the `mine` flag the realm sends on your own rows).
+
+  Two kinds of row, because two kinds of goods. Materials are fungible, so every open
+  listing of one is merged into a pool: how many there are, the cheapest price, and the
+  price bands behind it. Gear and tools are not, so they stay one row a piece.
+
 ```html
 <div class="listings" role="table" aria-label="Listings">
-  <div class="listing-head" role="row"><span>Item</span><span class="num">Left</span><span class="num">Each</span><span>Seller</span><span></span></div>
+  <div class="listing-head" role="row"><span>Item</span><span class="num">Left</span><span class="num">Each</span><span>Price bands</span><span></span></div>
+
+  <!-- a material pool -->
+  <div class="listing" role="row">
+    <div class="listing-item"><div class="art art-sm" aria-hidden="true"><svg>ore</svg></div>
+      <div class="lr-main"><div class="lr-title">Slag Ore</div><div class="lr-sub">Ores · Tier 1</div></div></div>
+    <div class="listing-qty"><span class="listing-l">Left</span>55</div>
+    <div class="listing-price"><span class="listing-l">From</span>12g</div>
+    <div class="listing-depth"><span class="listing-l">Price bands</span>40 at 12g · 15 at 13g</div>
+    <div class="listing-buy"><button class="btn btn-gold btn-soft btn-sm" type="button">Buy</button></div>
+  </div>
+
+  <!-- one piece of gear -->
   <div class="listing" role="row">                                               <!-- .is-mine for your own -->
     <div class="listing-item"><div class="art art-sm" data-rarity="rare" aria-hidden="true"><svg>blade</svg></div>
       <div class="lr-main"><div class="lr-title rar-rare">Sundering Bog Sword</div><div class="lr-sub">Rare weapon · Tier 2</div></div></div>
     <div class="listing-qty"><span class="listing-l">Left</span>1</div>
     <div class="listing-price"><span class="listing-l">Each</span>420g</div>
-    <div class="listing-seller"><span class="listing-l">Seller</span>Edda</div>
-    <div class="listing-buy"><button class="btn btn-gold btn-soft btn-sm" type="button">Buy</button></div>   <!-- yours: "Cancel" (btn-quiet) -->
+    <div class="listing-depth"></div>
+    <div class="listing-buy"><button class="btn btn-gold btn-soft btn-sm" type="button">Buy</button></div>   <!-- yours: "Remove" (btn-quiet) -->
   </div>
 </div>
 ```
 
-  Below 768px each listing becomes a card: item and price on top, "Left", "Seller" and Buy below (the `.listing-l` labels appear).
+  Below 768px each listing becomes a card: item and price on top, "Left", the bands and Buy below (the `.listing-l` labels appear).
 - Buying: pick a quantity if more than one, then `confirm({ cost })`.
 - "My listings" (`.list`, a thin gold bar of how much sold, Cancel) and "Recent sales" (`.list`, `.price` "+67g" or `.price.is-short` "−420g") share a `.grid-2`.
 - Sell dialog body: a qty picker (no No limit), a price field (`.input-wrap` with `coin` and `.affix` "g", a hint with the lowest listing and the merchant price), and a fee preview:

@@ -23,7 +23,7 @@
 import { CONFIG } from "./config.js";
 import { GameData, findAction, getSkill, getMonster, getCompanion, getClass, getTool, regionOfTier } from "./registry.js";
 import { itemDef, parseKey, stacks, validKey } from "./items.js";
-import { orderedKeys } from "./storage.js";
+import { canHold, unstacked } from "./storage.js";
 import { combatStats, levelFromXp, skillLevel, maxHp } from "./stats.js";
 import { dayIndex, windowIndex } from "./weather.js";
 import { hashString } from "./rng.js";
@@ -37,7 +37,7 @@ const A = CONFIG.agents;
 const IDLE_CAP = CONFIG.time.idleCapMs;
 const LOG_MAX = 60;
 const MAX_LIMIT = 100000;
-const POOL_IDS = ["inv", "bank", "vault"];
+const POOL_IDS = ["inv", "bank", "vault", "satchel"];
 const ZONE_IDS = GameData.ZONES.map((z) => z.id);
 // The longest walk a hunt can owe: lying low, or all of a zone's window, whichever is longer.
 const WALK_MAX = Math.max(H.hideMs, H.searchMinMs, ...GameData.ZONES.map((z) => z.windowMs));
@@ -102,6 +102,8 @@ function blankState(clock, seed) {
     inv:   { slots: S.slots.inv,   items: {}, order: [] },
     bank:  { slots: S.slots.bank,  items: {}, order: [] },
     vault: { slots: S.slots.vault, items: {}, order: [] },
+    // The Satchel: the remedies a fight can reach, and nothing else.
+    satchel: { slots: S.slots.satchel, items: {}, order: [] },
     uid: 1,
     equipment,
     tools: {},
@@ -126,7 +128,13 @@ function blankState(clock, seed) {
     bountyBoard: {},
     buff: null,
     smugglerBought: {},
-    stats: { kills: 0, actions: 0, deaths: 0, crafted: 0, epics: 0, goldEarned: 0, bosses: 0 },
+    /* selfMade is the Wealth board's whole basis: the gold value a player has
+       *created*, counted the moment it is created and never again. A gathered
+       material counts at its value; a craft counts only what it added over the
+       materials it ate, so an ore dug and then smelted is not counted twice.
+       Nothing bought, traded, looted, requisitioned or smuggled ever touches it,
+       which is what stops the board being bought. */
+    stats: { kills: 0, actions: 0, deaths: 0, crafted: 0, epics: 0, goldEarned: 0, bosses: 0, selfMade: 0 },
     log: [],
     rng: { seed: s, world: hashString(`${s}:world`), hunt: hashString(`${s}:hunt`) },
     rolls: {},
@@ -166,7 +174,10 @@ export function migrateSave(raw, { now, seed, userId, account, legacy = false } 
 /* ---------- v4 (schema 8 and older) ---------- */
 
 const V5_ONLY = new Set(["meta", "player", "skills", "equipment", "tasks", "travel", "stats", "settings", "inv", "bank", "vault",
-  "wear", "tools", "log", "rng", "rolls", "serial", "clock", "schema"]);
+  "satchel", "wear", "tools", "log", "rng", "rolls", "serial", "clock", "schema"]);
+
+// The three pools v4 knew. The Satchel is packed in normalise, from what they hold.
+const V4_POOLS = ["inv", "bank", "vault"];
 
 /* v4's migrate(), in the same steps and order, then what v5 adds, building
    a loose save that normalise() checks value by value afterwards. The steps
@@ -191,7 +202,7 @@ function fromV4(loaded, opts) {
   ["skilling", "combat"].forEach((k) => {
     if (isObj(m.tasks[k])) m.tasks[k] = ownCopy(m.tasks[k]);
   });
-  POOL_IDS.forEach((w) => {
+  V4_POOLS.forEach((w) => {
     const src = obj(loaded[w]);
     m[w] = {
       slots: typeof src.slots === "number" ? src.slots : m[w].slots,
@@ -200,6 +211,8 @@ function fromV4(loaded, opts) {
     };
   });
   m.inv.slots = S.slots.inv;
+  // No Satchel here: leaving it off is what tells normalise to pack one.
+  delete m.satchel;
   // Read, never written, from here on.
   m.wear = obj(loaded.wear);
   m.tools = obj(loaded.tools);
@@ -222,7 +235,6 @@ function fromV4(loaded, opts) {
   m.player.camp = null;
   convertSkilling(m);
   convertHunt(m);
-  moveRemedies(m, stamp);
   m.log = m.log.slice(-LOG_MAX);
   return m;
 }
@@ -458,43 +470,37 @@ function convertHunt(m) {
   delete c.queued;
 }
 
-// Remedies are used only by the hunter, so they live in Belongings now.
-function moveRemedies(m, stamp) {
-  const found = [];
-  ["bank", "vault"].forEach((w) => {
-    orderedKeys(m, w).forEach((k) => {
+/* The Satchel came after these saves, so a save without one has its remedies
+   sitting in the pools where nothing in a fight can reach them. They move in
+   once, best heal first, every stack of a kind merged into the one slot, and
+   whatever the four slots cannot take stays where it lies. Returns the keys
+   taken out of the pools and how many stacks were lifted. */
+function packSatchel(s, src, ledger) {
+  const stackMax = ledger.legacy ? LEGACY_STACK_MAX : QTY_MAX;
+  const found = new Map();
+  V4_POOLS.forEach((w) => {
+    const items = obj(obj(src[w]).items);
+    keysOf(items).forEach((k) => {
+      const q = items[k];
       // Remedies are materials, and a material's key is its bare id.
-      const d = typeof k === "string" && !k.includes("|") && validKey(k) ? itemDef(k) : null;
-      if (d && d.heal > 0) found.push({ w, k, heal: d.heal });
+      if (!finite(q) || q < 1 || k.includes("|") || !validKey(k)) return;
+      const d = itemDef(k);
+      if (!d || !(d.heal > 0)) return;
+      const at = found.get(k) || { heal: d.heal, qty: 0, stacks: 0 };
+      at.qty += Math.floor(q);
+      at.stacks++;
+      found.set(k, at);
     });
   });
-  found.sort((a, b) => b.heal - a.heal);
-
-  let used = Object.keys(m.inv.items).length;
-  const listed = new Set(m.inv.order);
-  const gone = { bank: new Set(), vault: new Set() };
-  let moved = 0;
-  found.forEach(({ w, k }) => {
-    const qty = Number(m[w].items[k]);
-    if (!(qty >= 1)) return;
-    const merging = Object.hasOwn(m.inv.items, k);
-    if (!merging && used >= S.slots.inv) return;
-    if (!merging) used++;
-    m.inv.items[k] = (merging ? Number(m.inv.items[k]) || 0 : 0) + qty;
-    if (!listed.has(k)) {
-      listed.add(k);
-      m.inv.order.push(k);
-    }
-    delete m[w].items[k];
-    gone[w].add(k);
-    moved++;
+  const picks = [...found.entries()].sort((a, b) => b[1].heal - a[1].heal).slice(0, S.slots.satchel);
+  let stacks = 0;
+  picks.forEach(([k, at]) => {
+    if (at.qty > stackMax) ledger.fixed++;
+    s.satchel.items[k] = Math.min(at.qty, stackMax);
+    s.satchel.order.push(k);
+    stacks += at.stacks;
   });
-  ["bank", "vault"].forEach((w) => {
-    if (gone[w].size) m[w].order = m[w].order.filter((x) => !gone[w].has(x));
-  });
-  if (moved) {
-    m.log.push({ t: stamp, m: `Remedies are kept in Belongings now. ${moved} stack${moved === 1 ? " was" : "s were"} moved.` });
-  }
+  return { taken: new Set(picks.map(([k]) => k)), stacks };
 }
 
 /* ---------- every save ---------- */
@@ -641,6 +647,12 @@ function normalise(src, opts) {
   }
   s.log = log.reverse();
 
+  // Said once, when the Satchel is first packed out of the old pools.
+  if (ledger.satchelStacks) {
+    const n = ledger.satchelStacks;
+    s.log.push({ t: clock, m: `Remedies are carried in the Satchel now. ${fmtWhole(n)} ${n === 1 ? "stack was" : "stacks were"} moved.` });
+  }
+
   const rolls = obj(src.rolls);
   keysOf(rolls).forEach((k) => {
     if (/^[amks]:[a-z0-9_]{1,40}$/.test(k) && finite(rolls[k])) s.rolls[k] = intIn(rolls[k], 0, BIG, 0);
@@ -666,8 +678,8 @@ function normalise(src, opts) {
   if (legacy && ledger.fixed) {
     const n = ledger.fixed;
     s.log.push({ t: clock, m: `Your old camp's ledger didn't add up. ${fmtWhole(n)} ${n === 1 ? "entry was" : "entries were"} set right.` });
-    if (s.log.length > LOG_MAX) s.log.splice(0, s.log.length - LOG_MAX);
   }
+  if (s.log.length > LOG_MAX) s.log.splice(0, s.log.length - LOG_MAX);
   return s;
 }
 
@@ -687,22 +699,28 @@ function uidOf(key) {
   return c < 0 ? key.slice(b + 1) : key.slice(b + 1, c);
 }
 
-/* The three pools, in one pass each. Keys must be real items in whole
+/* The four pools, in one pass each. Keys must be real items in whole
    amounts of at least one; a unique piece counts once and only once across
-   what is worn and all three pools (worn, then Belongings, the Stockpile,
-   the Vault); a pool keeps its stacks in the player's order up to its slot
-   count and lets the rest go. */
+   what is worn and every pool (worn, then Belongings, the Stockpile, the
+   Vault, the Satchel); a pool keeps its stacks in the player's order up to
+   its slot count and lets the rest go. */
 function normalisePools(s, src, ledger) {
   const stackMax = ledger.legacy ? LEGACY_STACK_MAX : QTY_MAX;
   const taken = new Set();
   Object.values(s.equipment).forEach((k) => { if (k && !stacks(k)) taken.add(k); });
 
+  // A save from before the Satchel packs one here, out of what the pools hold.
+  const virgin = !isObj(src.satchel);
+  const packed = virgin ? packSatchel(s, src, ledger) : { taken: new Set(), stacks: 0 };
+  ledger.satchelStacks = packed.stacks;
+
   POOL_IDS.forEach((w) => {
+    if (w === "satchel" && virgin) return;
     const from = obj(src[w]);
     const pool = s[w];
     if (w === "bank") pool.slots = intIn(from.slots, S.slots.bank, S.bankMax, S.slots.bank);
     if (w === "vault") pool.slots = intIn(from.slots, S.slots.vault, S.bankMax, S.slots.vault);
-    const cap = w === "inv" ? S.slots.inv : pool.slots;
+    const cap = w === "bank" || w === "vault" ? pool.slots : S.slots[w];
 
     // Real items in amounts of at least one, in the order the save lists them.
     const items = obj(from.items);
@@ -710,6 +728,13 @@ function normalisePools(s, src, ledger) {
     for (const k of Object.keys(items)) {
       const q = items[k];
       if (!finite(q) || q < 1 || k === "__proto__" || !validKey(k)) continue;
+      // Already lifted into the Satchel, and held once.
+      if (packed.taken.has(k)) continue;
+      // The Satchel takes remedies and nothing else, whatever a row claims.
+      if (!canHold(w, k)) {
+        ledger.fixed++;
+        continue;
+      }
       const uid = uidOf(k);
       if (uid !== null && ledger.legacy && !V4_UID.test(uid)) {
         ledger.fixed++;
@@ -718,35 +743,46 @@ function normalisePools(s, src, ledger) {
       valid.add(k);
     }
 
-    // The player's order, then whatever it missed: a stack a slot, up to the pool's size.
-    const kept = new Set();
+    /* The player's order, then whatever it missed: a stack a slot, up to the
+       pool's size, except a remedy in Belongings, which costs a slot a bottle
+       and is trimmed to the room left rather than let go whole. */
+    const kept = new Map();
     const listed = new Set();
+    let used = 0;
     const consider = (k) => {
       if (listed.has(k) || !valid.has(k)) return;
       listed.add(k);
       const unique = uidOf(k) !== null;
-      if ((unique && taken.has(k)) || kept.size >= cap) {
+      const left = cap - used;
+      if ((unique && taken.has(k)) || left < 1) {
         ledger.fixed++;
         return;
       }
+      const whole = Math.floor(items[k]);
+      const most = unique ? 1 : stackMax;
+      if (whole > most) ledger.fixed++;
+      let qty = Math.min(whole, most);
+      const each = unstacked(w, k);
+      if (each && qty > left) {
+        qty = left;
+        ledger.fixed++;
+      }
       if (unique) taken.add(k);
-      kept.add(k);
+      kept.set(k, qty);
+      used += each ? qty : 1;
     };
     (Array.isArray(from.order) ? from.order : []).forEach((k) => { if (typeof k === "string") consider(k); });
     valid.forEach(consider);
 
-    // Whole amounts, one of a unique piece, each stack no larger than the limit.
+    // Written in the save's own order, listed in the player's.
     let placed = 0;
     for (const k of valid) {
       if (placed === kept.size) break;
       if (!kept.has(k)) continue;
-      const whole = Math.floor(items[k]);
-      const most = uidOf(k) !== null ? 1 : stackMax;
-      if (whole > most) ledger.fixed++;
-      pool.items[k] = Math.min(whole, most);
+      pool.items[k] = kept.get(k);
       placed++;
     }
-    pool.order = [...kept];
+    pool.order = [...kept.keys()];
   });
 }
 

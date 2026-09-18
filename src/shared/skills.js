@@ -14,7 +14,7 @@
 
 import { CONFIG } from "./config.js";
 import { GameData, findAction, getSkill, isGather } from "./registry.js";
-import { makeKey, rarityFromRoll, prefixFromRoll, craftIndex } from "./items.js";
+import { itemDef, makeKey, rarityFromRoll, prefixFromRoll, craftIndex } from "./items.js";
 import { ORDER, orderFor, placeFor, canPay, stockCovers, isFull, transact } from "./storage.js";
 import { skillLevel } from "./stats.js";
 import { xpEach, addXp, actionTime, doubleChance } from "./progression.js";
@@ -93,12 +93,19 @@ function completeAction(state, task, def, env, at) {
   const gathering = isGather(def.skillId);
   let crafted = null;
 
+  // What this action actually put down, so the value below counts a doubled yield too.
+  const yielded = {};
+
   const res = transact(state, (tx) => {
     if (!canPay(state, def.cost)) tx.fail(STOCK);
     tx.pay(def.cost);
     if (def.out) {
       const dbl = gathering && roll(seed, rollKey, n, SALT.double) < doubleChance(state, def.skillId);
-      Object.keys(def.out).forEach((k) => tx.stash(k, dbl ? def.out[k] * 2 : def.out[k]));
+      Object.keys(def.out).forEach((k) => {
+        const qty = dbl ? def.out[k] * 2 : def.out[k];
+        yielded[k] = qty;
+        tx.stash(k, qty);
+      });
     }
     if (def.craftGear) {
       const rarity = rarityFromRoll(roll(seed, rollKey, n, SALT.rarity));
@@ -111,6 +118,18 @@ function completeAction(state, task, def, env, at) {
     }
   });
   if (!res.ok) return res.error === STOCK ? "stock" : "storage";
+
+  /* Worked out after the transaction went through, so a refused action banks
+     nothing. Gathering counts what it pulled out of the ground; a bench counts the
+     output less the materials it consumed, which is the value it actually added. */
+  const valueOf = (key, qty) => {
+    const d = itemDef(key);
+    return d && d.value > 0 ? d.value * qty : 0;
+  };
+  const sum = (bag) => (bag ? Object.keys(bag).reduce((n2, k) => n2 + valueOf(k, bag[k]), 0) : 0);
+  const out = crafted ? valueOf(crafted.key, 1) : sum(yielded);
+  const made = gathering ? out : Math.max(0, out - sum(def.cost));
+  if (made > 0) state.stats.selfMade += Math.round(made);
 
   if (def.out) {
     // Reagents turn up alongside. One with nowhere to go is left, and the work goes on.

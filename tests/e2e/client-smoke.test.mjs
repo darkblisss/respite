@@ -166,12 +166,20 @@ await run(async () => {
     await live(B, () => window.__respite.store.sync());
     await waitFor("B's gold", async () => (await storeState(B)).player.gold === 500, { timeout: 8000 });
 
+    // Ore is a pool: browse answers for gear and tools, pools for materials, and neither
+    // carries a name. B never learns that it was A who listed it.
     const browse = await live(B, () => window.__respite.net.market.browse({ q: "slag" }));
-    check("B finds the listing through net.market.browse", browse.error === null && browse.rows.some((r) => r.id === listingId && r.seller_name === "smoke_a" && r.qty_left === 20), browse);
-    const bought = await dispatch(B.page, "marketBuy", { listingId, qty: 8 });
-    same("B buys 8 through dispatch", [bought.ok, bought.data], [true, { listingId, key: "slag_delve", qty: 8, cost: 40 }]);
+    same("net.market.browse returns no material listing at all", [browse.error, browse.rows], [null, []]);
+    const pools = await live(B, () => window.__respite.net.market.pools({ q: "slag" }));
+    check("B finds the ore as a pool through net.market.pools",
+      pools.error === null && pools.rows.length === 1 && pools.rows[0].item_key === "slag_delve"
+      && Number(pools.rows[0].qty_left) === 20 && Number(pools.rows[0].price_min) === 5, pools);
+    check("and nothing in the answer names the seller", !/seller|user_id|smoke_a/i.test(JSON.stringify(pools.rows)), pools.rows);
+    const bought = await dispatch(B.page, "marketBuyPool", { key: "slag_delve", qty: 8, maxEach: 5 });
+    same("B buys 8 out of the pool through dispatch", [bought.ok, bought.data],
+      [true, { key: "slag_delve", qty: 8, cost: 42, fee: 2, asked: 8, short: false }]);
     const stateB = await storeState(B);
-    same("B paid 40 and holds 8", [stateB.player.gold, held(stateB, "slag_delve")], [460, 8]);
+    same("B paid 40 for the ore and 2 to the market", [stateB.player.gold, held(stateB, "slag_delve")], [458, 8]);
 
     await live(A, () => {
       window.__news = [];
@@ -185,10 +193,13 @@ await run(async () => {
     same("and the store tells it as news", await live(A, () => window.__news.filter((e) => e.type === "mail:claimed").map((e) => e.gold)), [38]);
     const mine = await live(A, () => window.__respite.net.market.mine());
     same("net.market.mine shows the listing with 12 left", mine.rows.filter((r) => r.id === listingId).map((r) => [r.qty_left, r.status]), [[12, "open"]]);
-    same("net.market.sales shows the sale to both sides", [
-      (await live(A, () => window.__respite.net.market.sales())).rows.map((r) => [r.listing_id, r.qty]),
-      (await live(B, () => window.__respite.net.market.sales())).rows.map((r) => [r.listing_id, r.qty]),
-    ], [[[listingId, 8]], [[listingId, 8]]]);
+    same("net.market.sales shows each side its own half of the trade", [
+      (await live(A, () => window.__respite.net.market.sales())).rows.map((r) => [r.side, r.qty, Number(r.fee)]),
+      (await live(B, () => window.__respite.net.market.sales())).rows.map((r) => [r.side, r.qty, Number(r.fee)]),
+    ], [[["sold", 8, 2]], [["bought", 8, 2]]]);
+    check("and neither half names the other party",
+      !/seller|buyer|user_id|smoke_a|smoke_b/i.test(JSON.stringify((await live(B, () => window.__respite.net.market.sales())).rows)),
+      (await live(B, () => window.__respite.net.market.sales())).rows);
 
     /* ---------------------------------------------------------- */
     section("a party through net.party");

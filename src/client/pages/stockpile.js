@@ -5,10 +5,15 @@
    segmented control, the tool rack (a tool for each trade) and
    a short ledger of the camp's work.
 
-   The slot grid is built here and Armaments borrows it: the
-   toolbar (pools, filters, sort), capacity, five-across slots and
-   drag to reorder. It only reads the save; every change is a
-   command, and the item popup does the rest.
+   The slot grid is built here and the Satchel page borrows it
+   twice, for Belongings and for the Satchel: the toolbar (pools,
+   filters, sort), capacity, five-across slots and drag to reorder.
+   It only reads the save; every change is a command, and the item
+   popup does the rest.
+
+   One quirk to know: Belongings give a remedy a slot a bottle
+   (storage.js), so a stack of five there is drawn as five cells of
+   the same item and the capacity line agrees.
    ============================================================ */
 
 import { h, el, on, setText, setWidth, setAttr, toggleClass } from "../ui/dom.js";
@@ -17,7 +22,7 @@ import { hideTip } from "../ui/overlay.js";
 import { fmt, fmtWhole, fmtGold } from "../ui/format.js";
 import { openPopup } from "../ui/widgets.js";
 import { itemDef, itemName } from "../../shared/items.js";
-import { poolName, slotCap, slotsUsed, qtyIn, orderedKeys } from "../../shared/storage.js";
+import { poolName, slotCap, slotsUsed, qtyIn, orderedKeys, unstacked } from "../../shared/storage.js";
 import { wearPct } from "../../shared/combat.js";
 import { GameData, TRADE_ORDER, gatherSkillDef } from "../../shared/registry.js";
 import { toolFor } from "../../shared/progression.js";
@@ -61,12 +66,30 @@ function visibleKeys(state, pool, view) {
   return keys;
 }
 
+/* One cell a slot the pool really spends: a stack is one, and a remedy in
+   Belongings is one a bottle. `id` is the cell's own name (the key, or the key
+   and which bottle it is), `key` the item it draws. */
+function visibleCells(state, pool, view) {
+  const out = [];
+  visibleKeys(state, pool, view).forEach((k) => {
+    const n = unstacked(pool, k) ? qtyIn(state, pool, k) : 1;
+    if (n <= 1) {
+      out.push({ id: k, key: k, one: false });
+      return;
+    }
+    for (let i = 0; i < n; i++) out.push({ id: `${k}#${i}`, key: k, one: true });
+  });
+  return out;
+}
+
 /**
- * storageCard(ctx, { pools, view, idBase }) -> { node, update(ctx), destroy() }
- * pools   ["bank", "vault"] shows a segmented control; ["inv"] a plain title.
+ * storageCard(ctx, { pools, view, idBase, filters, hint }) -> { node, update(ctx), destroy() }
+ * pools   ["bank", "vault"] shows a segmented control; one pool a plain title.
  * view    { pool, filter, sort }: kept by the page for the session and changed here.
+ * filters false leaves the filter chips out, for a pool that holds one kind.
+ * hint    a line under the toolbar, for a pool that needs a word of explaining.
  */
-export function storageCard(ctx, { pools, view, idBase }) {
+export function storageCard(ctx, { pools, view, idBase, filters = true, hint = null }) {
   if (!pools.includes(view.pool)) view.pool = pools[0];
 
   const tabs = pools.length > 1
@@ -78,13 +101,13 @@ export function storageCard(ctx, { pools, view, idBase }) {
     ? h("div.seg", { role: "tablist", "aria-label": "Store" }, tabs)
     : h("h2.card-title", poolName(pools[0]));
 
-  const chips = FILTERS.map((f) => h("button.chip", {
+  const chips = filters ? FILTERS.map((f) => h("button.chip", {
     type: "button",
     dataset: { filter: f.id },
     "aria-label": f.icon ? f.label : null,
     "data-tip": f.icon ? f.label : null,
     "data-tip-touch": f.icon ? "off" : null,
-  }, f.icon ? iconEl(f.icon) : f.label));
+  }, f.icon ? iconEl(f.icon) : f.label)) : [];
 
   const sortSel = h("select.select.select-sm", { id: `${idBase}Sort`, value: view.sort },
     SORTS.map(([id, label]) => h("option", { value: id }, label)));
@@ -108,40 +131,44 @@ export function storageCard(ctx, { pools, view, idBase }) {
   const node = h("section.card.storage-main",
     h("div.toolbar",
       lead,
-      h("div.filters", { role: "group", "aria-label": "Show" }, chips),
+      chips.length ? h("div.filters", { role: "group", "aria-label": "Show" }, chips) : null,
       h("div.toolbar-end", h("label.sr-only", { for: `${idBase}Sort` }, "Sort"), sortSel)),
+    hint ? h("p.card-sub", hint) : null,
     capacity,
     nothing,
     grid);
 
-  const slots = new Map();   // key -> slot button, kept so focus and the popup's opener survive a reorder
-  const names = new Map();   // key -> name, so a frame never rebuilds strings it already has
+  const slots = new Map();   // cell id -> slot button, kept so focus and the popup's opener survive a reorder
+  const names = new Map();   // cell id -> name, so a frame never rebuilds strings it already has
   const blanks = [];
   let gridSig = null;
   let shownPool = view.pool;
 
-  function makeSlot(key) {
-    const d = itemDef(key);
+  function makeSlot(cell) {
+    const d = itemDef(cell.key);
     const rarity = d.kind === "gear" || d.kind === "tool" ? d.rarity || "common" : "common";
-    names.set(key, itemName(key));
-    return h("button.slot", { type: "button", "data-rarity": rarity, dataset: { key } },
+    names.set(cell.id, itemName(cell.key));
+    return h("button.slot", {
+      type: "button", "data-rarity": rarity,
+      dataset: { key: cell.key, cell: cell.id, one: cell.one ? "1" : false },
+    },
       h("span.slot-qty"),
       h("span.slot-art", iconEl(d.icon)),
-      h("span.slot-name", names.get(key)));
+      h("span.slot-name", names.get(cell.id)));
   }
 
   // Moves only what is out of place, so a focused slot is not pulled from the page.
-  function reconcile(keys, empties) {
-    const keep = new Set(keys);
-    slots.forEach((n, k) => {
-      if (keep.has(k)) return;
+  function reconcile(cells, empties) {
+    const keep = new Set(cells.map((c) => c.id));
+    slots.forEach((n, id) => {
+      if (keep.has(id)) return;
       n.remove();
-      slots.delete(k);
-      names.delete(k);
+      slots.delete(id);
+      names.delete(id);
     });
-    const want = keys.map((k) => {
-      if (!slots.has(k)) slots.set(k, makeSlot(k));
-      return slots.get(k);
+    const want = cells.map((c) => {
+      if (!slots.has(c.id)) slots.set(c.id, makeSlot(c));
+      return slots.get(c.id);
     });
     while (blanks.length < empties) blanks.push(h("div.slot.is-empty", { "aria-hidden": "true" }));
     while (blanks.length > empties) blanks.pop().remove();
@@ -151,10 +178,11 @@ export function storageCard(ctx, { pools, view, idBase }) {
     });
   }
 
-  // A single piece of gear shows its condition; a stack shows how many.
+  // A single piece of gear shows its condition; a stack shows how many. A cell
+  // that is one bottle of an unstacked remedy is always the one.
   function paintSlot(n, state, pool) {
     const key = n.dataset.key;
-    const qty = qtyIn(state, pool, key);
+    const qty = n.dataset.one ? 1 : qtyIn(state, pool, key);
     const pct = qty === 1 ? wearPct(state, key) : null;
     const worn = pct != null;
     const corner = n.firstChild;
@@ -164,7 +192,7 @@ export function storageCard(ctx, { pools, view, idBase }) {
     toggleClass(corner, "is-worn", worn && pct > 25 && pct <= 60);
     toggleClass(corner, "is-bad", worn && pct <= 25);
     setText(corner, worn ? `${pct}%` : fmt(qty));
-    setAttr(n, "aria-label", `${names.get(key)}, ${worn ? `${pct}% condition` : fmtWhole(qty)}`);
+    setAttr(n, "aria-label", `${names.get(n.dataset.cell)}, ${worn ? `${pct}% condition` : fmtWhole(qty)}`);
   }
 
   function update(nextCtx) {
@@ -196,10 +224,10 @@ export function storageCard(ctx, { pools, view, idBase }) {
     setWidth(capFill, cap > 0 ? (used / cap) * 100 : 0);
     toggleClass(capacity, "is-full", used >= cap);
 
-    const keys = visibleKeys(state, pool, view);
+    const cells = visibleCells(state, pool, view);
     // With a filter on, the blanks are the pool's free slots, never padding that hides a full pool.
     const empties = Math.max(0, cap - used);
-    const none = view.filter !== "all" && keys.length === 0;
+    const none = view.filter !== "all" && cells.length === 0;
     setAttr(nothing, "hidden", !none);
     setAttr(grid, "hidden", none);
     if (none) {
@@ -208,11 +236,11 @@ export function storageCard(ctx, { pools, view, idBase }) {
     }
     setAttr(grid, "data-reorder", view.sort === "custom");
 
-    const sig = `${pool}|${view.filter}|${view.sort}|${empties}|${keys.join("\n")}`;
+    const sig = `${pool}|${view.filter}|${view.sort}|${empties}|${cells.map((c) => c.id).join("\n")}`;
     // A drag in progress keeps the grid still; what changed lands when it ends.
     if (sig !== gridSig && !(drag && drag.active)) {
       gridSig = sig;
-      reconcile(keys, empties);
+      reconcile(cells, empties);
     }
     slots.forEach((n) => paintSlot(n, state, pool));
   }
@@ -271,6 +299,8 @@ export function storageCard(ctx, { pools, view, idBase }) {
     const state = ctx.state;
     const pool = view.pool;
     if (qtyIn(state, pool, key) <= 0) return;
+    // Two cells of the same unstacked stack: there is nothing between them to move.
+    if (target.dataset.key === key) return;
     const full = orderedKeys(state, pool);
     const from = full.indexOf(key);
     let before = null;

@@ -104,6 +104,46 @@ await run(async () => {
     check("stopSkill is idempotent", applyCommand(s, { type: "stopSkill", args: {} }, env).ok && s.tasks.skilling === null && applyCommand(s, { type: "stopSkill" }, env).ok);
   }
 
+  /* The Wealth board's basis: value counted as it is created, never again, and
+     never for anything that came from somewhere else. See stats.selfMade. */
+  section("What a player makes");
+  {
+    const { env } = await listening();
+    const s = fresh();
+    const ore = I.itemDef("slag_delve").value;
+    check("a fresh camp has made nothing", s.stats.selfMade === 0);
+    start(s, env, "delving", "delving_t1_raw", 5);
+    advance(s, T0 + 5 * 12000, env);
+    const dug = S.haveQty(s, "slag_delve");
+    check("gathering counts every unit it pulled up, doubles and all",
+      s.stats.selfMade === Math.round(dug * ore) && dug >= 5, { made: s.stats.selfMade, dug, ore });
+
+    // A bench counts what it added, not the whole bar: the ore was counted when it was dug.
+    const before = s.stats.selfMade;
+    put(s, "bank", "slag_delve", 100);
+    put(s, "bank", "coal", 100);
+    const made = S.haveQty(s, "slag_bar");
+    start(s, env, "forgemaster", "craft_slag_bar", 1);
+    advance(s, T0 + 5 * 12000 + 12000, env);
+    const def = findAction("forgemaster", "craft_slag_bar");
+    const added = I.itemDef("slag_bar").value * def.out.slag_bar
+      - Object.keys(def.cost).reduce((n, k) => n + I.itemDef(k).value * def.cost[k], 0);
+    check("a craft counts the value it added over the materials it ate",
+      S.haveQty(s, "slag_bar") > made && s.stats.selfMade === before + Math.round(Math.max(0, added)),
+      { before, now: s.stats.selfMade, added });
+
+    // Everything that arrives some other way is worth nothing to the board.
+    const held = s.stats.selfMade;
+    put(s, "bank", "slag_bar", 500);
+    s.player.gold += 100000;
+    applyCommand(s, { type: "buyRemedy", args: { key: "provision_t1", qty: 1 } }, env);
+    check("bought, granted and looted goods never count", s.stats.selfMade === held, { held, now: s.stats.selfMade });
+
+    // It is a record of work done, so parting with the work does not undo it.
+    applyCommand(s, { type: "sellItem", args: { pool: "bank", key: "slag_bar", qty: 100 } }, env);
+    check("selling what you made does not take it back off you", s.stats.selfMade === held, { held, now: s.stats.selfMade });
+  }
+
   section("Storage stops");
   {
     // Crafted gear needs a free slot unless it rolls common and stacks. Pick a
