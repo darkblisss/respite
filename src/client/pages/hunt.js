@@ -1,19 +1,24 @@
 /* ============================================================
    Respite · pages/hunt.js · The Field
    ------------------------------------------------------------
-   #/skill/warfare. The hunt as it happens: your commander and up
-   to three foes, every blow floating off whoever took it, what
-   the fight is doing and its numbers. Under it the four zones of
-   the region you stand in (each opens the zone popup, where a hunt
-   is taken up) and the quarry that lives there.
+   #/skill/warfare. The hunt as it happens, drawn as a place and
+   not as a panel: your commander stands on the ground at the
+   left, up to three foes loom out of the smoke at the right, and
+   what the fight is doing is written between them. Nothing in
+   the field is boxed. A fighter is a figure with a name and a
+   line of health under it; the one you are on stands nearest and
+   largest, the rest hang back in the dark. Under the field, the
+   four zones of the region as one descent from Outer to Core
+   (each opens the zone popup, where a hunt is taken up) and the
+   quarry that lives there, stood in a line.
 
    Built once, then updated in place about ten times a second.
-   Foe cards are keyed by hunt and uid: reinforcements slide in,
-   the fallen fade out. Blows arrive as hunt:fx events while the
-   store plays a frame; they are queued and drawn after the cards
-   have caught up, the way v4 drained its combatFx.
+   Foes are keyed by hunt and uid: reinforcements come in from the
+   dark, the fallen sink into it. Blows arrive as hunt:fx events
+   while the store plays a frame; they are queued and drawn after
+   the figures have caught up, the way v4 drained its combatFx.
 
-   While the party is out and this player is on it, the same arena
+   While the party is out and this player is on it, the same field
    draws the shared fight instead (store.partyHunt, which is the
    server's sessionView and nothing else). That fight is not played
    here and cannot be: two members are at different clocks and hold
@@ -41,7 +46,8 @@ const FLOATS_MAX = 12;          // on screen at once, across the whole arena
 const FLOATS_PER_FRAME = 8;     // a long frame (a slow device, a burst) shows only its last few blows
 const FX_STALE_MS = 1500;       // simulated age past which a blow is not worth drawing
 const FX_QUEUE_MAX = 60;
-const GONE_MS = 700;            // the fade in pages.css, then the card goes
+const GONE_MS = 700;            // the fade in pages.css, then the figure goes
+const VEIL_STEPS = 10;          // the mist at your feet thickens in tenths (data-veil, read by pages.css)
 const DEAD_MS = 1400;
 
 /* What floats up for each kind of blow. No damage number floats any more, in
@@ -126,27 +132,27 @@ export default {
     const mates = new Map();   // the party's other hunters, by user id
     let wasParty = false;      // which fight the arena was last drawn for
 
-    /* ================= HERO ================= */
+    /* ================= THE HEAD OF THE FIELD ================= */
 
-    const heroEyebrow = h("div.eyebrow.hero-eyebrow");
+    /* Every other skill page opens on a masthead. This one does not: the field is the
+       page, so what the masthead carried (the level, the way to the next, what is bending
+       XP) is written into the top of the scene, and the ground you are on is the title. */
+    const heroEyebrow = h("div.eyebrow");
     const heroLv = document.createTextNode("");
-    const heroLvSub = h("div.hero-lv-sub");
+    const heroLvSub = h("span.scene-xp-sub");
     const heroFill = h("i");
-    const heroNext = h("span");
-    const heroTags = h("div.chip-row.hero-tags");
-    const heroXp = h("div.hero-xp",
-      h("div.bar.bar-ember", heroFill),
-      h("div.hero-xp-meta", h("span", getSkill("warfare").note), heroNext));
-    // No art box, as on every other skill page: the swords live in the sidebar.
-    const hero = h("section.hero", { "data-tone": "ember" },
-      h("div.hero-main", heroEyebrow, h("h1.hero-title", "Hunt")),
-      h("div.hero-level", h("div.hero-lv", h("small", "Lv"), heroLv), heroLvSub),
-      heroXp);
+    const heroNext = h("span.scene-xp-next");
+    const heroTags = h("div.chip-row.scene-tags");
+    const rank = h("div.scene-rank",
+      h("div.scene-lv", h("small", "Hunt Lv"), heroLv),
+      h("div.bar.bar-thin", heroFill),
+      h("div.scene-xp-meta", heroLvSub, heroNext),
+      heroTags);
 
     // Only built while a discipline can be chosen: before Hunt level 5 there is nothing to say.
     let discipline = null;
     // One row: on phones the button drops under the words (list-row stack-sm).
-    const buildDiscipline = () => h("section.card.card-flush",
+    const buildDiscipline = () => h("section.card.card-flush", { "data-tone": "veil" },
       h("div.list-row.stack-sm",
         h("div.art", { "aria-hidden": "true" }, iconEl("sparkle")),
         h("div.lr-main",
@@ -154,40 +160,57 @@ export default {
           h("p.lr-sub", "Warrior, Rogue or Mage. It opens the Veil and shapes every fight after. Set once.")),
         h("div.lr-end", h("button.btn.btn-primary", { type: "button", onClick: () => openPopup("class", ctx) }, "Choose"))));
 
-    /* ================= THE FIGHT ================= */
+    /* ================= THE FIELD ================= */
 
-    const huntTitle = h("h2.card-title");
-    const huntSub = h("p.card-sub");
-    const company = h("div.card-actions");
-    const huntHead = h("div.card-head", h("div", huntTitle, huntSub), company);
+    /* Where the fight is: written into the top of the scene, not set above it in a card head. */
+    const huntTitle = h("h1.scene-title");
+    const huntSub = h("p.scene-sub");
+    const company = h("div.scene-company");
+    const huntHead = h("header.scene-head", h("div.scene-where", heroEyebrow, huntTitle, huntSub, company), rank);
+
+    /* A fighter is a figure, a name and a line of health. `vital()` is the line and its
+       figures side by side (components.css): nothing is painted on top of a bar. */
+    const vital = (kind) => {
+      const fill = h("i");
+      const text = h("span.vital-text");
+      return { fill, text, node: h("div.vital", { class: kind && `vital-${kind}` }, h("div.vital-line", fill), text) };
+    };
 
     const youFx = h("div.fx-layer");
-    const youPortrait = h("div.portrait.arena-portrait", h("img", { src: "assets/commander-default.webp", alt: "" }));
-    const youName = h("div.arena-name");
-    const youFill = h("i");
-    const youText = h("span");
-    // The rest of the warband, only while the party is out: name and health, one row each.
-    const band = h("div.arena-band", { hidden: true });
-    const you = h("div.arena-you", youFx, youPortrait, youName, h("div.hpbar", youFill, youText), band);
-    let veil = null;   // { bar, fill, note }, only once a discipline is held
+    // The Veil as weather at your feet: it thickens as the charge builds (data-veil on `you`).
+    const youMist = h("div.fighter-mist", { "aria-hidden": "true" });
+    const youPortrait = h("div.portrait.fighter-art", youMist, h("img", { src: "assets/commander-default.webp", alt: "" }));
+    const youName = h("div.fighter-name");
+    const youVital = vital(null);
+    const youFill = youVital.fill;
+    const youText = youVital.text;
+    const youPlate = h("div.fighter-plate", youName, youVital.node);
+    const you = h("div.fighter.fighter-you", youFx, youPortrait, youPlate);
+    let veil = null;   // { fill, note, node }, only once a discipline is held
 
-    const status = h("div.arena-status");
-    const timer = h("div.arena-timer");
-    const emptyTitle = h("span.foe-empty-title");
-    const emptySub = h("span.foe-empty-sub");
-    const empty = h("div.foe-empty", emptyTitle, emptySub);
-    const foesBox = h("div.arena-foes", empty);
-    const arena = h("div.arena",
-      you,
-      h("div.arena-mid", h("div.arena-vs", { "aria-hidden": "true" }, "VS"), status, timer),
+    /* The warband, while the party is out: a figure each, you first. It stands where you
+       stand, as your sibling and not inside you, so hiding your own figure leaves it up. */
+    const band = h("div.scene-band", { hidden: true });
+    const side = h("div.scene-side", you, band);
+
+    // What the fight is doing, set between the two sides where "VS" used to be.
+    const status = h("div.scene-status");
+    const timer = h("div.scene-timer");
+    const emptyTitle = h("span.scene-empty-title");
+    const emptySub = h("span.scene-empty-sub");
+    const empty = h("div.scene-empty", emptyTitle, emptySub);
+    const foesBox = h("div.scene-foes", empty);
+    const stage = h("div.scene-stage",
+      side,
+      h("div.scene-state", { role: "status" }, status, timer),
       foesBox);
 
-    // The label is a node too: the party's fight has different numbers to report in the same strip.
+    // The label is a node too: the party's fight has different numbers to report in the same line.
     const kpi = (label, withBar) => {
       const l = h("span.l", label);
       const v = h("span.v");
       const fill = withBar ? h("i") : null;
-      return { l, v, fill, node: h("div.kpi", l, v, withBar ? h("div.bar.bar-ember.bar-thin", fill) : null) };
+      return { l, v, fill, node: h("div.kpi", l, v, withBar ? h("div.bar.bar-neutral.bar-thin", fill) : null) };
     };
     const kKills = kpi("Kills");
     const kRate = kpi("XP/hr");
@@ -195,48 +218,56 @@ export default {
     const kSov = kpi("Sovereign", true);
     const kLeft = kpi("Time left");
     const kpis = h("div.kpis", kKills.node, kRate.node, kDps.node, kSov.node, kLeft.node);
-    const hint = h("p.hunt-hint");
+    const hint = h("p.scene-hint");
 
     const pullBtn = h("button.btn.btn-quiet", { type: "button" }, "Pull back");
-    const goBtn = h("button.btn.btn-ember", { type: "button" }, "Change hunt");
-    const huntCard = h("section.card.hunt-card",
+    const goBtn = h("button.btn", { type: "button" }, "Change hunt");
+    /* data-state is what the scene reads: quiet | search | fight | sovereign | down.
+       The light, the smoke and the ground all turn on it (pages.css). */
+    const arena = h("section.scene", { "data-state": "quiet", "aria-label": "The field" },
+      h("div.scene-sky", { "aria-hidden": "true" }),
       huntHead,
-      arena,
-      h("div.hunt-foot", kpis, hint, h("div.hunt-actions", h("div.btn-row", pullBtn, goBtn))));
+      stage,
+      h("footer.scene-foot", kpis, hint, h("div.scene-actions", pullBtn, goBtn)));
 
-    /* ================= ZONES AND QUARRY ================= */
+    /* ================= THE DESCENT AND THE QUARRY ================= */
 
     const awayText = document.createTextNode("");
     const away = h("span.chip.chip-ember", iconEl("swords"), awayText);
-    const zonesGrid = h("div.grid-cards.max-2");
+    /* The four zones are one road going down, so they are drawn as one: Outer at the
+       left, the Core at the right, a line through all four, darker and hotter as it goes. */
+    const zonesGrid = h("ol.descent");
     const zones = h("section.section",
       h("div.section-head",
         h("div",
-          h("h2.section-title", "Zones"),
+          h("h2.section-title", "The descent"),
           h("p.section-sub", "Deeper zones field more foes, hit harder and pay more XP. The Inner and the Core are the only ground a Sovereign walks, and the only ground whose Elites carry the Veil.")),
         h("div.section-end", away)),
       zonesGrid);
     const zoneRefs = new Map();
 
     const quarrySub = h("p.section-sub");
-    const quarryGrid = h("div.grid-cards");
+    // Stood in a line on one floor, the way a field guide plates its specimens.
+    const quarryGrid = h("div.lineup");
     const quarry = h("section.section",
       h("div.section-head", h("div", h("h2.section-title", "Quarry"), quarrySub)),
       quarryGrid);
 
-    view.appendChild(h("div.page", hero, huntCard, zones, quarry));
+    view.appendChild(h("div.page.hunt-page", arena, zones, quarry));
 
     function buildZones(tier) {
       zoneRefs.clear();
-      // No Threat meter per card: one region, one counter, shown in the section head.
-      zonesGrid.replaceChildren(...GameData.ZONES.map((z) => {
-        const tag = h("span");
-        const node = h("button.zone-card", { type: "button", dataset: { tier: String(tier), zone: z.id } },
-          h("span.art", { "data-tone": "ember", "aria-hidden": "true" }, iconEl(ZONE_ICONS[z.id])),
-          h("span.zone-main", h("span.zone-name", z.name), h("span.zone-sub", `${z.foesText} at once · ×${z.xp} XP · ×${z.power} foes`)),
+      // No Threat meter per stop: one region, one counter, shown in the section head.
+      zonesGrid.replaceChildren(...GameData.ZONES.map((z, i) => {
+        const tag = h("span.descent-tag");
+        const node = h("button.descent-stop", { type: "button", dataset: { tier: String(tier), zone: z.id, depth: String(i + 1) } },
+          h("span.descent-mark", { "aria-hidden": "true" }),
+          h("span.descent-name", z.name),
+          h("span.descent-sub", `${z.foesText} at once`),
+          h("span.descent-sub", `×${z.xp} XP · ×${z.power} foes`),
           tag);
         zoneRefs.set(z.id, { node, tag });
-        return node;
+        return h("li", node);
       }));
     }
 
@@ -246,40 +277,40 @@ export default {
       const tile = (mob) => {
         const sov = mob.archetype === "sovereign";
         const sub = sov
-          ? `Sovereign · comes on its own odds, with ${GameData.SOVEREIGN.escorts} Elites · enrages every ${GameData.SOVEREIGN.enrageMs / 1000}s`
-          : `${GameData.ARCHETYPES[mob.archetype].name} · ${fmt(mob.hp)} health · swings every ${(mob.speed / 1000).toFixed(1)}s`;
-        return h("button.foe-tile", { type: "button", class: { "is-sovereign": sov }, dataset: { monster: mob.id } },
+          ? `Comes on its own odds, with ${GameData.SOVEREIGN.escorts} Elites · enrages every ${GameData.SOVEREIGN.enrageMs / 1000}s`
+          : `${fmt(mob.hp)} health · swings every ${(mob.speed / 1000).toFixed(1)}s`;
+        return h("button.specimen", { type: "button", class: { "is-sovereign": sov }, dataset: { monster: mob.id } },
           h("span.foe-art", { html: monsterArt(mob) }),
-          h("span.foe-tile-main", h("span.foe-tile-name", mob.name), h("span.foe-tile-sub", sub)),
-          sov ? h("span.tag.tag-sovereign", "Sovereign") : null);
+          h("span.specimen-kind", sov ? "Sovereign" : GameData.ARCHETYPES[mob.archetype].name),
+          h("span.specimen-name", mob.name),
+          h("span.specimen-sub", sub));
       };
       quarryGrid.replaceChildren(...foesOf(tier).map(tile), tile(sovereignOf(tier)));
     }
 
-    /* ================= FOE CARDS ================= */
+    /* ================= FOES ================= */
 
     const cards = new Map();   // `${hunt}:${uid}` -> { node, art, fx, fill, text, on, gone }
 
     function buildCard(f, shared) {
       const mob = getMonster(f.id);
       const sov = mob.archetype === "sovereign";
-      const fill = h("i");
-      const text = h("span");
+      const hp = vital("foe");
       const fx = h("div.fx-layer");
       // Who a foe is on only matters when there is more than one of you for it to choose between.
-      const on = shared ? h("div.small.muted.mt-1") : null;
-      const art = h("button.foe-art", { type: "button", "aria-label": `${mob.name}: details`, dataset: { monster: mob.id }, html: monsterArt(mob, f.elite) });
-      const node = h("div.foe-card", { class: { "is-elite": f.elite && !sov, "is-sovereign": sov } },
+      const on = shared ? h("div.fighter-on") : null;
+      const art = h("button.fighter-art.foe-art", { type: "button", "aria-label": `${mob.name}: details`, dataset: { monster: mob.id }, html: monsterArt(mob, f.elite) });
+      const node = h("div.fighter.fighter-foe", { class: { "is-elite": f.elite && !sov, "is-sovereign": sov } },
         fx,
         art,
-        h("div.foe-body",
-          h("div.foe-name", h("span", mob.name), sov ? h("span.tag.tag-sovereign", "Sovereign") : f.elite ? h("span.tag.tag-elite", "Elite") : null),
-          h("div.hpbar.hpbar-foe", fill, text),
+        h("div.fighter-plate",
+          h("div.fighter-name", h("span", mob.name), sov ? h("span.tag.tag-sovereign", "Sovereign") : f.elite ? h("span.tag.tag-elite", "Elite") : null),
+          hp.node,
           on));
-      return { node, art, fx, fill, text, on, gone: false };
+      return { node, art, fx, fill: hp.fill, text: hp.text, on, gone: false };
     }
 
-    /* One roster of foe cards for both fights. `shared` is null for your own hunt, where the
+    /* One roster of foes for both fights. `shared` is null for your own hunt, where the
        first foe is the one you are on; for the party's it says who each foe is on, which is the
        thing that makes the fight read as shared. */
     function syncFoes(foes, hunt, shared) {
@@ -381,17 +412,17 @@ export default {
       else openPopup("zone", ctx, currentRegion(state).tier, lastZone);
     });
     on(foesBox, "click", ".foe-art", (e, b) => openPopup("foe", ctx, b.dataset.monster));
-    on(zonesGrid, "click", ".zone-card", (e, b) => {
+    on(zonesGrid, "click", ".descent-stop", (e, b) => {
       lastZone = b.dataset.zone;
       openPopup("zone", ctx, Number(b.dataset.tier), b.dataset.zone);
     });
-    on(quarryGrid, "click", ".foe-tile", (e, b) => openPopup("foe", ctx, b.dataset.monster));
+    on(quarryGrid, "click", ".specimen", (e, b) => openPopup("foe", ctx, b.dataset.monster));
 
     /* ================= UPDATE ================= */
 
     function paintHero(ctx, region, c, kls, party) {
       const state = ctx.state;
-      setText(heroEyebrow, `The Field · ${region.name}`);
+      setText(heroEyebrow, "The Field · Hunt");
       const xp = xpProgress(state, "warfare");
       setText(heroLv, String(xp.level));
       setText(heroLvSub, xp.maxed ? "Mastered" : `${fmtWhole(xp.xp)} / ${fmtWhole(xp.next)} XP`);
@@ -410,25 +441,24 @@ export default {
       if (tags !== sigs.tags) {
         sigs.tags = tags;
         const nodes = chips.map(chipNode);
-        if (kls) nodes.unshift(h("span.tag.tag-violet", kls.name));
+        // A discipline is what you do with the Veil, so it is the one violet word up here.
+        if (kls) nodes.unshift(h("span.tag.tag-veil", kls.name));
         heroTags.replaceChildren(...nodes);
-        // The hero lays out differently without a tags row, so the row comes and goes.
-        if (nodes.length && !heroTags.isConnected) hero.insertBefore(heroTags, heroXp);
-        if (!nodes.length && heroTags.isConnected) heroTags.remove();
       }
     }
 
     /* The Veil is your own fight's: the party's view carries none (no stat lines leave the
-       server), so the bar goes while they are out rather than sitting there at nothing. */
+       server), so the line goes while they are out rather than sitting there at nothing. */
     function setVeil(want) {
       if (want && !veil) {
-        const fill = h("i");
-        veil = { fill, bar: h("div.veilbar", fill), note: h("div.veil-note") };
-        you.append(veil.bar, veil.note);
+        const v = vital("veil");
+        veil = { fill: v.fill, note: v.text, node: v.node };
+        youPlate.append(veil.node);
       } else if (!want && veil) {
-        veil.bar.remove();
-        veil.note.remove();
+        veil.node.remove();
         veil = null;
+        setAttr(you, "data-veil", null);
+        toggleClass(you, "is-charged", false);
       }
     }
 
@@ -436,16 +466,20 @@ export default {
       const state = ctx.state;
       const zone = c ? getZone(c.zone) : null;
 
-      setAttr(huntHead, "hidden", !c);
+      /* The scene is always somewhere: the ground you hunt, or the region you stand in. */
       if (c) {
         setText(huntTitle, `The ${zone.name} of ${regionOfTier(c.tier).name}`);
         setText(huntSub, `${atOnce(zone)} at once · ×${zone.xp} XP a kill`);
         const line = companyLine(partyHere(ctx, c.tier, c.zone).names);
         if (line !== sigs.company) {
           sigs.company = line;
-          company.replaceChildren(...(line ? [h("span.chip.chip-violet", iconEl("party"), line)] : []));
+          company.replaceChildren(...(line ? [h("span.chip.chip-good", iconEl("party"), line)] : []));
         }
         setAttr(company, "hidden", !line);
+      } else {
+        setText(huntTitle, region.name);
+        setText(huntSub, down ? "You were carried back to camp." : getSkill("warfare").note);
+        setAttr(company, "hidden", true);
       }
 
       // ---- you ----
@@ -456,15 +490,21 @@ export default {
       setText(youName, commanderName(ctx));
       setWidth(youFill, (hp / s.maxHp) * 100);
       setText(youText, `${fmt(hp)} / ${fmt(s.maxHp)}`);
+      toggleClass(youVital.node, "is-low", s.maxHp > 0 && hp / s.maxHp <= 0.35);
       toggleClass(you, "is-down", down);
 
       setVeil(!!kls);
       if (veil) {
         const v = c ? Math.max(0, Math.min(H.veilMax, c.veil)) : 0;
+        const full = !!c && v >= H.veilMax;
         setWidth(veil.fill, (v / H.veilMax) * 100);
         setText(veil.note, !c ? kls.veilName
           : c.volley > 0 ? `Volley · ${c.volley} to come`
+          : full ? `${kls.veilName} · ready`
           : `${kls.veilName} · ${Math.floor(v)} of ${H.veilMax}`);
+        // The mist thickens in tenths, and flares once the charge is whole.
+        setAttr(you, "data-veil", String(Math.round((v / H.veilMax) * VEIL_STEPS)));
+        toggleClass(you, "is-charged", full || (!!c && c.volley > 0));
       }
 
       // ---- what is happening ----
@@ -495,6 +535,8 @@ export default {
       setText(timer, tm);
       setText(emptyTitle, et);
       setText(emptySub, es);
+      setAttr(arena, "data-state", down ? "down" : !c ? "quiet" : c.phase === "search" ? (c.sovereignNext ? "sovereign" : "search")
+        : c.kind === "sovereign" ? "sovereign" : "fight");
 
       syncFoes(c && c.phase === "fight" ? c.foes : [], c ? huntKey(c) : null, null);
       drainFx(ctx.now);
@@ -530,8 +572,10 @@ export default {
       setAttr(goBtn, "hidden", false);
       setAttr(goBtn, "disabled", down);
       setText(goBtn, down ? "Recovering" : c ? "Change hunt" : `Hunt the ${getZone(lastZone).name}`);
+      // Setting out is the one solid plate the field ever shows; changing ground is not.
+      toggleClass(goBtn, "btn-ember", !c && !down);
       setAttr(band, "hidden", true);
-      // Back to your own card when the party's fight is not what is on screen.
+      // Back to your own figure when the party's fight is not what is on screen.
       setAttr(you, "hidden", false);
       toggleClass(arena, "is-party", false);
     }
@@ -551,17 +595,16 @@ export default {
       const e = view.phase === "fight" ? view.enc : null;
       const enc = e && Array.isArray(e.foes) && Array.isArray(e.hunters) ? e : null;
 
-      setAttr(huntHead, "hidden", false);
       setText(huntTitle, `The ${zone.name} of ${region.name}`);
       setText(huntSub, "The party's hunt · XP by your share, gold and drops the same for everyone");
       const chip = `${hunters.length} out together`;
       if (chip !== sigs.company) {
         sigs.company = chip;
-        company.replaceChildren(h("span.chip.chip-violet", iconEl("party"), chip));
+        company.replaceChildren(h("span.chip.chip-good", iconEl("party"), chip));
       }
       setAttr(company, "hidden", false);
 
-      // Your own card gives way: in a party you are one square among the others.
+      // Your own figure gives way: in a party you are one of the warband, drawn with the rest.
       setAttr(you, "hidden", true);
       setVeil(false);
 
@@ -595,6 +638,7 @@ export default {
       setText(timer, tm);
       setText(emptyTitle, et);
       setText(emptySub, es);
+      setAttr(arena, "data-state", !enc ? "search" : enc.kind === "sovereign" ? "sovereign" : "fight");
 
       // A foe this build cannot name is left out rather than drawn as an unknown.
       syncFoes(enc ? enc.foes.filter((f) => getMonster(f.id)) : [], enc ? `p${view.partyId}:${enc.id}` : null, { me, names });
@@ -623,28 +667,25 @@ export default {
       setAttr(pullBtn, "hidden", false);
       setText(pullBtn, "Break away");
       setAttr(goBtn, "hidden", true);
+      toggleClass(goBtn, "btn-ember", false);
     }
 
-    // One row a member: their name, their health, and a mark on whoever has fallen or is waiting.
-/* The whole warband, you first, as squares: two across for a pair, two over one for
-   a three, two by two for a four. Everyone is on screen at once, which is the point
-   of hunting together, and a square each is the only shape that stays readable at
-   four. `data-n` is what the grid reads to lay them out. */
+    /* The whole warband, you first, stood together on the same ground: a figure, a name
+       and a line of health each. Everyone is on screen at once, which is the point of
+       hunting together. `data-n` is what the layout reads to size them (pages.css). */
     function syncBand(all, names, inEnc, me) {
       const sig = all.map((u) => `${u.userId}:${u.down ? 1 : 0}`).join("|");
       if (sig !== sigs.band) {
         sigs.band = sig;
         mates.clear();
         band.replaceChildren(...all.map((u) => {
-          const fill = h("i");
-          const text = h("span");
+          const hp = vital("sm");
           const isMe = sameId(u.userId, me);
           const label = isMe ? "You" : (names.get(String(u.userId).toLowerCase()) || "Someone");
-          const node = h("div.band-mate", { class: { "is-down": u.down, "is-me": isMe } },
-            h("div.band-art", h("img", { src: "assets/commander-default.webp", alt: "" })),
-            h("span.band-name", label),
-            h("div.hpbar.hpbar-sm", fill, text));
-          mates.set(String(u.userId).toLowerCase(), { fill, text });
+          const node = h("div.fighter.band-mate", { class: { "is-down": u.down, "is-me": isMe } },
+            h("div.portrait.fighter-art", h("img", { src: "assets/commander-default.webp", alt: "" })),
+            h("div.fighter-plate", h("div.fighter-name", label), hp.node));
+          mates.set(String(u.userId).toLowerCase(), { fill: hp.fill, text: hp.text, node: hp.node });
           return node;
         }));
       }
@@ -655,6 +696,7 @@ export default {
         const max = u.max > 0 ? u.max : 1;
         setWidth(row.fill, (Math.max(0, u.hp) / max) * 100);
         setText(row.text, u.down ? "Fallen" : inEnc(u) ? `${fmt(Math.max(0, u.hp))} / ${fmt(max)}` : "Waiting");
+        toggleClass(row.node, "is-low", !u.down && u.hp / max <= 0.35);
       });
       setAttr(band, "hidden", !all.length);
     }
@@ -674,10 +716,8 @@ export default {
         const active = !!(c && c.tier === tier && c.zone === z.id);
         toggleClass(r.node, "is-active", active);
         toggleClass(r.node, "is-peaked", peaked);
-        toggleClass(r.tag, "tag", active || peaked);
-        toggleClass(r.tag, "tag-ember", active);
-        toggleClass(r.tag, "tag-sovereign", !active && peaked);
-        setText(r.tag, active ? "Hunting" : peaked ? "Peaked" : "");
+        setAttr(r.node, "aria-current", active ? "true" : null);
+        setText(r.tag, active ? "You hunt here" : peaked ? "Peaked" : "");
       });
 
       // Travel doesn't end a hunt: say where it is when that isn't here.
@@ -707,13 +747,13 @@ export default {
       const can = canPickClass(state);
       if (can && !discipline) {
         discipline = buildDiscipline();
-        hero.after(discipline);
+        arena.after(discipline);
       } else if (!can && discipline) {
         discipline.remove();
         discipline = null;
       }
 
-      // Cards outlive neither fight: a change of ground clears the roster the other built.
+      // Figures outlive neither fight: a change of ground clears the roster the other built.
       if (!!party !== wasParty) {
         wasParty = !!party;
         sigs.band = null;

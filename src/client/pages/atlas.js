@@ -133,7 +133,7 @@ export default {
           h("p.page-sub", "Pay the toll once, and the road stays open. Where you stand decides what your crews work and what you fight.")),
         h("div.page-actions",
           skyBtn,
-          h("span.chip.chip-violet", iconEl("map-pin"), hereName))),
+          h("span.chip.chip-bone", iconEl("map-pin"), hereName))),
       h("div.atlas",
         h("section.card.atlas-regions",
           h("div.card-head", h("div", h("h2.card-title", "Regions")), h("div.card-actions", openChip)),
@@ -157,7 +157,7 @@ export default {
           toggleClass(ref.row, "is-far", st === "far");
           setText(ref.sub, st === "far" ? `Beyond ${prev.name}` : `Gear around Lv${NBSP}${r.level}`);
           ref.end.replaceChildren(
-            st === "here" ? h("span.tag.tag-violet", "Here")
+            st === "here" ? h("span.tag.tag-bone", "Here")
               : st === "open" ? h("span.tag.tag-good", "Open")
                 : h("span.region-toll", { class: { "is-short": short } }, iconEl("lock"), fmtGold(r.toll)));
           const said = st === "here" ? "you are here" : st === "open" ? "open" : st === "toll" ? `toll ${fmtGold(r.toll)}` : `beyond ${prev.name}`;
@@ -193,7 +193,7 @@ export default {
       const foeChip = (mob, sovereign) => {
         const tip = sovereign ? "Sovereign" : GameData.ARCHETYPES[mob.archetype].name;
         const kids = [iconEl(sovereign ? "skull" : mob.icon), mob.name];
-        const cls = sovereign ? ".chip.chip-ember" : ".chip";
+        const cls = sovereign ? ".chip.chip-veil" : ".chip";
         return canOpenFoe
           ? h(`button${cls}`, { type: "button", "data-foe": mob.id, "data-tip": tip, "data-tip-touch": "off", "aria-label": `${mob.name}, ${tip}: details` }, kids)
           : h(`span${cls}`, { "data-tip": tip }, kids);
@@ -253,7 +253,6 @@ export default {
           block("Your standing",
             threat,
             h("div.stats", { class: { "mt-3": !!threat } },
-              hunted ? null : stat("Threat here", "None yet").node,
               huntNow.node,
               bounty ? bounty.node : null,
               remedies.node))),

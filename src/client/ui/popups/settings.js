@@ -30,7 +30,7 @@ function connectionText(ctx) {
   const st = store.status;
   if (st.conn === "guest") return ["Playing as a guest", "muted"];
   if (st.conn === "connecting") return ["Connecting", null];
-  if (st.conn === "syncing") return ["Syncing", "violet"];
+  if (st.conn === "syncing") return ["Syncing", "tan"];
   if (st.conn === "outdated") return ["A new version is out", "bad"];
   if (st.conn === "offline") return [st.error === "unauthorized" ? "Signed out" : "Offline", "bad"];
   return [store.online != null ? `Online · ${fmtWhole(store.online)} in the realm` : "Online", "good"];
@@ -89,7 +89,7 @@ registerPopup("settings", (ctx) => {
   const paint = () => {
     const [text, tone] = connectionText(ctx);
     setText(status, text);
-    for (const t of ["good", "bad", "violet"]) toggleClass(status, `t-${t}`, tone === t);
+    for (const t of ["good", "bad", "tan"]) toggleClass(status, `t-${t}`, tone === t);
     toggleClass(status, "muted", tone === "muted");
     if (!guest) {
       const at = ctx.store.status.lastSyncAt;

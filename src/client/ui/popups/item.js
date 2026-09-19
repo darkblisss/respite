@@ -302,7 +302,7 @@ function openItem(ctx, key, opts, extra) {
     title: itemName(key),
     art: d.icon,
     artRarity: d.heal ? null : gearArt ? d.rarity || "common" : "common",
-    artTone: d.heal ? "good" : "violet",
+    artTone: d.heal ? "good" : null,
     size: "md",
     body: [],
     onClose: () => { if (off) off(); },

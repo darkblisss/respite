@@ -200,7 +200,7 @@ function makeArt(art, tone, rarity, artClass) {
   else inner = art;
   return h("div.art.art-lg", {
     class: artClass,
-    "data-tone": rarity ? null : tone || "violet",
+    "data-tone": rarity ? null : tone || null,
     "data-rarity": rarity || null,
     "aria-hidden": "true",
   }, inner);
@@ -225,7 +225,7 @@ export function openModal(opts = {}) {
     title = "",
     sub = "",
     art = null,
-    artTone = "violet",
+    artTone = null,
     artRarity = null,
     artClass = "",
     body = null,
@@ -517,7 +517,7 @@ export function confirm({
       size: "sm",
       role: "alertdialog",
       art,
-      artTone: artTone || (danger ? "ember" : cost ? "gold" : "violet"),
+      artTone: artTone || (danger ? "ember" : cost ? "gold" : null),
       footLayout: "row",
       actions: [
         { label: cancelText, kind: "quiet", onClick: () => { answer = false; } },

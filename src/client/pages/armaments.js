@@ -130,7 +130,7 @@ export function dollCard(ctx, { link = null } = {}) {
       const nextClass = k ? k.id : "";
       if (nextClass !== classSig) {
         classSig = nextClass;
-        chips.replaceChildren(...[k ? h("span.chip.chip-violet", k.name) : null, linkNode].filter(Boolean));
+        chips.replaceChildren(...[k ? h("span.chip.chip-veil", k.name) : null, linkNode].filter(Boolean));
       }
       setText(nameNode, commanderName(ctx));
       setText(subNode, [k && k.name, region.name].filter(Boolean).join(" · "));
@@ -144,9 +144,10 @@ function standingRows(state) {
   const s = statsOf(state);
   const k = myClass(state);
   return [
-    k && ["Discipline", k.name, "good"],
+    // A discipline is what you do with the Veil, so it is written in the Veil's colour.
+    k && ["Discipline", k.name, "veil"],
     ["Health", fmtWhole(s.maxHp)],
-    ["Attack", fmtStat(s.attack), "gold"],
+    ["Attack", fmtStat(s.attack)],
     // A flat number, never the share it stops: the mitigation curve is the engine's business.
     ["Defence", fmtStat(s.defence)],
     ["Swing", `${(s.speed / 1000).toFixed(1)}s`],
@@ -154,7 +155,7 @@ function standingRows(state) {
     ["Crit damage", pct(s.critDmg)],
     ["Penetration", pct(s.pen)],
     k && ["Veil", s.absorb ? `+${fmtStat(s.absorb)} a second` : `+${fmtStat(s.veilGain)} a blow`],
-    ["Hunt", `Lv ${skillLevel(state, "warfare")}`, "good"],
+    ["Hunt", `Lv ${skillLevel(state, "warfare")}`],
   ].filter(Boolean);
 }
 

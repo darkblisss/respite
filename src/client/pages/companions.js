@@ -67,11 +67,11 @@ export default {
 
       return h("article.card.comp-card", { class: { "is-active": i.active }, "data-comp": def.id },
         h("div.comp-top",
-          h("div.art.art-lg", { "data-tone": i.owned ? "violet" : "neutral", "aria-hidden": "true" }, iconEl(def.icon)),
+          h("div.art.art-lg", { "data-tone": i.owned ? "tan" : "neutral", "aria-hidden": "true" }, iconEl(def.icon)),
           h("div.grow",
             h("h2.comp-name", def.name),
             h("div.comp-sub", i.owned ? `Rank ${N[i.rank]} · Bond ${i.level}` : fmtGold(def.cost))),
-          i.active ? h("span.tag.tag-violet", "At your side") : null),
+          i.active ? h("span.tag.tag-tan", "At your side") : null),
         h("p.comp-blurb", def.blurb),
         h("div.well.comp-trait", h("span.t-name", def.trait.name), h("span.t-val", `${share(i.trait)} ${def.trait.text}`)),
         meter,
@@ -96,7 +96,7 @@ export default {
 
       const active = activeCompanion(state);
       setText(walking.lastChild, active ? `${active.name} walks with you` : "Nobody walks with you");
-      toggleClass(walking, "chip-violet", !!active);
+      toggleClass(walking, "chip-tan", !!active);
 
       bars.forEach((ref) => {
         const i = infos.find((x) => x.def.id === ref.id);

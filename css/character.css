@@ -15,11 +15,15 @@
 
 .char-tabs {
   display: flex;
-  gap: 6px;
+  gap: var(--sp-5);
   overflow-x: auto;
   padding-bottom: 2px;
+  border-bottom: 1px solid var(--line);
   scrollbar-width: none;
 }
+
+/* The chosen word's rule sits on the row's own rule. */
+.char-tabs .chip { margin-bottom: -1px; }
 
 .char-tabs::-webkit-scrollbar { display: none; }
 .char-tabs .chip { flex-shrink: 0; }
@@ -67,31 +71,12 @@
   min-width: 0;
 }
 
-/* A foe never felled: the name and a lock, no drawing and no numbers.
-   Dashed and dimmed, as a tier that is not open yet reads. */
-.foe-tile.is-locked {
-  border-style: dashed;
-  border-color: var(--line-soft);
-  background: var(--surface-1);
-  box-shadow: none;
-}
-
-.foe-tile.is-locked .foe-art {
-  background: var(--wash);
-  box-shadow: inset 0 0 0 1px var(--line-soft);
-  color: var(--bone-ghost);
-}
-
-.foe-tile.is-locked .foe-art .ico { width: 22px; height: 22px; }
-.foe-tile.is-locked .foe-tile-name { color: var(--bone-faint); }
-.foe-tile.is-locked .tag { opacity: .6; }
-
-/* The Sovereign's tile spans the row it sits in (the quarry's rule), and
-   a locked one loses the violet wash that says it is something special. */
-.foe-tile.is-locked.is-sovereign {
-  border-color: var(--line-soft);
-  background: var(--surface-1);
-}
+/* A foe never felled: the name and a lock, no drawing and no numbers. Pencil where
+   the rest is ink. */
+.foe-tile.is-locked .foe-art { color: var(--bone-ghost); }
+.foe-tile.is-locked .foe-art .ico { width: 20px; height: 20px; }
+.foe-tile.is-locked .foe-tile-name { color: var(--bone-ghost); font-style: italic; }
+.foe-tile.is-locked .tag { opacity: .5; }
 
 /* A felled foe's line carries three counts, so on a narrow tile it breaks
    rather than pushing the tile wider than its column. */

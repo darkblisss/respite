@@ -179,7 +179,8 @@ function picker(name, onPick) {
       tabindex: it.id === id ? "0" : "-1",
       "aria-controls": "hsBoard",
       dataset: { pick: it.id },
-    }, it.icon ? iconEl(it.icon) : null, it.name)));
+    // Words alone, as every row of tabs is: the board's glyph is kept for its empty state.
+    }, it.name)));
     select.replaceChildren(...items.map((it) => h("option", { value: it.id }, it.name)));
     select.value = id;
   }
@@ -404,7 +405,7 @@ function boardBody(ctx, page) {
     const mineRow = me ? got.rows.find((r) => String(r.username || "").toLowerCase() === me) : null;
     meChip.hidden = false;
     setText(meChip, mineRow ? `You are #${fmtWhole(Number(mineRow.rank))}` : `Not in the top ${TOP}`);
-    toggleClass(meChip, "chip-violet", !!mineRow);
+    toggleClass(meChip, "chip-bone", !!mineRow);
 
     box.replaceChildren(h("div.table-wrap",
       h("table.table",
@@ -425,9 +426,9 @@ function boardBody(ctx, page) {
           return h("tr", { class: isMe && "is-me", "aria-current": isMe ? "true" : null },
             h("td", h("span.hs-rank", { class: rank <= 3 && `is-${rank}` }, fmtWhole(rank))),
             h("td.strong", h("span.hs-name",
-              h("span.avatar.avatar-sm", { "data-tone": isMe ? null : "gold", "aria-hidden": "true" }, display(r.username).charAt(0)),
+              h("span.avatar.avatar-sm", { "aria-hidden": "true" }, display(r.username).charAt(0)),
               h("span.truncate", display(r.username)),
-              isMe ? h("span.tag.tag-violet", "You") : null,
+              isMe ? h("span.tag.tag-bone", "You") : null,
               loose ? h("span.tag.hs-hide-sm", "Undisciplined") : null)),
             h("td.num", b.oneFigure ? fmtWhole(xp) : fmtWhole(level)),
             b.oneFigure ? null : h("td.num.hs-hide-sm", { title: `${fmtWhole(xp)} XP` }, fmt(xp)));

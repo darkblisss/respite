@@ -2,6 +2,8 @@
 
 The contract for page authors. Build every page from what is written here: the shell in `index.html`, the stylesheets in `css/`, and the helpers in `src/client/ui/`. If something you need is not here, add it to the kit (components.css or pages.css, and this file) instead of styling it inline.
 
+**The direction (Sept 2026): a field ledger laid over a dark scene.** The UI has two registers and nothing else. *The scene* is where something is happening (the hunt's field, the camp under a gathering page, a region's vista): full bleed, no frame, figures standing on ground, state written as type. *The ledger* is where things are listed: hairline rules, inked names, small-caps labels, tabular figures. There are no cards, pills, icon tiles or glossy gradients. The materials are soot, ash, bone, tanned leather and iron; violet belongs to the Veil alone and ember to danger alone. Class names from the card era are kept (`.card`, `.item-pill`, `.chip`, `.art`) because every page is built from them; what they draw has changed.
+
 The living style guide draws every component with the real CSS and helpers:
 
 - `dev/kit.html`: the gallery (tokens, icons, every component and state, working dialogs, toasts and tooltips).
@@ -30,11 +32,13 @@ ES modules need HTTP: `cd repo && python3 -m http.server 8765`, then open `http:
 
 ## 1. Ground rules
 
-1. **Colour has a job.** Violet is the bench, the crews, focus and "where you are". Ember is the hunt, danger and things going wrong. Gold is money and the one spend on a surface. Green (`good`) is health, gains and online. Never pick an accent for looks.
-2. **One solid button per surface**, for the thing the surface is for (Forge, Hunt, Buy for 700g). Repeated actions in lists use the soft variant (`.btn-soft`). Everything else is default or quiet.
-3. **Cards never sit inside cards.** Inside a card, group with `.well`, `.list`, `.stats`, `.divider` or a `.kpis` strip.
+1. **Colour has a job.** Bone is the ink, focus, the current page and the one plain decision on a surface. Tan is the bench and the crews: work under way. Ember is danger and damage and nothing else: foe health, low health, a fall, the road down into the Core. Veil (violet) is the Veil and nothing else: charge, techniques, disciplines, Sovereigns. Gold is money. Green (`good`) is your health, gains and online. Never pick an accent for looks, and never use ember or violet as decoration: they only mean something while they are rare.
+2. **One solid plate per surface**, for the thing the surface is for (Forge, Hunt the Inner, Buy for 700g). Repeated actions in lists use the soft variant (`.btn-soft`). Everything else is an outline or quiet.
+3. **Nothing is boxed unless it floats or holds things.** A dialog, a tooltip and a toast float, so they have an edge. A slot and a form field are places you put things, so they have one too. Everything else is a rule above it and space around it: a `.card` is a ruled section, not a panel, and nothing is ever nested in a second container. Group inside a section with `.list`, `.stats`, `.divider`, a `.kpis` line or a `.well` (a marginal note).
+3a. **Data is written, not badged.** A chip is words in a tone; a tag is a word in small caps. Neither has a border or a fill. A glyph stands bare: `.art` has no tile behind it.
+3b. **Names are inked, figures are set.** Names, titles and the state of a fight use the display face. Anything that counts uses the UI face with lining tabular figures (`.num`, or `font-variant-numeric: var(--figures)`). Labels are true small caps (`.eyebrow`), never capitals.
 4. **Card grids show three across at most** (`.grid-cards`). The storage slot grid is the one exception: five across (four on narrow phones).
-5. **Gathering nodes and recipes are one full-width pill each** (`.item-pill`), never small tiles in a grid.
+5. **Gathering nodes and recipes are one full-width ruled entry each** (`.item-pill`), never small tiles in a grid.
 6. **Features that are not open are not rendered at all**: no nav row, no teaser, no locked tier beyond the next one. Do not hide them with CSS; do not build them.
 7. **Every gold spend goes through `confirm({ cost })`**: Bonesetter, Smuggler, Atlas tolls, companions, agent hire, market buys.
 8. **No inline styles** except a bar fill width (use `setWidth`). Everything else is a class or a `data-tone` / `data-rarity` attribute. A new look is a new class in the kit.
@@ -55,7 +59,7 @@ ES modules need HTTP: `cd repo && python3 -m http.server 8765`, then open `http:
 <link rel="stylesheet" href="css/pages.css">       <!-- one page only: arena, paperdoll, atlas, market, party... -->
 ```
 
-Fonts: Spectral 500/600/700 (display) and Inter 400/500/600/700 (UI) from Google Fonts. Fallbacks are Georgia and the system UI font, so the UI stays usable if fonts are blocked.
+Fonts, from Google Fonts: IM Fell English, roman and italic (display: an inked, letterpress face with one weight, so display rules say `font-weight: 400` and let size do the work) and Alegreya Sans 400/500/700 plus 400 italic (UI). A third link loads ten glyphs of EB Garamond 500, the figures 0 to 9 (`&text=0123456789`): the Fell type has only old-style figures and its 1 reads as an I, so `--font-display` opens with EB Garamond, which catches every figure and lets every letter fall through. Keep the `text=` on that link or every heading turns Garamond. Fallbacks are Palatino, Georgia and Gill Sans or the system UI font, so the UI stays usable if fonts are blocked.
 
 ### Helper modules
 
@@ -80,72 +84,77 @@ All in `css/tokens.css`. Use them through `var()`. Do not write raw colours in p
 
 | Token | Value | Use |
 |---|---|---|
-| `--bg` | `#0b0910` | the page (set on `html`; `body` is transparent over a fixed glow and grain) |
-| `--surface-1` | `#141019` | cards, pills, rows that stand alone |
-| `--surface-2` | `#1c1723` | raised: default buttons, slots, avatars |
-| `--surface-3` | `#241d2d` | floating: tooltips, toasts, the active segment |
-| `--surface-sunk` | `#0f0c14` | wells, inputs, bar tracks, KPI strips |
-| `--scrim` | `rgba(6,4,10,.72)` | behind dialogs and the drawer |
+| `--bg` | `#0d0c0a` | the page: soot (set on `html`; `body` is transparent over a fixed vignette and grain) |
+| `--surface-1` | `#141210` | a sheet laid on the page: dialogs, the drawer, a filled slot |
+| `--surface-2` | `#1b1815` | plates: a hovered slot, a select's options |
+| `--surface-3` | `#25211b` | floating: tooltips, toasts |
+| `--surface-sunk` | `#090807` | wells: inputs, the empty tray |
+| `--scrim` | `rgba(5,4,3,.8)` | behind dialogs and the drawer |
 | `--panel`, `--panel-raised`, `--panel-deep` | aliases of surface-1, surface-2, surface-sunk | v4 names, kept |
-| `--line-soft` | bone at 6% | dividers inside a card |
-| `--line` | bone at 10% | card and control borders |
-| `--line-strong` | bone at 16% | hover borders, dialogs, inputs |
-| `--wash`, `--wash-strong` | bone at 4% and 7% | neutral fills, hover backgrounds |
+| `--line-soft` | bone at 7.5% | rules between rows |
+| `--line` | bone at 13% | the rule above a section, field and slot edges |
+| `--line-strong` | bone at 22% | outline buttons, dialogs, inputs |
+| `--wash`, `--wash-strong` | bone at 4% and 7.5% | hover fills |
 
 ### Text
 
 | Token | Value | Contrast on surface-3 | Use |
 |---|---|---|---|
-| `--bone` | `#e8e1d5` | 12.5:1 | names, numbers that matter, titles |
-| `--bone-dim` | `#b5adbb` | 7.5:1 | body copy, labels, secondary values |
-| `--bone-faint` | `#948c9f` | 5.0:1 | meta, captions, eyebrows, timestamps |
-| `--bone-ghost` | `#5f586a` | 2.4:1 | decoration and disabled marks only, never for reading |
-| `--on-accent` | `#120e18` | | text on solid violet, gold, ember |
+| `--bone` | `#e7e0d2` | 12:1 | names, numbers that matter, titles |
+| `--bone-dim` | `#b8ae9d` | 7.3:1 | body copy, secondary values |
+| `--bone-faint` | `#938a7a` | 4.7:1 | meta, captions, small-caps labels |
+| `--bone-ghost` | `#5c554a` | 2.3:1 | decoration and disabled marks only, never for reading |
+| `--on-accent` | `#14110d` | | text on solid bone, gold, ember |
 
 ### Accents
 
-Each accent has a family. `-hi` is the readable text tone on dark surfaces; `-lo` and `-deep` are for gradients and tile backgrounds; `-soft` is a tinted fill; `-edge` is a tinted border.
+Each accent has a family. `-hi` is the readable text tone on dark surfaces; `-lo` and `-deep` are the dark ends of the family, for the rare toned ground (a toned surface reads `--tone-deep`); `-soft` is a tinted wash; `-edge` is a tinted rule.
 
 | Family | Base | `-hi` | `-lo` | `-deep` | `-soft` | `-edge` |
 |---|---|---|---|---|---|---|
-| violet | `#9d82e0` | `#b9a4f2` | `#5b4891` | `#2a2140` | 14% | 42% |
-| ember | `#d8743f` | `#eb9068` | `#7d3a2c` | `#2d1a18` | 14% | 42% |
-| gold | `#d9b566` | `#ecd08f` | `#7a6232` | `#2a2215` | 13% | 40% |
-| good | `#7cbfa4` | `#9dd6bf` | `#3f6e5d` | | 13% | 38% |
-| warn | `#e3a857` | | | | 13% | 40% |
+| tan | `#b08a5b` | `#d2ae80` | `#6d5233` | `#231b12` | 13% | 42% |
+| ember | `#cf5f2e` | `#ea8a5c` | `#7a3019` | `#26130c` | 13% | 45% |
+| veil | `#a48ce8` | `#c8b8f8` | `#58458f` | `#1c1630` | 13% | 42% |
+| gold | `#d2ad5a` | `#e8cd8a` | `#77602c` | `#241d10` | 12% | 40% |
+| good | `#8fb08a` | `#b2d0ab` | `#46603f` | | 12% | 38% |
+| warn | `#dba24f` | | | | 12% | 40% |
 | bad | `--ember-hi` | | | | ember-soft | ember-edge |
 
-Also: `--focus: #b9a4f2`, `--focus-ring` (a 3px violet halo for inputs), `--hp`, `--hp-deep`, `--foe`, `--foe-deep`, `--veil: #a88ee6`, `--veil-deep: #4a3a7a`.
+There is no `--violet` family any more. What it coloured was split by meaning: work and "where you are" went to tan and bone, and the Veil kept the violet under its own name.
+
+Also: `--focus` (bone), `--focus-ring`, `--hp`, `--hp-deep`, `--foe`, `--foe-deep`.
 
 ### Rarity
 
-`--r-common #a59eb0`, `--r-uncommon #7cbfa4`, `--r-rare #7aa2dc`, `--r-epic #b88bdb`, `--r-legendary #dcb462`, `--r-relic #e07a4c`.
+`--r-common #a9a294`, `--r-uncommon #8fb08a`, `--r-rare #7f9fcf`, `--r-epic #b18ad6`, `--r-legendary #d9b25e`, `--r-relic #dd7245`.
 
 Any element with `data-rarity="common|uncommon|rare|epic|legendary|relic"` gets `--rar` (the colour) and `--rar-soft` (a tint; transparent for common). Components read these.
 
-Any element with `data-tone="violet|ember|gold|good"` gets `--tone`, `--tone-hi`, `--tone-soft`, `--tone-edge`, `--tone-deep`. These inherit: an `.art` tile inside a `data-tone="ember"` card is ember unless the tile sets its own `data-tone`.
+Any element with `data-tone="tan|ember|gold|good|veil"` gets `--tone`, `--tone-hi`, `--tone-soft`, `--tone-edge`, `--tone-deep`. These inherit: an `.art` glyph inside a `data-tone="ember"` section is ember unless the glyph sets its own `data-tone`. With no tone anywhere above it, a glyph is plain ink.
 
 ### Type
 
 | Token | Size | Use |
 |---|---|---|
-| `--text-2xs` | 11px | eyebrows and tags, always uppercase and tracked |
-| `--text-xs` | 12px | meta, chips, timestamps |
-| `--text-sm` | 13px | secondary copy, sub lines |
-| `--text-md` | 14px | body (the default) |
-| `--text-lg` | 16px | lead copy, list titles in display face |
-| `--text-xl` | 18px | card titles (display) |
-| `--text-2xl` | 22px | section and dialog titles (display) |
-| `--text-3xl` | 28px | page titles (display) |
-| `--text-4xl` | 36px | hero numbers (display) |
+| `--text-2xs` | 12px | the smallest figures: wear on a slot, a count in a corner |
+| `--text-xs` | 13px | meta, timestamps |
+| `--text-sm` | 14px | secondary copy, sub lines |
+| `--text-md` | 15px | body (the default) |
+| `--text-lg` | 17px | lead copy, the chronicle's italic voice |
+| `--text-xl` | 21px | entry and row names (display) |
+| `--text-2xl` | 27px | section and dialog titles (display) |
+| `--text-3xl` | 38px | large titles (display) |
+| `--text-4xl` | 54px | page titles, the state of a fight (display) |
+| `--text-5xl` | 76px | a skill's masthead, the commander's name |
+| `--caps-sm`, `--caps`, `--caps-lg` | 15, 16, 18px | small-caps labels: a tag, a label or column head, a button. True small caps stand about half as tall as the size they are set at, so a 16px label reads the way an 11px line of capitals used to |
 
-`--font-display` (Spectral) is for names and titles: page, card, item, foe, region. `--font-ui` (Inter) is for everything else. Numbers that update use `font-variant-numeric: tabular-nums` (class `.num`; most components already set it). Line heights: `--lh-tight 1.2`, `--lh 1.45`, `--lh-loose 1.6`. `--tracking-caps .12em`.
+`--font-display` (IM Fell English, with EB Garamond's figures) is for names and titles: page, section, item, foe, region, and for the italic "voice" lines (`.voice`, `.page-sub`, item and zone descriptions). Never under 16px. `--font-ui` (Alegreya Sans) is for everything else. Alegreya's figures are old-style by default, so `body` asks for `lining-nums` and anything that updates or lines up asks for `font-variant-numeric: var(--figures)` (lining and tabular; class `.num`; most components already set it). Line heights: `--lh-tight 1.15`, `--lh 1.45`, `--lh-loose 1.6`. `--tracking-caps .1em`.
 
 ### Space, radii, depth, motion, layers
 
-- Space (4px steps): `--sp-0 2px`, `--sp-1 4px`, `--sp-2 8px`, `--sp-3 12px`, `--sp-4 16px`, `--sp-5 20px`, `--sp-6 24px`, `--sp-7 28px`, `--sp-8 32px`, `--sp-10 40px`, `--sp-12 48px`, `--sp-16 64px`.
-- Radii: `--r-xs 4px` (tags, deltas), `--r-sm 6px`, `--r-md 10px` (buttons, inputs, slots, wells), `--r-lg 14px` (cards, pills), `--r-xl 18px` (heroes, dialogs), `--r-pill 999px` (chips, badges).
-- Depth: `--hi` (a 1px inner highlight), `--shadow-1`, `--shadow-card`, `--shadow-pop` (tooltips, toasts), `--shadow-modal`.
+- Space (4px steps): `--sp-0 2px`, `--sp-1 4px`, `--sp-2 8px`, `--sp-3 12px`, `--sp-4 16px`, `--sp-5 20px`, `--sp-6 24px`, `--sp-7 28px`, `--sp-8 32px`, `--sp-10 40px`, `--sp-12 48px`, `--sp-16 64px`, `--sp-20 80px`.
+- Corners: most things are cut square. `--r-plate 2px` eases anything you press (buttons, inputs, the stepper, a badge); `--r-sheet 4px` anything that floats (dialogs); only a dot is round. The old names survive as aliases (`--r-xs 0`, `--r-sm`, `--r-md`, `--r-lg`, `--r-pill` all 2px, `--r-xl 4px`) so older page code lands on the new shapes.
+- Depth: only what floats casts a shadow. `--shadow-pop` (tooltips, toasts) and `--shadow-modal`; `--hi`, `--shadow-1` and `--shadow-card` are `none`.
 - Motion: `--dur-1 120ms` (hover, press), `--dur-2 180ms` (dialogs, tooltips), `--dur-3 260ms` (sheets, drawer), `--bar-dur 140ms` (progress bars, linear), `--ease`, `--ease-in`. All durations become 0 under `prefers-reduced-motion`.
 - Layers: `--z-sticky 10`, `--z-topbar 40`, `--z-drawer 60`, `--z-modal 80` (each stacked dialog adds 1), `--z-toast 90`, `--z-tip 100`.
 
@@ -153,14 +162,16 @@ Any element with `data-tone="violet|ember|gold|good"` gets `--tone`, `--tone-hi`
 
 | Token | Desktop | Below 1280 | Below 1024 | Below 600 | Below 380 |
 |---|---|---|---|---|---|
-| `--topbar-h` | 64px | 64px | 56px | 56px | 56px |
+| `--topbar-h` | 60px | 60px | 56px | 56px | 56px |
 | `--hpline-h` | 0 | 0 | 3px | 3px | 3px |
-| `--gutter` | 32px | 28px | 24px | 16px | 12px |
-| `--page-gap` | 24px | 24px | 24px | 16px | 16px |
-| `--card-pad` | 20px | 20px | 20px | 16px | 14px |
-| `--grid-gap` | 16px | 16px | 16px | 12px | 12px |
+| `--gutter` | 44px | 32px | 24px | 16px | 12px |
+| `--page-gap` | 44px | 44px | 36px | 32px | 32px |
+| `--sheet-pad` | 22px | 22px | 22px | 16px | 16px |
+| `--grid-gap` | 28px | 28px | 28px | 20px | 20px |
 
-Fixed: `--sidebar-w 232px`, `--content-max 1180px`. `--tap` is 32px, and 44px on touch screens (`pointer: coarse`); every button, chip button, tier, segment, tab, stepper and input uses it as a floor for its height (so a 38px button stays 38px on desktop and grows to 44px on touch).
+`--card-pad` is `0` at every width: a section has no box, so it has no padding of its own. Dialogs and the drawer use `--sheet-pad`.
+
+Fixed: `--sidebar-w 212px`, `--content-max 1200px`. `--tap` is 32px, and 44px on touch screens (`pointer: coarse`); every button, chip button, tier, segment, tab, stepper and input uses it as a floor for its height (so a 38px button stays 38px on desktop and grows to 44px on touch).
 
 ---
 
@@ -170,13 +181,13 @@ Fixed: `--sidebar-w 232px`, `--content-max 1180px`. `--tap` is 32px, and 44px on
 |---|---|---|
 | `min-width: 1280px` | wide | breadcrumb and HP numbers show in the topbar |
 | `min-width: 1200px` | | storage pages (Stockpile, Armaments) get a sticky side column |
-| `min-width: 1024px` | desktop | 64px topbar with brand, activity chips with meta and stop buttons, gold, HP bar, connection pill, settings; sticky 232px sidebar |
+| `min-width: 1024px` | desktop | 60px topbar with brand, the two activities with meta and start-over buttons, gold, health line, connection, settings; sticky 212px sidebar |
 | `max-width: 1023px` | tablet | 56px topbar plus a 3px health line on its bottom edge; menu button opens the sidebar as a drawer; connection pill hides and the settings button shows a coloured dot; inputs 16px |
 | `max-width: 899px` | | Sky forecast becomes a list of rows |
-| `max-width: 767px` | | item pills put their stats under the name; the hunt arena goes single column; market listings become cards; atlas stacks (list above detail) |
+| `max-width: 767px` | | entries put their stats under the name; the hunt's scene stacks (foes above, the state between, you below), the descent turns on its end and the quarry stands two by two; market listings stack; atlas stacks (list above detail) |
 | `max-width: 599px` | phone | topbar: menu, two compact chips (icon, short name, bar), gold, settings; brand hidden; dialogs become bottom sheets; toasts span the bottom; heroes stack; `.grid-2` goes to one column; `.list-row.stack-sm` drops its end to a new line; skills grid 2 columns |
 | `max-width: 479px` | | storage slot grid 4 across |
-| `max-width: 379px` | narrow phone | tighter topbar; gutter 12px; card padding 14px |
+| `max-width: 379px` | narrow phone | tighter topbar; gutter 12px |
 | `pointer: coarse` | touch | `--tap: 44px`; chip buttons 44px tall; info buttons get a larger invisible hit area; tooltips open on tap |
 | `hover: hover` | | hover styles only apply on devices that can hover, so taps never leave things lit |
 | `prefers-reduced-motion: reduce` | | no transitions or loops; hit floats are not shown; bars jump straight to their value |
@@ -245,13 +256,13 @@ The icons baked into `index.html` are copies of `icon()` output. When a chip's s
 | Chip | `data-state` | Icon | Name / short | Meta | Bar | Stop |
 |---|---|---|---|---|---|---|
 | bench | `idle` | `hammer` | "Idle" | "No crews at work" | hidden | hidden |
-| bench | `working` | the action's icon | "Bog Ore" (crafting: "Bog Bar") | "42 of 200 · 1h 12m left"; crafting: "Forging · 18 of 60 · 9m left"; no limit: "42 · 11h 58m left" | violet, action progress | shown |
+| bench | `working` | the action's icon | "Bog Ore" (crafting: "Bog Bar") | "42 of 200 · 1h 12m left"; crafting: "Forging · 18 of 60 · 9m left"; no limit: "42 · 11h 58m left" | tan, action progress | shown |
 | hunt | `idle` | `swords` | "Idle" | "Nobody is hunting" | hidden | hidden |
 | hunt | `hunting` | `zoneOuter` / `zoneMiddle` / `zoneInner` / `zoneCore` | "Inner · Gallowmoor" / "Inner" | "38 kills · 4,210 XP/hr · Threat 64" | ember, hunt progress | shown |
 | hunt | `recovering` | `heart` | "Recovering" / the countdown "3m 12s" | "Back in 3m 12s" | ember stripes, recovery progress | hidden |
-| hunt | `hiding` | `eye-off` | "Hiding" | "4m 10s left · The Drowned Bailiff searches" | violet dashes, time hidden so far | shown |
+| hunt | `hiding` | `eye-off` | "Hiding" | "4m 10s left · The Drowned Bailiff searches" | bone dashes, time hidden so far | shown |
 
-On phones each chip is only its link (icon, short name, bar): a tap opens the page. The whole topbar is one row, 56px plus the 3px health line, and every target is 44px.
+An activity is not a chip any more: it is a column of writing between two hairlines, with a bare glyph in its tone and its progress drawn along the topbar's own bottom rule. On phones each is only its link (glyph, short name, line): a tap opens the page. The whole topbar is one row, 56px plus the 3px health line, and every target is 44px.
 
 ```js
 function paintBench(plan) {
@@ -277,7 +288,7 @@ function paintBench(plan) {
 ```html
 <nav class="tb-crumbs" id="tbCrumbs" aria-label="Breadcrumb">
   <span>Trades</span>
-  <svg class="ico">...chevron-right...</svg>
+  <span class="tb-crumb-sep" aria-hidden="true">/</span>
   <span aria-current="page">Delving</span>
 </nav>
 ```
@@ -287,8 +298,7 @@ function paintBench(plan) {
 ```html
 <li>
   <a class="nav-item" href="#/skill/delving" aria-current="page">   <!-- aria-current on the current page only -->
-    <svg class="ico nav-ico">...</svg>                                <!-- iconEl(name, "nav-ico") -->
-    <span class="nav-label">Delving</span>
+    <span class="nav-label">Delving</span>                            <!-- no glyph: the sidebar is a table of contents -->
     <span class="nav-dot" role="img" aria-label="Working"></span>    <!-- only while this skill works; data-tone="ember" for the hunt -->
     <span class="nav-meta">Lv 24</span>                               <!-- skills: "Lv 24"; storage: "24/30"; requisitions: "2/3" -->
     <span class="badge" aria-label="2 unread">2</span>              <!-- only when something needs attention -->
@@ -296,12 +306,15 @@ function paintBench(plan) {
 </li>
 ```
 
-- Current row: `aria-current="page"` (or `.is-active`). It gets a violet wash, a 3px violet bar on the left and a violet icon.
-- Badge tones: `.badge` (violet, party), `.badge-gold` (a bounty ready), `.badge-ember` (something wrong), `.badge-good`.
+- Current row: `aria-current="page"` (or `.is-active`). The ink darkens to bone and a 2px bone rule stands in the margin. No fill.
+- A row's `icon` in shell.js is still what the topbar and the pages draw; the sidebar itself shows words and figures only.
+- Badge tones: `.badge` (bone, party), `.badge-gold` (a bounty ready), `.badge-ember` (something wrong), `.badge-good`.
 - Groups and rows by the information architecture: **The Vanguard** (Character `person`, Armaments `plate`, Companions `paw`), **The Camp** (Stockpile `stockpile`, Bounties `scroll`, Requisitions `crate` only from tier 2, Shop `shop`, Sky `sky`), **Trades** (Felling `axe`, Delving `pick`, Harvesting `sickle`, Flaying `knife`, Dredging `net`), **Artisans** (Forgemaster `plate`, Woodwright `ward`, Tanner `treads`, Weaver `cowl`, Artificer `charm`), **The Field** (Hunt `swords`), **The Realm** (Atlas `atlas`, Market `market`, Party `party`, Hiscores `trophy`).
 - In the drawer rows are 44px tall with 15px text.
 
-### Weather card
+### Weather note
+
+No card: a rule above it at the foot of the contents, the sky's name inked, its two modifiers, and "The week ahead" in small caps. The whole note opens the Sky.
 
 ```html
 <div class="weather" id="weather">
@@ -417,7 +430,7 @@ A centred dialog at 600px and up; a bottom sheet on phones (grab handle, 88vh ma
 | `title` | `""` | the heading (display face) |
 | `sub` | `""` | a quiet line under the title; also the dialog's description |
 | `art` | `null` | an icon name, an SVG string (a monster drawing) or a Node, shown in a 56px `.art` tile |
-| `artTone` | `"violet"` | `"violet" \| "ember" \| "gold" \| "good" \| "neutral"` |
+| `artTone` | `null` (plain ink) | `"tan" \| "ember" \| "gold" \| "good" \| "veil" \| "neutral"` |
 | `artRarity` | `null` | a rarity: the tile takes the rarity colour instead of a tone |
 | `artClass` | `""` | extra classes on the tile |
 | `body` | `null` | a Node, a string (becomes `p.copy`) or an array of them |
@@ -434,7 +447,7 @@ Handle: `{ el, body, buttons, closed, close(reason?), setBody(content), setActio
 
 Action: `{ label, kind, onClick, disabled, icon, soft, wide, id, keep, describedBy }`.
 
-- `kind`: `"primary"` (violet), `"gold"`, `"ember"`, `"danger"`, `"quiet"`, or omit for default.
+- `kind`: `"primary"` (bone), `"gold"`, `"ember"`, `"danger"`, `"quiet"`, or omit for default.
 - `soft: true` uses the soft variant; `wide: true` spans both columns of a grid footer (the main action, or a quiet last one).
 - `onClick(handle, event)`: the dialog closes afterwards, unless the action has `keep: true` or `onClick` returns `false`. Returning a Promise shows the button loading, disables the footer, and closes when it resolves to anything but `false` (on `false` it re-enables and keeps focus in the dialog).
 
@@ -489,7 +502,7 @@ if (await confirm({ title: "Start over?", body: "Every skill, item, companion an
 
 | Option | Default | Meaning |
 |---|---|---|
-| `kind` | `"info"` | `"info"` (violet), `"good"`, `"warn"`, `"bad"` (ember, announced assertively), `"gold"` |
+| `kind` | `"info"` | `"info"` (bone), `"good"`, `"warn"`, `"bad"` (ember, announced assertively), `"gold"` |
 | `icon` | by kind | any icon name |
 | `ms` | `3200` | time on screen; `0` stays until clicked |
 | `action` | `null` | `{ label, onClick }`: a small text button ("View", "Undo") |
@@ -559,7 +572,7 @@ Each entry: what it is for, the markup, modifiers and states, and how it respond
 <div class="page">
   <header class="page-head">
     <div>
-      <div class="eyebrow page-eyebrow">The Camp</div>                 <!-- data-tone="ember" for hunt pages -->
+      <div class="eyebrow page-eyebrow">The Camp</div>
       <h1 class="page-title">Requisitions</h1>
       <p class="page-sub">Send Agents out for supplies. They return at the daily reset.</p>
     </div>
@@ -571,7 +584,9 @@ Each entry: what it is for, the markup, modifiers and states, and how it respond
 
 Skill pages use a `.hero` instead of `.page-head` (7.3); Character uses `.char-hero` (8.1).
 
-**Section.** A titled group of cards or pills without a card around it.
+The title is set at `--text-4xl` and `.page-sub` is the chronicle's voice: italic display type. That contrast, one large inked name over quiet ledger text, is the page's hierarchy; do not add a container to make one.
+
+**Section.** A titled group of entries, without a rule above it.
 
 ```html
 <section class="section">
@@ -583,7 +598,7 @@ Skill pages use a `.hero` instead of `.page-head` (7.3); Character uses `.char-h
 </section>
 ```
 
-**Card grid, three across at most.** Columns fill to three, never more, and drop as the space narrows below `--grid-min` (260px) per card.
+**Column grid, three across at most.** Columns fill to three, never more, and drop as the space narrows below `--grid-min` (260px) per column.
 
 ```html
 <div class="grid-cards">...</div>           <!-- 3, 2, 1 -->
@@ -592,10 +607,12 @@ Skill pages use a `.hero` instead of `.page-head` (7.3); Character uses `.char-h
 
 To change the narrowest card, set `--grid-min` on a page class in pages.css (`.skills-grid` and `.class-grid` use 220px). `.grid-2` is a plain two-column split that goes to one column on phones (market lists, party chat and invites).
 
-### 7.2 Card
+### 7.2 Card (a ruled section)
+
+`.card` keeps its name because every page is built from it, but it draws the opposite of a card: no border, no fill, no corner, no shadow. It is a hairline rule above, a title inked at `--text-2xl`, and its matter. `data-tone` tints the rule.
 
 ```html
-<section class="card" data-tone="violet">                    <!-- data-tone optional: a thin accent line on the top edge -->
+<section class="card" data-tone="tan">                       <!-- data-tone optional: tints the rule above the section -->
   <div class="card-head">
     <div>
       <div class="eyebrow">The Camp</div>                      <!-- optional -->
@@ -611,41 +628,44 @@ To change the narrowest card, set `--grid-min` on a page class in pages.css (`.s
 
 | Class | Meaning |
 |---|---|
-| `.card-flush` | no padding: for content that runs edge to edge (lists with row padding, the camp scene, the atlas detail, chat). A `.card-head` inside gets the padding back |
-| `.card-link` | the whole card is a link or button (class picker): hover lifts the border |
+| `.card-flush` | kept for markup that used it; every section is flush now, so it changes nothing but a footer's top margin |
+| `.card-link` | the whole section is a link or button (class picker): hover brightens its rule |
 | `.card-foot.between` | footer content spread to both ends |
-| `.well` | a sunk group inside a card (stats, a comparison line). Never a card inside a card |
-| `.divider` | a quiet `hr` with 16px space around it |
+| `.well` | an aside set in from a rule in the margin (a comparison line, a hint). Not a box |
+| `.divider` | a quiet `hr` with 20px space around it |
 
 The card head wraps its actions under the title when there is no room.
 
 ### 7.3 Hero (skill pages)
 
+A masthead, not a panel: the skill's name at `--text-5xl` on the left, its level as large on the right, the way to the next level as one 3px rule under both, then a line of writing.
+
 ```html
-<section class="hero" data-tone="ember">                        <!-- data-tone="ember" on the Hunt only -->
-  <div class="art art-xl" data-tone="ember" aria-hidden="true"><svg>swords</svg></div>
+<section class="hero">
   <div class="hero-main">
-    <div class="eyebrow hero-eyebrow">The Field · Gallowmoor</div>
-    <h1 class="hero-title">Hunt</h1>
+    <div class="eyebrow hero-eyebrow">Trades · Gallowmoor</div>
+    <h1 class="hero-title">Delving</h1>
   </div>
   <div class="hero-level">
-    <div class="hero-lv"><small>Lv</small>31</div>
+    <div class="hero-lv"><small>Lv</small>24</div>
     <div class="hero-lv-sub">120,450 / 131,600 XP</div>
   </div>
-  <div class="chip-row hero-tags">                              <!-- optional: Mastery tip chip, XP modifier chips, party bonus -->
+  <div class="hero-xp">
+    <div class="bar"><i style="width: 42%"></i></div>
+    <div class="hero-xp-meta"><span>Ore and coal, hauled up by lamplight.</span><span><b>11,150</b> to Lv 25</span></div>
+  </div>
+  <div class="chip-row hero-tags">                              <!-- optional: Mastery tip chip, XP modifier chips -->
     <button class="tip-chip" type="button"><svg>info</svg>Mastery · +2% double yield</button>
     <span class="chip chip-good">+16% XP · Extreme Aridity</span>
-  </div>
-  <div class="hero-xp">
-    <div class="bar bar-ember"><i style="width: 42%"></i></div>
-    <div class="hero-xp-meta"><span>You take the vanguard.</span><span><b>11,150</b> to Lv 32</span></div>
   </div>
 </section>
 ```
 
-Eyebrow: "Trades · Gallowmoor", "Artisans · At camp", "The Field · Gallowmoor". Show modifier chips only when they apply (weather, Bountiful Weekend, companion, bounty buff, party bonus). When maxed: `hero-lv-sub` reads "Mastered" and the XP line drops its "to Lv" part.
+Eyebrow: "Trades · Gallowmoor", "Artisans · At camp". The first span of `.hero-xp-meta` is the skill's note and is set in the chronicle's voice. Show modifier chips only when they apply (weather, Bountiful Weekend, companion, bounty buff). When maxed: `hero-lv-sub` reads "Mastered" and the XP line drops its "to Lv" part. An `.art` as the first child is still laid out (a column opens for it), but no live page passes one.
 
-Phones: the tags move to their own full-width row, the title is 24px and `hero-lv-sub` hides.
+The Hunt has no hero: its field is the page, and the level, the XP line and the modifier chips are written into the head of the scene (8.7).
+
+Phones: `hero-lv-sub` hides and the note and "to Lv" stack.
 
 ### 7.4 Buttons
 
@@ -660,9 +680,10 @@ Phones: the tags move to their own full-width row, the title is 24px and `hero-l
 
 | Modifier | Use |
 |---|---|
-| `.btn-primary` | violet: the bench, crews, equip, sign in, list for sale |
-| `.btn-gold` | a spend: buy, pay a toll, hire, claim gold |
-| `.btn-ember` | the hunt: Hunt, Change hunt |
+| (none) | an outline plate: the default for anything that is not the surface's one decision |
+| `.btn-primary` | solid bone: the plain decision (Forge, Equip, Sign in, List for sale, Travel here) |
+| `.btn-gold` | solid gold: a spend (buy, pay a toll, hire, claim gold) |
+| `.btn-ember` | solid ember: setting out to fight ("Hunt the Inner", "Move the hunt here"). Not for "Change hunt" while already out: that is an outline |
 | `.btn-danger` | destructive: Start over, kick (inside a confirm) |
 | `.btn-quiet` | no chrome: Cancel, Stop, Pull back, Later |
 | `.btn-soft` | with a kind: the tinted variant for repeated actions in lists (Buy in shop rows, Deploy, Take along) |
@@ -670,9 +691,9 @@ Phones: the tags move to their own full-width row, the title is 24px and `hero-l
 | `.btn-icon` | square, icon only; always with `aria-label` |
 | `.btn-block` | full width |
 | `.is-loading` | a spinner replaces the label (openModal does this for Promise actions) |
-| `disabled` | 42% opacity, no hover |
+| `disabled` | 38% opacity, no hover |
 
-A button with an icon: put `iconEl(name)` before the label. Group buttons with `.btn-row` (`.btn-row.end` to align right). `.link` is an underlined violet text link for use inside copy.
+Every button is lettered in small caps (`--caps-lg`), cut nearly square (`--r-plate`) and flat: no gradient, no glow, no inner highlight. A button with an icon: put `iconEl(name)` before the label. Group buttons with `.btn-row` (`.btn-row.end` to align right). `.link` is an underlined bone text link for use inside copy.
 
 **Info button.** A 28px round (i) that only opens a tooltip.
 
@@ -682,26 +703,26 @@ A button with an icon: put `iconEl(name)` before the label. Group buttons with `
 
 ### 7.5 Chips, tags, badges, dots
 
-**Chip**: a short fact.
+**Chip**: a short fact, written. No border, no fill, no pill: words in the tone that says what kind of fact it is, with an optional small glyph in front.
 
 ```html
 <span class="chip"><svg>clock</svg>16s</span>
 <span class="chip chip-good">+9% XP · Faint Gloom</span>
-<span class="chip chip-violet"><svg>party</svg>+20% Hunt XP · 2 here</span>
+<span class="chip chip-good"><svg>party</svg>+20% Hunt XP · 2 here</span>
 ```
 
-Tones: `.chip-good`, `.chip-warn`, `.chip-bad`, `.chip-gold`, `.chip-violet`, `.chip-ember`. Sizes: `.chip-sm` (22px), `.chip-lg` (32px). `<b>` inside a chip is brighter. Wrap several in `.chip-row` (it hides itself when empty).
+Tones: `.chip-good` (a gain), `.chip-warn`, `.chip-bad`, `.chip-gold` (money), `.chip-tan` (work: XP an action, a trade), `.chip-bone` (you, here), `.chip-ember` (the hunt is out somewhere), `.chip-veil` (a discipline). Sizes: `.chip-sm`, `.chip-lg`. `<b>` inside a chip is brighter. Wrap several in `.chip-row` (it hides itself when empty).
 
-**Chip as a button**: filters, quantity presets, hiscore skills. It lights violet when pressed or selected.
+**Chip as a button**: filters, tabs, quantity presets, leaderboard picks. A word with a 2px bone rule under the chosen one. Words, not glyphs: a filter is its own name.
 
 ```html
 <div class="filters" role="group" aria-label="Show">
   <button class="chip" type="button" aria-pressed="true">All</button>
-  <button class="chip" type="button" aria-pressed="false" aria-label="Gear" data-tip="Gear"><svg>blade</svg></button>
+  <button class="chip" type="button" aria-pressed="false">Gear</button>
 </div>
 ```
 
-States: `aria-pressed="true"`, `aria-selected="true"` or `.is-active`; `disabled`. 30px tall, 44px on touch.
+States: `aria-pressed="true"`, `aria-selected="true"` or `.is-active`; `disabled`. 32px tall, 44px on touch.
 
 **Tip chip**: a chip that opens a rich tooltip (the Mastery tooltip).
 
@@ -713,39 +734,39 @@ States: `aria-pressed="true"`, `aria-selected="true"` or `.is-active`; `disabled
 tooltip(chipEl, () => tipBody({ title: "Delving Mastery", list: [...], track: [...], foot: "..." }), { placement: "bottom" });
 ```
 
-**Tag**: a label on a thing, uppercase.
+**Tag**: a label on a thing: a word in small caps, in a tone. No border, no fill.
 
 ```html
-<span class="tag tag-violet">Warrior</span>
+<span class="tag tag-veil">Warrior</span>
 <span class="tag tag-elite">Elite</span>
 <span class="tag tag-sovereign">Sovereign</span>
 <span class="tag" data-rarity="legendary">Legendary</span>
 ```
 
-Tones: `.tag-violet` (here, you, class), `.tag-ember` (hunting), `.tag-gold` (tier), `.tag-good` (open, paid out), `.tag-elite`, `.tag-sovereign`, `data-rarity`, or plain (expired).
+Tones: `.tag-veil` (a discipline), `.tag-bone` (here, you, yours), `.tag-tan` (out, at your side), `.tag-ember`, `.tag-gold` (tier), `.tag-good` (open, paid out), `.tag-elite`, `.tag-sovereign` (veil), `data-rarity`, or plain (expired).
 
-**Badge**: a count that needs attention. `.badge` (violet), `.badge-gold`, `.badge-ember`, `.badge-good`. Give it an `aria-label` that says what it counts.
+**Badge**: a count that needs attention, and the one mark in the kit that keeps a filled shape. `.badge` (bone), `.badge-gold`, `.badge-ember`, `.badge-good`. Give it an `aria-label` that says what it counts.
 
 **Dot**: status.
 
 ```html
-<span class="dot dot-online"></span>   <!-- also dot-away, dot-offline, dot-working (violet pulse), dot-hunting (ember pulse) -->
+<span class="dot dot-online"></span>   <!-- also dot-away, dot-offline, dot-working (tan pulse), dot-hunting (ember pulse) -->
 ```
 
 Give a meaningful dot `role="img"` and an `aria-label` (or put the words next to it).
 
-### 7.6 Art tiles
+### 7.6 Glyphs (`.art`)
 
-The square that holds an item, skill, zone or foe icon.
+A glyph in the margin of a row: an item, a skill, a zone, a foe. It keeps the square it always had so rows still line up, but there is nothing behind it: no tile, no edge, no gradient.
 
 ```html
-<div class="art" aria-hidden="true"><svg class="ico">ore</svg></div>                  <!-- violet by default, or the nearest data-tone -->
+<div class="art" aria-hidden="true"><svg class="ico">ore</svg></div>                  <!-- plain ink, or the nearest data-tone -->
 <div class="art art-sm" data-tone="ember" aria-hidden="true">...</div>
 <div class="art art-lg" data-rarity="epic" aria-hidden="true">...</div>
 <div class="art" data-tone="neutral" aria-hidden="true">...</div>
 ```
 
-Sizes: `.art-sm` 36px, default 44px, `.art-lg` 56px, `.art-xl` 72px. `data-tone`: `violet` (skills, bench), `ember` (hunt, zones), `gold` (shop, money), `good` (remedies, done), `neutral` (bare hands, not owned). `data-rarity` for gear. `.is-dim` greys it out.
+Sizes: `.art-sm` 28px, default 40px, `.art-lg` 52px, `.art-xl` 72px. `data-tone`: `tan` (work under way), `ember` (the hunt), `gold` (money), `good` (remedies, done), `veil` (a discipline), `neutral` (bare hands, not owned); none at all is plain ink, and that is the default for a dialog's glyph. `data-rarity` for gear. `.is-dim` greys it out.
 
 ### 7.7 Bars and meters
 
@@ -755,25 +776,28 @@ Sizes: `.art-sm` 36px, default 44px, `.art-lg` 56px, `.art-xl` 72px. `data-tone`
 
 | Modifier | Use |
 |---|---|
-| (none) | violet: skills, XP, crafting |
-| `.bar-ember` | the hunt, Threat |
+| (none) | tan: skills, XP, crafting |
+| `.bar-ember` | a foe's health seen from outside the field (the Character page's hunt), a fall |
 | `.bar-gold` | bounties, market progress |
-| `.bar-good` | health outside the arena, bond when complete |
-| `.bar-neutral` | anything without meaning |
-| `.bar-thin` (3px), `.bar-lg` (10px) | heights; default 6px |
+| `.bar-good` | health outside the field, bond when complete |
+| `.bar-veil` | the Veil |
+| `.bar-neutral` | anything without meaning (odds, a share) |
+| `.bar-thin` (2px), `.bar-lg` (6px) | heights; default 4px. Square ends, no track box |
 | `.bar-striped` | recovering (animated stripes) |
 | `.nojump` on the `i` | no transition, for the frame a bar wraps back to 0 |
 
 Always update with `setWidth(fill, pct)`. When the bar is the only place a number lives, add `role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="36"`; otherwise leave it decorative.
 
-**Health bar with numbers** (arena, foes):
+**Vital**: someone's health, written under them. A line and its figures side by side; nothing is painted on top of a bar.
 
 ```html
-<div class="hpbar"><i style="width: 78%"></i><span>87 / 112</span></div>
-<div class="hpbar hpbar-foe"><i style="width: 46%"></i><span>22 / 48</span></div>     <!-- hpbar-sm: 16px -->
+<div class="vital"><div class="vital-line"><i style="width: 78%"></i></div><span class="vital-text">87 / 112</span></div>
+<div class="vital vital-foe">...22 / 48...</div>          <!-- ember: a foe -->
+<div class="vital vital-veil">...Bulwark · 64 of 100...</div>   <!-- a 2px violet hairline that glows as it fills -->
+<div class="vital vital-sm">...</div>                      <!-- the warband -->
 ```
 
-**Veil bar**: `<div class="veilbar"><i></i></div><div class="veil-note">Bulwark · 64 of 100</div>`; `.veilbar.is-locked` before a discipline (the note then reads "The Veil opens at Hunt 5" or "Choose a discipline").
+`.is-low` turns your own line and figures ember at 35% and under. The Veil's text reads "Bulwark · ready" when full, "Volley · 2 to come" mid volley, and the technique's name alone at camp. There is no locked state: before a discipline is held the line is not built at all.
 
 **Meter**: a labelled bar.
 
@@ -784,7 +808,7 @@ Always update with `setWidth(fill, pct)`. When the bar is the only place a numbe
 </div>
 ```
 
-**KPI strip**: key numbers in a sunk strip (the hunt).
+**KPI line**: key numbers in a line (the hunt, the party's fight): a small-caps label over a figure, and only space between one and the next. No strip, no cells.
 
 ```html
 <div class="kpis">
@@ -793,7 +817,7 @@ Always update with `setWidth(fill, pct)`. When the bar is the only place a numbe
 </div>
 ```
 
-`.kpi .s` is an optional small line under the value. Phones: two per row.
+`.kpi .s` is an optional small line under the value. The line wraps on its own as the space narrows.
 
 ### 7.8 Lists, stats, prices
 
@@ -831,7 +855,7 @@ Rows are divided by soft lines. `.lr-title.display` uses the display face. `.lis
 </div>
 ```
 
-States: `.is-selected` / `aria-selected="true"` (violet wash and bar), `.is-current` (you are here), `.is-locked`.
+States: `.is-selected` / `aria-selected="true"` (a wash and a bone rule in the margin), `.is-current` (you are here), `.is-locked`.
 
 **Stat rows**: label and value pairs.
 
@@ -843,7 +867,7 @@ States: `.is-selected` / `aria-selected="true"` (violet wash and bar), `.is-curr
 </div>
 ```
 
-Value tones: `.t-good`, `.t-gold`, `.t-bad`, `.t-violet`. **Delta** (a change against what is worn): `.delta.up` (green), `.delta.down` (ember), `.delta.same`; write "+3", "−2" (true minus).
+Value tones: `.t-good`, `.t-gold`, `.t-bad`, `.t-tan`, `.t-veil`. **Delta** (a change against what is worn): `.delta.up` (green), `.delta.down` (ember), `.delta.same`; write "+3", "−2" (true minus).
 
 ### 7.9 Tabs, segments, tiers
 
@@ -900,7 +924,7 @@ States: `aria-pressed="true"` or `.is-active`; `.is-next` (dashed, with a lock) 
 
 | Class | Meaning |
 |---|---|
-| `.input`, `.select`, `.textarea` | 40px (44px on touch), violet focus ring |
+| `.input`, `.select`, `.textarea` | 38px (44px on touch), sunk and square; the edge turns bone on focus |
 | `.input-sm`, `.select-sm` | 34px |
 | `.is-invalid` | ember border; say why in a `.field-hint.t-bad` |
 | `.input-wrap` | a leading icon (`svg` before the input) and/or a trailing `.affix` |
@@ -910,7 +934,7 @@ Inputs are 16px on phones and touch screens so the page never zooms.
 
 ### 7.11 Quantity picker
 
-One control for every "how many": a stepper you can type in, presets, Max, and "No limit" where an unlimited run makes sense. Unlimited is shown as an empty box with a violet "No limit" placeholder and a pressed "No limit" chip. Never a symbol.
+One control for every "how many": a stepper you can type in, presets, Max, and "No limit" where an unlimited run makes sense. Unlimited is shown as an empty box with a dim italic "No limit" placeholder and a pressed "No limit" chip. Never a symbol.
 
 ```html
 <div class="qty">                                                  <!-- .is-unlimited while No limit is chosen -->
@@ -994,9 +1018,9 @@ function qtyPicker({ value = 1, max = 9999, unlimited = false, allowUnlimited = 
 
 Returns `{ node, pick, refresh(nextMax?) }`. `pick` is `{ n, unlimited }`: the limit to send is `pick.unlimited ? null : pick.n`. Keep `pick` per skill for the session if you want the popup to remember the last choice. `onChange` is not called on construction or on `refresh`.
 
-### 7.12 Item pills (gathering nodes, recipes, zones in lists)
+### 7.12 Entries (`.item-pill`: gathering nodes, recipes)
 
-One full-width row per node or recipe. The name is the button, and its hit area covers the whole pill; the (i) button on the right stays separately clickable. A 3px bar along the bottom edge shows the running action.
+One ruled line per node or recipe: a page of the ledger, not a stack of pills. The name is inked and is the button, and its hit area covers the whole line; the (i) button on the right stays separately clickable. The running action's progress is drawn on the entry's own bottom rule.
 
 ```html
 <div class="pills">
@@ -1008,7 +1032,7 @@ One full-width row per node or recipe. The name is the button, and its hit area 
     </div>
     <div class="pill-stats">
       <span class="chip"><svg>clock</svg>16s</span>
-      <span class="chip chip-violet">3 XP</span>
+      <span class="chip chip-tan">3 XP</span>
       <span class="chip">147 held</span>
     </div>
     <div class="pill-end">
@@ -1023,20 +1047,20 @@ One full-width row per node or recipe. The name is the button, and its hit area 
 | State | Markup | Looks |
 |---|---|---|
 | idle | none | quiet; `.pill-sub` holds a one-line description or recipe note |
-| working | `.is-working` | violet border and wash, glowing art, violet status line, bar moving |
-| locked by level | `.is-locked` | greyed art and dim name; `.pill-sub` holds `iconEl("lock")` then "Needs Delving Lv 30"; still opens its popup |
-| missing materials | `.is-short` | the status line turns ember ("Missing Bog Great Blade"); the short `.need` chips turn ember |
-| hunt tone | `data-tone="ember"` | ember instead of violet (a zone or hunt pill) |
+| working | `.is-working` | a 2px tan mark in the margin, the glyph and status line in tan, the line moving on the bottom rule |
+| locked by level | `.is-locked` | faded glyph and dim name; `.pill-sub` holds `iconEl("lock")` then "Needs Delving Lv 30"; still opens its popup |
+| missing materials | `.is-short` | the status line goes to pencil (faint italic: "Missing Bog Great Blade"); only the figure you are short of turns ember in its `.need` |
+| hunt tone | `data-tone="ember"` | ember instead of tan |
 
 - `.pill-sub`: separate parts as `<span>`s and a quiet dot is drawn between them. `<b>` is brighter.
-- `.pill-stats`: chips for the numbers (time, XP, held) or `.need` chips for recipe inputs.
+- `.pill-stats`: chips for the numbers (time, XP, held) or `.need`s for recipe inputs. Both are plain writing along the line.
 - The (i) opens the stats before you commit: for nodes, time, XP, yield, double yield, held; for gear recipes, a table of stats by rarity (Common to Relic). Build it with `tooltip(infoBtn, () => tipBody({...}), { placement: "left" })`.
 - Wire clicks once with `on(view, "click", ".pill-hit", ...)` and read `closest(".item-pill").dataset.action`.
 - Updates several times a second: `setWidth(pill bar)`, `setText` on the status parts, `toggleClass(pill, "is-working" | "is-short", ...)`.
 
-Phones (below 768px): the stats wrap under the name as compact chips (24px), the chevron hides, the (i) stays top right.
+Phones (below 768px): the stats wrap under the name, the chevron hides, the (i) stays top right.
 
-**Need chip**: what a recipe takes, have over need.
+**Need**: what a recipe takes, have over need, written.
 
 ```html
 <span class="need"><svg>ore</svg>Bog Ore <span class="have">147<small>/2</small></span></span>
@@ -1073,8 +1097,9 @@ Phones (below 768px): the stats wrap under the name as compact chips (24px), the
 ```
 
 - Show `.slot-qty` (via `fmt(qty)`, so 12,500 reads "12.5K") for stacks, or `.slot-wear` for gear and tools: `.is-fine` above 60%, `.is-worn` 26 to 60%, `.is-bad` 25% and under.
-- Rarity shows as a 2px edge along the bottom, a soft glow and the icon colour (common has none).
-- States: `.is-empty` (dashed, not focusable), `.is-selected` (violet ring), `.is-dragover` (while dragging to reorder), `.is-locked`.
+- The grid is one partitioned tray, not a wall of cards: square cells that share their hairline edges. A full cell is a shade lighter than an empty one.
+- Rarity shows as a 2px line along the cell's foot and the glyph's colour (common has none).
+- States: `.is-empty` (the bare tray, not focusable), `.is-selected` (a 2px bone edge), `.is-dragover` (tan, while dragging to reorder), `.is-locked`.
 - Fill the grid to the pool's capacity with empty slots.
 - `.capacity.is-full` turns the count ember.
 - Five across; four at 479px and below. The toolbar wraps; on phones the sort select takes its own full line.
@@ -1084,7 +1109,7 @@ Phones (below 768px): the stats wrap under the name as compact chips (24px), the
 
 ### 7.14 Tooltip content classes
 
-Built by `tipBody()`; listed so you can style custom content the same way: `.tip-title` (display), `.tip-sub`, `.tip-text`, `.tip-rows` > `.tip-row` (`.l`, `.v` with `.t-good`, `.t-bad`, `.t-gold`), `.tip-list` (violet bullets), `.tip-track` > `.tip-step` (`.g` mark, `.lv`, `.name`, `.v`; `.is-done` fills the mark violet, `.is-next` brightens the row), `.tip-table` (first column may carry `.rar-*`), `.tip-foot` (`.t-good` for good news).
+Built by `tipBody()`; listed so you can style custom content the same way: `.tip-title` (display), `.tip-sub`, `.tip-text`, `.tip-rows` > `.tip-row` (`.l`, `.v` with `.t-good`, `.t-bad`, `.t-gold`), `.tip-list` (small square bullets in faint bone), `.tip-track` > `.tip-step` (`.g` mark, `.lv`, `.name`, `.v`; `.is-done` inks the mark in and turns its value green, `.is-next` brightens the row), `.tip-table` (first column may carry `.rar-*`), `.tip-foot` (`.t-good` for good news).
 
 ### 7.15 Dialog anatomy
 
@@ -1108,12 +1133,12 @@ Body helpers: `.modal-note` (a quiet line), `.modal-section` (sections divided b
 
 Built by `toast()`: `.toasts` > `.toast[data-kind]` > `.toast-ico`, `.toast-text`, `.toast-action`, `.toast-timer`. Kinds: `info`, `good`, `warn`, `bad`, `gold`.
 
-### 7.17 Banners
+### 7.17 Banners (notices)
 
-For guests, offline, and anything that applies to the whole page. They go in `#bannerDock`.
+For guests, offline, and anything that applies to the whole page. They go in `#bannerDock`. A notice is a note pinned in the margin: a 2px rule down its side in its tone, a bare glyph, the word, and what to do about it. No box.
 
 ```html
-<div class="banner" role="status">                                  <!-- data-tone: gold (default), violet, ember, good -->
+<div class="banner" role="status">                                  <!-- data-tone: gold (default), tan, ember, good, veil -->
   <span class="banner-ico"><svg>cloud</svg></span>
   <div class="banner-text"><b>You are playing as a guest</b>Nothing is kept once this tab closes.</div>
   <div class="banner-actions"><button class="btn btn-gold btn-sm" type="button">Sign in</button></div>
@@ -1157,7 +1182,7 @@ Added with the realm pages (pages.css): width steps for skeleton lines, `.skel-w
 </ol>
 ```
 
-`data-tone` on a line: `good` (levels), `gold` (money), `ember` (deaths, losses), `violet` (party and companions). Times with `fmtAgo()`; redraw at most twice a minute.
+`data-tone` on a line: `good` (levels), `gold` (money), `ember` (deaths, losses), `tan` (party and companions). Times with `fmtAgo()`; redraw at most twice a minute.
 
 ### 7.21 Tables
 
@@ -1168,7 +1193,7 @@ Added with the realm pages (pages.css): width steps for skeleton lines, `.skel-w
     <tbody>
       <tr class="is-me" aria-current="true">
         <td><span class="hs-rank">7</span></td>
-        <td class="strong"><span class="hs-name"><span class="avatar avatar-sm">M</span><span class="truncate">Morwen</span><span class="tag tag-violet">You</span></span></td>
+        <td class="strong"><span class="hs-name"><span class="avatar avatar-sm">M</span><span class="truncate">Morwen</span><span class="tag tag-bone">You</span></span></td>
         <td class="num">318</td><td class="num hs-hide-sm">4.6M</td>
       </tr>
     </tbody>
@@ -1176,21 +1201,22 @@ Added with the realm pages (pages.css): width steps for skeleton lines, `.skel-w
 </div>
 ```
 
-`.num` right-aligns with tabular figures; `td.strong` is the bright column; `tr.is-me` highlights your row with a violet wash and edge.
+`.num` right-aligns with tabular figures; `td.strong` is the bright column; `tr.is-me` inks your row darker and marks it with a bone rule in the margin.
 
-### 7.22 Avatars and portraits
+### 7.22 Initials and figures
 
 ```html
-<span class="avatar" aria-hidden="true">T<span class="dot dot-online"></span></span>   <!-- .avatar-sm 30px, .avatar-lg 64px; data-tone gold, ember, good -->
+<span class="avatar" aria-hidden="true">T<span class="dot dot-online"></span></span>   <!-- .avatar-sm 28px, .avatar-lg 64px; data-tone gold, ember, good, tan -->
 <div class="portrait"><img src="assets/commander-default.webp" alt=""></div>
 ```
 
-An avatar is the first letter of a name. A `.dot` inside sits on its corner. `.portrait` crops an image to fill the box you give it (page classes set the size).
+An avatar is the first letter of a name, inked, with a rule under it in its tone. No tile. A `.dot` inside sits on its corner. `.portrait` has no frame: the commander's painting is already cut out, so the figure stands straight on the page (`object-fit: contain`, from the floor up) and all the class adds is the shadow under her feet. Page classes set the size.
 
 ### 7.23 Utilities (base.css)
 
 - Type: `.display`, `.eyebrow`, `.title-lg`, `.title-md`, `.title-sm`, `.lead`, `.copy`, `.small`, `.tiny`, `.muted`, `.dim`, `.strong`, `.num`, `.nowrap`, `.truncate`, `.clamp-2`, `.break`, `kbd` / `.kbd`.
-- Tones (these win over component colours): `.t-violet`, `.t-ember`, `.t-gold`, `.t-good`, `.t-warn`, `.t-bad`, and rarity names `.rar-common` to `.rar-relic`.
+- Tones (these win over component colours): `.t-tan`, `.t-veil`, `.t-ember`, `.t-gold`, `.t-good`, `.t-warn`, `.t-bad`, and rarity names `.rar-common` to `.rar-relic`.
+- `.voice`: a line in the chronicle's voice (italic display type, `--text-lg`): what a place is like, what a thing was.
 - Layout: `.vstack`, `.hstack`, `.wrap`, `.grow`, `.shrink-0`, `.ml-auto`, `.center`, `.between`, `.end`, `.items-start`, `.items-baseline`, `.gap-1` to `.gap-6`, `.mt-1`, `.mt-2`, `.mt-3`, `.mt-4`, `.mt-6`, `.full`.
 - Access: `.sr-only`, `.skip-link`, `.hover-only`, `.touch-only`.
 
@@ -1210,7 +1236,7 @@ What each page is built from. Page-only classes live in `pages.css`. See each pa
       <div class="eyebrow page-eyebrow">In Gallowmoor</div>
       <h1 class="char-name">Morwen</h1>
       <div class="chip-row char-tags">
-        <span class="tag tag-violet">Warrior</span>                    <!-- the discipline, only once picked -->
+        <span class="tag tag-veil">Warrior</span>                      <!-- the discipline, only once picked -->
         <span class="chip"><svg>paw</svg>Tunnel Rat</span>
         <span class="chip chip-gold"><svg>scroll</svg>Bounty 12 of 17</span>
       </div>
@@ -1219,7 +1245,7 @@ What each page is built from. Page-only classes live in `pages.css`. See each pa
   </section>
 
   <div class="grid-cards max-2">
-    <article class="card act-card" data-tone="violet">                 <!-- the hunt card: data-tone="ember", .bar-ember -->
+    <article class="card act-card" data-tone="tan">                    <!-- the hunt card: data-tone="ember", .bar-ember -->
       <div class="act-card-top">
         <div class="art" aria-hidden="true"><svg>pick</svg></div>
         <div class="grow"><div class="eyebrow">The crews · Delving</div><h2 class="card-title">Bog Ore</h2></div>
@@ -1318,7 +1344,7 @@ Recipe pills: `.pill-sub` holds "Rarity is rolled when it is made" (gear), "Miss
 <p class="ap-plan"><span><b>100 × Bog Bar</b> · 33m 20s · 800 XP</span><span class="t-warn">Stock covers 15.</span></p>
 ```
 
-Actions: `{ label: "Stop", kind: "quiet" }` first while running, then the verb: `{ label: "Forge", kind: "primary" }` ("Delve", "Fell", "Carve"...; the Hunt uses `kind: "ember"` with "Hunt" or "Move the hunt here"). Disabled start labels: "Needs Lv 30", "Missing materials", "Recovering". Plan line with no limit: "No limit · stock covers 15" or "No limit · up to 2,700 in twelve hours"; for the hunt "No limit · until you pull back, fall or twelve hours pass". Foe popups (`?page=hunt&modal=foe`) pass the monster drawing as `art` (an `svg.m-art` string; it fills 88% of the tile) with `artTone: "ember"`, a `.stats` block (Health, Attack, Against you, Defence, Swings every, Experience, Threat, Gold, As an Elite), a Drops `.ap-list`, and one wide action back to the zone they were opened from.
+Actions: `{ label: "Stop", kind: "quiet" }` first while running, then the verb: `{ label: "Forge", kind: "primary" }` ("Delve", "Fell", "Carve"...; the Hunt uses `kind: "ember"` with "Hunt" or "Move the hunt here"). Disabled start labels: "Needs Lv 30", "Missing materials", "Recovering". Plan line with no limit: "No limit · stock covers 15" or "No limit · up to 2,700 in twelve hours"; for the hunt "No limit · until you pull back, fall or twelve hours pass". Foe popups (`?page=hunt&modal=foe`) pass the monster drawing as `art` (an `svg.m-art` string; it fills the glyph's square, with nothing behind it) with `artTone: "ember"`, a `.stats` block (Health, Attack, Against you, Defence, Swings every, Experience, Threat, Gold, As an Elite), a Drops `.ap-list`, and one wide action back to the zone they were opened from.
 
 ### 8.5 Item popup (`?page=storage&modal=item`, `&modal=stack`)
 
@@ -1383,96 +1409,97 @@ A two-handed weapon: render the offhand slot as `.doll-slot.is-empty.is-blocked`
 
 Armaments renders a two-handed weapon as one spanning slot instead: `.doll-col.has-span` turns that column into four equal rows and the weapon's `button.doll-slot.is-span` takes two of them (Weapon and Offhand), so it lines up exactly with two slots across the figure; the offhand slot is not rendered. The slot columns follow `DOLL_ORDER`: armour (head, chest, hands, feet) on the left, weapon, offhand, neck and ring on the right. Belongings on Armaments has no pool tabs: its toolbar starts with an `h2.card-title` "Belongings"; the Stockpile page's `.seg` switches between the Stockpile and the Vault. Discipline and Veil rows (and the Worn card's class chip) appear only once a discipline is chosen.
 
-### 8.7 Hunt (`?page=hunt`)
+### 8.7 Hunt (`?page=hunt`, `&field=fight|quiet|search|sovereign|down|party`)
 
-1. `.hero` with `data-tone="ember"`; the party bonus chip (`chip-violet`, `party` icon, "+20% Hunt XP · 2 of your party here") only when it applies.
-2. The fight:
+The hunt is a place, not a panel. The page is `div.page.hunt-page` and opens on the scene itself: there is no `.hero`, because the ground you hunt is the page's title and the level, the XP line and the modifier chips are written into the scene's head. Nothing in the scene is a card, a tile or a pill, and there is no "VS": what the fight is doing is set in large italic type between the two sides.
+
+1. The scene:
 
 ```html
-<section class="card hunt-card">
-  <div class="card-head">...The Inner of Gallowmoor · "Two or three at once · ×1.7 XP a kill"...</div>
-  <div class="arena">
-    <div class="arena-you">                                                 <!-- .is-down while recovering, .is-dead on the killing blow -->
-      <div class="fx-layer"></div>
-      <div class="portrait arena-portrait"><img src="assets/commander-default.webp" alt=""></div>
-      <div class="arena-name">Morwen</div>
-      <div class="hpbar"><i></i><span>87 / 112</span></div>
-      <div class="veilbar"><i></i></div>
-      <div class="veil-note">Bulwark · 64 of 100</div>
+<section class="scene" data-state="fight" aria-label="The field">     <!-- quiet | search | fight | sovereign | down; .is-party for the shared fight -->
+  <div class="scene-sky" aria-hidden="true"></div>                     <!-- the backdrop and nothing else: sky, a dead treeline, smoke, ground -->
+  <header class="scene-head">
+    <div class="scene-where">
+      <div class="eyebrow">The Field · Hunt</div>
+      <h1 class="scene-title">The Inner of Gallowmoor</h1>              <!-- not hunting: the region's name -->
+      <p class="scene-sub">Two or three at once · ×1.7 XP a kill</p>
+      <div class="scene-company"><span class="chip chip-good"><svg>party</svg>Thane hunts here too</span></div>
     </div>
-    <div class="arena-mid">
-      <div class="arena-vs" aria-hidden="true">VS</div>
-      <div class="arena-status">Fighting</div>                             <!-- Searching, Hiding, A Sovereign, Recovering, Not hunting -->
-      <div class="arena-timer">Reinforcements in 31s</div>
+    <div class="scene-rank">                                            <!-- all the masthead the hunt has -->
+      <div class="scene-lv"><small>Hunt Lv</small>31</div>
+      <div class="bar bar-thin"><i></i></div>
+      <div class="scene-xp-meta"><span class="scene-xp-sub">120,450 / 131,600 XP</span><span class="scene-xp-next"><b>11,150</b> to Lv 32</span></div>
+      <div class="chip-row scene-tags"><span class="tag tag-veil">Warrior</span><span class="chip chip-good">+8% XP · Veil Hound</span></div>
     </div>
-    <div class="arena-foes">
-      <div class="foe-card is-target">                                     <!-- .is-elite, .is-sovereign; .is-gone fades a fallen foe out -->
+  </header>
+  <div class="scene-stage">
+    <div class="scene-side">
+      <div class="fighter fighter-you" data-veil="6">                   <!-- .is-down recovering, .is-dead on the killing blow, .is-charged at a full Veil -->
         <div class="fx-layer"></div>
-        <button class="foe-art" type="button" aria-label="Fen Stalker: details"><svg class="m-art" viewBox="0 0 120 120">...</svg></button>
-        <div class="foe-body">
-          <div class="foe-name"><span>Fen Stalker</span><span class="tag tag-elite">Elite</span></div>
-          <div class="hpbar hpbar-foe"><i></i><span>22 / 48</span></div>
+        <div class="portrait fighter-art"><div class="fighter-mist" aria-hidden="true"></div><img src="assets/commander-default.webp" alt=""></div>
+        <div class="fighter-plate">
+          <div class="fighter-name">Morwen</div>
+          <div class="vital"><div class="vital-line"><i></i></div><span class="vital-text">87 / 112</span></div>
+          <div class="vital vital-veil">...Bulwark · 64 of 100...</div>  <!-- only once a discipline is held -->
         </div>
       </div>
-      <!-- no foes: <div class="foe-empty"><span class="foe-empty-title">The Inner lies quiet</span><span class="foe-empty-sub">Nothing is being hunted here.</span></div> -->
+      <div class="scene-band" data-n="4" hidden>...</div>               <!-- the warband, while the party is out -->
+    </div>
+    <div class="scene-state" role="status">
+      <div class="scene-status">Fighting</div>                          <!-- Searching, A Sovereign, Recovering, Something vast approaches -->
+      <div class="scene-timer">Reinforcements in 31s</div>
+    </div>
+    <div class="scene-foes">
+      <div class="fighter fighter-foe is-target">                       <!-- .is-elite, .is-sovereign; .is-gone sinks a fallen foe -->
+        <div class="fx-layer"></div>
+        <button class="fighter-art foe-art" type="button" aria-label="Fen Stalker: details"><svg class="m-art" viewBox="0 0 120 120">...</svg></button>
+        <div class="fighter-plate">
+          <div class="fighter-name"><span>Fen Stalker</span><span class="tag tag-elite">Elite</span></div>
+          <div class="vital vital-foe">...22 / 48...</div>
+          <div class="fighter-on">On Thane</div>                        <!-- the party's fight only -->
+        </div>
+      </div>
+      <!-- no foes: <div class="scene-empty"><span class="scene-empty-title">The Inner lies quiet</span><span class="scene-empty-sub">Nothing is being hunted here.</span></div> -->
     </div>
   </div>
-  <div class="hunt-foot">
-    <div class="kpis">...Kills, XP/hr, Threat (with a bar), Time left...</div>     <!-- not hunting here: <p class="hunt-hint">Choose a zone below to take up the hunt.</p> -->
-    <div class="hunt-actions">
-      <label class="switch"><input type="checkbox"> Hide when Threat peaks</label>
-      <div class="btn-row"><button class="btn btn-quiet" type="button">Pull back</button><button class="btn btn-ember" type="button">Change hunt</button></div>
-    </div>
-  </div>
+  <footer class="scene-foot">
+    <div class="kpis">...Kills, XP/hr, DPS, Sovereign (with a line), Time left...</div>   <!-- not hunting: <p class="scene-hint">Choose a zone below to take up the hunt.</p> -->
+    <div class="scene-actions"><button class="btn btn-quiet" type="button">Pull back</button><button class="btn" type="button">Change hunt</button></div>
+  </footer>
 </section>
 ```
 
-- Floats: append `<span class="float {kind} lane{0|1|2}">14!</span>` to the target's `.fx-layer` and remove it after 1 second. Kinds: `hit`, `crit` (gold), `strike`, `ambush`, `empowered`, `veil`, `volley` (violet), `bleed`, `thorns`, `hurt`, `ambushed` (ember), `heal` (green), `block`, `dodge`, `glance`, `join`, `enrage` (small caps words). Cycle the lane so blows do not overlap. Show at most the last 8 per frame.
-- Struck: remove `.struck` from the art, read `offsetWidth`, add `.struck` (a 260ms shake).
-- Monster drawings: v4's `MONSTER_ART` markup inside `svg.m-art` (`.elite`, `.sovereign` stroke colours), classes `m-body`, `m-void`, `m-eye`, `m-edge`, `m-steel`, `m-crack`, `m-bone`.
-- Foe cards are keyed by foe uid: add new ones, update health in place, give fallen ones `.is-gone` and remove them after 700ms.
+- **A fighter** is a figure, a name and a vital. Every `.fighter-plate` is the same height, so every pair of feet comes down on the same ground. The foe you are on (`.is-target`) stands nearest, largest and fully lit; the rest hang back smaller and dimmer. Reinforcements come in from the right; the fallen sink (`.is-gone`, removed after 700ms). Foes are keyed by uid and updated in place.
+- **One measure.** `--figure-h` on `.scene` is how tall you stand, cut from the window's height (`100dvh - 510px`, clamped 260 to 500px), and every foe's size is cut from it. That is what keeps the whole fight, down to the last line of health, above the fold on a laptop.
+- **`data-state`** turns the light. `fight` lays ember heat on the ground under the foes (`--scene-heat`); `sovereign` turns the horizon and the ground violet, because a Sovereign is of the Veil; `search` quickens the smoke; `quiet` hides the state block and says the quiet once, large, where the foes would stand; `down` greys you.
+- **The Veil** is weather at your feet: `.fighter-mist` thickens in tenths with `data-veil="0..10"` on `.fighter-you` (an attribute, so no inline style is needed), and `.is-charged` puts a violet rim on the figure. The `.vital-veil` hairline keeps the exact figure. These two and the Sovereign's light are the only violet in the scene.
+- **The sky bleeds.** `.scene-sky` runs from the sidebar to the far edge of the window where the browser supports `overflow: clip` (`.main` clips; a scroller would unstick the sticky side panels elsewhere) and fades into the page at its sides and top. The lights that belong to the fighters sit on `.scene::before`, in the scene's own box, so they stay under the figures however wide the sky is.
+- Floats: append `<span class="float {kind} lane{0|1|2}">Crit</span>` to the fighter's `.fx-layer` and remove it after 1 second. They are words in italic ink, never damage numbers: `crit` (gold), `strike`, `ambush`, `empowered`, `veil`, `volley` (veil), `bleed`, `thorns`, `hurt`, `ambushed` (ember), `heal` (green, a figure), `block`, `dodge`, `glance`, `join`, `enrage` (small caps). Cycle the lane so blows do not overlap. Show at most the last 8 per frame.
+- Struck: remove `.struck` from the art, read `offsetWidth`, add `.struck` (a 260ms shake and flash).
+- Monster drawings: `MONSTER_ART` markup inside `svg.m-art` (`.elite`, `.sovereign` stroke colours), classes `m-body`, `m-void`, `m-eye`, `m-edge`, `m-steel`, `m-crack`, `m-bone`. Inside `.scene` they are restyled as shapes: black against the smoke, a rim of firelight, the eyes lit.
+- The go button is `.btn-ember` only while nobody is out ("Hunt the Inner"): setting out is the one solid plate the scene ever shows.
 
-3. Zones, two across:
-
-```html
-<div class="grid-cards max-2">
-  <button class="zone-card is-active" type="button">                           <!-- .is-peaked at 100 Threat -->
-    <div class="art" data-tone="ember" aria-hidden="true"><svg>zoneInner</svg></div>
-    <span class="zone-main"><span class="zone-name">Inner</span><span class="zone-sub">2 or 3 at once · ×1.7 XP</span></span>
-    <span class="tag tag-ember">Hunting</span>                                  <!-- "Peaked" (tag-sovereign) at 100, or an empty span -->
-    <span class="meter"><span class="meter-top"><span>Threat</span><b>64 / 100</b></span><div class="bar bar-ember bar-thin"><i></i></div></span>
-  </button>
-</div>
-```
-
-4. Quarry: `.grid-cards` of three `button.foe-tile` (`span.foe-art` with the drawing, `span.foe-tile-main` > `.foe-tile-name` + `.foe-tile-sub` "Stalker · 48 health · swings every 2.4s") and one `button.foe-tile.is-sovereign` spanning the row, with a `tag-sovereign` at its end.
-
-Phones (below 768px): the arena is one column: you in a strip (72px portrait beside your bars), the status and timer on one ruled line, then the foe cards at full width with names that wrap rather than truncate. KPIs go two by two; the switch and buttons share a line.
-
-Added with the live page (pages.css, The Hunt), for the party's shared fight:
+2. The descent. The four zones are one road going down, so they are drawn as one: a line from bone at the camp's edge to ember by the Core, a stop each.
 
 ```html
-<div class="arena is-party">                                <!-- the shared fight, never your own -->
-  <div class="arena-you">
-    ...portrait, name, your hpbar...
-    <div class="arena-band">                                <!-- the rest of the warband; hidden when alone -->
-      <div class="band-mate is-down">                       <!-- .is-down dims a fallen or absent member -->
-        <span class="band-name">Thane</span>
-        <div class="hpbar hpbar-sm"><i></i><span>25 / 25</span></div>
-      </div>
-    </div>
-  </div>
-  ...
-  <div class="arena-foes">
-    <div class="foe-card">
-      ...art, name, hpbar...
-      <div class="small muted mt-1">On Thane</div>           <!-- who the foe is on; existing utilities -->
-    </div>
-  </div>
-</div>
+<ol class="descent">
+  <li><button class="descent-stop is-active" type="button" data-depth="3" aria-current="true">
+    <span class="descent-mark" aria-hidden="true"></span>
+    <span class="descent-name">Inner</span>
+    <span class="descent-sub">2 or 3 at once</span>
+    <span class="descent-sub">×1.7 XP · ×1.27 foes</span>
+    <span class="descent-tag">You hunt here</span>                      <!-- empty on the other three -->
+  </button></li>
+</ol>
 ```
 
-`.arena-band` is a column of rows under your own bars (240px at most, in the same column as your hpbar on phones). `.band-mate` is a 72px name beside the bar; `.band-name` truncates rather than wraps. `.arena.is-party` is the one state class: it turns `.arena-foes` into an `auto-fit` grid of 230px cards, because a party's roster scales with it (up to a dozen) and they should stand two abreast rather than run down the page. One foe still gets one wide card, and below 768px it is one column again. Nothing else about the arena changes.
+3. The quarry, stood in a line on one floor the way a field guide plates its specimens: `div.lineup` of three `button.specimen` and one `button.specimen.is-sovereign` (wider, larger, its kind in veil). Each is `span.foe-art` (the drawing, feet on the floor rule), `span.specimen-kind` ("Stalker"), `span.specimen-name`, `span.specimen-sub` ("48 health · swings every 2.4s").
+
+`.foe-tile` (glyph, name, sub, in a ruled row) is still the kit's compact foe entry: the Character page's Collection lists every foe in the world with it.
+
+Phones (below 768px): the scene stacks. Foes stand in a row at the top, the state is one centred line under them, and you stand at the bottom left with your name and lines beside you rather than under you. The descent turns on its end (a line down the margin, a stop a row) and the quarry stands two by two.
+
+The party's shared fight is the same scene with `.is-party`: your own figure is hidden and `.scene-band` stands the whole warband where you stood, you first (`div.fighter.band-mate`, `.is-me`, `.is-down`; a `.vital-sm` each, reading "Fallen" or "Waiting" where that applies). The state moves above the stage as one line, and the foes, up to a dozen, stand in ranks of small figures with `.fighter-on` saying who each is on. The band is a sibling of `.fighter-you`, not a child, so hiding your figure leaves it standing.
 
 ### 8.8 Atlas (`?page=atlas`)
 
@@ -1481,7 +1508,7 @@ Added with the live page (pages.css, The Hunt), for the party's shared fight:
   <section class="card atlas-regions">
     <div class="card-head">...Regions · "2 of 9 open" chip...</div>
     <div class="pick-list" role="listbox" aria-label="Regions">
-      <button class="pick-row is-current" role="option" aria-selected="false">...tier, name, sub, <span class="tag tag-violet">Here</span></button>
+      <button class="pick-row is-current" role="option" aria-selected="false">...tier, name, sub, <span class="tag tag-bone">Here</span></button>
       <button class="pick-row" role="option" aria-selected="false">...<span class="tag tag-good">Open</span></button>
       <button class="pick-row is-locked is-selected" role="option" aria-selected="true">...<span class="region-toll"><svg>lock</svg>100g</span></button>
     </div>
@@ -1497,7 +1524,7 @@ Added with the live page (pages.css, The Hunt), for the party's shared fight:
         <div class="atlas-fact"><div class="eyebrow">Your Hunt</div><div class="v t-good">Lv 31</div></div>
         <div class="atlas-fact"><div class="eyebrow">Toll</div><div class="v t-gold">100g</div></div>
       </div>
-      <div class="atlas-block"><div class="eyebrow">Lives here</div><div class="chip-row">...foe chips, the Sovereign as chip-ember with skull...</div></div>
+      <div class="atlas-block"><div class="eyebrow">Lives here</div><div class="chip-row">...foe chips, the Sovereign as chip-veil with skull...</div></div>
       <div class="atlas-block"><div class="eyebrow">Yields</div><div class="chip-row">...material chips...</div></div>
       <div class="atlas-block"><div class="eyebrow">Your standing</div><div class="stats">...Threat here, Remedies held, Suits your gear...</div></div>
     </div>
@@ -1536,7 +1563,7 @@ Added with the live page (pages.css, Atlas):
   <div class="bounty-progress">
     <div class="meter-top"><span>Progress</span><b>12 of 17</b></div>
     <div class="bar bar-gold bar-lg"><i></i></div>
-    <div class="chip-row"><span class="chip chip-gold"><svg>coin</svg>Pays 27g</span><span class="chip chip-violet"><svg>sparkle</svg>An hour of double XP</span></div>
+    <div class="chip-row"><span class="chip chip-gold"><svg>coin</svg>Pays 27g</span><span class="chip chip-good"><svg>sparkle</svg>An hour of double XP</span></div>
   </div>
   <div class="bounty-foot"><span class="small muted">Kills anywhere in Gallowmoor count.</span><button class="btn btn-gold" type="button">Claim 27g</button></div>
 </section>
@@ -1565,7 +1592,7 @@ The live page puts only a `btn-block` "Deploy" in `.agent-deploy` ("None left to
 
 ### 8.12 Companions (`?page=companions`)
 
-`.grid-cards` of `.card.comp-card` (`.is-active` for the one at your side): `.comp-top` (art `art-lg`, neutral tone when not owned; `.comp-name`; `.comp-sub` "Rank II · Bond 7" or the price; `tag-violet` "At your side"), `p.comp-blurb`, `.well.comp-trait` (`.t-name`, `.t-val` green), a `.meter` for Bond when owned, `ul.comp-unlocks` (`li.is-open` for unlocked: `span.g` with a check icon, `span.req` "Bond 10" or "Rank III", then the text), and `.comp-actions`: "Take along" (`btn-primary btn-soft`), "Leave at camp" (`btn-quiet`) or "Buy · 300g" (`btn-gold btn-soft`, confirm with cost). Page actions: "Tunnel Rat walks with you" chip.
+`.grid-cards` of `.card.comp-card` (`.is-active` for the one at your side): `.comp-top` (art `art-lg`, tan when owned and neutral when not; `.comp-name`; `.comp-sub` "Rank II · Bond 7" or the price; `tag-tan` "At your side"), `p.comp-blurb`, `.well.comp-trait` (`.t-name`, `.t-val` green), a `.meter` for Bond when owned, `ul.comp-unlocks` (`li.is-open` for unlocked: `span.g` with a check icon, `span.req` "Bond 10" or "Rank III", then the text), and `.comp-actions`: "Take along" (`btn-primary btn-soft`), "Leave at camp" (`btn-quiet`) or "Buy · 300g" (`btn-gold btn-soft`, confirm with cost). Page actions: "Tunnel Rat walks with you" chip.
 
 ### 8.13 Sky (`?page=sky`)
 
@@ -1621,7 +1648,7 @@ Seven columns in one ruled strip; below 900px, seven rows.
 </div>
 ```
 
-  Below 768px each listing becomes a card: item and price on top, "Left", the bands and Buy below (the `.listing-l` labels appear).
+  Below 768px each listing stacks into one ruled entry: item and price on top, "Left", the bands and Buy below (the `.listing-l` labels appear).
 - Buying: pick a quantity if more than one, then `confirm({ cost })`.
 - "My listings" (`.list`, a thin gold bar of how much sold, Cancel) and "Recent sales" (`.list`, `.price` "+67g" or `.price.is-short` "−420g") share a `.grid-2`.
 - Sell dialog body: a qty picker (no No limit), a price field (`.input-wrap` with `coin` and `.affix` "g", a hint with the lowest listing and the merchant price), and a fee preview:
@@ -1654,7 +1681,7 @@ Seven columns in one ruled strip; below 900px, seven rows.
 </article>
 ```
 
-  `member-doing` tones: `ember` for hunting, `violet` for crafting and gathering, none for offline ("Last seen 2h ago"). Bonus chip: "Counts toward your bonus" (good), "Not hunting", "Other ground", "Offline". Your own card: "+20% to your Hunt XP". Kick only for the leader, never on yourself.
+  `member-doing` tones: `ember` for hunting, `tan` for crafting and gathering, none for offline ("Last seen 2h ago"). Bonus chip: "Counts toward your bonus" (good), "Not hunting", "Other ground", "Offline". Your own card: "+20% to your Hunt XP". Kick only for the leader, never on yourself.
 - Chat (`card card-flush chat` in a `.grid-2` with Invites):
 
 ```html
@@ -1671,11 +1698,11 @@ Seven columns in one ruled strip; below 900px, seven rows.
 ```
 
   Newest at the bottom; scroll the log to the bottom on new messages unless the reader has scrolled up. Message text is player text: always a text child, never markup.
-- Added with the live page (pages.css, Party): a refusal from chat (the rate limit, a message too long) shows for four seconds between the log and the composer as `<div class="chat-alert" role="alert"><svg>alert</svg><span>You are sending messages too quickly.</span></div>` (hidden otherwise). The "Found a party" form inside the `.empty` is `form.btn-row.empty-form`: centred, and its button drops the lone-button top margin `.empty .btn` gives, so the input and the button line up. The bonus summary is one chip under the page sub (`chip-violet` with `party` "+10% Hunt XP · 1 of your party here", or plain "No party bonus · nobody else here"); keep chip text short, chips never wrap.
+- Added with the live page (pages.css, Party): a refusal from chat (the rate limit, a message too long) shows for four seconds between the log and the composer as `<div class="chat-alert" role="alert"><svg>alert</svg><span>You are sending messages too quickly.</span></div>` (hidden otherwise). The "Found a party" form inside the `.empty` is `form.btn-row.empty-form`: centred, and its button drops the lone-button top margin `.empty .btn` gives, so the input and the button line up. The bonus summary is one chip under the page sub (`chip-good` with `party` "+10% Hunt XP · 1 of your party here", or plain "No party bonus · nobody else here"); keep chip text short, chips never wrap.
 
 ### 8.16 Hiscores (`?page=hiscores`)
 
-A `.hs-skills` row of chip tabs (`role="tablist"`, `aria-selected`): Total, then each skill with its icon. Then a card with the table from 7.21: `.hs-rank` (`.is-1` gold, `.is-2` silver, `.is-3` bronze), `.hs-name` with an avatar and the name, level and XP (`fmt`). Your row `tr.is-me`; `chip-violet` "You are #7" in the card head. Top 50. Phones: the XP column (`.hs-hide-sm`) and avatars hide.
+A `.hs-skills` row of word tabs (`button.chip`, `role="tablist"`, `aria-selected`): Total, then each skill by name. No icons: a tab is a word with a rule under the current one. Then a card with the table from 7.21: `.hs-rank` (`.is-1` gold, `.is-2` silver, `.is-3` bronze), `.hs-name` with an avatar and the name, level and XP (`fmt`). Your row `tr.is-me`; `chip-bone` "You are #7" in the card head. Top 50. Phones: the XP column (`.hs-hide-sm`) and avatars hide.
 
 Added with the live page (pages.css, Hiscores): the chip tabs carry `.hs-pick-tabs` as well, and a `select.select.hs-pick-select` of the same boards sits beside them. Below 600px the tabs hide and the select shows; above, the select stays hidden. The tabs take arrow keys, Home and End.
 
@@ -1733,7 +1760,7 @@ Added with the live page (pages.css, Hiscores): the chip tabs carry `.hs-pick-ta
 
 - Every icon-only control has an `aria-label` that names the thing ("Bog Sword: what it gives", "Remove Thane from the party").
 - Toggles use `aria-pressed`; tabs use `role="tablist"` / `role="tab"` / `aria-selected`; pick lists use `role="listbox"` / `role="option"` / `aria-selected`; the current nav row has `aria-current="page"`; today in the forecast has `aria-current="date"`.
-- Focus is always visible: a 2px `--focus` outline with a 2px offset on `:focus-visible` (pills draw it inside the pill; inputs use a violet ring). Never remove it.
+- Focus is always visible: a 2px `--focus` outline with a 2px offset on `:focus-visible` (entries draw it inside the line; inputs turn their edge bone). Never remove it.
 - Dialogs, confirms and the drawer trap focus and restore it (the helpers do this). Route changes: call `closeModals()` and focus `#view`.
 - Text is 4.5:1 or better: `--bone-faint` is the quietest text allowed. `--bone-ghost` is for decoration only.
 - Touch targets are 44px on touch screens; do not shrink `.btn`, `.chip` buttons, `.tier`, `.seg-btn`, `.qty-btn` or nav rows below `--tap`.

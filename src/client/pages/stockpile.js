@@ -100,13 +100,11 @@ export function storageCard(ctx, { pools, view, idBase, filters = true, hint = n
     ? h("div.seg", { role: "tablist", "aria-label": "Store" }, tabs)
     : h("h2.card-title", poolName(pools[0]));
 
+  // A filter is its own name. Four glyphs in a row asked the reader to learn them first.
   const chips = filters ? FILTERS.map((f) => h("button.chip", {
     type: "button",
     dataset: { filter: f.id },
-    "aria-label": f.icon ? f.label : null,
-    "data-tip": f.icon ? f.label : null,
-    "data-tip-touch": f.icon ? "off" : null,
-  }, f.icon ? iconEl(f.icon) : f.label)) : [];
+  }, f.label)) : [];
 
   const sortSel = h("select.select.select-sm", { id: `${idBase}Sort`, value: view.sort },
     SORTS.map(([id, label]) => h("option", { value: id }, label)));

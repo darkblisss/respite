@@ -5,116 +5,148 @@
    uses. Dark only. Other stylesheets read these through var()
    and never write a raw colour of their own where a token fits.
 
+   The materials: soot and ash for the ground, bone and linen for
+   the ink, tanned leather for work, iron for edges. Nothing here
+   is tinted violet any more, which is what lets violet mean
+   something.
+
    Colour has a job:
-     violet  the bench and the crews, focus, the current page
-     ember   the hunt, danger, things going wrong
-     gold    money and the one spend on a surface
-     good    health, gains, online
+     bone    ink, focus, the current page, the one plain spend
+     tan     the bench and the crews: work under way
+     ember   danger and damage: foe health, low health, a fall
+     veil    the Veil and nothing else: charge, techniques,
+             disciplines, Sovereigns
+     gold    money
+     good    your health, gains, online
    ============================================================ */
 
 :root {
   color-scheme: dark;
 
   /* ---- surfaces, from the ground up ---- */
-  --bg: #0b0910;            /* the page */
-  --surface-1: #141019;     /* cards, pills, rows that stand alone */
-  --surface-2: #1c1723;     /* raised: hover, buttons, slots */
-  --surface-3: #241d2d;     /* floating: tooltips, toasts, menus */
-  --surface-sunk: #0f0c14;  /* wells, inputs, bar tracks */
-  --scrim: rgba(6, 4, 10, .72);
+  --bg: #0d0c0a;            /* the page: soot */
+  --surface-1: #141210;     /* a sheet laid on the page: dialogs, the drawer */
+  --surface-2: #1b1815;     /* plates: buttons, slots, inputs on a sheet */
+  --surface-3: #25211b;     /* floating: tooltips, toasts, menus */
+  --surface-sunk: #090807;  /* wells, inputs, bar tracks, the tray */
+  --scrim: rgba(5, 4, 3, .8);
 
   /* v4 names, kept so old habits still land somewhere sensible */
   --panel: var(--surface-1);
   --panel-raised: var(--surface-2);
   --panel-deep: var(--surface-sunk);
 
-  /* ---- lines ---- */
-  --line-soft: rgba(232, 225, 213, .06);
-  --line: rgba(232, 225, 213, .1);
-  --line-strong: rgba(232, 225, 213, .16);
-  --wash: rgba(232, 225, 213, .04);       /* quiet fill for hover and neutral chips */
-  --wash-strong: rgba(232, 225, 213, .07);
+  /* ---- rules (the ledger is ruled, not boxed) ---- */
+  --line-soft: rgba(231, 224, 210, .075);
+  --line: rgba(231, 224, 210, .13);
+  --line-strong: rgba(231, 224, 210, .22);
+  --wash: rgba(231, 224, 210, .04);       /* quiet fill for hover */
+  --wash-strong: rgba(231, 224, 210, .075);
 
-  /* ---- text (contrast measured on --surface-3, the lightest surface) ---- */
-  --bone: #e8e1d5;          /* 12.5:1  names, numbers that matter */
-  --bone-dim: #b5adbb;      /* 7.5:1   body copy, secondary labels */
-  --bone-faint: #948c9f;    /* 5.0:1   meta, captions, eyebrows */
-  --bone-ghost: #5f586a;    /* 2.4:1   decoration and disabled only, never for reading */
-  --on-accent: #120e18;     /* text on solid violet, gold and ember */
+  /* ---- ink (contrast measured on --surface-3, the lightest surface) ---- */
+  --bone: #e7e0d2;          /* names, numbers that matter */
+  --bone-dim: #b8ae9d;      /* body copy, secondary labels */
+  --bone-faint: #938a7a;    /* meta, captions, small-caps labels */
+  --bone-ghost: #5c554a;    /* decoration and disabled only, never for reading */
+  --on-accent: #14110d;     /* text on solid bone, gold and ember */
 
   /* ---- accents ---- */
-  --violet: #9d82e0;
-  --violet-hi: #b9a4f2;
-  --violet-lo: #5b4891;
-  --violet-deep: #2a2140;
-  --violet-soft: rgba(157, 130, 224, .14);
-  --violet-edge: rgba(157, 130, 224, .42);
+  --tan: #b08a5b;
+  --tan-hi: #d2ae80;
+  --tan-lo: #6d5233;
+  --tan-deep: #231b12;
+  --tan-soft: rgba(176, 138, 91, .13);
+  --tan-edge: rgba(176, 138, 91, .42);
 
-  --ember: #d8743f;
-  --ember-hi: #eb9068;
-  --ember-lo: #7d3a2c;
-  --ember-deep: #2d1a18;
-  --ember-soft: rgba(216, 116, 63, .14);
-  --ember-edge: rgba(216, 116, 63, .42);
+  --ember: #cf5f2e;
+  --ember-hi: #ea8a5c;
+  --ember-lo: #7a3019;
+  --ember-deep: #26130c;
+  --ember-soft: rgba(207, 95, 46, .13);
+  --ember-edge: rgba(207, 95, 46, .45);
 
-  --gold: #d9b566;
-  --gold-hi: #ecd08f;
-  --gold-lo: #7a6232;
-  --gold-deep: #2a2215;
-  --gold-soft: rgba(217, 181, 102, .13);
-  --gold-edge: rgba(217, 181, 102, .4);
+  --gold: #d2ad5a;
+  --gold-hi: #e8cd8a;
+  --gold-lo: #77602c;
+  --gold-deep: #241d10;
+  --gold-soft: rgba(210, 173, 90, .12);
+  --gold-edge: rgba(210, 173, 90, .4);
 
-  --good: #7cbfa4;
-  --good-hi: #9dd6bf;
-  --good-lo: #3f6e5d;
-  --good-soft: rgba(124, 191, 164, .13);
-  --good-edge: rgba(124, 191, 164, .38);
+  --good: #8fb08a;
+  --good-hi: #b2d0ab;
+  --good-lo: #46603f;
+  --good-soft: rgba(143, 176, 138, .12);
+  --good-edge: rgba(143, 176, 138, .38);
 
-  --warn: #e3a857;
-  --warn-soft: rgba(227, 168, 87, .13);
-  --warn-edge: rgba(227, 168, 87, .4);
+  --warn: #dba24f;
+  --warn-soft: rgba(219, 162, 79, .12);
+  --warn-edge: rgba(219, 162, 79, .4);
 
   --bad: var(--ember-hi);
   --bad-soft: var(--ember-soft);
   --bad-edge: var(--ember-edge);
 
-  --focus: #b9a4f2;
-  --focus-ring: 0 0 0 3px rgba(157, 130, 224, .28);
+  /* The Veil. Reserved: if it is violet, it is supernatural. */
+  --veil: #a48ce8;
+  --veil-hi: #c8b8f8;
+  --veil-lo: #58458f;
+  --veil-deep: #1c1630;
+  --veil-soft: rgba(164, 140, 232, .13);
+  --veil-edge: rgba(164, 140, 232, .42);
 
-  /* ---- health and the Veil ---- */
-  --hp: #7cbfa4;
-  --hp-deep: #3f6e5d;
-  --foe: #d8743f;
-  --foe-deep: #7d3a2c;
-  --veil: #a88ee6;
-  --veil-deep: #4a3a7a;
+  --focus: #e7e0d2;
+  --focus-ring: 0 0 0 3px rgba(231, 224, 210, .2);
+
+  /* ---- health ---- */
+  --hp: #8fb08a;
+  --hp-deep: #46603f;
+  --foe: #cf5f2e;
+  --foe-deep: #7a3019;
 
   /* ---- rarity ---- */
-  --r-common: #a59eb0;
-  --r-uncommon: #7cbfa4;
-  --r-rare: #7aa2dc;
-  --r-epic: #b88bdb;
-  --r-legendary: #dcb462;
-  --r-relic: #e07a4c;
+  --r-common: #a9a294;
+  --r-uncommon: #8fb08a;
+  --r-rare: #7f9fcf;
+  --r-epic: #b18ad6;
+  --r-legendary: #d9b25e;
+  --r-relic: #dd7245;
 
-  /* ---- type ---- */
-  --font-display: "Spectral", Georgia, "Times New Roman", serif;
-  --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* ---- type ----
+     IM Fell English is the ink: names, titles, the state of a fight. One weight,
+     a roman and an italic, and it wants size: never under 16px.
+     It has only old-style figures, and its 1 is an I ("Lv 10" reads "Lv IO"). So the
+     display stack opens with EB Garamond, which index.html loads as a cut of ten
+     glyphs, 0 to 9 and nothing else (the `text=` on its font link). Every letter
+     falls through it to the Fell type; every figure is caught by it. If that link
+     ever loads the whole family, headings turn Garamond: keep the `text=`.
+     Alegreya Sans is the hand that fills the ledger in. Its figures are old-style
+     by default; anything that counts asks for lining tabular ones (.num, or
+     --figures on font-variant-numeric). */
+  --font-display: "EB Garamond", "IM Fell English", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --font-ui: "Alegreya Sans", "Gill Sans", "Gill Sans MT", "Trebuchet MS", system-ui, sans-serif;
+  --figures: lining-nums tabular-nums;
 
-  --text-2xs: 11px;   /* eyebrows and tags, always uppercase and tracked */
-  --text-xs: 12px;    /* meta, chips, timestamps */
-  --text-sm: 13px;    /* secondary copy, nav */
-  --text-md: 14px;    /* body */
-  --text-lg: 16px;    /* lead copy */
-  --text-xl: 18px;    /* card titles (display) */
-  --text-2xl: 22px;   /* modal and section titles (display) */
-  --text-3xl: 28px;   /* page titles (display) */
-  --text-4xl: 36px;   /* hero numbers (display) */
+  --text-2xs: 12px;   /* the smallest figures: wear on a slot, a count in a corner */
+  --text-xs: 13px;    /* meta, timestamps */
+  --text-sm: 14px;    /* secondary copy, nav meta */
+  --text-md: 15px;    /* body */
+  --text-lg: 17px;    /* lead copy */
+  --text-xl: 21px;    /* entry and section names (display) */
+  --text-2xl: 27px;   /* dialog and section titles (display) */
+  --text-3xl: 38px;   /* page titles (display) */
+  --text-4xl: 54px;   /* hero numbers, the state of a fight (display) */
+  --text-5xl: 76px;   /* the one thing a page is about */
 
-  --lh-tight: 1.2;
+  /* Labels are true small caps, which stand about half as tall as the size they are
+     set at: a 16px label reads the way an 11px line of capitals used to. */
+  --caps-sm: 15px;    /* a word beside a name: a tag, a kind, "Lv" */
+  --caps: 16px;       /* labels, column heads, the breadcrumb */
+  --caps-lg: 18px;    /* buttons */
+
+  --lh-tight: 1.15;
   --lh: 1.45;
   --lh-loose: 1.6;
-  --tracking-caps: .12em;
+  --tracking-caps: .1em;
 
   /* ---- space: a 4px step ---- */
   --sp-0: 2px;
@@ -129,27 +161,34 @@
   --sp-10: 40px;
   --sp-12: 48px;
   --sp-16: 64px;
+  --sp-20: 80px;
 
-  /* ---- radii ---- */
-  --r-xs: 4px;      /* tags, deltas */
-  --r-sm: 6px;      /* small controls inside other controls */
-  --r-md: 10px;     /* buttons, inputs, slots, rows */
-  --r-lg: 14px;     /* cards, pills */
-  --r-xl: 18px;     /* heroes, dialogs */
-  --r-pill: 999px;  /* chips, badges */
+  /* ---- corners ----
+     Most things are cut square. A plate you can press is eased by 2px, a sheet
+     that floats by 4px, and only a dot is round. The old names stay as aliases
+     so page code written against them lands on the new shapes. */
+  --r-0: 0;
+  --r-plate: 2px;
+  --r-sheet: 4px;
+  --r-xs: 0;
+  --r-sm: 2px;
+  --r-md: 2px;
+  --r-lg: 2px;
+  --r-xl: 4px;
+  --r-pill: 2px;
 
-  /* ---- depth ---- */
-  --hi: inset 0 1px 0 rgba(255, 255, 255, .04);
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, .35);
-  --shadow-card: inset 0 1px 0 rgba(255, 255, 255, .035), 0 1px 2px rgba(0, 0, 0, .3), 0 18px 36px -28px rgba(0, 0, 0, .9);
-  --shadow-pop: 0 14px 34px rgba(0, 0, 0, .55), 0 2px 6px rgba(0, 0, 0, .35);
-  --shadow-modal: 0 32px 80px rgba(0, 0, 0, .65), 0 4px 14px rgba(0, 0, 0, .4);
+  /* ---- depth: only what floats casts a shadow ---- */
+  --hi: none;
+  --shadow-1: none;
+  --shadow-card: none;
+  --shadow-pop: 0 18px 40px rgba(0, 0, 0, .6), 0 2px 6px rgba(0, 0, 0, .45);
+  --shadow-modal: 0 40px 100px rgba(0, 0, 0, .75), 0 4px 14px rgba(0, 0, 0, .5);
 
   /* ---- motion ---- */
   --dur-1: 120ms;   /* hover, press */
   --dur-2: 180ms;   /* dialogs, tooltips */
   --dur-3: 260ms;   /* sheets, drawer */
-  --bar-dur: 140ms; /* progress bars: short and linear, they move several times a second */
+  --bar-dur: 140ms; /* progress lines: short and linear, they move several times a second */
   --ease: cubic-bezier(.2, .7, .2, 1);
   --ease-in: cubic-bezier(.4, 0, 1, 1);
 
@@ -162,19 +201,20 @@
   --z-tip: 100;
 
   /* ---- the shell ---- */
-  --topbar-h: 64px;
+  --topbar-h: 60px;
   --hpline-h: 0px;          /* the phone health line under the topbar */
-  --sidebar-w: 232px;
-  --content-max: 1180px;
-  --gutter: 32px;           /* page side padding */
-  --page-gap: 24px;         /* between blocks on a page */
-  --card-pad: 20px;
-  --grid-gap: 16px;
+  --sidebar-w: 212px;
+  --content-max: 1200px;
+  --gutter: 44px;           /* page side padding */
+  --page-gap: 44px;         /* between blocks on a page: whitespace does the work borders did */
+  --card-pad: 0px;          /* a section has no box, so it has no padding of its own */
+  --sheet-pad: 22px;        /* dialogs and the drawer still do */
+  --grid-gap: 28px;
   --tap: 32px;              /* the floor for control sizes; 44px on touch */
 }
 
 @media (max-width: 1279px) {
-  :root { --gutter: 28px; }
+  :root { --gutter: 32px; }
 }
 
 @media (max-width: 1023px) {
@@ -182,23 +222,24 @@
     --topbar-h: 56px;
     --hpline-h: 3px;
     --gutter: 24px;
+    --page-gap: 36px;
   }
 }
 
 @media (max-width: 599px) {
   :root {
     --gutter: 16px;
-    --page-gap: 16px;
-    --card-pad: 16px;
-    --grid-gap: 12px;
+    --page-gap: 32px;
+    --sheet-pad: 16px;
+    --grid-gap: 20px;
+    --text-3xl: 32px;
+    --text-4xl: 40px;
+    --text-5xl: 54px;
   }
 }
 
 @media (max-width: 379px) {
-  :root {
-    --gutter: 12px;
-    --card-pad: 14px;
-  }
+  :root { --gutter: 12px; }
 }
 
 @media (pointer: coarse) {

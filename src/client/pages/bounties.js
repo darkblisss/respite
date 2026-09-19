@@ -58,7 +58,7 @@ export default {
         hint = `Kills on ${region.name} ground count, in any zone.`;
       } else {
         const trade = tradeFor(b);
-        kind = h("span.chip.chip-violet", iconEl(trade ? trade.icon : "hammer"), trade ? trade.name : "Gathering");
+        kind = h("span.chip.chip-tan", iconEl(trade ? trade.icon : "hammer"), trade ? trade.name : "Gathering");
         hint = `Every ${itemName(b.targetId)} your crews bring in counts.`;
       }
       const R = { count: h("b"), fill: h("i"), claim: h("button.btn.btn-gold", { type: "button", onClick: () => ctx.dispatch("claimBounty") }) };
@@ -74,7 +74,7 @@ export default {
             h("div.chip-row",
               kind,
               h("span.chip.chip-gold", iconEl("coin"), `Pays ${fmtGold(b.gold)}`),
-              h("span.chip.chip-violet", iconEl("sparkle"), "An hour of double XP"))),
+              h("span.chip.chip-good", iconEl("sparkle"), "An hour of double XP"))),
           h("div.bounty-foot", h("span.small.muted", hint), R.claim)),
       };
     }
@@ -91,12 +91,12 @@ export default {
       const R = { left: h("span"), fill: h("i") };
       return {
         R,
-        node: h("section.card", { "data-tone": "violet" },
+        node: h("section.card", { "data-tone": "tan" },
           h("div.card-head",
             h("div",
               h("h2.card-title", iconEl("sparkle"), mult === 2 ? "Double experience" : `×${mult} experience`),
               h("p.card-sub", "The bounty's reward. Every skill earns it while it lasts, the hunt included.")),
-            h("div.card-actions", h("span.chip.chip-violet", iconEl("clock"), R.left))),
+            h("div.card-actions", h("span.chip", iconEl("clock"), R.left))),
           h("div.bar", { "aria-hidden": "true" }, R.fill)),
       };
     }

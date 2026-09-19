@@ -35,7 +35,7 @@ function cardInner(c, mine) {
     h("span.hstack.gap-3",
       h("span.art.art-sm", { "aria-hidden": "true" }, iconEl(c.icon)),
       h("span.class-name", c.name),
-      mine ? h("span.tag.tag-violet.ml-auto", "Yours") : null),
+      mine ? h("span.tag.tag-veil.ml-auto", "Yours") : null),
     h("span.class-blurb", c.blurb),
     h("span.chip-row", numbers(c).map((t) => h("span.chip", t))),
     h("span.class-veil", `${c.veilName}. ${c.veilNote}`),
@@ -62,7 +62,7 @@ registerPopup("class", (ctx) => {
         body: "Set once. It can't be changed.",
         confirmText: `Become a ${c.name}`,
         art: c.icon,
-        artTone: "violet",
+        artTone: "veil",
       });
       if (!sure || m.closed) return;
       const res = await ctx.dispatch("pickClass", { id: c.id });
@@ -78,7 +78,7 @@ registerPopup("class", (ctx) => {
   const cards = GameData.CLASSES.map((c) => (choosing
     ? h("button.card.card-link.class-card", { type: "button", onClick: () => choose(c) }, cardInner(c, false))
     // A look, not a choice: no pointer, no press.
-    : h("div.card.vstack.gap-3", { "data-tone": held.id === c.id ? "violet" : null }, cardInner(c, held.id === c.id))));
+    : h("div.card.vstack.gap-3", { "data-tone": held.id === c.id ? "veil" : null }, cardInner(c, held.id === c.id))));
 
   m = openModal({
     title: choosing ? "Choose your discipline" : "Disciplines",
