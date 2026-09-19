@@ -29,18 +29,22 @@
      the way mail already does.
 
    FAIRNESS
-   Solo, at most CONFIG.hunt.maxFoes are on you at once. A party of
-   four sharing three foes would be four times as safe, so the roster
-   scales with the party and each foe holds one target, handed to
-   whoever has fewest on them. Per hunter the pressure lands about
-   where it does alone, which is what was asked for: the bonus for
-   partying is the 5% and the company, not an easier fight.
+   A party fights the same roster a lone hunter does -- never more
+   than CONFIG.hunt.maxFoes at once -- but each foe is scaled to the
+   warband: its health and its attack both rise with the number
+   standing. Nobody holds a foe of their own; every swing it takes is
+   aimed at whoever is standing, in turn, so the pressure lands across
+   the party rather than four separate fights running side by side.
+   One bigger thing, shared, instead of four small ones.
 
    WHAT A KILL PAYS
-   Every blow is recorded against the foe that took it, so a kill
-   splits its XP and gold by share of the damage that killed it.
-   Drops cannot be halved, so they go to whoever hurt it most, ties
-   to the killing blow.
+   Contribution is 70% of the damage you dealt and 30% of the damage
+   you took, so holding the line counts for something without paying
+   better than swinging. XP follows contribution. Gold is equal --
+   everyone who was there did the encounter. Drops are rolled for each
+   hunter separately, so nobody races for a last hit. And the kill
+   itself is credited to everyone who actually hurt it: one shared
+   encounter, not four independent corpses.
    ============================================================ */
 
 import { CONFIG } from "./config.js";
@@ -75,6 +79,8 @@ export function makeHunter(userId, stats, { hp = null, heals = [] } = {}) {
     swing: 0, veil: 0, volley: 0, streak: 0,
     down: false,
     dmg: 0,
+    // What they have absorbed. Thirty percent of a share is this.
+    taken: 0,
     owed: { xp: 0, gold: 0, kills: 0, slain: [], drops: [], died: null, remedies: 0 },
   };
 }
@@ -103,12 +109,11 @@ export function newEncounter({ id, partyId, tier, zone, seed, hunters, kind = "n
   if (e.kind === "sovereign") {
     e.enrageAt = GameData.SOVEREIGN.enrageMs;
     spawn(e, rng, sovereignOf(tier), false);
-    // Two at its back for one hunter, and that guard scales with the warband as the roster does.
-    for (let i = 0; i < GameData.SOVEREIGN.escorts * standing(e).length; i++) spawn(e, rng, rollFoe(tier, z, rng).mob, true);
+    // Two at its back, warband or not: they are scaled, not multiplied.
+    for (let i = 0; i < GameData.SOVEREIGN.escorts; i++) spawn(e, rng, rollFoe(tier, z, rng).mob, true);
   } else {
-    // Solo draws zone.sizes; a warband draws that many each, so the pressure per hunter holds.
-    const each = pickWeighted(z.sizes, rng);
-    const want = Math.min(maxFoes(e), each * standing(e).length);
+    // Exactly what the zone fields for one hunter.
+    const want = Math.min(maxFoes(), pickWeighted(z.sizes, rng));
     for (let i = 0; i < want; i++) {
       const r = rollFoe(tier, z, rng);
       spawn(e, rng, r.mob, r.elite);
@@ -123,7 +128,6 @@ export function newEncounter({ id, partyId, tier, zone, seed, hunters, kind = "n
       u.volley = GameData.TECHNIQUE.volley.casts;
     }
   });
-  retarget(e, rng);
   return e;
 }
 
@@ -134,51 +138,43 @@ function diceAt(e) {
 
 export const standing = (e) => e.hunters.filter((u) => !u.down);
 
-// Three foes a hunter, as a lone hunter faces, and never more than the party could hold.
-const maxFoes = (e) => H.maxFoes * Math.max(1, standing(e).length);
+// The same ceiling a lone hunter faces. A party gets bigger foes, not more of them.
+const maxFoes = () => H.maxFoes;
 
+// How much of a foe a party is worth: its health and its attack both ride this.
+const partyScale = (e) => Math.max(1, standing(e).length);
+
+/* One foe, sized for the party that is facing it: health and attack both times the
+   number standing. A four fights a thing with four times the health hitting four
+   times as hard, spread across four of them -- which is the same fight each of them
+   would have alone, made into one shared one. `scale` is kept on the foe so a hunter
+   going down mid-fight cannot resize what is already on the floor. */
 function spawn(e, rng, mob, elite, ambush = false) {
   const z = getZone(e.zone);
   const power = z.power || 1;
+  const scale = partyScale(e);
   const n = foeNumbers(mob, elite, power);
+  const hp = Math.round(n.hp * scale);
   const f = {
-    uid: e.uid++, id: mob.id, elite: !!elite, power, hp: n.hp, max: n.hp, ambush: !!ambush,
+    uid: e.uid++, id: mob.id, elite: !!elite, power, scale, hp, max: hp, ambush: !!ambush,
     timer: ambush ? 300 + rng() * 400 : mob.speed * (0.45 + rng() * 0.35),
     bleed: 0, bleedTimer: 0,
-    target: null,
-    // Who has hurt it, and by how much: the split a kill pays out by.
+    // Who has hurt it, and by how much: the share a kill pays out by.
     by: {},
   };
   e.foes.push(f);
   return f;
 }
 
-/* Hands every untargeted foe to whoever has fewest on them, ties broken by the
-   encounter's dice so it is not always the first in the list. Called on a spawn,
-   and again whenever a hunter goes down. */
-function retarget(e, rng) {
+/* Nobody owns a foe. Each blow it throws goes to whoever is standing, taken in turn
+   from a marker that walks the party, so a foe scaled for four spreads those four
+   blows' worth across the four of them instead of pounding one. The marker lives on
+   the encounter, not the foe, so the spread holds across the whole roster. */
+function nextTarget(e) {
   const up = standing(e);
-  if (!up.length) return;
-  const load = new Map(up.map((u) => [u.userId, 0]));
-  e.foes.forEach((f) => {
-    if (f.target && load.has(f.target)) load.set(f.target, load.get(f.target) + 1);
-    else f.target = null;
-  });
-  e.foes.forEach((f) => {
-    if (f.target) return;
-    let least = Infinity;
-    let pick = [];
-    for (const u of up) {
-      const n = load.get(u.userId);
-      if (n < least) {
-        least = n;
-        pick = [u];
-      } else if (n === least) pick.push(u);
-    }
-    const u = pick[Math.floor(rng() * pick.length) % pick.length];
-    f.target = u.userId;
-    load.set(u.userId, least + 1);
-  });
+  if (!up.length) return null;
+  e.turn = ((e.turn || 0) + 1) % up.length;
+  return up[e.turn];
 }
 
 const hunterOf = (e, userId) => e.hunters.find((u) => u.userId === userId) || null;
@@ -271,7 +267,6 @@ function reinforce(ctx) {
     const r = rollFoe(e.tier, z, ctx.rng);
     joined.push(spawn(e, ctx.rng, r.mob, r.elite, true));
   }
-  retarget(e, ctx.rng);
   joined.forEach((f) => ctx.fx(f.uid, "join", 0));
 }
 
@@ -285,9 +280,9 @@ function enrageStep(ctx) {
 
 /* ================= 3. BLOWS ================= */
 
-// Their own foe first, so a hunter fights what is on them; anything else if it is down.
-function pickFoe(e, u) {
-  return e.foes.find((f) => f.target === u.userId) || e.foes[0] || null;
+// One roster, shared: everyone swings at the same thing, the first still standing.
+function pickFoe(e, _u) {
+  return e.foes[0] || null;
 }
 
 function hurt(e, u, f, amount) {
@@ -372,15 +367,14 @@ function foeSwing(ctx, f) {
   const mob = getMonster(f.id);
   f.timer += mob.speed;
 
-  let u = hunterOf(e, f.target);
-  if (!u || u.down) {
-    retarget(e, ctx.rng);
-    u = hunterOf(e, f.target);
-  }
+  const u = nextTarget(e);
   if (!u || u.down) return;
   const s = u.stats;
 
-  let raw = foeNumbers(mob, f.elite, f.power).attack * (f.ambush ? H.foeAmbush : 1);
+  /* Scaled to the warband, as its health is. It swings no more often than it would
+     alone, so a four takes four hunters' worth of damage spread over four of them:
+     about what each of them would have taken fighting it on their own. */
+  let raw = foeNumbers(mob, f.elite, f.power).attack * (f.scale || 1) * (f.ambush ? H.foeAmbush : 1);
   if (mob.archetype === "sovereign") raw *= 1 + e.enrage * GameData.SOVEREIGN.enrage;
   raw *= 1 - mitigation(s.defence, e.tier);
   if (s.resilient && u.hp < s.maxHp * 0.35) raw *= 0.8;
@@ -394,6 +388,7 @@ function foeSwing(ctx, f) {
   f.ambush = false;
   const dmg = landed(raw, ctx.rng);
   u.hp -= dmg;
+  u.taken += dmg;
   ctx.fx(u.userId, dmg <= 0 ? "glance" : ambush ? "ambushed" : blunted ? "block" : "hurt", dmg);
 
   if (s.klass === "warrior") u.veil = Math.min(H.veilMax, u.veil + Math.round(s.veilGain / 2));
@@ -440,14 +435,17 @@ function fall(ctx, u, mob) {
   u.hp = 0;
   u.owed.died = mob.id;
   ctx.fx(u.userId, "fall", 0);
-  retarget(ctx.e, ctx.rng);
 }
 
 /* ================= 4. WHAT A KILL PAYS ================= */
 
-/* XP and gold split by share of the damage that killed it, so a hunter who
-   landed a tenth of it takes a tenth. Drops cannot be halved: they go to whoever
-   hurt it most, and the killing blow breaks a tie. */
+/* A share of an encounter is 70% of the damage you dealt and 30% of the damage you
+   took, both measured across the whole encounter, so a hunter holding the line is
+   paid for it without being paid better than one swinging. XP follows that share.
+   Gold does not: everyone who hurt it gets the same, because they all did the same
+   encounter. Drops are an entry each, rolled separately in each hunter's own save,
+   so there is no last-hit to race for. And the kill is credited to everyone who
+   actually hurt it -- one shared encounter, not four corpses. */
 function killFoe(ctx, f) {
   const e = ctx.e;
   const i = e.foes.indexOf(f);
@@ -459,36 +457,35 @@ function killFoe(ctx, f) {
   const n = foeNumbers(mob, f.elite, f.power);
   ctx.fx(f.uid, "kill", 0);
 
-  const total = Object.keys(f.by).reduce((sum, k) => sum + f.by[k], 0);
   const gold = n.gold[0] + Math.floor(ctx.rng() * (n.gold[1] - n.gold[0] + 1));
-  let best = null;
-  let bestDmg = -1;
+  const xp = n.xp * z.xp;
+  const hurtIt = e.hunters.filter((u) => (f.by[u.userId] || 0) > 0);
 
   e.hunters.forEach((u) => {
-    const mine = f.by[u.userId] || 0;
-    if (mine > bestDmg) {
-      bestDmg = mine;
-      best = u;
-    }
-    if (!(mine > 0) || !(total > 0)) return;
-    const share = mine / total;
-    u.owed.xp += n.xp * z.xp * share;
-    u.owed.gold += gold * share;
-
+    const share = contributionOf(e, u);
+    if (share > 0) u.owed.xp += xp * share;
   });
 
-  /* One corpse is one kill. Crediting everyone who landed a blow would write four
-     kills into a four's tally and onto the Monsters killed board for a single foe,
-     which the board would be lying about. It goes to whoever hurt it most, with
-     its id, so the slay bounty, the m: counter and the bestiary all see the same
-     kill a lone hunter's would be. The drop follows it: neither can be halved. */
-  if (best && bestDmg > 0) {
-    best.owed.kills++;
-    best.owed.slain.push({ id: mob.id, elite: !!f.elite });
-    best.owed.drops.push({ id: mob.id, elite: !!f.elite });
-  }
+  hurtIt.forEach((u) => {
+    u.owed.gold += gold;
+    u.owed.kills++;
+    u.owed.slain.push({ id: mob.id, elite: !!f.elite });
+    u.owed.drops.push({ id: mob.id, elite: !!f.elite });
+  });
 
   if (!e.foes.length) e.over = "cleared";
+}
+
+/* A hunter's share of the encounter so far. With nothing taken by anyone the whole
+   of it rides on damage dealt, rather than handing out the 30% for standing still. */
+export function contributionOf(e, u) {
+  const P = CONFIG.party;
+  const totalDmg = e.hunters.reduce((n, x) => n + x.dmg, 0);
+  const totalTaken = e.hunters.reduce((n, x) => n + x.taken, 0);
+  if (!(totalDmg > 0)) return 0;
+  const dealt = u.dmg / totalDmg;
+  if (!(totalTaken > 0)) return dealt;
+  return P.contribDealt * dealt + P.contribTaken * (u.taken / totalTaken);
 }
 
 /* ================= 5. READING ONE ================= */
@@ -501,12 +498,13 @@ export function encounterView(e) {
     over: e.over,
     foes: e.foes.map((f) => ({
       uid: f.uid, id: f.id, elite: f.elite,
-      hp: Math.max(0, Math.ceil(f.hp)), max: f.max, target: f.target,
+      hp: Math.max(0, Math.ceil(f.hp)), max: f.max,
     })),
     hunters: e.hunters.map((u) => ({
       userId: u.userId, down: u.down,
       hp: Math.max(0, Math.ceil(u.hp)), max: u.stats.maxHp,
-      dmg: Math.round(u.dmg),
+      dmg: Math.round(u.dmg), taken: Math.round(u.taken),
+      share: Math.round(contributionOf(e, u) * 100),
     })),
   };
 }

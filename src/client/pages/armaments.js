@@ -49,15 +49,19 @@ function commanderName(ctx) {
 
 /* ================= 1. THE PAPERDOLL ================= */
 
+/* A worn slot is a small square of the piece's own art, bordered in its rarity.
+   No name under it and no label over it: the grid is read by shape and colour, and
+   the piece's name is one press away in its own sheet (and on the button's label
+   for anyone reading it aloud). An empty slot says what it is instead, because
+   there the name is the only thing worth saying. */
 function dollSlot(state, slot) {
   const key = state.equipment[slot];
   const label = SLOT_LABELS[slot];
   const d = key ? itemDef(key) : null;
   if (!d) {
     return h("div.doll-slot.is-empty", { role: "img", "aria-label": `${label}: empty` },
-      h("span.doll-slot-top", h("span.doll-slot-l", label)),
       h("span.doll-slot-art", iconEl(SLOT_GLYPHS[slot])),
-      h("span.doll-slot-name", "Empty"));
+      h("span.doll-slot-name", label));
   }
   const twoHands = slot === "weapon" && d.twoHanded;
   return h("button.doll-slot", {
@@ -66,10 +70,9 @@ function dollSlot(state, slot) {
     "data-rarity": d.rarity || "common",
     // The spanning slot says what it covers to those who cannot see it span.
     dataset: { key, slot, label: twoHands ? "Weapon, both hands" : label, name: itemName(key) },
+    title: itemName(key),
   },
-    h("span.doll-slot-top", h("span.doll-slot-l", label)),
-    h("span.doll-slot-art", iconEl(d.icon)),
-    h("span.doll-slot-name", itemName(key)));
+    h("span.doll-slot-art", iconEl(d.icon)));
 }
 
 /* `link` puts a small quiet link in the card head ({ href, label }). The Satchel

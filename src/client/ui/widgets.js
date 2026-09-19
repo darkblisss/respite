@@ -29,7 +29,13 @@ export function qtyPicker({ value = 1, max = 9999, unlimited = false, allowUnlim
   const minChip = showMin ? h("button.chip", { type: "button", "data-q": "min" }, "Min") : null;
   const maxChip = h("button.chip", { type: "button", "data-q": "max" }, "Max");
   const noLimit = allowUnlimited ? h("button.chip.chip-wide", { type: "button", "data-q": "none" }, "No limit") : null;
-  const node = h("div.qty", h("div.qty-stepper", dec, input, inc), h("div.qty-presets", minChip, chips, maxChip, noLimit));
+  /* With no numbered presets, Min and Max are the two ends of the stepper itself:
+     one row of Min - value + Max, which is the whole decision in one line. Only a
+     picker that still offers preset counts keeps a second row for them. */
+  const inline = showMin && !chips.length && !noLimit;
+  const node = inline
+    ? h("div.qty.qty-inline", h("div.qty-stepper", minChip, dec, input, inc, maxChip))
+    : h("div.qty", h("div.qty-stepper", dec, input, inc), h("div.qty-presets", minChip, chips, maxChip, noLimit));
 
   // notify is false for redraws from outside, so a caller's onChange never loops back into refresh().
   const show = (notify = true) => {
@@ -47,7 +53,7 @@ export function qtyPicker({ value = 1, max = 9999, unlimited = false, allowUnlim
 
   dec.addEventListener("click", () => { pick.n = (pick.unlimited ? max : pick.n) - 1; pick.unlimited = false; show(); });
   inc.addEventListener("click", () => { if (!pick.unlimited) pick.n += 1; show(); });
-  on(node, "click", ".qty-presets .chip", (e, b) => {
+  on(node, "click", ".chip[data-q]", (e, b) => {
     const q = b.dataset.q;
     if (q === "none") pick.unlimited = true;
     else if (q === "max") { pick.unlimited = false; pick.n = max; }

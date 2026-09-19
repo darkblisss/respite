@@ -544,35 +544,37 @@ button.ap-link:hover span { text-decoration: underline; text-decoration-color: v
 /* The paperdoll: four slots either side of the figure. */
 .doll {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1fr);
-  gap: 10px;
-  align-items: stretch;
+  grid-template-columns: 72px minmax(0, 1fr) 72px;
+  gap: 14px;
+  align-items: center;
+  justify-content: center;
 }
 
 .doll-col {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  justify-content: center;
+  gap: 8px;
   min-width: 0;
 }
 
 .doll-slot {
   position: relative;
-  flex: 1 1 0;
-  min-height: 100px;
+  flex: 0 0 auto;
+  width: 72px;
+  aspect-ratio: 1;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  justify-items: center;
-  align-items: center;
-  gap: 2px;
-  padding: 7px 8px 9px;
+  place-items: center;
+  padding: 0;
   border-radius: var(--r-md);
-  border: 1px solid var(--line);
-  background: radial-gradient(80% 60% at 50% 55%, var(--rar-soft, transparent), transparent 75%), var(--surface-2);
+  border: 1px solid var(--rar, var(--line));
+  background: radial-gradient(80% 70% at 50% 45%, var(--rar-soft, transparent), transparent 75%), var(--surface-2);
   box-shadow: var(--hi);
   text-align: center;
-  transition: border-color var(--dur-1), background var(--dur-1);
+  transition: border-color var(--dur-1), background var(--dur-1), transform var(--dur-1);
 }
+
+.doll-slot:hover { transform: translateY(-1px); }
 
 button.doll-slot { cursor: pointer; }
 
@@ -604,13 +606,15 @@ button.doll-slot { cursor: pointer; }
 
 .doll-slot-art { display: grid; place-items: center; color: var(--rar, var(--bone-dim)); }
 .doll-slot[data-rarity="common"] .doll-slot-art { color: var(--bone-dim); }
-.doll-slot-art .ico { width: 26px; height: 26px; }
+.doll-slot-art .ico { width: 30px; height: 30px; }
+
+.doll-slot.is-empty { display: grid; grid-template-rows: auto auto; gap: 4px; align-content: center; }
 
 .doll-slot-name {
   max-width: 100%;
-  font-size: var(--text-xs);
+  font-size: 10.5px;
   font-weight: 500;
-  line-height: 1.25;
+  line-height: 1.2;
   color: var(--bone);
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -676,12 +680,11 @@ button.doll-slot { cursor: pointer; }
 }
 
 @media (max-width: 599px) {
-  .doll { grid-template-columns: 88px minmax(0, 1fr) 88px; gap: 8px; }
-  .doll-col { gap: 8px; }
-  .doll-slot { min-height: 96px; padding: 6px 6px 8px; }
-  .doll-slot-l { font-size: 10px; letter-spacing: .06em; }
-  .doll-slot-art .ico { width: 22px; height: 22px; }
-  .doll-slot-name { font-size: 11px; }
+  .doll { grid-template-columns: 58px minmax(0, 1fr) 58px; gap: 10px; }
+  .doll-col { gap: 6px; }
+  .doll-slot { width: 58px; }
+  .doll-slot-art .ico { width: 24px; height: 24px; }
+  .doll-slot-name { font-size: 9.5px; }
 
 }
 
@@ -752,24 +755,54 @@ button.doll-slot { cursor: pointer; }
 .arena-you .hpbar,
 .arena-you .veilbar { max-width: 240px; }
 
-/* The rest of the warband, under your own bars while the party is out. */
+/* The warband while the party is out: a square each, you first. Two across for a
+   pair, two over one for a three, two by two for a four -- everyone on screen at
+   once, with room to breathe rather than crammed into a column of thin rows. */
 .arena-band {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
   width: 100%;
-  max-width: 240px;
+  max-width: 300px;
   margin-top: 2px;
+  justify-items: center;
 }
+
+/* One alone takes the width; the third of a three sits centred under the first two. */
+.arena-band[data-n="1"] { grid-template-columns: minmax(0, 1fr); max-width: 170px; }
+.arena-band[data-n="3"] > .band-mate:last-child { grid-column: 1 / -1; }
 
 .band-mate {
-  display: grid;
-  grid-template-columns: minmax(0, 72px) minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
+  width: 100%;
+  max-width: 132px;
+  min-width: 0;
 }
 
+.band-art {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: radial-gradient(circle at 50% 28%, #2c2140, #120e17 75%);
+}
+
+.band-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 12%;
+}
+
+.band-mate.is-me .band-art { border-color: var(--violet-edge); }
 .band-mate.is-down { opacity: .45; }
+.band-mate.is-down .band-art img { filter: grayscale(1); }
+.band-mate .hpbar { width: 100%; }
 
 .band-name {
   overflow: hidden;
@@ -1210,6 +1243,7 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
      label for it. A mate's bar is not your bar, so it keeps out of the areas this grid names. */
   .arena-band { grid-column: 2; max-width: none; }
   .arena-band .hpbar { grid-area: auto; }
+  .band-mate { max-width: 104px; }
   .arena.is-party .arena-foes { grid-template-columns: minmax(0, 1fr); }
   .arena-you .veilbar { grid-area: veil; max-width: none; }
   .arena-you .veil-note { grid-area: note; text-align: left; }

@@ -531,6 +531,8 @@ export default {
       setAttr(goBtn, "disabled", down);
       setText(goBtn, down ? "Recovering" : c ? "Change hunt" : `Hunt the ${getZone(lastZone).name}`);
       setAttr(band, "hidden", true);
+      // Back to your own card when the party's fight is not what is on screen.
+      setAttr(you, "hidden", false);
       toggleClass(arena, "is-party", false);
     }
 
@@ -551,7 +553,7 @@ export default {
 
       setAttr(huntHead, "hidden", false);
       setText(huntTitle, `The ${zone.name} of ${region.name}`);
-      setText(huntSub, "The party's hunt · XP and gold split by the damage each of you deals");
+      setText(huntSub, "The party's hunt · XP by your share, gold and drops the same for everyone");
       const chip = `${hunters.length} out together`;
       if (chip !== sigs.company) {
         sigs.company = chip;
@@ -559,13 +561,8 @@ export default {
       }
       setAttr(company, "hidden", false);
 
-      // ---- you ----
-      setText(youName, commanderName(ctx));
-      const hp = mine ? Math.max(0, mine.hp) : 0;
-      const max = mine && mine.max > 0 ? mine.max : 1;
-      setWidth(youFill, (hp / max) * 100);
-      setText(youText, `${fmt(hp)} / ${fmt(max)}`);
-      toggleClass(you, "is-down", !!(mine && mine.down));
+      // Your own card gives way: in a party you are one square among the others.
+      setAttr(you, "hidden", true);
       setVeil(false);
 
       /* Whoever joined after an encounter had begun is in the session but not in that fight:
@@ -574,8 +571,9 @@ export default {
       const inEnc = (u) => !enc || enc.hunters.some((x) => sameId(x.userId, u.userId));
       const fighting = !!(enc && mine && inEnc(mine));
 
-      // ---- the rest of the warband ----
-      syncBand(hunters.filter((u) => !sameId(u.userId, me)), names, inEnc);
+      // ---- the warband, you first ----
+      const band4 = hunters.slice().sort((a, b) => (sameId(a.userId, me) ? -1 : sameId(b.userId, me) ? 1 : 0));
+      syncBand(band4, names, inEnc, me);
 
       // ---- what is happening ----
       let st = "Walking";
@@ -606,7 +604,8 @@ export default {
       /* A share is the damage you dealt over the damage the party dealt, which is the one
          figure worth watching in a fight whose spoils are split that way. */
       const total = hunters.reduce((n, u) => n + (u.dmg || 0), 0);
-      const share = total > 0 && mine ? (mine.dmg / total) * 100 : 0;
+      // The server's own figure: 70% of damage dealt, 30% of damage taken.
+      const share = mine && mine.share != null ? mine.share : 0;
       setAttr(kpis, "hidden", false);
       setAttr(hint, "hidden", true);
       setText(kKills.l, "Encounters");
@@ -627,29 +626,37 @@ export default {
     }
 
     // One row a member: their name, their health, and a mark on whoever has fallen or is waiting.
-    function syncBand(others, names, inEnc) {
-      const sig = others.map((u) => `${u.userId}:${u.down ? 1 : 0}`).join("|");
+/* The whole warband, you first, as squares: two across for a pair, two over one for
+   a three, two by two for a four. Everyone is on screen at once, which is the point
+   of hunting together, and a square each is the only shape that stays readable at
+   four. `data-n` is what the grid reads to lay them out. */
+    function syncBand(all, names, inEnc, me) {
+      const sig = all.map((u) => `${u.userId}:${u.down ? 1 : 0}`).join("|");
       if (sig !== sigs.band) {
         sigs.band = sig;
         mates.clear();
-        band.replaceChildren(...others.map((u) => {
+        band.replaceChildren(...all.map((u) => {
           const fill = h("i");
           const text = h("span");
-          const node = h("div.band-mate", { class: { "is-down": u.down } },
-            h("span.band-name", names.get(String(u.userId).toLowerCase()) || "Someone"),
+          const isMe = sameId(u.userId, me);
+          const label = isMe ? "You" : (names.get(String(u.userId).toLowerCase()) || "Someone");
+          const node = h("div.band-mate", { class: { "is-down": u.down, "is-me": isMe } },
+            h("div.band-art", h("img", { src: "assets/commander-default.webp", alt: "" })),
+            h("span.band-name", label),
             h("div.hpbar.hpbar-sm", fill, text));
           mates.set(String(u.userId).toLowerCase(), { fill, text });
           return node;
         }));
       }
-      others.forEach((u) => {
+      setAttr(band, "data-n", String(all.length));
+      all.forEach((u) => {
         const row = mates.get(String(u.userId).toLowerCase());
         if (!row) return;
         const max = u.max > 0 ? u.max : 1;
         setWidth(row.fill, (Math.max(0, u.hp) / max) * 100);
         setText(row.text, u.down ? "Fallen" : inEnc(u) ? `${fmt(Math.max(0, u.hp))} / ${fmt(max)}` : "Waiting");
       });
-      setAttr(band, "hidden", !others.length);
+      setAttr(band, "hidden", !all.length);
     }
 
     function paintGround(ctx, region, c) {

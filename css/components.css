@@ -2868,3 +2868,27 @@ button.chip:disabled { opacity: .45; }
     linear-gradient(180deg, transparent 62%, rgba(11, 9, 16, .45));
   border-radius: inherit;
 }
+
+/* The inline picker: Min and Max sit inside the stepper, so the row reads
+   Min - value + Max and nothing else. The chips lose their pill shape here and
+   take the stepper's ends instead, which is what makes it read as one control. */
+.qty-inline .qty-stepper { width: 100%; max-width: 420px; }
+.qty-inline .qty-input { flex: 1 1 auto; min-width: 0; }
+
+.qty-inline .chip[data-q] {
+  border: 0;
+  border-radius: 0;
+  min-width: 64px;
+  justify-content: center;
+  background: transparent;
+  color: var(--bone-dim);
+  font-size: var(--text-sm);
+}
+
+.qty-inline .chip[data-q="min"] { border-right: 1px solid var(--line-strong); }
+.qty-inline .chip[data-q="max"] { border-left: 1px solid var(--line-strong); }
+.qty-inline .chip[data-q]:hover { background: var(--wash-strong); color: var(--bone); }
+.qty-inline .chip[data-q][aria-pressed="true"] { background: var(--wash-strong); color: var(--bone); }
+
+/* The verb is the decision on this sheet, so it gets the width to say so. */
+.modal-center-foot > .modal-foot .btn { min-width: 220px; }

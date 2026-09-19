@@ -19,9 +19,9 @@ import { iconEl } from "../icons.js";
 import { openModal } from "../overlay.js";
 import { fmt, fmtGold, fmtStat, chancePct, plural } from "../format.js";
 import { registerPopup, openPopup } from "../widgets.js";
-import { GameData, getMonster, getZone, regionOfTier, tierLabel } from "../../../shared/registry.js";
+import { GameData, getMonster, getZone, regionOfTier, tierLabel, veilBandOfTier } from "../../../shared/registry.js";
+import { statsOf } from "../../../shared/stats.js";
 import { foeNumbers } from "../../../shared/combat.js";
-import { statsOf, mitigation } from "../../../shared/stats.js";
 import { xpMult } from "../../../shared/progression.js";
 import { companionBonus } from "../../../shared/companions.js";
 import { itemDef, itemName } from "../../../shared/items.js";
@@ -98,22 +98,16 @@ function foeBody(ctx, mob) {
   const state = ctx.state;
   const sov = mob.archetype === "sovereign";
   const n = foeNumbers(mob, false);
-  const you = statsOf(state);
-  // What reaches you in a minute of its swings, after your Defence on its own ground.
-  const perMinute = (n.attack * (1 - mitigation(you.defence, mob.tier)) * 60000) / mob.speed;
   const goldMult = 1 + companionBonus(state, "gold");
   const dropMult = 1 + companionBonus(state, "drops");
   const rare = companionBonus(state, "rare");
 
   const stats = h("div.stats",
     stat("Health", fmt(n.hp)),
-    stat("Attack", `${fmtStat(n.attack)} a blow`),
-    stat("Against you", `About ${fmtStat(perMinute)} a minute`),
-    // Its Defence as a number. What that works out to is "Against you", above.
+    stat("Attack", fmtStat(n.attack)),
     stat("Defence", fmtStat(mob.defence)),
     stat("Swings every", `${(mob.speed / 1000).toFixed(1)}s`),
-    stat("Experience", `${fmtStat(n.xp * xpMult(state, "warfare", ctx.now))} a kill, more deeper in`),
-    sov ? null : stat("Threat", `${n.threat} a kill, more deeper in`),
+    stat("Base XP", fmtStat(n.xp * xpMult(state, "warfare", ctx.now))),
     stat("Gold", `${fmtGold(Math.round(n.gold[0] * goldMult))} to ${fmtGold(Math.round(n.gold[1] * goldMult))}`, "gold"));
 
   if (sov) {
@@ -125,12 +119,20 @@ function foeBody(ctx, mob) {
   }
 
   const rows = mob.drops.map(([key, qty, chance]) => {
+    // "@reagent" is whichever of the five it happens to carry, rolled on the kill.
+    if (key === "@reagent") return note(`Reagent ×${qty}`, chancePct(Math.min(1, chance * dropMult)));
     const d = itemDef(key);
     return h("div.ap-row",
       h("button.ap-link", { type: "button", dataset: { item: key } }, iconEl(d ? d.icon : "unknown"), h("span", `${itemName(key)} ×${qty}`)),
       h("span.ap-val", chancePct(Math.min(1, chance * dropMult))));
   });
-  rows.push(sov ? note("Epic gear", "Always") : note("Elites drop", `×${GameData.ELITE.drops}`));
+  const band = veilBandOfTier(mob.tier);
+  if (sov) {
+    rows.push(note(`${band.name} Essence ×${GameData.SOVEREIGN.essence}`, "Always"));
+  } else {
+    rows.push(note("Elites drop", `×${GameData.ELITE.drops}`));
+    rows.push(note(`${band.name} Fragment ×${GameData.ELITE.fragments}`, "Elites, Inner and Core"));
+  }
   if (rare) rows.push(note("Finer gear", chancePct(rare)));
 
   const list = h("div.ap-list", rows);

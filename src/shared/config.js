@@ -202,6 +202,12 @@ const party = {
   maxSize: 4,
   huntBonusPerMember: 0.05,
   huntBonusCap: 0.15,           // the three others you can have, at 5% each
+
+  /* What a share of an encounter is worth. Damage dealt is most of it, but holding
+     the line is worth counting too, or the only way to be paid is to swing. Gold is
+     not split by this: everyone who was there gets the same. */
+  contribDealt: 0.70,
+  contribTaken: 0.30,
 };
 
 /* ================= 11. FORMULAS ================= */

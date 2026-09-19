@@ -403,7 +403,7 @@ function openActionPopup(ctx, skillId, actionId) {
       // No "Goes into..." note: it belongs on the item, not on the order sheet.
       listBlock,
       run,
-      h("div.ap-block", h("div.eyebrow", "How many"), picker.node),
+      h("div.ap-block", picker.node),
       plan,
     ],
     actions: actionsFor(false),

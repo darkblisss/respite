@@ -9,6 +9,7 @@
    ============================================================ */
 
 import { tierLabel } from "../../shared/registry.js";
+import { CONFIG } from "../../shared/config.js";
 import { h, el, setText, setAttr, toggleClass } from "../ui/dom.js";
 import { iconEl } from "../ui/icons.js";
 import { toast } from "../ui/overlay.js";
@@ -174,7 +175,7 @@ export default {
         h("div.page-actions",
           h("span.clock", { "data-tip": "World clock. Bounties and the Smuggler run on this." }, iconEl("clock"), clockText))),
       h("section.card",
-        cardHead("The Bonesetter", "bonesetter", "Always open. Remedies go into Belongings first. On the hunt one is taken whenever your health falls to 45% or less, the strongest first."),
+        cardHead("The Bonesetter", "bonesetter", `Always open. Remedies land in Belongings; pack the Satchel to take them out. Between encounters one is drunk at or below ${Math.round(CONFIG.hunt.remedyAt * 100)}% health.`),
         h("div.list", remedies.map((r) => r.node))),
       h("section.card",
         cardHead("The Smuggler", "hourglass", "Turns up twice a day on the world clock with whatever fell off the back of something. Each lot goes once.",

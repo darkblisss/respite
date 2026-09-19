@@ -147,15 +147,22 @@ export function createShell(app) {
      back to zero, the batch from the top, without walking to the page to do it. It is
      only there while something is actually running, and it is the only place it is --
      a skill's own page keeps its Stop, which is the choice that needs the walk. */
+  /* Stop first, then start: the same thing again from nothing, exactly as picking it
+     afresh would. Re-issuing the start alone only rewinds the count -- the action's own
+     progress and the fight in hand carry on -- which is not what "start over" means. */
   $.benchRestart.addEventListener("click", () => {
     const t = app.store && app.store.state ? app.store.state.tasks.skilling : null;
     if (!t) return;
-    app.dispatch("startSkill", { skillId: t.skillId, actionId: t.actionId, limit: t.limit == null ? null : t.limit });
+    const args = { skillId: t.skillId, actionId: t.actionId, limit: t.limit == null ? null : t.limit };
+    app.dispatch("stopSkill");
+    app.dispatch("startSkill", args);
   });
   $.huntRestart.addEventListener("click", () => {
     const c = app.store && app.store.state ? app.store.state.tasks.combat : null;
     if (!c || outWithParty) return;
-    app.dispatch("startHunt", { tier: c.tier, zone: c.zone, limit: c.limit == null ? null : c.limit });
+    const args = { tier: c.tier, zone: c.zone, limit: c.limit == null ? null : c.limit };
+    app.dispatch("pullBack");
+    app.dispatch("startHunt", args);
   });
   $.conn.addEventListener("click", () => app.openSettings());
   $.settings.addEventListener("click", () => app.openSettings());

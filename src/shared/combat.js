@@ -19,7 +19,7 @@ import {
   GameData, getMonster, getZone, foeOf, sovereignOf, regionOfTier,
   fragmentOfTier, essenceOfTier,
 } from "./registry.js";
-import { itemDef, makeKey, fineRarityFromRoll, prefixFromRoll, validKey, remedyTooWeak } from "./items.js";
+import { itemDef, validKey, remedyTooWeak } from "./items.js";
 import { ORDER, transact } from "./storage.js";
 import { statsOf, maxHp, mitigation, skillLevel } from "./stats.js";
 import { xpMult, partyMult, addXp } from "./progression.js";
@@ -107,16 +107,6 @@ export function foeNumbers(mob, elite, power = 1) {
 // "The Ash Stalker", "The Ashen Warden", "What Feeds The Roots".
 export const foeTitle = (mob) => (/^(The|What) /.test(mob.name) ? mob.name : `The ${mob.name}`);
 
-// Gear of a tier, in registry order: where rare finds and Sovereign pieces come from.
-const GEAR_BY_TIER = new Map();
-function gearOfTier(tier) {
-  let list = GEAR_BY_TIER.get(tier);
-  if (!list) {
-    list = Object.values(GameData.GEAR).filter((g) => g.tier === tier);
-    GEAR_BY_TIER.set(tier, list);
-  }
-  return list;
-}
 
 /* ================= 2. TAKING UP THE HUNT ================= */
 /* A hunt runs `limit` kills, or with no limit (null) until you pull back,
@@ -993,15 +983,13 @@ export function dropLoot(state, mob, elite, kN, env, at) {
     stashLoot(state, key, qty * qtyMult, env, at);
   });
 
-  // Companions with a nose for it turn up a finer piece now and then.
+  /* Companions with a nose for it turn something up now and then. It is a Veil
+     Fragment, not a piece of gear: the hunt pays in reagents, gold and the Veil,
+     and the bench is the only place armour and weapons come from. */
   const rare = companionBonus(state, "rare");
   const kKey = `k:${mob.tier}`;
   if (rare && roll(seed, kKey, kN, SALT.rare) < rare) {
-    const rarity = fineRarityFromRoll(roll(seed, kKey, kN, SALT.rareRarity));
-    const pool = gearOfTier(mob.tier);
-    const base = pool[Math.floor(roll(seed, kKey, kN, SALT.rarePick) * pool.length)].id;
-    const prefix = rarity === "relic" ? prefixFromRoll(base, roll(seed, kKey, kN, SALT.prefix)) : null;
-    const key = makeKey(base, rarity, `f${mob.tier}.${kN}`, prefix);
+    const key = fragmentOfTier(mob.tier);
     if (stashLoot(state, key, 1, env, at)) emit(state, env, "loot:found", { key, at });
   }
 }

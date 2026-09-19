@@ -759,7 +759,7 @@ function buildRegistry() {
        speed    shorter action time (gathering and artisans)
        gold     more gold from kills
        drops    kills drop materials more often
-       rare     chance a kill turns up a piece of uncommon-or-better gear
+       rare     chance a kill turns up a Veil Fragment
      Skill lists may use "gather", "trade" (gathering and artisans) or "all". */
 
   const RANK_NUMERALS = ["", "I", "II", "III", "IV", "V"];
@@ -809,8 +809,8 @@ function buildRegistry() {
       unlocks: [
         { bond: 5,  kind: "gold",  value: 0.10, text: "+10% gold from kills" },
         { bond: 10, kind: "drops", value: 0.10, text: "Kills drop materials 10% more often" },
-        { bond: 20, kind: "rare",  value: 0.01, text: "+1% rare find chance on kills" },
-        { rank: 3,  kind: "rare",  value: 0.01, text: "+1% rare find chance on kills" },
+        { bond: 20, kind: "rare",  value: 0.01, text: "+1% chance a kill leaves a Veil Fragment" },
+        { rank: 3,  kind: "rare",  value: 0.01, text: "+1% chance a kill leaves a Veil Fragment" },
       ],
     },
     {
@@ -821,7 +821,7 @@ function buildRegistry() {
       unlocks: [
         { bond: 5,  kind: "double", skills: ["gather"], value: 0.01, text: "+1% double yield on all gathering" },
         { bond: 10, kind: "speed",  skills: ["trade"],  value: 0.02, text: "Trade actions 2% quicker" },
-        { bond: 20, kind: "rare",   value: 0.01, text: "+1% rare find chance on kills" },
+        { bond: 20, kind: "rare",   value: 0.01, text: "+1% chance a kill leaves a Veil Fragment" },
         { rank: 3,  kind: "gold",   value: 0.05, text: "+5% gold from kills" },
       ],
     },

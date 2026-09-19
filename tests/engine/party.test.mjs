@@ -39,17 +39,13 @@ await run(async () => {
   {
     const e = start(1);
     check("a lone hunter meets what the zone fields", e.foes.length >= 1 && e.foes.length <= H.maxFoes, e.foes.length);
-    check("every foe has a target, and it is the only hunter", e.foes.every((f) => f.target === "u0"));
+    check("no foe is owned by anyone: the roster is shared", e.foes.every((f) => f.target === undefined));
     check("the encounter carries its own dice, not just its seed", typeof e.dice === "number" && e.dice !== e.seed);
 
     const four = start(4);
-    const load = {};
-    four.foes.forEach((f) => { load[f.target] = (load[f.target] || 0) + 1; });
-    const counts = Object.values(load);
-    check("four hunters draw four times the foes, capped", four.foes.length > start(1).foes.length && four.foes.length <= H.maxFoes * 4,
-      { one: start(1).foes.length, four: four.foes.length });
-    check("and the foes are spread evenly over them", Math.max(...counts) - Math.min(...counts) <= 1, load);
-    check("nobody is left without one to fight", Object.keys(load).length === four.hunters.length, load);
+    check("a four meets the same roster a lone hunter does", four.foes.length <= H.maxFoes, four.foes.length);
+    check("but each foe is scaled to the warband", four.foes.every((f) => f.scale === 4) && four.foes[0].max > start(1).foes[0].max,
+      { four: four.foes[0].max, one: start(1).foes[0].max });
   }
 
   section("The same fight however it is sliced");
@@ -125,10 +121,17 @@ await run(async () => {
     const xp = one.hunters.map((u) => u.owed.xp);
     const sum = xp[0] + xp[1];
     check("one foe's whole XP is paid out, and no more", sum > 0 && Number.isFinite(sum), { xp, total });
-    check("the split follows the damage, to the rounding", Math.abs((xp[0] / sum) - (one.hunters[0].dmg / (one.hunters[0].dmg + one.hunters[1].dmg))) < 0.02,
-      { xp, dmg: one.hunters.map((u) => Math.round(u.dmg)) });
-    check("a drop goes to one hunter, not both", one.hunters.filter((u) => u.owed.drops.length).length <= 1,
+    // 70% of the damage dealt and 30% of the damage taken, so a share sits between
+    // a pure damage split and an even one rather than tracking damage exactly.
+    const dealtShare = one.hunters[0].dmg / (one.hunters[0].dmg + one.hunters[1].dmg);
+    check("a share leans on damage dealt but not wholly", xp[0] / sum > 0.5 && xp[0] / sum < dealtShare + 0.01 && dealtShare > 0.5,
+      { xpShare: xp[0] / sum, dealtShare });
+    check("both hunters roll their own drop", one.hunters.every((u) => u.owed.drops.length > 0),
       one.hunters.map((u) => u.owed.drops.length));
+    check("gold is the same for both, not split", one.hunters[0].owed.gold === one.hunters[1].owed.gold && one.hunters[0].owed.gold > 0,
+      one.hunters.map((u) => u.owed.gold));
+    check("and the kill is credited to each of them", one.hunters.every((u) => u.owed.kills > 0),
+      one.hunters.map((u) => u.owed.kills));
   }
 
   section("When one of them goes down");
@@ -166,7 +169,7 @@ await run(async () => {
     const e = start(3, { seed: 88, zone: "core", tier: 3, kind: "sovereign", level: 60 });
     const sov = e.foes.find((f) => GameData.MONSTERS.find((m) => m.id === f.id).archetype === "sovereign");
     check("the Sovereign is there, once", !!sov && e.foes.filter((f) => GameData.MONSTERS.find((m) => m.id === f.id).archetype === "sovereign").length === 1);
-    check("its guard scales with the warband", e.foes.length > 1 + getZone("core").escorts, { foes: e.foes.length, escorts: getZone("core").escorts });
+    check("its guard is two, warband or not", e.foes.length === 1 + GameData.SOVEREIGN.escorts, { foes: e.foes.length, escorts: GameData.SOVEREIGN.escorts });
     const before = e.enrage;
     P.stepEncounter(e, GameData.SOVEREIGN.enrageMs + 1000);
     check("and it grows angrier on the clock", e.enrage > before, { before, now: e.enrage });
