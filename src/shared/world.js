@@ -317,12 +317,6 @@ function held(state, key, from) {
   return null;
 }
 
-// Wear is kept for what the camp still holds or wears: once the last of a piece has gone, so has its wear.
-function forgetWear(tx, state, key) {
-  if (!Object.hasOwn(state.wear, key) || haveQty(state, key) > 0) return;
-  if (!Object.values(state.equipment).includes(key)) tx.del(state.wear, key);
-}
-
 // null takes the whole stack; otherwise a whole number, at most what is there.
 function amountOf(qty, have) {
   if (qty == null) return have;
@@ -451,7 +445,6 @@ export function sellItem(state, { key, from, qty } = {}, env) {
   transact(state, (tx) => {
     tx.remove(from, key, n);
     tx.gold(gold, true);
-    forgetWear(tx, state, key);
   });
   emit(state, env, "item:sold", { key, qty: n, gold });
   return { ok: true, data: { gold } };
@@ -497,7 +490,6 @@ export function salvage(state, { key, from } = {}, env) {
     tx.remove(from, key, 1);
     if (!placeFor(state, out.mat, ORDER.material)) tx.fail("No room for what it breaks down into.");
     tx.stash(out.mat, out.qty, ORDER.material);
-    forgetWear(tx, state, key);
   });
   if (!res.ok) return res;
   emit(state, env, "item:salvaged", { key, mat: out.mat, qty: out.qty });

@@ -1,9 +1,9 @@
 /* ============================================================
    Respite · pages/armaments.js · Inventory
    ------------------------------------------------------------
-   What you carry and what you wear, under three tabs: Belongings,
-   the Satchel and your Discipline. The paperdoll and your Standing
-   stand beside all three.
+   What you carry and what you wear: Belongings and the Satchel
+   (both the slot grid the Stockpile page builds) stacked in one
+   column, with the paperdoll and your Standing beside them.
 
    Belongings hold everything -- gear, materials, remedies -- and
    stack normally. The Satchel is the combat loadout and stacks
@@ -27,7 +27,7 @@ import { openPopup } from "../ui/widgets.js";
 import { storageCard } from "./stockpile.js";
 import { CONFIG } from "../../shared/config.js";
 import { itemDef, itemName } from "../../shared/items.js";
-import { wearPct, bestRemedy, remedyHeals } from "../../shared/combat.js";
+import { bestRemedy, remedyHeals } from "../../shared/combat.js";
 import { GameData } from "../../shared/registry.js";
 import { statsOf, myClass, skillLevel } from "../../shared/stats.js";
 import { currentRegion } from "../../shared/world.js";
@@ -40,7 +40,6 @@ const LEFT = DOLL_ORDER.filter((s) => ARMOUR.has(s));
 const RIGHT = DOLL_ORDER.filter((s) => !ARMOUR.has(s));
 
 const pct = (x) => `${+((Number(x) || 0) * 100).toFixed(1)}%`;
-const wearClass = (p) => (p > 60 ? "is-fine" : p > 25 ? "is-worn" : "is-bad");
 
 // The account name, or "Commander" until there is one.
 function commanderName(ctx) {
@@ -60,7 +59,6 @@ function dollSlot(state, slot) {
       h("span.doll-slot-art", iconEl(SLOT_GLYPHS[slot])),
       h("span.doll-slot-name", "Empty"));
   }
-  const worn = wearPct(state, key) != null;
   const twoHands = slot === "weapon" && d.twoHanded;
   return h("button.doll-slot", {
     type: "button",
@@ -69,7 +67,7 @@ function dollSlot(state, slot) {
     // The spanning slot says what it covers to those who cannot see it span.
     dataset: { key, slot, label: twoHands ? "Weapon, both hands" : label, name: itemName(key) },
   },
-    h("span.doll-slot-top", h("span.doll-slot-l", label), worn ? h("span.doll-wear") : null),
+    h("span.doll-slot-top", h("span.doll-slot-l", label)),
     h("span.doll-slot-art", iconEl(d.icon)),
     h("span.doll-slot-name", itemName(key)));
 }
@@ -120,15 +118,8 @@ export function dollCard(ctx, { link = null } = {}) {
         toggleClass(right, "has-span", twoHands && RIGHT.includes("weapon"));
       }
 
-      // Wear moves with every kill, so it is painted in place.
       node.querySelectorAll("button.doll-slot[data-key]").forEach((b) => {
-        const p = wearPct(state, b.dataset.key);
-        const tag = b.querySelector(".doll-wear");
-        if (tag && p != null) {
-          setText(tag, `${p}%`);
-          ["is-fine", "is-worn", "is-bad"].forEach((c) => toggleClass(tag, c, c === wearClass(p)));
-        }
-        setAttr(b, "aria-label", `${b.dataset.label}: ${b.dataset.name}${p != null ? `, ${p}% condition` : ""}`);
+        setAttr(b, "aria-label", `${b.dataset.label}: ${b.dataset.name}`);
       });
 
       const k = myClass(state);
@@ -220,25 +211,11 @@ function satchelCard(ctx, view) {
   };
 }
 
-/* ================= 4. DISCIPLINE ================= */
-
-/* Its own tab, and empty on purpose. The discipline tree lands here; until it
-   does the tab says so rather than pretending to be missing. */
-function disciplineCard() {
-  const node = h("div.card",
-    h("div.card-head", h("h2.card-title", "Discipline")),
-    h("div.well", iconEl("book"), h("span", "Nothing to set here yet. Your discipline and the Veil are on the Character page; what grows out of them will be laid out here.")));
-  return { node, update() {}, destroy() {} };
-}
-
-/* ================= 5. THE PAGE ================= */
+/* ================= 4. THE PAGE ================= */
 
 // The filter and sort each grid shows, for the length of the session.
 const VIEW = { pool: "inv", filter: "all", sort: "custom" };
 const SATCHEL_VIEW = { pool: "satchel", filter: "all", sort: "custom" };
-
-// Which tab was last open, for the length of the session, as the Character page keeps its own.
-const PAGE_VIEW = { tab: "belongings" };
 
 export default {
   id: "armaments",
@@ -248,83 +225,21 @@ export default {
   mount(view, ctx) {
     const store = storageCard(ctx, { pools: ["inv"], view: VIEW, idBase: "arm" });
     const satchel = satchelCard(ctx, SATCHEL_VIEW);
-    const discipline = disciplineCard();
     const doll = dollCard(ctx);
     const standing = standingCard();
-
-    const TABS = [
-      { id: "belongings", name: "Belongings", icon: "crate", part: store },
-      { id: "satchel", name: "Satchel", icon: "ration", part: satchel },
-      { id: "discipline", name: "Discipline", icon: "book", part: discipline },
-    ];
-    if (!TABS.some((t) => t.id === PAGE_VIEW.tab)) PAGE_VIEW.tab = TABS[0].id;
-
-    const row = h("div.char-tabs", { role: "tablist", "aria-label": "Inventory" },
-      TABS.map((t) => h("button.chip", {
-        type: "button", role: "tab", id: `invTab-${t.id}`,
-        "aria-selected": "false", "aria-controls": `invPanel-${t.id}`,
-        tabindex: "-1", dataset: { tab: t.id },
-      }, iconEl(t.icon), t.name)));
-
-    const select = h("select.select.char-tab-select", { "aria-label": "Inventory" },
-      TABS.map((t) => h("option", { value: t.id }, t.name)));
-
-    const panels = TABS.map((t) => h("div", {
-      id: `invPanel-${t.id}`, role: "tabpanel", "aria-labelledby": `invTab-${t.id}`, hidden: true,
-    }, t.part.node));
-
-    function paintPick() {
-      row.querySelectorAll("[role=tab]").forEach((t) => {
-        const picked = t.dataset.tab === PAGE_VIEW.tab;
-        setAttr(t, "aria-selected", picked ? "true" : "false");
-        setAttr(t, "tabindex", picked ? "0" : "-1");
-      });
-      if (select.value !== PAGE_VIEW.tab) select.value = PAGE_VIEW.tab;
-      panels.forEach((pane, i) => setAttr(pane, "hidden", TABS[i].id !== PAGE_VIEW.tab));
-    }
-
-    function choose(id, { focus = false } = {}) {
-      if (!TABS.some((t) => t.id === id) || id === PAGE_VIEW.tab) return;
-      PAGE_VIEW.tab = id;
-      paintPick();
-      const picked = TABS.find((t) => t.id === id);
-      if (picked && picked.part.update) picked.part.update(ctx);
-      if (!focus) return;
-      const btn = row.querySelector(`[data-tab="${id}"]`);
-      if (btn) btn.focus();
-    }
-
-    const offs = [
-      on(row, "click", "[role=tab]", (e, t) => choose(t.dataset.tab)),
-      on(row, "keydown", "[role=tab]", (e, t) => {
-        const i = TABS.findIndex((x) => x.id === t.dataset.tab);
-        let next = -1;
-        if (e.key === "ArrowRight") next = (i + 1) % TABS.length;
-        else if (e.key === "ArrowLeft") next = (i - 1 + TABS.length) % TABS.length;
-        else if (e.key === "Home") next = 0;
-        else if (e.key === "End") next = TABS.length - 1;
-        if (next < 0) return;
-        e.preventDefault();
-        choose(TABS[next].id, { focus: true });
-      }),
-    ];
-    const onChange = () => choose(select.value);
-    select.addEventListener("change", onChange);
-    paintPick();
 
     view.appendChild(h("div.page",
       h("header.page-head", h("div",
         h("div.eyebrow.page-eyebrow", "The Vanguard"),
         h("h1.page-title", "Inventory"),
         h("p.page-sub", "What you carry, what you pack for the hunt and what you wear there. Five bottles is all the Satchel takes."))),
-      row, select,
       h("div.storage",
-        h("div.storage-stack", ...panels),
+        h("div.storage-stack", store.node, satchel.node),
         h("aside.storage-side", { "aria-label": "Worn and standing" }, doll.node, standing.node))));
 
     const update = (next) => {
-      const picked = TABS.find((t) => t.id === PAGE_VIEW.tab);
-      if (picked && picked.part.update) picked.part.update(next);
+      store.update(next);
+      satchel.update(next);
       doll.update(next);
       standing.update(next);
     };
@@ -333,11 +248,8 @@ export default {
     return {
       update,
       unmount() {
-        offs.forEach((off) => off());
-        select.removeEventListener("change", onChange);
         store.destroy();
         satchel.destroy();
-        discipline.destroy();
       },
     };
   },

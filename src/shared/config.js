@@ -75,7 +75,6 @@ const hunt = {
   deathDebuff: 0.15,
   deathDebuffMs: 10 * 60 * 1000,
 
-  deathWear: 25,                // durability every worn piece loses on a death
 
   /* Health comes back only when nothing is swinging at you: between encounters
      and at camp, this share of your most a second. Nothing else heals for free. */
@@ -192,8 +191,6 @@ const weather = {
 
 const bench = {
   valueMarkup: 1.25,        // gear and tools are worth a quarter more than what went into them
-  durBase: 400,             // a crafted piece's durability: durBase + tier * durPerTier
-  durPerTier: 220,
   toolSpeedPerTier: 0.02,   // a tool's speed bonus: tier * toolSpeedPerTier
 };
 

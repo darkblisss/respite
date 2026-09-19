@@ -21,7 +21,7 @@ import { maxHp } from "./stats.js";
 import { windowIndex, nextDayAt } from "./weather.js";
 import { activeCompanion, bondStep, nextBondIn, buyCompanion, setCompanion } from "./companions.js";
 import { startSkill, stopSkill, nextSkillDue, resolveSkilling } from "./skills.js";
-import { startHunt, pullBack, setHide, huntStep, repair } from "./combat.js";
+import { startHunt, pullBack, setHide, huntStep } from "./combat.js";
 import {
   refreshBounty, resolveRequisitions, claimBounty, hireAgent, deployAgent, buyRemedy, buySmuggler,
   travel, equip, unequip, unequipTool, moveItem, sellItem, useChest, useRemedy, salvage, reorder, pickClass,
@@ -117,7 +117,6 @@ export const COMMANDS = Object.freeze({
   salvage:      { run: salvage, predict: true },
   useChest:     { run: useChest, predict: true },
   useRemedy:    { run: useRemedy, predict: true },
-  repair:       { run: repair, predict: true },
   reorder:      { run: reorder, predict: true },
   buyRemedy:    { run: buyRemedy, predict: true },
   buySmuggler:  { run: buySmuggler, predict: true },

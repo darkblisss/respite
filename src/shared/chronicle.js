@@ -67,8 +67,6 @@ const LINES = {
 
   "loot:lost": () => "Belongings, the Vault and the Stockpile are full. Loot is being left where it fell.",
 
-  "item:broke": (p) => `${itemName(p.key)} broke.`,
-  "item:repaired": (p) => `Patched up ${itemName(p.key)}.`,
 
   "companion:bond": (p) => {
     const def = getCompanion(p.id);

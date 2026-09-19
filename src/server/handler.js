@@ -22,7 +22,7 @@ import { attachChronicle } from "../shared/chronicle.js";
 import { itemDef, itemName, validKey } from "../shared/items.js";
 import { ORDER, qtyIn, transact } from "../shared/storage.js";
 import {
-  applyWear, bestRemedy, campPlan, damageItem, dropLoot, huntPresence, remedyHeals, threatIn, threatKey,
+  bestRemedy, campPlan, dropLoot, huntPresence, remedyHeals,
 } from "../shared/combat.js";
 import { companionBonus, companionFinds } from "../shared/companions.js";
 import { addXp, partyMult, xpMult } from "../shared/progression.js";
@@ -1077,7 +1077,6 @@ function settleParty(ctx, row) {
       took.drops += dropLoot(state, won, !!drops[i].elite, kN, env, at);
     }
     companionFinds(state, "warfare", kKey, kN, env, at);
-    applyWear(state, rng, env, at);
     state.rolls[kKey] = kN + 1;
   }
 
@@ -1093,11 +1092,6 @@ function settleParty(ctx, row) {
     state.player.recoveryLeft = 0;
     state.player.hp = 1;
     state.player.camp = { since: at, hp: 1, walkUntil: at };
-    GameData.EQUIP_SLOTS.forEach((slot) => {
-      const key = state.equipment[slot];
-      const d = key ? itemDef(key) : null;
-      if (d && d.maxDur) damageItem(state, key, H.deathWear, env, at);
-    });
     announce(ctx, "hunt:death", { monsterId: owed.died, elapsedMs: Math.round(s.elapsed), at });
   }
 

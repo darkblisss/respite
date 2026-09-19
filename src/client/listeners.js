@@ -111,7 +111,6 @@ const TABLE = {
 
   "loot:found": (p) => [`Found: ${itemName(p.key)}`, { kind: "gold" }, { once: `loot:${p.key}` }],
 
-  "item:broke": (p) => [`${itemName(p.key)} broke`, { kind: "bad" }],
 
   "store:rejected": (p) => [plainText(p.error) || "The server turned that away", { kind: "warn" }],
 

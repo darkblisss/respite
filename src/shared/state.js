@@ -7,9 +7,8 @@
    ids and the hunt stream. Every save, old or new, is then rebuilt
    field by field from checked values, holding to what play itself
    never breaks: a unique piece is held once, a pool holds no more
-   stacks than it has slots, wear is kept only for what is still
-   held, and postings, errands and fights are the ones the rules
-   would have made. The server trusts nothing it reads back.
+   stacks than it has slots, and postings, errands and fights are the
+   ones the rules would have made. The server trusts nothing it reads back.
 
    v4 browsers wrote their own saves, so a row one wrote can hold
    anything. Migrated as `legacy`, it goes the v4 way whatever schema
@@ -107,7 +106,6 @@ function blankState(clock, seed) {
     uid: 1,
     equipment,
     tools: {},
-    wear: {},
     tasks: { skilling: null, combat: null },
     region: "region_1",
     travel: { unlocked: ["region_1"] },
@@ -174,7 +172,7 @@ export function migrateSave(raw, { now, seed, userId, account, legacy = false } 
 /* ---------- v4 (schema 8 and older) ---------- */
 
 const V5_ONLY = new Set(["meta", "player", "skills", "equipment", "tasks", "travel", "stats", "settings", "inv", "bank", "vault",
-  "satchel", "wear", "tools", "log", "rng", "rolls", "serial", "clock", "schema"]);
+  "satchel", "tools", "log", "rng", "rolls", "serial", "clock", "schema"]);
 
 // The three pools v4 knew. The Satchel is packed in normalise, from what they hold.
 const V4_POOLS = ["inv", "bank", "vault"];
@@ -214,7 +212,6 @@ function fromV4(loaded, opts) {
   // No Satchel here: leaving it off is what tells normalise to pack one.
   delete m.satchel;
   // Read, never written, from here on.
-  m.wear = obj(loaded.wear);
   m.tools = obj(loaded.tools);
   m.log = (Array.isArray(loaded.log) ? loaded.log.slice(-LOG_MAX) : []).map((e) => (typeof e === "string" ? { t: stamp, m: e } : e));
   delete m.yields;
@@ -560,15 +557,6 @@ function normalise(src, opts) {
 
   normalisePools(s, src, ledger);
   s.uid = intIn(src.uid, 1, BIG, 1);
-
-  // Wear only for what is still held or worn. Anything else has left the camp.
-  const held = new Set();
-  Object.values(s.equipment).forEach((k) => { if (k) held.add(k); });
-  POOL_IDS.forEach((w) => Object.keys(s[w].items).forEach((k) => held.add(k)));
-  const wear = obj(src.wear);
-  keysOf(wear).forEach((k) => {
-    if (held.has(k) && finite(wear[k]) && wear[k] > 0) s.wear[k] = Math.min(Math.floor(wear[k]), 1e9);
-  });
 
   const unlocked = Array.isArray(obj(src.travel).unlocked) ? src.travel.unlocked : [];
   s.travel.unlocked = ["region_1"];

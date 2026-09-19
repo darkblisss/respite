@@ -23,7 +23,6 @@ import { fmt, fmtWhole, fmtGold } from "../ui/format.js";
 import { openPopup } from "../ui/widgets.js";
 import { itemDef, itemName } from "../../shared/items.js";
 import { poolName, slotCap, slotsUsed, qtyIn, orderedKeys, unstacked } from "../../shared/storage.js";
-import { wearPct } from "../../shared/combat.js";
 import { GameData, TRADE_ORDER, gatherSkillDef } from "../../shared/registry.js";
 import { toolFor } from "../../shared/progression.js";
 
@@ -178,21 +177,14 @@ export function storageCard(ctx, { pools, view, idBase, filters = true, hint = n
     });
   }
 
-  // A single piece of gear shows its condition; a stack shows how many. A cell
-  // that is one bottle of an unstacked remedy is always the one.
+  // How many are in the cell. A cell that is one bottle of an unstacked remedy is always the one.
   function paintSlot(n, state, pool) {
     const key = n.dataset.key;
     const qty = n.dataset.one ? 1 : qtyIn(state, pool, key);
-    const pct = qty === 1 ? wearPct(state, key) : null;
-    const worn = pct != null;
     const corner = n.firstChild;
-    toggleClass(corner, "slot-qty", !worn);
-    toggleClass(corner, "slot-wear", worn);
-    toggleClass(corner, "is-fine", worn && pct > 60);
-    toggleClass(corner, "is-worn", worn && pct > 25 && pct <= 60);
-    toggleClass(corner, "is-bad", worn && pct <= 25);
-    setText(corner, worn ? `${pct}%` : fmt(qty));
-    setAttr(n, "aria-label", `${names.get(n.dataset.cell)}, ${worn ? `${pct}% condition` : fmtWhole(qty)}`);
+    toggleClass(corner, "slot-qty", true);
+    setText(corner, fmt(qty));
+    setAttr(n, "aria-label", `${names.get(n.dataset.cell)}, ${fmtWhole(qty)}`);
   }
 
   function update(nextCtx) {

@@ -106,8 +106,8 @@ export function gearTable(state, base) {
   const defs = GameData.RARITIES.map((r) => ({ r, d: itemDef(makeKey(base, r.key, "x1", r.key === "relic" ? pool[0].id : null)) }));
   const cols = GEAR_COLS.filter((c) => (!c.discipline || state.player.klass) && defs.some(({ d }) => d[c.key] > 0));
   return {
-    head: ["Rarity", ...cols.map((c) => c.head), "Durab."],
-    rows: defs.map(({ r, d }) => ({ rarity: r.key, cells: [r.name, ...cols.map((c) => c.show(d[c.key])), fmtWhole(d.maxDur)] })),
+    head: ["Rarity", ...cols.map((c) => c.head)],
+    rows: defs.map(({ r, d }) => ({ rarity: r.key, cells: [r.name, ...cols.map((c) => c.show(d[c.key]))] })),
     foot: `${g.twoHanded ? "Two-handed. " : ""}A Relic is Legendary with a prefix, such as ${pool[0].name} or ${pool[1].name}.`,
   };
 }

@@ -52,7 +52,6 @@ function refusal(ctx, key, from) {
   const worn = from === "worn" || (!stacks(key) && Object.values(ctx.state.equipment).includes(key));
   if (worn) return "Worn gear can't go on the market. Take it off first.";
   if (!TRADEABLE.includes(def.kind)) return "Only materials, gear and tools can be traded.";
-  if ((ctx.state.wear[key] || 0) > 0) return "Repair it before you list it. The market only takes sound pieces.";
   if (!isPool(from)) return "Open it from a store of your own to list it.";
   if (qtyIn(ctx.state, from, key) <= 0) return `There is no ${itemName(key)} left ${IN[from]}.`;
   return null;

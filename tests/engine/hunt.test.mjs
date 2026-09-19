@@ -359,8 +359,8 @@ await run(async () => {
     check("Death: recovery starts when you fell, counted to the end of that stretch",
       !!death && s.player.recoveryLeft === H.recoveryMs - (s.clock - death.at), { left: s.player.recoveryLeft, since: death && s.clock - death.at });
     const refused = applyCommand(s, { type: "startHunt", args: { tier: 1, zone: "outer", limit: null } }, a.env);
-    check("Death: worn gear takes wear, health refills and you can't set out again",
-      s.stats.deaths === 1 && s.wear["slag_sword|common"] >= 25 && s.player.hp === St.maxHp(s) && !refused.ok && refused.error === "You're still recovering.");
+    check("Death: you come round on one point of health, and the gate is open",
+      s.stats.deaths === 1 && s.player.hp === 1 && refused.ok);
     const r0 = s.player.recoveryLeft;
     step(s, a.env, 120000);
     const partway = s.player.recoveryLeft;
@@ -663,13 +663,7 @@ await run(async () => {
     check("Loot goes straight into storage: Belongings full, so the Vault", s.inv.order.join(",") === junk.join(",") && s.vault.items.mangy_flay > 0 && !s.bank.items.mangy_flay);
     check("A stack held in the Stockpile grows where it is", s.bank.items.mud_dredge > 1 && !s.vault.items.mud_dredge);
     const n = s.stats.kills;
-    const armour = ["offhand", "head", "chest", "hands", "feet"].map((slot) => s.wear[s.equipment[slot]] || 0);
-    check("Every kill wears the weapon by one and one armour piece by one", s.wear[s.equipment.weapon] === n && armour.reduce((x, y) => x + y, 0) === n && armour.filter((w) => w > 0).length >= 3, { n, armour });
     check("Kill counters count every kill", s.rolls["k:1"] === n && Object.keys(s.rolls).filter((k) => k.startsWith("m:")).reduce((x, k) => x + s.rolls[k], 0) === n);
-    const chest = s.equipment.chest;
-    s.wear[chest] = I.itemDef(chest).maxDur - 1;
-    stepWhile(s, a.env, 1000, () => s.equipment.chest === chest, 2000);
-    check("A worn-out piece breaks: off the body, its wear gone with it, on the log", s.equipment.chest === null && !Object.hasOwn(s.wear, chest) && a.of("item:broke").some((e) => e.key === chest) && logHas(s, /^Vital Titan Chestplate broke\.$/));
     check("and health never sits above the new most", s.player.hp <= St.maxHp(s));
   }
   {
@@ -774,7 +768,6 @@ await run(async () => {
     const start = () => {
       const s = hunter(76, { level: 25, klass: "rogue", equipment: gearSet(GameData, 3, "rogue") });
       put(s, "satchel", "provision_t3", 30);
-      s.wear[s.equipment.chest] = I.itemDef(s.equipment.chest).maxDur - 60;
       s.player.gold = 0;
       return s;
     };

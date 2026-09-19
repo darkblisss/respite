@@ -51,8 +51,8 @@ await run(async () => {
       const m = migrateSave(raw, { now: NOW, seed: 99, legacy });
       const ms = performance.now() - t0;
       const held = ["inv", "bank", "vault"].reduce((n, w) => n + Object.keys(m[w].items).length, 0);
-      console.log(`     ${label}: ${Math.round(ms)}ms, ${held} stacks kept, ${Object.keys(m.wear).length} wear entries`);
-      check(`${label}: under 300ms (${Math.round(ms)}ms), and only what ninety slots hold is kept`, ms < 300 && held <= 90 && Object.keys(m.wear).length <= held);
+      console.log(`     ${label}: ${Math.round(ms)}ms, ${held} stacks kept`);
+      check(`${label}: under 300ms (${Math.round(ms)}ms), and only what ninety slots hold is kept`, ms < 300 && held <= 90);
     }
   }
   const { advance, applyCommand } = await shared("engine.js");

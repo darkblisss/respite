@@ -269,10 +269,10 @@ function buildRegistry() {
       value: Math.max(1, Math.round(CONFIG.valBase(tier) * valMult)), tier, category: category || "Component" };
   }
 
-  function addGear(id, name, icon, slot, tier, prof, line, twoHand, maxDur) {
+  function addGear(id, name, icon, slot, tier, prof, line, twoHand) {
     GEAR[id] = {
       id, name, icon, kind: "gear", slot, tier, prof, line,
-      twoHanded: !!twoHand, maxDur, repairMat: rowMatId(TIERS[tier - 1], "delve"),
+      twoHanded: !!twoHand,
       value: 1,   // set from the recipe's materials in addCraft
     };
   }
@@ -393,7 +393,6 @@ function buildRegistry() {
 
     // 4. GEAR (Weapons & Armor)
     const gTime = CONFIG.gearTime(tier);
-    const dur = B.durBase + tier * B.durPerTier;
 
     const wSword = `${slug(tDelve)}_sword`;
     const wDagger = `${slug(tDelve)}_dagger`;
@@ -403,13 +402,13 @@ function buildRegistry() {
     const wGsword = `${slug(tDelve)}_greatsword`;
     const wGrimoire = `${slug(tDred)}_grimoire`;
 
-    addGear(wSword, `${tDelve} Sword`, "blade", "weapon", tier, "forgemaster", "sword", false, dur);
-    addGear(wDagger, `${tDelve} Dagger`, "blade", "weapon", tier, "forgemaster", "dagger", false, dur);
-    addGear(wShield, `${tFell} Shield`, "ward", "offhand", tier, "woodwright", "shield", false, dur);
-    addGear(wBow, `${tFell} Bow`, "stave", "weapon", tier, "woodwright", "bow", true, dur);
-    addGear(wStaff, `${tDred} Staff`, "stave", "weapon", tier, "artificer", "staff", true, dur);
-    addGear(wGsword, `${tDelve} Greatsword`, "greatblade", "weapon", tier, "forgemaster", "greatsword", true, dur);
-    addGear(wGrimoire, `${tDred} Grimoire`, "book", "offhand", tier, "artificer", "grimoire", false, dur);
+    addGear(wSword, `${tDelve} Sword`, "blade", "weapon", tier, "forgemaster", "sword");
+    addGear(wDagger, `${tDelve} Dagger`, "blade", "weapon", tier, "forgemaster", "dagger");
+    addGear(wShield, `${tFell} Shield`, "ward", "offhand", tier, "woodwright", "shield");
+    addGear(wBow, `${tFell} Bow`, "stave", "weapon", tier, "woodwright", "bow", true);
+    addGear(wStaff, `${tDred} Staff`, "stave", "weapon", tier, "artificer", "staff", true);
+    addGear(wGsword, `${tDelve} Greatsword`, "greatblade", "weapon", tier, "forgemaster", "greatsword", true);
+    addGear(wGrimoire, `${tDred} Grimoire`, "book", "offhand", tier, "artificer", "grimoire");
 
     addCraft("forgemaster", wSword, GEAR[wSword].name, "blade", tier, gTime, 2.5, { [blade]: 1, [handle]: 1 }, true);
     addCraft("forgemaster", wDagger, GEAR[wDagger].name, "blade", tier, gTime, 2.5, { [blade]: 1, [handle]: 1 }, true);
@@ -423,8 +422,8 @@ function buildRegistry() {
     const jAmulet = `${slug(tDred)}_amulet`;
     const jRing = `${slug(tDelve)}_ring`;
 
-    addGear(jAmulet, `${tDred} Amulet`, "charm", "neck", tier, "artificer", "amulet", false, dur);
-    addGear(jRing, `${tDelve} Ring`, "band", "ring", tier, "artificer", "ring", false, dur);
+    addGear(jAmulet, `${tDred} Amulet`, "charm", "neck", tier, "artificer", "amulet");
+    addGear(jRing, `${tDelve} Ring`, "band", "ring", tier, "artificer", "ring");
 
     addCraft("artificer", jAmulet, GEAR[jAmulet].name, "charm", tier, gTime, 2.5, { [clasp]: 1, [inlay]: 2, [shard]: tier }, true);
     addCraft("artificer", jRing, GEAR[jRing].name, "band", tier, gTime, 2.5, { [bar]: 6, [inlay]: 1, [shard]: tier }, true);
@@ -435,10 +434,10 @@ function buildRegistry() {
     const aHB = `${slug(tDelve)}_hboots`;
     const aHG = `${slug(tDelve)}_hgaunts`;
 
-    addGear(aHH, `${tDelve} Helm`, "cowl", "head", tier, "forgemaster", "helm", false, dur);
-    addGear(aHC, `${tDelve} Chestplate`, "plate", "chest", tier, "forgemaster", "chest", false, dur);
-    addGear(aHB, `${tDelve} Boots`, "treads", "feet", tier, "forgemaster", "hboots", false, dur);
-    addGear(aHG, `${tDelve} Gauntlets`, "gauntlets", "hands", tier, "forgemaster", "hgaunts", false, dur);
+    addGear(aHH, `${tDelve} Helm`, "cowl", "head", tier, "forgemaster", "helm");
+    addGear(aHC, `${tDelve} Chestplate`, "plate", "chest", tier, "forgemaster", "chest");
+    addGear(aHB, `${tDelve} Boots`, "treads", "feet", tier, "forgemaster", "hboots");
+    addGear(aHG, `${tDelve} Gauntlets`, "gauntlets", "hands", tier, "forgemaster", "hgaunts");
 
     [aHH, aHC, aHB, aHG].forEach((id) => {
       addCraft("forgemaster", id, GEAR[id].name, GEAR[id].icon, tier, gTime, 2.5, { [bar]: 20, [coal]: tier }, true);
@@ -450,10 +449,10 @@ function buildRegistry() {
     const aMB = `${slug(tFlay)}_mboots`;
     const aMG = `${slug(tFlay)}_mgloves`;
 
-    addGear(aMH, `${tFlay} Hood`, "cowl", "head", tier, "tanner", "hood_medium", false, dur);
-    addGear(aMC, `${tFlay} Jacket`, "shroud", "chest", tier, "tanner", "jacket", false, dur);
-    addGear(aMB, `${tFlay} Boots`, "treads", "feet", tier, "tanner", "mboots", false, dur);
-    addGear(aMG, `${tFlay} Gloves`, "gauntlets", "hands", tier, "tanner", "mgloves", false, dur);
+    addGear(aMH, `${tFlay} Hood`, "cowl", "head", tier, "tanner", "hood_medium");
+    addGear(aMC, `${tFlay} Jacket`, "shroud", "chest", tier, "tanner", "jacket");
+    addGear(aMB, `${tFlay} Boots`, "treads", "feet", tier, "tanner", "mboots");
+    addGear(aMG, `${tFlay} Gloves`, "gauntlets", "hands", tier, "tanner", "mgloves");
 
     [aMH, aMC, aMB, aMG].forEach((id) => {
       addCraft("tanner", id, GEAR[id].name, GEAR[id].icon, tier, gTime, 2.5, { [leather]: 20, [tallow]: tier }, true);
@@ -465,10 +464,10 @@ function buildRegistry() {
     const aLB = `${slug(tHarv)}_lboots`;
     const aLG = `${slug(tHarv)}_lgloves`;
 
-    addGear(aLH, `${tHarv} Hood`, "cowl", "head", tier, "weaver", "hood_light", false, dur);
-    addGear(aLC, `${tHarv} Robe`, "shroud", "chest", tier, "weaver", "robe", false, dur);
-    addGear(aLB, `${tHarv} Boots`, "treads", "feet", tier, "weaver", "lboots", false, dur);
-    addGear(aLG, `${tHarv} Gloves`, "gauntlets", "hands", tier, "weaver", "lgloves", false, dur);
+    addGear(aLH, `${tHarv} Hood`, "cowl", "head", tier, "weaver", "hood_light");
+    addGear(aLC, `${tHarv} Robe`, "shroud", "chest", tier, "weaver", "robe");
+    addGear(aLB, `${tHarv} Boots`, "treads", "feet", tier, "weaver", "lboots");
+    addGear(aLG, `${tHarv} Gloves`, "gauntlets", "hands", tier, "weaver", "lgloves");
 
     [aLH, aLC, aLB, aLG].forEach((id) => {
       addCraft("weaver", id, GEAR[id].name, GEAR[id].icon, tier, gTime, 2.5, { [weave]: 20, [pulp]: tier }, true);

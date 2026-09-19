@@ -34,7 +34,6 @@ import { GameData, itemSources, prefixDef, rarityDef, skillName, tierLabel } fro
 import { itemDef, itemName, stacks } from "../../../shared/items.js";
 import { ORDER, POOLS, canHold, isPool, poolName, qtyIn, haveQty, roomFor, slotCap, slotsUsed, placeFor } from "../../../shared/storage.js";
 import { displacedBy, salvageValue } from "../../../shared/world.js";
-import { wearPct, repairCost } from "../../../shared/combat.js";
 import { statsOf, combatStats, skillLevel } from "../../../shared/stats.js";
 import { itemLore } from "../../../shared/lore.js";
 
@@ -134,7 +133,6 @@ function sourcesNode(d) {
   const drops = uniq(S.droppedBy.map((m) => m && m.name));
   if (drops.length) rows.push(["Dropped by", drops.join(", ")]);
   if (d.heal) rows.push(["Sold by", "The Bonesetter"]);
-  if (d.kind === "gear" && d.repairMat) rows.push(["Repaired with", itemName(d.repairMat)]);
   if (!rows.length) return null;
   return h("dl.ip-sources", rows.map(([t, v]) => [h("dt", t), h("dd", v)]));
 }
@@ -178,15 +176,6 @@ function statRows(state, key, d, from, qty) {
       if (d.veil || veil) add("Veil a blow", d.veil ? `+${fmtStat(d.veil)}` : "0", { delta: veil });
     }
     if (d.slot === "weapon") add("Grip", d.twoHanded ? "Two-handed" : "One-handed");
-    if (d.maxDur) {
-      const p = wearPct(state, key);
-      if (from === "worn" || (p != null && p < 100)) {
-        const left = Math.max(0, d.maxDur - (Object.hasOwn(state.wear, key) ? state.wear[key] : 0));
-        add("Condition", `${p}%`, { tone: p > 60 ? "good" : p > 25 ? "gold" : "bad", small: `${fmtWhole(left)} of ${fmtWhole(d.maxDur)}` });
-      } else {
-        add("Durability", fmtWhole(d.maxDur));
-      }
-    }
   }
 
   if (d.kind === "tool") {
@@ -364,20 +353,6 @@ function openItem(ctx, key, opts, extra) {
     return send("salvage", { key, from });
   }
 
-  function repairAction(state) {
-    const cost = d.kind === "gear" ? repairCost(state, key) : null;
-    if (!cost) return null;
-    const have = haveQty(state, cost.mat);
-    const what = `${fmtWhole(cost.qty)} ${itemName(cost.mat)}`;
-    return {
-      id: "repair",
-      label: have >= cost.qty ? `Repair · ${what}` : `Repair needs ${what}`,
-      icon: "shield",
-      disabled: have < cost.qty,
-      onClick: () => send("repair", { key }),
-    };
-  }
-
   function actionList(state) {
     if (!acting) return [];
     const list = [];
@@ -400,7 +375,6 @@ function openItem(ctx, key, opts, extra) {
           disabled: !dest || !slot,
           onClick: () => send("unequip", { slot: wornSlot(ctx.state, key, d) }),
         });
-        list.push(repairAction(state));
       }
       return list.filter(Boolean);
     }
@@ -477,8 +451,6 @@ function openItem(ctx, key, opts, extra) {
         },
       });
     }
-
-    list.push(repairAction(state));
 
     const sv = salvageValue(key);
     if (sv) {

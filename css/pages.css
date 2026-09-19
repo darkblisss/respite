@@ -25,7 +25,8 @@
 
 .char-portrait {
   width: 104px;
-  height: 152px;
+  aspect-ratio: 768 / 1376;
+  height: auto;
   border-radius: 16px;
 }
 
@@ -67,7 +68,7 @@
     padding: var(--sp-4);
     border-radius: var(--r-lg);
   }
-  .char-portrait { width: 72px; height: 108px; border-radius: 12px; }
+  .char-portrait { width: 72px; height: auto; border-radius: 12px; }
   .char-name { font-size: 26px; }
   .char-tags { margin-top: 8px; }
   .char-total {
@@ -642,13 +643,20 @@ button.doll-slot { cursor: pointer; }
 .doll-figure {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 10px;
   min-width: 0;
 }
 
+/* The art is 768x1376. Left to stretch down a column as tall as the slot stacks
+   beside it, `contain` fits it by width and leaves a third of the frame empty above
+   the figure's head. Holding the frame to the art's own ratio means the figure fills
+   it at any column width, and the column centres what is left over. */
 .doll-figure .portrait {
-  flex: 1 1 auto;
-  min-height: 300px;
+  flex: 0 1 auto;
+  aspect-ratio: 768 / 1376;
+  max-height: 100%;
+  min-height: 0;
 }
 
 .doll-name {
@@ -674,7 +682,7 @@ button.doll-slot { cursor: pointer; }
   .doll-slot-l { font-size: 10px; letter-spacing: .06em; }
   .doll-slot-art .ico { width: 22px; height: 22px; }
   .doll-slot-name { font-size: 11px; }
-  .doll-figure .portrait { min-height: 240px; }
+
 }
 
 /* ================= 5. THE HUNT ================= */
@@ -728,7 +736,7 @@ button.doll-slot { cursor: pointer; }
 .arena-portrait {
   position: relative;
   width: clamp(112px, 12vw, 150px);
-  aspect-ratio: 1 / 1.12;
+  aspect-ratio: 768 / 1376;
   transition: opacity 300ms, filter 300ms, transform 300ms;
 }
 

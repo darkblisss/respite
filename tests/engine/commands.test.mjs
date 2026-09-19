@@ -194,18 +194,6 @@ await run(async () => {
     put(cramped, "inv", "slag_helm|common", 2);
     fillAll(cramped, S.POOLS, ["slag_bar"]);
     refused("with no room for what it breaks down into", cramped, "salvage", { key: "slag_helm|common", from: "inv" }, "No room for what it breaks down into.");
-    {
-      const worn = fresh();
-      put(worn, "inv", "slag_helm|epic|s1.1", 1);
-      put(worn, "bank", "slag_chest|common", 2);
-      worn.equipment.chest = "slag_chest|common";
-      Object.assign(worn.wear, { "slag_helm|epic|s1.1": 50, "slag_chest|common": 9 });
-      check("selling the last of a piece takes its wear with it", cmd(worn, "sellItem", { key: "slag_helm|epic|s1.1", from: "inv", qty: 1 }).ok && !Object.hasOwn(worn.wear, "slag_helm|epic|s1.1"));
-      check("a stack still held or worn keeps its wear", cmd(worn, "sellItem", { key: "slag_chest|common", from: "bank", qty: null }).ok && worn.wear["slag_chest|common"] === 9);
-      put(worn, "vault", "slag_helm|rare|7", 1);
-      worn.wear["slag_helm|rare|7"] = 3;
-      check("and so does breaking the last of it down", cmd(worn, "salvage", { key: "slag_helm|rare|7", from: "vault" }).ok && !Object.hasOwn(worn.wear, "slag_helm|rare|7"));
-    }
 
     put(s, "inv", "vault_chest", 2);
     check("useChest widens the Stockpile", cmd(s, "useChest", { key: "vault_chest", from: "inv" }).ok && s.bank.slots === 35 && s.inv.items.vault_chest === 1 && s.log.some((l) => l.m === "The Stockpile widened to 35 slots."));
@@ -213,14 +201,6 @@ await run(async () => {
     s.bank.slots = 200;
     refused("past 200 slots", s, "useChest", { key: "vault_chest", from: "inv" }, "The Stockpile can't be widened any further.");
 
-    s.equipment.chest = "slag_chest|common";
-    s.wear["slag_chest|common"] = 161;
-    put(s, "bank", "slag_delve", 2);
-    refused("without the ore", s, "repair", { key: "slag_chest|common" }, "Need 3 Slag Ore.");
-    put(s, "vault", "slag_delve", 1);
-    check("repair spends the ore and clears the wear", cmd(s, "repair", { key: "slag_chest|common" }).ok && !Object.hasOwn(s.wear, "slag_chest|common") && S.haveQty(s, "slag_delve") === 0 && s.log.some((l) => l.m === "Patched up Slag Chestplate."));
-    refused("what has no wear", s, "repair", { key: "slag_chest|common" }, "Nothing to repair.");
-    refused("junk", s, "repair", { key: 42 }, "No such item.");
 
     const r = fresh();
     ["coal", "resin", "pulp", "tallow"].forEach((k) => put(r, "bank", k, 1));
@@ -420,7 +400,6 @@ await run(async () => {
     put(base, "bank", "coal", 50);
     put(base, "vault", "vault_chest", 1);
     base.equipment.head = "slag_helm|epic|s1.0";
-    base.wear["slag_helm|epic|s1.0"] = 100;
     put(base, "bank", "slag_delve", 5);
     base.tools.felling = "bitter_axe";
     base.agents.push({ id: "agent_1", name: "Silt", rarity: "rare" });
@@ -540,18 +519,12 @@ await run(async () => {
     ];
     same("prepareListing refusals change nothing", [refusals.map(([args]) => M.prepareListing(s, args, w.env).error), s], [refusals.map(([, e]) => e), before]);
 
-    // Wear stays with the camp that did the wearing: a worn piece doesn't go to market to come back new.
-    const worn = fresh();
-    put(worn, "inv", "slag_sword|epic|s1.4", 1);
-    put(worn, "bank", "slag_chest|common", 3);
-    worn.wear["slag_sword|epic|s1.4"] = 1;
-    worn.wear["slag_chest|common"] = 40;
-    const wornBefore = clone(worn);
-    same("prepareListing refuses a worn unique piece, and a stack whose key carries wear, changing nothing",
-      [M.prepareListing(worn, { key: "slag_sword|epic|s1.4", from: "inv", qty: 1, price: 500 }, w.env), M.prepareListing(worn, { key: "slag_chest|common", from: "bank", qty: 1, price: 9 }, w.env), worn],
-      [{ ok: false, error: "Repair it before you list it." }, { ok: false, error: "Repair it before you list it." }, wornBefore]);
-    put(worn, "bank", "slag_delve", 50);
-    check("repaired, it lists", cmd(worn, "repair", { key: "slag_sword|epic|s1.4" }).ok && M.prepareListing(worn, { key: "slag_sword|epic|s1.4", from: "inv", qty: 1, price: 500 }, w.env).ok && !S.haveQty(worn, "slag_sword|epic|s1.4"));
+    {
+      // Any sound piece lists: there is no condition left to hold one back.
+      const piece = fresh();
+      put(piece, "inv", "slag_sword|epic|s1.4", 1);
+      check("a unique piece lists", M.prepareListing(piece, { key: "slag_sword|epic|s1.4", from: "inv", qty: 1, price: 500 }, w.env).ok && !S.haveQty(piece, "slag_sword|epic|s1.4"));
+    }
 
     s.player.gold = 100;
     // The purse pays the goods and the fee: 60 plus 3 leaves 37, and the event says 63.

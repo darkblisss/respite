@@ -134,7 +134,6 @@ await run(async () => {
     check("v4 left a hunter recovering", raw.player.recoveryLeft > 0 && raw.player.recoveryLeft < CONFIG.hunt.recoveryMs && raw.tasks.combat === null && raw.stats.deaths === 1);
     const m = migrateSave(clone(raw), opts);
     check("recovery carries over, counted in game time", m.player.recoveryLeft === raw.player.recoveryLeft && St.recovering(m));
-    check("the wear from the death is kept", m.wear["slag_sword|common"] === raw.wear["slag_sword|common"]);
     const w = await listening();
     E.advance(m, LEFT + raw.player.recoveryLeft - 1, w.env);
     const still = St.recovering(m);

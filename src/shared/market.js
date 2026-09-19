@@ -116,7 +116,6 @@ export function prepareListing(state, { key, from, qty, price } = {}, env) {
   if (!stacks(key) && Object.values(state.equipment).includes(key)) return refuse("Take it off first.");
   // Wear belongs to the camp that did the wearing. A buyer's copy comes back under a new uid with
   // none, so a worn piece would leave the market as good as new.
-  if (Object.hasOwn(state.wear, key) && state.wear[key] > 0) return refuse("Repair it before you list it.");
 
   const res = transact(state, (tx) => tx.remove(from, key, qty));
   if (!res.ok) return res;

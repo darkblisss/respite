@@ -22,6 +22,7 @@ export const DEFAULT_HASH = "#/character";
 const PAGES = Object.freeze({
   character: ["character", "The Vanguard", "Character"],
   armaments: ["armaments", "The Vanguard", "Inventory"],
+  discipline: ["discipline", "The Vanguard", "Discipline"],
   // Companions are unhooked from the live camp until the system is redesigned: the module and its
   // shared state stay put, so restoring this line (and the nav row in ui/shell.js) brings it back.
   // companions: ["companions", "The Vanguard", "Companions"],

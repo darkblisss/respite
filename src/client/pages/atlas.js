@@ -20,7 +20,6 @@ import { GameData, TRADE_ORDER, foesOf, gatherSkillDef, sovereignOf, stratumOf, 
 import { skillLevel } from "../../shared/stats.js";
 import { itemDef, isRemedy } from "../../shared/items.js";
 import { heldEverywhere } from "../../shared/storage.js";
-import { threatIn } from "../../shared/combat.js";
 import { dayIndex, weatherAt } from "../../shared/weather.js";
 
 const REGIONS = GameData.REGIONS;
@@ -176,7 +175,7 @@ export default {
     // What decides the panel's shape. Numbers inside it move in place.
     function shapeOf(state, r, st) {
       const c = state.tasks.combat;
-      const hunted = (c && c.tier === r.tier) || ZONES.some((z) => threatIn(state, r.tier, z.id) > 0);
+      const hunted = !!(c && c.tier === r.tier);
       const workable = TRADE_ORDER.map((id) => (skillLevel(state, id) >= r.level ? 1 : 0)).join("");
       return `${r.id}|${st}|${hunted ? 1 : 0}|${workable}|${hasPopup("foe") ? 1 : 0}`;
     }
@@ -215,18 +214,8 @@ export default {
         : workable === 0 ? `Your crews need Lv${NBSP}${r.level} in a trade to work any of it.`
           : `Your crews can work ${workable} of five. The rest need Lv${NBSP}${r.level}.`;
 
-      // Threat only once you have hunted this ground.
       const c = state.tasks.combat;
-      const hunted = (c && c.tier === r.tier) || ZONES.some((z) => threatIn(state, r.tier, z.id) > 0);
-      let threat = null;
-      if (hunted) {
-        R.zones = {};
-        threat = h("div.kpis.atlas-threat", ZONES.map((z) => {
-          const z3 = { v: h("span.v"), fill: h("i"), s: h("span.s.t-ember", { hidden: true }, "Hunting") };
-          R.zones[z.id] = z3;
-          return h("div.kpi", h("span.l", z.name), z3.v, h("div.bar.bar-ember.bar-thin", { "aria-hidden": "true" }, z3.fill), z3.s);
-        }));
-      }
+      const threat = null;
       const huntNow = stat("The hunt");
       const remedies = stat("Remedies held");
       const bounty = st === "here" ? stat("Bounty") : null;
@@ -293,15 +282,6 @@ export default {
       toggleClass(refs.toll, "t-bad", !paid && state.player.gold < r.toll);
 
       const c = state.tasks.combat;
-      if (refs.zones) {
-        ZONES.forEach((z) => {
-          const t = threatIn(state, r.tier, z.id);
-          const zr = refs.zones[z.id];
-          setText(zr.v, fmtWhole(t));
-          setWidth(zr.fill, (t / CONFIG.hunt.threatCap) * 100);
-          setAttr(zr.s, "hidden", !(c && c.tier === r.tier && c.zone === z.id));
-        });
-      }
       if (!c) setText(refs.huntNow, "Not hunting");
       else if (c.tier === r.tier) setText(refs.huntNow, `${getZone(c.zone).name} · ${fmt(c.done)} kills`);
       else setText(refs.huntNow, `In ${regionOfTier(c.tier).name}`);

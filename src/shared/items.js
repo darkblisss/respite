@@ -58,7 +58,7 @@ function buildDef(base, rarity, prefix) {
       health: gearStat(line.health, growth.health, g.tier, m),
       crit: line.crit ? Math.round(line.crit * m * 1000) / 1000 : 0,
       veil: g.slot === "weapon" ? gearStat(CONFIG.hunt.weaponVeil[g.tier - 1], 1, 1, m) : 0,
-      twoHanded: g.twoHanded, maxDur: g.maxDur, repairMat: g.repairMat,
+      twoHanded: g.twoHanded,
       value: Math.round(g.value * m * (pfx ? 2 : 1)), tier: g.tier, prof: g.prof,
       effect: pfx ? pfx.effect : null, category: "Equipment",
     };

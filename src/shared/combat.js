@@ -7,8 +7,7 @@
    phone and twelve hours away all play out the same fight. The same
    engine runs projections for the zone popup without a save.
 
-   Flow inside a fight (timers, foes, crits, gold per kill, which
-   armour piece wears) draws from the save's one hunt stream,
+   Flow inside a fight (timers, foes, crits, gold per kill) draws from the save's one hunt stream,
    state.rng.hunt, in v4's order. It runs on from hunt to hunt,
    through pulling back and falling, so no command can deal a fresh
    one. What a kill leaves (drops, finds, Sovereign pieces) rolls on
@@ -774,7 +773,6 @@ function liveHunt(state, c, env, nowAt) {
         stashLoot(state, fragmentOfTier(mob.tier), GameData.ELITE.fragments, env, at);
       }
       companionFinds(state, "warfare", kKey, kN, env, at);
-      if (applyWear(state, ctx.rng, env, at)) refresh();
       state.rolls[mKey] = (state.rolls[mKey] || 0) + 1;
       state.rolls[kKey] = kN + 1;
     },
@@ -807,11 +805,6 @@ function liveHunt(state, c, env, nowAt) {
       state.player.recoveryLeft = 0;
       state.player.hp = 1;
       state.player.camp = { since: at, hp: 1, walkUntil: at };
-      GameData.EQUIP_SLOTS.forEach((slot) => {
-        const key = state.equipment[slot];
-        const d = key ? itemDef(key) : null;
-        if (d && d.maxDur) damageItem(state, key, H.deathWear, env, at);
-      });
       ctx.fx("you", "fall", 0);
       emit(state, env, "hunt:death", { monsterId: mob.id, elapsedMs: Math.round(took), at });
     },
@@ -1013,61 +1006,3 @@ export function dropLoot(state, mob, elite, kN, env, at) {
   }
 }
 
-/* ================= 7. DURABILITY ================= */
-
-export function wearPct(state, key) {
-  const d = itemDef(key);
-  if (!d || !d.maxDur) return null;
-  const worn = Object.hasOwn(state.wear, key) ? state.wear[key] : 0;
-  return clamp(Math.round((1 - worn / d.maxDur) * 100), 0, 100);
-}
-
-// A kill's wear: the weapon and one armour piece. True when something broke.
-export function applyWear(state, rng, env, at) {
-  let broke = false;
-  const eq = state.equipment;
-  const w = eq.weapon;
-  const wd = w ? itemDef(w) : null;
-  if (wd && wd.maxDur) broke = damageItem(state, w, 1, env, at) || broke;
-  const armour = GameData.EQUIP_SLOTS
-    .filter((s) => s !== "weapon" && s !== "ring" && s !== "neck")
-    .map((s) => eq[s])
-    .filter((k) => {
-      const d = k ? itemDef(k) : null;
-      return !!(d && d.maxDur);
-    });
-  if (armour.length) broke = damageItem(state, armour[Math.floor(rng() * armour.length)], 1, env, at) || broke;
-  return broke;
-}
-
-export function damageItem(state, key, amount, env, at) {
-  const d = itemDef(key);
-  if (!d || !d.maxDur) return false;
-  state.wear[key] = (Object.hasOwn(state.wear, key) ? state.wear[key] : 0) + amount;
-  if (state.wear[key] < d.maxDur) return false;
-  state.equipment[d.slot] = null;
-  // The piece is gone, and its wear with it.
-  delete state.wear[key];
-  emit(state, env, "item:broke", { key, at });
-  return true;
-}
-
-export function repairCost(state, key) {
-  const d = itemDef(key);
-  const dmg = d && Object.hasOwn(state.wear, key) ? state.wear[key] : 0;
-  if (!d || !d.maxDur || dmg <= 0) return null;
-  return { mat: d.repairMat, qty: Math.max(1, Math.ceil(dmg / 80)) };
-}
-
-export function repair(state, { key } = {}, env) {
-  if (!validKey(key)) return refuse("No such item.");
-  const cost = repairCost(state, key);
-  if (!cost) return refuse("Nothing to repair.");
-  const res = transact(state, (tx) => {
-    tx.spend(cost.mat, cost.qty, ORDER.spend);
-    tx.del(state.wear, key);
-  });
-  if (!res.ok) return refuse(`Need ${fmt(cost.qty)} ${itemDef(cost.mat).name}.`);
-  emit(state, env, "item:repaired", { key });
-  return { ok: true };
-}

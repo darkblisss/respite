@@ -2856,7 +2856,6 @@ button.chip:disabled { opacity: .45; }
   height: 100%;
   object-fit: contain;
   object-position: center bottom;
-  padding: 8px 6px 0;
 }
 
 .portrait::after {

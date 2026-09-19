@@ -18,7 +18,7 @@ import { CONFIG } from "../../shared/config.js";
 import { ARTISAN_ORDER, TRADE_ORDER, getSkill, getZone, regionOfTier, sovereignOf, skillName } from "../../shared/registry.js";
 import { skillPlan } from "../../shared/skills.js";
 import { campPlan, combatPlan } from "../../shared/combat.js";
-import { maxHp, recovering, skillLevel } from "../../shared/stats.js";
+import { maxHp, myClass, recovering, skillLevel } from "../../shared/stats.js";
 import { slotCap, slotsUsed } from "../../shared/storage.js";
 import { requisitionsLeft, requisitionsOpen } from "../../shared/world.js";
 import { dayIndex, tomorrowRevealed, weatherAt, weatherForDay } from "../../shared/weather.js";
@@ -49,6 +49,7 @@ const NAV = [
     { route: { page: "character" }, label: "Character", icon: "person" },
     // Inventory sits above the Hunt: what you carry into a fight, then the fight.
     { route: { page: "armaments" }, label: "Inventory", icon: "plate", meta: (s) => `${slotsUsed(s, "inv")}/${slotCap(s, "inv")}` },
+    { route: { page: "discipline" }, label: "Discipline", icon: "book", meta: (s) => (myClass(s) ? myClass(s).name : "-") },
     { route: { page: "skill", arg: "warfare" }, label: "Hunt", icon: "swords",
       meta: (s) => `Lv ${skillLevel(s, "warfare")}`, dot: (s) => (s.tasks.combat ? "ember" : null) },
     // Companions are out of the live camp until the system is redesigned. Re-enable this row with the route in router.js.
@@ -116,9 +117,9 @@ const SYNC_SHOW_MS = 600;   // a quick request never flickers the pill
 export function createShell(app) {
   const $ = {
     bench: el("tbBench"), benchLink: el("tbBenchLink"), benchIcon: el("tbBenchIcon"), benchName: el("tbBenchName"),
-    benchShort: el("tbBenchShort"), benchMeta: el("tbBenchMeta"), benchBar: el("tbBenchBar"), benchStop: el("tbBenchStop"),
+    benchShort: el("tbBenchShort"), benchMeta: el("tbBenchMeta"), benchBar: el("tbBenchBar"), benchRestart: el("tbBenchRestart"),
     hunt: el("tbHunt"), huntLink: el("tbHuntLink"), huntIcon: el("tbHuntIcon"), huntName: el("tbHuntName"),
-    huntShort: el("tbHuntShort"), huntMeta: el("tbHuntMeta"), huntBar: el("tbHuntBar"), huntStop: el("tbHuntStop"),
+    huntShort: el("tbHuntShort"), huntMeta: el("tbHuntMeta"), huntBar: el("tbHuntBar"), huntRestart: el("tbHuntRestart"),
     gold: el("tbGoldText"), hp: el("tbHp"), hpFill: el("tbHpFill"), hpText: el("tbHpText"),
     conn: el("tbConn"), connText: el("tbConnText"), settings: el("tbSettings"), crumbs: el("tbCrumbs"),
     weather: el("weather"), banners: el("bannerDock"), log: el("logDock"),
@@ -139,11 +140,23 @@ export function createShell(app) {
 
   const phone = typeof matchMedia === "function" ? matchMedia("(max-width: 599px)") : { matches: false };
 
-  // Set by paintHunt: the stop button has two meanings and only one place to press it.
+  // Set by paintHunt: whether the hunt on the bar is the party's rather than your own.
   let outWithParty = false;
 
-  $.benchStop.addEventListener("click", () => app.dispatch("stopSkill"));
-  $.huntStop.addEventListener("click", () => app.dispatch(outWithParty ? "partyHuntLeave" : "pullBack"));
+  /* The bar's button starts the thing on it over rather than stopping it: the count
+     back to zero, the batch from the top, without walking to the page to do it. It is
+     only there while something is actually running, and it is the only place it is --
+     a skill's own page keeps its Stop, which is the choice that needs the walk. */
+  $.benchRestart.addEventListener("click", () => {
+    const t = app.store && app.store.state ? app.store.state.tasks.skilling : null;
+    if (!t) return;
+    app.dispatch("startSkill", { skillId: t.skillId, actionId: t.actionId, limit: t.limit == null ? null : t.limit });
+  });
+  $.huntRestart.addEventListener("click", () => {
+    const c = app.store && app.store.state ? app.store.state.tasks.combat : null;
+    if (!c || outWithParty) return;
+    app.dispatch("startHunt", { tier: c.tier, zone: c.zone, limit: c.limit == null ? null : c.limit });
+  });
   $.conn.addEventListener("click", () => app.openSettings());
   $.settings.addEventListener("click", () => app.openSettings());
 
@@ -178,6 +191,7 @@ export function createShell(app) {
       setText($.benchShort, "Idle");
       setText($.benchMeta, "No crews at work");
       setAttr($.benchLink, "href", "#/character");
+      setAttr($.benchRestart, "hidden", true);
       toggleClass($.benchBar, "nojump", true);
       setWidth($.benchBar, 0);
       return;
@@ -190,6 +204,7 @@ export function createShell(app) {
     setText($.benchShort, shortName(name));
     setText($.benchMeta, `${verb ? `${verb} · ` : ""}${count} · ${fmtTime(plan.timeLeft)} left`);
     setAttr($.benchLink, "href", `#/skill/${plan.def.skillId}`);
+    setAttr($.benchRestart, "hidden", false);
     toggleClass($.benchBar, "nojump", plan.pct < 6);
     setWidth($.benchBar, plan.pct);
   }
@@ -251,7 +266,8 @@ export function createShell(app) {
     setText($.huntName, look.name);
     setText($.huntShort, look.short);
     setText($.huntMeta, look.meta);
-    setAttr($.huntStop, "aria-label", look.stop);
+    // Nothing to start over when nothing is out, and the party's fight is not yours to restart.
+    setAttr($.huntRestart, "hidden", look.state === "idle" || outWithParty);
     toggleClass($.huntBar, "nojump", look.state === "idle" || look.pct < 6);
     setWidth($.huntBar, look.pct);
   }
