@@ -29,7 +29,7 @@ import { monsterArt } from "../ui/popups/foe.js";
 import { huntChips, chipNode, partyHere, ZONE_ICONS } from "../ui/popups/zone.js";
 import { CONFIG } from "../../shared/config.js";
 import { GameData, getMonster, getZone, getSkill, foesOf, sovereignOf, regionOfTier } from "../../shared/registry.js";
-import { campPlan, huntRates, threatIn, threatShown } from "../../shared/combat.js";
+import { campPlan, huntRates } from "../../shared/combat.js";
 import { statsOf, canPickClass, recovering, myClass, xpProgress } from "../../shared/stats.js";
 import { currentRegion } from "../../shared/world.js";
 
@@ -44,19 +44,19 @@ const FX_QUEUE_MAX = 60;
 const GONE_MS = 700;            // the fade in pages.css, then the card goes
 const DEAD_MS = 1400;
 
-// What floats up for each kind of blow. Kinds with no text (kill, spawn, leave, fall) only move things.
+/* What floats up for each kind of blow. No damage number floats any more, in
+   either direction: a health bar winding down says how the fight is going, and the
+   DPS on the run bar says how fast. What is left here is the things a number could
+   never say -- that a blow was a critical, that armour turned one, that a technique
+   landed -- and healing, which is not damage and is worth counting. Kinds with no
+   text (hit, volley, bleed, thorns, hurt, kill, spawn, leave, fall) only move things. */
 const FLOAT_TEXT = {
-  hit: (n) => fmt(n),
-  crit: (n) => `${fmt(n)}!`,
-  strike: (n) => `${fmt(n)}!`,
-  ambush: (n) => `${fmt(n)}!`,
-  volley: (n) => fmt(n),
-  empowered: (n) => `${fmt(n)}!`,
-  bleed: (n) => fmt(n),
-  thorns: (n) => fmt(n),
-  hurt: (n) => fmt(n),
-  ambushed: (n) => `${fmt(n)}!`,
-  block: (n) => `Blunted ${fmt(n)}`,
+  crit: () => "Crit",
+  strike: () => "Devastating",
+  ambush: () => "Ambush",
+  empowered: () => "Empowered",
+  ambushed: () => "Ambushed",
+  block: () => "Blunted",
   glance: () => "Glance",
   heal: (n) => `+${fmt(n)}`,
   join: () => "Joins",
@@ -192,38 +192,29 @@ export default {
     const kKills = kpi("Kills");
     const kRate = kpi("XP/hr");
     const kDps = kpi("DPS");
-    const kThreat = kpi("Threat", true);
+    const kSov = kpi("Sovereign", true);
     const kLeft = kpi("Time left");
-    const kpis = h("div.kpis", kKills.node, kRate.node, kDps.node, kThreat.node, kLeft.node);
+    const kpis = h("div.kpis", kKills.node, kRate.node, kDps.node, kSov.node, kLeft.node);
     const hint = h("p.hunt-hint");
 
-    const hideInput = h("input", { type: "checkbox" });
-    const hideSwitch = h("label.switch", hideInput, "Hide when Threat peaks");
     const pullBtn = h("button.btn.btn-quiet", { type: "button" }, "Pull back");
     const goBtn = h("button.btn.btn-ember", { type: "button" }, "Change hunt");
     const huntCard = h("section.card.hunt-card",
       huntHead,
       arena,
-      h("div.hunt-foot", kpis, hint, h("div.hunt-actions", hideSwitch, h("div.btn-row", pullBtn, goBtn))));
+      h("div.hunt-foot", kpis, hint, h("div.hunt-actions", h("div.btn-row", pullBtn, goBtn))));
 
     /* ================= ZONES AND QUARRY ================= */
 
     const awayText = document.createTextNode("");
     const away = h("span.chip.chip-ember", iconEl("swords"), awayText);
-    /* Threat is region-wide, so it is stated once here rather than on each of four
-       zone cards, and this is also the one place the hide rule is spelled out. */
-    const threatValue = h("b");
-    const threatFill = h("i");
-    const regionThreat = h("div.meter.region-threat",
-      h("span.meter-top", h("span", "Region Threat"), threatValue),
-      h("span.bar.bar-ember.bar-thin", threatFill));
     const zonesGrid = h("div.grid-cards.max-2");
     const zones = h("section.section",
       h("div.section-head",
         h("div",
           h("h2.section-title", "Zones"),
-          h("p.section-sub", "Deeper zones field more foes, hit harder and pay more XP. Threat is the whole region's: hide out a full hour, or fell the Sovereign, to clear it.")),
-        h("div.section-end", regionThreat, away)),
+          h("p.section-sub", "Deeper zones field more foes, hit harder and pay more XP. The Inner and the Core are the only ground a Sovereign walks, and the only ground whose Elites carry the Veil.")),
+        h("div.section-end", away)),
       zonesGrid);
     const zoneRefs = new Map();
 
@@ -255,7 +246,7 @@ export default {
       const tile = (mob) => {
         const sov = mob.archetype === "sovereign";
         const sub = sov
-          ? `Sovereign · comes when Threat peaks · enrages every ${GameData.SOVEREIGN.enrageMs / 1000}s`
+          ? `Sovereign · comes on its own odds, with ${GameData.SOVEREIGN.escorts} Elites · enrages every ${GameData.SOVEREIGN.enrageMs / 1000}s`
           : `${GameData.ARCHETYPES[mob.archetype].name} · ${fmt(mob.hp)} health · swings every ${(mob.speed / 1000).toFixed(1)}s`;
         return h("button.foe-tile", { type: "button", class: { "is-sovereign": sov }, dataset: { monster: mob.id } },
           h("span.foe-art", { html: monsterArt(mob) }),
@@ -373,14 +364,6 @@ export default {
 
     /* ================= WIRING ================= */
 
-    let hidePending = false;
-    hideInput.addEventListener("change", () => {
-      hidePending = true;
-      Promise.resolve(ctx.dispatch("setHide", { on: hideInput.checked })).finally(() => {
-        hidePending = false;
-        hideInput.checked = !!ctx.state.settings.hideSovereign;
-      });
-    });
     /* One button, two fights: walking away from the party's is a server-only command, and the
        answer to it is what takes the shared arena off the page. A refusal toasts itself. */
     pullBtn.addEventListener("click", () => {
@@ -495,12 +478,7 @@ export default {
         es = "You are in no state to hunt.";
       } else if (c) {
         et = `The ${zone.name} lies quiet`;
-        if (c.phase === "hide") {
-          st = "Hiding";
-          tm = `${fmtTime(c.wait)} left`;
-          et = "Lying low";
-          es = `Something vast is searching the ${zone.name}.`;
-        } else if (c.phase === "search") {
+        if (c.phase === "search") {
           st = c.sovereignNext ? "Something vast approaches" : "Searching";
           tm = c.sovereignNext ? `Here in ${fmtTime(c.wait)}` : `Next encounter in ${fmtTime(c.wait)}`;
           et = c.sovereignNext ? sovereignOf(c.tier).name : `Searching the ${zone.name}`;
@@ -528,7 +506,7 @@ export default {
       setText(kKills.l, "Kills");
       setText(kRate.l, "XP/hr");
       setText(kDps.l, "DPS");
-      setText(kThreat.l, "Threat");
+      setText(kSov.l, "Sovereign");
       setText(kLeft.l, "Time left");
       if (c) {
         setText(kKills.v, fmt(c.done));
@@ -537,18 +515,16 @@ export default {
         const rates = huntRates(c);
         setText(kRate.v, rates.xpRate == null ? "Reckoning" : fmt(Math.round(rates.xpRate)));
         setText(kDps.v, rates.dps == null ? "Reckoning" : fmtStat(rates.dps));
-        const threat = threatIn(state, c.tier, c.zone);
-        setText(kThreat.v, `${threatShown(threat)} / ${H.threatCap}`);
-        setWidth(kThreat.fill, (threat / H.threatCap) * 100);
+        // Not a counter filling any more: the flat odds this ground shows it, per encounter cleared.
+        const sovChance = getZone(c.zone).sovereign || 0;
+        setText(kSov.v, sovChance > 0 ? `${+(sovChance * 100).toFixed(2)}%` : "-");
+        setWidth(kSov.fill, sovChance > 0 ? Math.min(100, sovChance * 100 * 20) : 0);
         setText(kLeft.v, fmtTime(Math.max(0, IDLE_CAP - c.elapsed)));
       } else {
         // The time left is already on the arena's status line.
         setText(hint, down ? "You fell. Choose a zone below once you are back on your feet." : "Choose a zone below to take up the hunt.");
       }
 
-      setAttr(hideSwitch, "hidden", !c);
-      const hide = !!state.settings.hideSovereign;
-      if (!hidePending && hideInput.checked !== hide) hideInput.checked = hide;
       setAttr(pullBtn, "hidden", !c);
       setText(pullBtn, "Pull back");
       setAttr(goBtn, "hidden", false);
@@ -639,14 +615,12 @@ export default {
       setText(kRate.v, fmt(Math.round(mine ? mine.dmg : 0)));
       setText(kDps.l, "Party damage");
       setText(kDps.v, fmt(Math.round(total)));
-      setText(kThreat.l, "Your share");
-      setText(kThreat.v, `${Math.round(share)}%`);
-      setWidth(kThreat.fill, share);
+      setText(kSov.l, "Your share");
+      setText(kSov.v, `${Math.round(share)}%`);
+      setWidth(kSov.fill, share);
       setText(kLeft.l, "Time out");
       setText(kLeft.v, fmtTime(view.elapsed));
 
-      // Hiding is a lone hunter's trick and the party's fight has no phase for it.
-      setAttr(hideSwitch, "hidden", true);
       setAttr(pullBtn, "hidden", false);
       setText(pullBtn, "Break away");
       setAttr(goBtn, "hidden", true);
@@ -685,11 +659,8 @@ export default {
         sigs.zones = tier;
         buildZones(tier);
       }
-      // One counter for the region, so every card reads the same peak.
-      const threat = threatIn(state, tier);
-      const peaked = threat >= H.threatCap;
-      setText(threatValue, `${threatShown(threat)} / ${H.threatCap}`);
-      setWidth(threatFill, (threat / H.threatCap) * 100);
+      // Nothing accumulates any more: each zone simply carries its own odds.
+      const peaked = false;
 
       GameData.ZONES.forEach((z) => {
         const r = zoneRefs.get(z.id);

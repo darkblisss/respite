@@ -167,10 +167,13 @@ function buildRegistry() {
   // Ids keep their old "provision" name for saves.
   const REMEDY_NAMES = {
     1: "Bitter-Ash Salve",
+    2: "Bogwater Tincture",
     3: "Gravemoss Poultice",
     4: "Corpse-Marrow Draught",
+    5: "Widow's Decoction",
     6: "Star-Steel Tonic",
     7: "Leviathan Blood",
+    8: "Void-Marrow Philtre",
     9: "Godsbane Elixir",
   };
 
@@ -188,6 +191,35 @@ function buildRegistry() {
       category: "Reagent", value: 1, tier: 1, reagent: true };
   });
 
+  /* ---- THE VEIL: FRAGMENTS AND ESSENCE ----
+     What the hunt pays out that the bench cannot make. An Elite in the Inner or
+     the Core leaves a Fragment; a Sovereign leaves the Essence whole. Twenty
+     Fragments merge into one Essence at the Artificer's bench. Each band covers
+     three tiers and only improves equipment inside it, so the deepest ground
+     never trivialises the shallow. Bands follow STRATA exactly. */
+  const VEIL_BANDS = [
+    { key: "lesser",    name: "Lesser Veil", tiers: [1, 2, 3], level: TIERS[0].level,
+      fragment: "lesser_veil_fragment",    essence: "lesser_veil_essence",    fragValue: 15,   essValue: 300 },
+    { key: "veiled",    name: "Veiled",      tiers: [4, 5, 6], level: TIERS[3].level,
+      fragment: "veiled_fragment",         essence: "veiled_essence",         fragValue: 140,  essValue: 2800 },
+    { key: "sovereign", name: "Sovereign",   tiers: [7, 8, 9], level: TIERS[6].level,
+      fragment: "sovereign_fragment",      essence: "sovereign_essence",      fragValue: 1200, essValue: 24000 },
+  ];
+  const FRAG_PER_ESSENCE = 20;
+
+  VEIL_BANDS.forEach((b) => {
+    MATERIALS[b.fragment] = { id: b.fragment, name: `${b.name} Fragment`, icon: "shardIco", kind: "material",
+      category: "Veil", value: b.fragValue, tier: b.tiers[0], band: b.key, fragment: true };
+    MATERIALS[b.essence] = { id: b.essence, name: `${b.name} Essence`, icon: "gem", kind: "material",
+      category: "Veil", value: b.essValue, tier: b.tiers[0], band: b.key, essence: true };
+    // Twenty Fragments, one Essence. The Artificer already works the Veil.
+    CRAFT_ACTIONS.artificer.push({
+      id: `merge_${b.essence}`, skillId: "artificer", tier: b.tiers[0], name: `${b.name} Essence`, icon: "gem",
+      level: b.level, time: CONFIG.compTime(b.tiers[0]), xp: TIERS[b.tiers[0] - 1].xp * 2,
+      cost: { [b.fragment]: FRAG_PER_ESSENCE }, out: { [b.essence]: 1 },
+    });
+  });
+
   // Every artisan recipe unlocks at its tier's level: 1, 10, 20 ... 80.
   CRAFT_ACTIONS.woodwright.push({
     id: "craft_vault_chest", skillId: "woodwright", tier: 2, name: "Banded Chest", icon: "crate",
@@ -198,30 +230,30 @@ function buildRegistry() {
      CONFIG.hunt.weaponVeil and CONFIG.gearStat turn them into real stats. */
   const GEAR_LINES = {
     // weapons and offhands
-    sword:       { attack: 1 },
-    dagger:      { attack: 1, crit: 0.03 },
-    greatsword:  { attack: 2 },
-    bow:         { attack: 2 },
-    staff:       { attack: 2 },
+    sword:       { attack: 10 },
+    dagger:      { attack: 10, crit: 0.03 },
+    greatsword:  { attack: 20 },
+    bow:         { attack: 20 },
+    staff:       { attack: 20 },
     shield:      { defence: 1 },
-    grimoire:    { attack: 1 },
+    grimoire:    { attack: 10 },
     // heavy: Defence on every piece
-    helm:        { health: 1, defence: 1 },
-    chest:       { health: 2, defence: 1 },
-    hboots:      { health: 1, defence: 1 },
-    hgaunts:     { health: 1, defence: 1 },
+    helm:        { health: 10, defence: 1 },
+    chest:       { health: 20, defence: 1 },
+    hboots:      { health: 10, defence: 1 },
+    hgaunts:     { health: 10, defence: 1 },
     // medium: a little Defence, a little crit
-    hood_medium: { health: 1, crit: 0.01 },
-    jacket:      { health: 2, defence: 1 },
-    mboots:      { health: 1, crit: 0.01 },
-    mgloves:     { health: 1, crit: 0.01 },
+    hood_medium: { health: 10, crit: 0.01 },
+    jacket:      { health: 20, defence: 1 },
+    mboots:      { health: 10, crit: 0.01 },
+    mgloves:     { health: 10, crit: 0.01 },
     // light: the most health
-    hood_light:  { health: 2 },
-    robe:        { health: 3 },
-    lboots:      { health: 1 },
-    lgloves:     { health: 1 },
+    hood_light:  { health: 20 },
+    robe:        { health: 30 },
+    lboots:      { health: 10 },
+    lgloves:     { health: 10 },
     // jewellery
-    amulet:      { attack: 1 },
+    amulet:      { attack: 10 },
     ring:        { defence: 1 },
   };
 
@@ -486,44 +518,49 @@ function buildRegistry() {
      The maths lives in combat.js. */
   /* `mix` is the share of each archetype the ground fields, `power` the multiplier
      on a foe's health and damage at that depth (the same foe, harder deeper in).
-     Power climbs in even steps to 1.4x at the Core while XP climbs to 2.2x, so
-     deeper ground stays a clearly better deal and not just a longer slog. Threat
-     per kill has no zone dial: the mix sending up more Brutes does that work. */
+     `start` is what walks in when an encounter opens; reinforcements add one at a
+     time on `windowMs` until maxFoes stand. `sovereign` is the flat chance, rolled
+     once at the end of every encounter you clear, that the next one is the Sovereign
+     instead. `elite` is rolled per foe; in the Inner and the Core an Elite also
+     leaves a Veil Fragment, which is the slow road to the same Essence a Sovereign
+     drops whole. Threat is gone: nothing accumulates, the ground simply has odds. */
   const ZONES = [
-    { id: "outer", name: "Outer", xp: 1, windowMs: 60000, power: 1, elite: 0.04, engage: 0.4, escorts: 0,
-      sizes: [[1, 0.75], [2, 0.25]], mix: { skirmisher: 0.7, stalker: 0.2, brute: 0.1 },
-      foesText: "1 or 2",
-      note: "The picked-over edge. One thing at a time, mostly, and help is slow to reach it." },
-    { id: "middle", name: "Middle", xp: 1.3, windowMs: 50000, power: 1.15, elite: 0.1, engage: 0.6, escorts: 0,
+    { id: "outer", name: "Outer", xp: 1, windowMs: 60000, power: 1, elite: 0.04, sovereign: 0, fragments: false,
+      sizes: [[1, 1]], mix: { skirmisher: 0.7, stalker: 0.2, brute: 0.1 },
+      foesText: "1",
+      note: "The picked-over edge. One thing at a time, and help is slow to reach it." },
+    { id: "middle", name: "Middle", xp: 1.3, windowMs: 50000, power: 1.15, elite: 0.1, sovereign: 0, fragments: false,
       sizes: [[1, 0.5], [2, 0.5]], mix: { skirmisher: 0.5, stalker: 0.3, brute: 0.2 },
       foesText: "1 or 2",
       note: "Deeper in. They come in pairs as often as not, and the dark answers faster." },
-    { id: "inner", name: "Inner", xp: 1.7, windowMs: 40000, power: 1.27, elite: 0.16, engage: 0.8, escorts: 1,
-      sizes: [[2, 0.5], [3, 0.5]], mix: { skirmisher: 0.2, stalker: 0.45, brute: 0.35 },
+    { id: "inner", name: "Inner", xp: 1.7, windowMs: 40000, power: 1.27, elite: 0.05, sovereign: 0.01, fragments: true,
+      sizes: [[2, 1]], mix: { skirmisher: 0.2, stalker: 0.45, brute: 0.35 },
+      foesText: "2",
+      note: "Where the ground stops pretending. Two at once, more on the way, and something that rules here." },
+    { id: "core", name: "Core", xp: 2.2, windowMs: 30000, power: 1.4, elite: 0.2, sovereign: 0.05, fragments: true,
+      sizes: [[2, 0.5], [3, 0.5]], mix: { skirmisher: 0.15, stalker: 0.35, brute: 0.5 },
       foesText: "2 or 3",
-      note: "Where the ground stops pretending. Two or three at once, and more on the way." },
-    { id: "core", name: "Core", xp: 2.2, windowMs: 30000, power: 1.4, elite: 0.22, engage: 1, escorts: 2,
-      sizes: [[3, 1]], mix: { skirmisher: 0.15, stalker: 0.35, brute: 0.5 },
-      foesText: "3",
-      note: "The heart of it. Always three, always hungry, and something vast is listening." },
+      note: "The heart of it. Always hungry, and what rules this ground walks it often." },
   ];
 
   /* Three kinds of foe in every region, plus its Sovereign. Multipliers are
      against a Stalker of the same tier. `defence` is the share of a blow it
      shrugs off on its own ground. An Elite is any of the three, only worse. */
   const ARCHETYPES = {
-    skirmisher: { name: "Skirmisher", speed: 2000, hp: 0.7, attack: 0.7, defence: 0,    xp: 0.8, threat: 1, gold: 0.7, drops: 1,
+    skirmisher: { name: "Skirmisher", speed: 2000, hp: 0.7, attack: 0.7, defence: 0,    xp: 0.8, gold: 0.7, drops: 1,
       note: "Fast and thin. Hits often and hits light." },
-    stalker:    { name: "Stalker",    speed: 2400, hp: 1,   attack: 1,   defence: 0.1,  xp: 1,   threat: 2, gold: 1,   drops: 1,
+    stalker:    { name: "Stalker",    speed: 2400, hp: 1,   attack: 1,   defence: 0.1,  xp: 1,   gold: 1,   drops: 1,
       note: "Patient and even. It keeps pace with you, blow for blow." },
-    brute:      { name: "Brute",      speed: 3000, hp: 1.6, attack: 1.8, defence: 0.25, xp: 1.5, threat: 3, gold: 1.5, drops: 1,
+    brute:      { name: "Brute",      speed: 3000, hp: 1.6, attack: 1.8, defence: 0.25, xp: 1.5, gold: 1.5, drops: 1,
       note: "Slow and heavy. Every blow lands like a door." },
   };
   const ARCHETYPE_ORDER = ["skirmisher", "stalker", "brute"];
-  const ELITE = { hp: 1.8, attack: 1.4, xp: 2.5, threat: 2, gold: 2.5, drops: 2 };
+  /* An Elite is any of the three, only worse -- and in the Inner and the Core it
+     carries a Veil Fragment. Twenty of those make the Essence a Sovereign drops whole. */
+  const ELITE = { hp: 1.8, attack: 1.4, xp: 2.5, gold: 2.5, drops: 2, fragments: 1 };
   const SOVEREIGN = { speed: 2800, hp: 12, attack: 2.5, defence: 0.3, xp: 15, gold: 20,
-    enrageMs: 30000, enrage: 0.15,
-    note: "It rules this ground. When a zone's Threat peaks it may come for you, with a guard in the deeper zones, and it grows angrier the longer the fight runs. Brought low, you break away and the hunt goes on." };
+    enrageMs: 30000, enrage: 0.15, escorts: 2, essence: 1,
+    note: "It rules this ground, and it walks the Inner and the Core on no schedule at all. It comes with two Elites at its back and grows angrier the longer the fight runs. Brought low, you break away and the hunt goes on. Felled, it leaves its Essence whole." };
 
   const REGION_FOES = [
     { skirmisher: ["Carrion Rat", "beast"],       stalker: ["Ash Stalker", "horror"],     brute: ["Ash Brute", "man"],             sovereign: ["The Ashen Warden", "horror"] },
@@ -537,12 +574,15 @@ function buildRegistry() {
     { skirmisher: ["Godsdown Spawn", "horror"],   stalker: ["Root Horror", "horror"],     brute: ["Godsdown Brute", "beast"],      sovereign: ["What Feeds The Roots", "horror"] },
   ];
 
-  // What each kind leaves behind: [material type, qty, chance]. Elites double the qty.
+  /* What each kind leaves behind: [what, qty, chance]. Elites double the qty.
+     The hunt pays in reagents, gold and the Veil; raw materials come out of the
+     ground you dig, not the things you kill. "@reagent" is resolved to one of the
+     five at drop time, so what a foe carries is never the same twice. */
   const FOE_DROPS = {
-    skirmisher: [["flay", 1, 0.45]],
-    stalker:    [["flay", 1, 0.35], ["dredge", 1, 0.15]],
-    brute:      [["delve", 1, 0.35], ["flay", 1, 0.3]],
-    sovereign:  [["flay", 3, 1], ["delve", 3, 1], ["dredge", 2, 1]],
+    skirmisher: [["@reagent", 1, 0.45]],
+    stalker:    [["@reagent", 1, 0.50]],
+    brute:      [["@reagent", 1, 0.65]],
+    sovereign:  [["@reagent", 5, 1]],
   };
 
   const H = CONFIG.hunt;
@@ -560,7 +600,7 @@ function buildRegistry() {
       defence: Math.round((spec.defence / (1 - spec.defence)) * k * 10) / 10,
       xp: H.foeXp[i] * spec.xp, threat: spec.threat || 0,
       gold: [Math.floor(H.foeGold[0] * goldScale * spec.gold), Math.max(1, Math.round(H.foeGold[1] * goldScale * spec.gold))],
-      drops: FOE_DROPS[arch].map(([type, qty, chance]) => [rowMatId(t, type), qty, chance]),
+      drops: FOE_DROPS[arch].map(([type, qty, chance]) => [type.startsWith("@") ? type : rowMatId(t, type), qty, chance]),
     });
 
     ARCHETYPE_ORDER.forEach((arch) => MONSTERS.push(mk(arch, ARCHETYPES[arch])));
@@ -650,23 +690,28 @@ function buildRegistry() {
      Multipliers apply to the base stats a Hunt level gives (CONFIG.baseHealth
      and friends). */
 
+  /* Every hunter crits at the same rate for the same damage and pierces nothing on
+     their own. A discipline is its bulk, its swing and what it does with the Veil;
+     penetration and the rest come off relics, where they can be read. */
+  const BASE_COMBAT = { crit: 0.05, critDmg: 1.5, pen: 0 };
+
   const BRUTE_FORCE = { id: null, name: "Brute Force", health: 1, attack: 1, defence: 1,
-    speed: H.playerSwingMs, crit: 0.05, critDmg: 1.5, pen: 0 };
+    speed: H.playerSwingMs, ...BASE_COMBAT };
 
   const CLASSES = [
     { id: "warrior", name: "Warrior", icon: "plate",
       blurb: "Forces the Veil through the body. Slow, heavy and hard to put down.",
-      health: 1.2, attack: 1, defence: 1.5, speed: 2600, crit: 0.05, critDmg: 1.5, pen: 0.1,
+      health: 1.2, attack: 1, defence: 1.5, speed: 2600, ...BASE_COMBAT,
       veilName: "Devastating Strike",
       veilNote: "Veil builds with every blow you land, and half as much with every blow aimed at you. It carries from fight to fight. Full, your next swing lands three times over and ignores half of Defence." },
     { id: "rogue", name: "Rogue", icon: "blade",
       blurb: "Brief, precise Veil surges. Fast hands, thin margins.",
-      health: 1, attack: 0.85, defence: 1, speed: 2000, crit: 0.12, critDmg: 1.75, pen: 0.15,
+      health: 1, attack: 0.85, defence: 1, speed: 2000, ...BASE_COMBAT,
       veilName: "Ambush",
       veilNote: "Every encounter you walk into opens on an Ambush: a certain critical, a quarter harder again. Veil rebuilds with each blow; full, the next swing is another Ambush." },
     { id: "mage", name: "Mage", icon: "stave",
       blurb: "Shapes the Veil directly. Fragile, and worth it.",
-      health: 0.9, attack: 1.3, defence: 0.7, speed: 2600, crit: 0.06, critDmg: 1.6, pen: 0.25,
+      health: 0.9, attack: 1.3, defence: 0.7, speed: 2600, ...BASE_COMBAT,
       veilName: "Elemental Absorption",
       veilNote: "Every encounter you walk into opens with a volley of three empowered casts, and every empowered cast washes over the whole fight. The Veil then drinks from the air, two a second, never from your blows. Full, your next cast is empowered." },
   ];
@@ -792,8 +837,9 @@ function buildRegistry() {
     STRATA, TIERS, REAGENTS, GATHER_SKILLS, PROFESSIONS, SKILLS,
     MATERIALS, GEAR, TOOLS, REMEDIES, GATHER_ACTIONS, CRAFT_ACTIONS, GEAR_LINES,
     REGIONS, ZONES, ARCHETYPES, ARCHETYPE_ORDER, ELITE, SOVEREIGN, REGION_FOES, FOE_DROPS, MONSTERS,
+    FRAG_PER_ESSENCE, VEIL_BANDS,
     BENCH_TABS, WEATHER_TYPES, WEATHER_SEVERITIES, WEEKDAY_NAMES, MASTERY_TRACK,
-    CLASSES, BRUTE_FORCE, TECHNIQUE, AGENT_RARITIES, AGENT_NAMES,
+    CLASSES, BRUTE_FORCE, BASE_COMBAT, TECHNIQUE, AGENT_RARITIES, AGENT_NAMES,
     COMPANIONS, RANK_NUMERALS, RETIRED_PETS,
     SOURCES: { GATHERED_BY, MADE_BY, USED_IN, DROPPED_BY },
   };
@@ -893,7 +939,20 @@ export const getCompanion = (id) => GameData.COMPANIONS.find((c) => c.id === id)
 export const rarityDef = (k) => GameData.RARITIES.find((r) => r.key === k) || GameData.RARITIES[0];
 export const prefixDef = (id) => GameData.ALL_PREFIXES.find((p) => p.id === id) || null;
 export const agentRarityDef = (k) => GameData.AGENT_RARITIES.find((a) => a.key === k) || GameData.AGENT_RARITIES[0];
+/* A tier, said the way a player reads it. Tiers are an internal index (1..9); what
+   anyone navigates by is the Hunt level the ground opens at, so every sheet, shelf
+   and map says "Lv40" where the table underneath says tier 5. */
+export function tierLabel(tier) {
+  const row = GameData.TIERS[Number(tier) - 1];
+  return row ? `Lv${row.level}` : `Lv${tier}`;
+}
+
 export const stratumOf = (tier) => GameData.STRATA.find((s) => s.tiers.includes(tier)) || GameData.STRATA[0];
+
+// The Veil band a tier sits in, and what it pays out: Fragments from Elites, Essence from Sovereigns.
+export const veilBandOfTier = (tier) => GameData.VEIL_BANDS.find((b) => b.tiers.includes(tier)) || GameData.VEIL_BANDS[0];
+export const fragmentOfTier = (tier) => veilBandOfTier(tier).fragment;
+export const essenceOfTier = (tier) => veilBandOfTier(tier).essence;
 
 // The bench tab and group a recipe sits under.
 export function benchGroupOf(def) {

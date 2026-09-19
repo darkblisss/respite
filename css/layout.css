@@ -90,6 +90,9 @@
   border-bottom: 1px solid var(--line);
   -webkit-backdrop-filter: blur(14px) saturate(1.25);
   backdrop-filter: blur(14px) saturate(1.25);
+  /* Same WebKit failure as the sidebar, on a sticky layer that also blurs: without
+     the hint the bar can come up empty until something else forces a repaint. */
+  will-change: backdrop-filter;
 }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
@@ -441,11 +444,22 @@ button.conn:hover { background: var(--wash-strong); border-color: var(--line); }
 
 /* ================= 3. SIDEBAR ================= */
 
+/* iOS Safari will not paint a sticky grid child whose height is given in dvh until
+   something forces a compositing pass, which is why this bar stayed blank until a
+   popup was opened and then appeared for the rest of the session. Two things fix
+   it, and both are needed: `align-self: start` so the grid does not stretch the
+   item (a stretched item has no room to stick, and WebKit lays it out wrong rather
+   than ignoring the stick), and its own compositing layer so the first frame paints
+   it. `will-change: transform` is the light way to ask for that layer; a
+   `translateZ(0)` hack would also make it a containing block for anything fixed
+   inside, which the drawer at phone widths relies on not being. */
 .sidebar {
   position: sticky;
   top: calc(var(--topbar-h) + env(safe-area-inset-top));
   height: calc(100vh - var(--topbar-h) - env(safe-area-inset-top));
   height: calc(100dvh - var(--topbar-h) - env(safe-area-inset-top));
+  align-self: start;
+  will-change: transform;
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
@@ -453,6 +467,7 @@ button.conn:hover { background: var(--wash-strong); border-color: var(--line); }
   border-right: 1px solid var(--line-soft);
   overflow-y: auto;
   overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .drawer-head { display: none; }
@@ -695,6 +710,8 @@ button.conn:hover { background: var(--wash-strong); border-color: var(--line); }
     top: 0;
     bottom: 0;
     left: 0;
+    /* The drawer animates transform itself, and it is not sticky here. */
+    align-self: auto;
     z-index: var(--z-drawer);
     width: min(320px, 86vw);
     height: auto;

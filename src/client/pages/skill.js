@@ -20,8 +20,7 @@ import { fmt, fmtWhole, fmtTime, titleCase } from "../ui/format.js";
 import { openPopup } from "../ui/widgets.js";
 import { xpChips, chipNode, nodeTip, makesTip, workingWord, firstSentence } from "../ui/popups/action.js";
 import {
-  GameData, getSkill, gatherSkillDef, actionsFor, actionOutput, findAction, benchGroupOf, skillName,
-} from "../../shared/registry.js";
+  GameData, getSkill, gatherSkillDef, actionsFor, actionOutput, findAction, benchGroupOf, skillName, tierLabel } from "../../shared/registry.js";
 import { itemDef, itemName } from "../../shared/items.js";
 import { haveQty } from "../../shared/storage.js";
 import { skillLevel, xpProgress } from "../../shared/stats.js";
@@ -554,7 +553,7 @@ function campView(skill) {
       const s = campStage(state, skill.id);
       if (s === stage) return;
       stage = s;
-      setText(stageChip, `Tier ${s} of ${TIERS.length}`);
+      setText(stageChip, `${tierLabel(s)} · ${s} of ${TIERS.length}`);
       scene.replaceChildren(html(`<svg viewBox="0 34 1000 186" preserveAspectRatio="xMidYMax slice" role="img" aria-label="The ${skill.name} camp">${campScene(skill.id, s)}</svg>`));
       setText(now, CAMP_STAGES[s - 1]);
       setText(next, s < TIERS.length ? `Next at Lv ${TIERS[s].level}: ${CAMP_STAGES[s].toLowerCase()}` : "Nothing left to build.");

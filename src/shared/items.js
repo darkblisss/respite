@@ -192,3 +192,21 @@ export function craftIndex(actionId) {
   const i = CRAFT_INDEX.get(actionId);
   return i === undefined ? -1 : i;
 }
+
+/* The tier of ground a Hunt level stands on: 1 at Lv1, 2 at Lv10, up to 9 at Lv80.
+   A remedy weaker than that does nothing at all -- the bottle is sized for lesser
+   wounds than you take now. A stronger one works, it just costs more than it had
+   to, which is what makes buying the right tier the thrifty move rather than a
+   rule anyone has to be told. */
+export function tierForLevel(level) {
+  const tiers = GameData.TIERS;
+  let t = tiers[0].i;
+  for (const row of tiers) if (level >= row.level) t = row.i;
+  return t;
+}
+
+export function remedyTooWeak(key, huntLevel) {
+  const d = itemDef(key);
+  if (!d || !(d.heal > 0)) return false;
+  return d.tier < tierForLevel(huntLevel);
+}

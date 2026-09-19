@@ -75,7 +75,7 @@ export function makeHunter(userId, stats, { hp = null, heals = [] } = {}) {
     swing: 0, veil: 0, volley: 0, streak: 0,
     down: false,
     dmg: 0,
-    owed: { xp: 0, gold: 0, kills: 0, threat: 0, slain: [], drops: [], died: null, remedies: 0 },
+    owed: { xp: 0, gold: 0, kills: 0, slain: [], drops: [], died: null, remedies: 0 },
   };
 }
 
@@ -103,8 +103,8 @@ export function newEncounter({ id, partyId, tier, zone, seed, hunters, kind = "n
   if (e.kind === "sovereign") {
     e.enrageAt = GameData.SOVEREIGN.enrageMs;
     spawn(e, rng, sovereignOf(tier), false);
-    // Its guard scales with the warband, as the roster does.
-    for (let i = 0; i < z.escorts * standing(e).length; i++) spawn(e, rng, rollFoe(tier, z, rng).mob, true);
+    // Two at its back for one hunter, and that guard scales with the warband as the roster does.
+    for (let i = 0; i < GameData.SOVEREIGN.escorts * standing(e).length; i++) spawn(e, rng, rollFoe(tier, z, rng).mob, true);
   } else {
     // Solo draws zone.sizes; a warband draws that many each, so the pressure per hunter holds.
     const each = pickWeighted(z.sizes, rng);
@@ -406,7 +406,6 @@ function foeSwing(ctx, f) {
     }
   }
 
-  if (u.hp > 0 && u.hp <= s.maxHp * H.remedyAt) takeRemedy(ctx, u);
   if (u.hp <= 0) {
     fall(ctx, u, mob);
     return;
@@ -475,8 +474,7 @@ function killFoe(ctx, f) {
     const share = mine / total;
     u.owed.xp += n.xp * z.xp * share;
     u.owed.gold += gold * share;
-    // The region notices everyone who was there, so Threat rises as it would alone.
-    u.owed.threat += n.threat * H.threatPerKill;
+
   });
 
   /* One corpse is one kill. Crediting everyone who landed a blow would write four
@@ -645,7 +643,7 @@ export function owedFor(s, userId) {
 export function clearOwed(s, userId) {
   const u = s.hunters.find((x) => x.userId === String(userId));
   if (!u) return;
-  u.owed = { xp: 0, gold: 0, kills: 0, threat: 0, slain: [], drops: [], died: null, remedies: 0 };
+  u.owed = { xp: 0, gold: 0, kills: 0, slain: [], drops: [], died: null, remedies: 0 };
 }
 
 // What a watcher sees of the whole session.

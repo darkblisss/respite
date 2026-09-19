@@ -1,7 +1,7 @@
 /* ============================================================
    Respite · combat.js · The Battlefield
    ------------------------------------------------------------
-   The hunt: zones and Threat, and the encounter engine. The engine
+   The hunt: zones, and the encounter engine. The engine
    is event-driven. Every combatant keeps its own swing timer and
    time jumps from one event to the next, so an open tab, a sleeping
    phone and twelve hours away all play out the same fight. The same
@@ -18,10 +18,11 @@
 import { CONFIG } from "./config.js";
 import {
   GameData, getMonster, getZone, foeOf, sovereignOf, regionOfTier,
+  fragmentOfTier, essenceOfTier,
 } from "./registry.js";
-import { itemDef, makeKey, fineRarityFromRoll, prefixFromRoll, validKey } from "./items.js";
+import { itemDef, makeKey, fineRarityFromRoll, prefixFromRoll, validKey, remedyTooWeak } from "./items.js";
 import { ORDER, transact } from "./storage.js";
-import { statsOf, maxHp, mitigation, recovering } from "./stats.js";
+import { statsOf, maxHp, mitigation, skillLevel } from "./stats.js";
 import { xpMult, partyMult, addXp } from "./progression.js";
 import { companionBonus, companionFinds } from "./companions.js";
 import { bountyProgress } from "./world.js";
@@ -45,25 +46,15 @@ export function landed(x, rng) {
   return f + (rng() < x - f ? 1 : 0);
 }
 
-/* ================= 1. ZONES, THREAT & FOES ================= */
+/* ================= 1. ZONES & FOES ================= */
 
-/* Threat is region-wide: every zone of a region shares one counter, so the key is
-   the tier alone. (Saves from before this keyed it "tier:zone"; the migration takes
-   the highest zone of each region forward.) It is kept unrounded, because Threat
-   per kill is fractional and rounding each one away would wreck the pacing. */
+/* Threat is gone. A Sovereign is no longer summoned by a counter filling: every
+   encounter you clear rolls the zone's flat chance that the next one is it, and
+   nothing accumulates between them. These two stay, returning nothing, so old
+   saves and any caller that has not caught up resolve quietly. */
 export const threatKey = (tier) => String(tier);
-
-export function threatIn(state, tier, _zone) {
-  const key = threatKey(tier);
-  return (state.threat && Object.hasOwn(state.threat, key) && state.threat[key]) || 0;
-}
-
-// What a player is shown. The counter itself keeps its fraction.
-export const threatShown = (n) => Math.floor(n);
-
-function setThreat(state, tier, _zone, n) {
-  state.threat[threatKey(tier)] = clamp(n, 0, H.threatCap);
-}
+export function threatIn(_state, _tier, _zone) { return 0; }
+export const threatShown = () => 0;
 
 /* Best time survived on a given ground, in milliseconds. Banked whenever a hunt
    ends, however it ended, so pulling out early banks the lower time it earned and
@@ -99,7 +90,7 @@ export function rollFoe(tier, zone, rng) {
 }
 
 /* A foe's numbers with the Elite modifier folded in, and the zone's depth on top.
-   `power` touches health and damage only: XP, gold and Threat are the same foe's
+   `power` touches health and damage only: XP and gold are the same foe's
    whatever depth it stands at, so deeper ground pays the same per kill for a
    harder fight. */
 export function foeNumbers(mob, elite, power = 1) {
@@ -109,7 +100,6 @@ export function foeNumbers(mob, elite, power = 1) {
     hp: Math.round(mob.hp * (e ? e.hp : 1) * p),
     attack: mob.attack * (e ? e.attack : 1) * p,
     xp: mob.xp * (e ? e.xp : 1),
-    threat: mob.threat + (e ? e.threat : 0),
     gold: mob.gold.map((g) => Math.round(g * (e ? e.gold : 1))),
     dropQty: e ? GameData.ELITE.drops : 1,
   };
@@ -144,13 +134,13 @@ function blankHunt(tier, zone, limit) {
   return {
     tier, zone, limit: limit == null ? null : limit,
     done: 0, elapsed: 0, startedAt: 0,
-    phase: "search",          // search | fight | hide
-    wait: H.searchMinMs,      // ms left of the walk, or of hiding
+    phase: "search",          // search | fight
+    wait: H.searchMinMs,      // ms left of the walk to the next encounter
     kind: "normal",           // normal | sovereign
     clock: 0, reinforceAt: 0, enrageAt: 0, enrage: 0,
     foes: [], uid: 1,
     swing: 0, volley: 0, veil: 0, streak: 0,
-    peak: false, sovereignNext: false, encounters: 0,
+    queued: 0, sovereignNext: false, encounters: 0,
     // xp and dmg run the whole hunt; marks sample both so XP/hr and DPS can be read
     // off a rolling window at any instant. See huntRates.
     xp: 0, dmg: 0, marks: [[0, 0, 0]], nextMark: H.rateMarkMs,
@@ -183,8 +173,10 @@ export function campPlan(state, at = state.clock) {
   const most = maxHp(state);
   const note = state.player.camp;
   if (!note) return { hp: most, maxHp: most, walkMs: H.searchMinMs };
-  const rested = (most * Math.max(0, at - note.since)) / H.recoveryMs;
-  return { hp: Math.min(most, note.hp + rested), maxHp: most, walkMs: Math.max(H.searchMinMs, note.walkUntil - at) };
+  // Camp heals nothing for free. The same 1%/sec that runs between encounters runs
+  // here; everything above it comes out of the Satchel or your Belongings by hand.
+  const trickle = most * H.regenPerSec * Math.max(0, (at - note.since) / 1000);
+  return { hp: Math.min(most, note.hp + trickle), maxHp: most, walkMs: Math.max(H.searchMinMs, note.walkUntil - at) };
 }
 
 export function startHunt(state, { tier, zone, limit } = {}, env) {
@@ -194,7 +186,6 @@ export function startHunt(state, { tier, zone, limit } = {}, env) {
   if (limit != null && (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIMIT)) {
     return refuse("A hunt is 1 to 100,000 kills, or no limit.");
   }
-  if (recovering(state)) return refuse("You're still recovering.");
 
   const c = state.tasks.combat;
   if (c && c.tier === tier && c.zone === zone) {
@@ -235,6 +226,10 @@ export function pullBack(state, _args, _env) {
   return { ok: true };
 }
 
+/* Hiding went with Threat: there is no counter left to duck, and nothing in the
+   engine reads this flag any more. The command is kept, and kept writing, so a
+   client still carrying the toggle round-trips exactly as it did rather than
+   erroring or silently disagreeing with the server about what it set. */
 export function setHide(state, { on } = {}, env) {
   if (typeof on !== "boolean") return refuse("Hiding is on or off.");
   state.settings.hideSovereign = on;
@@ -270,7 +265,6 @@ export function combatPlan(state) {
     c, zone, region: regionOfTier(c.tier), phase: c.phase, kind: c.kind,
     target, mob: target ? getMonster(target.id) : null, pct,
     done: c.done, limit: c.limit, xpRate: rates.xpRate, dps: rates.dps,
-    threat: threatShown(threatIn(state, c.tier, c.zone)),
     timeLeft: Math.max(0, IDLE_CAP - c.elapsed),
   };
 }
@@ -288,10 +282,9 @@ export function huntPresence(state) {
      s        combat stats snapshot
      p        { hp } for the hunter
      rng      () => 0..1
-     hide     whether to go to ground when Threat peaks
-   and hooks for everything with a consequence: fx, threat, setThreat,
-   remedy, gainXp, gainGold, killed, sovereignDown, died, ended, met, hid,
-   passed, retreated. Section 4 wires them to a save; section 5 to a tally. */
+   and hooks for everything with a consequence: fx, remedy, gainXp, gainGold,
+   killed, sovereignDown, died, ended, met, retreated. Section 4 wires them to a
+   save; section 5 to a tally. */
 
 export function stepHunt(ctx, dt) {
   let left = dt;
@@ -326,6 +319,8 @@ function move(ctx, ms) {
   c.elapsed += ms;
   if (c.phase !== "fight") {
     c.wait -= ms;
+    // Between encounters health comes back on its own, slowly, and only here.
+    ctx.p.hp = Math.min(ctx.s.maxHp, ctx.p.hp + ctx.s.maxHp * H.regenPerSec * (ms / 1000));
     return;
   }
   c.clock += ms;
@@ -346,8 +341,7 @@ function fireDue(ctx) {
 
     if (c.phase !== "fight") {
       if (c.wait > EPS) return;
-      if (c.phase === "hide") leaveHiding(ctx);
-      else beginEncounter(ctx);
+      beginEncounter(ctx);
       continue;
     }
 
@@ -416,13 +410,6 @@ function beginEncounter(ctx) {
   const c = ctx.c;
   const zone = getZone(c.zone);
 
-  // Ticked Hide after the Sovereign was already on its way: still go to ground.
-  if (c.sovereignNext && ctx.hide) {
-    c.sovereignNext = false;
-    goToGround(ctx);
-    return;
-  }
-
   c.phase = "fight";
   c.clock = 0;
   c.foes = [];
@@ -438,7 +425,8 @@ function beginEncounter(ctx) {
     c.enrageAt = GameData.SOVEREIGN.enrageMs;
     const sov = sovereignOf(c.tier);
     addFoe(ctx, sov, false, false);
-    for (let i = 0; i < zone.escorts; i++) addFoe(ctx, rollFoe(c.tier, zone, ctx.rng).mob, true, false);
+    // It never comes alone: two Elites at its back, wherever it is met.
+    for (let i = 0; i < GameData.SOVEREIGN.escorts; i++) addFoe(ctx, rollFoe(c.tier, zone, ctx.rng).mob, true, false);
     ctx.met(sov);
     return;
   }
@@ -459,11 +447,26 @@ function beginEncounter(ctx) {
   }
 }
 
+/* One reinforcement comes due each time the zone's clock comes round. If the ranks
+   are already full it is held rather than thrown away, and steps into the first gap
+   a kill opens: that holding is what makes a full encounter feel like a swarm. */
 function reinforce(ctx) {
   const c = ctx.c;
   const zone = getZone(c.zone);
   c.reinforceAt += zone.windowMs;
-  if (c.foes.length >= H.maxFoes) return;
+  if (c.foes.length >= H.maxFoes) {
+    c.queued = (c.queued || 0) + 1;
+    return;
+  }
+  const r = rollFoe(c.tier, zone, ctx.rng);
+  addFoe(ctx, r.mob, r.elite, true);
+}
+
+// A slot has opened and one was already owed: it steps in at once.
+function fillQueued(ctx) {
+  const c = ctx.c;
+  const zone = getZone(c.zone);
+  c.queued--;
   const r = rollFoe(c.tier, zone, ctx.rng);
   addFoe(ctx, r.mob, r.elite, true);
 }
@@ -592,7 +595,6 @@ function foeSwing(ctx, f) {
     }
   }
 
-  if (p.hp > 0 && p.hp <= s.maxHp * H.remedyAt) takeRemedy(ctx);
   if (p.hp <= 0) {
     die(ctx, mob);
     return;
@@ -611,6 +613,8 @@ function bleedTick(ctx, f) {
   if (f.hp <= 0) killFoe(ctx, f);
 }
 
+/* A remedy is never drunk mid-swing any more. It is taken in the breath between
+   encounters, at or below a quarter health, out of the Satchel you packed. */
 function takeRemedy(ctx) {
   const heal = ctx.remedy();
   if (!heal) return;
@@ -635,17 +639,10 @@ function killFoe(ctx, f) {
   ctx.gainGold(n.gold[0] + Math.floor(ctx.rng() * (n.gold[1] - n.gold[0] + 1)));
   ctx.killed(mob, f.elite);
 
-  if (mob.archetype === "sovereign") {
-    // Felling the region's Sovereign is one of the two things that clears Threat.
-    ctx.setThreat(0);
-    ctx.sovereignDown(mob);
-  } else if (c.kind === "normal") {
-    // Archetype alone: the zone mix already sends this up with depth.
-    const before = ctx.threat();
-    const after = Math.min(H.threatCap, before + n.threat * H.threatPerKill);
-    if (after !== before) ctx.setThreat(after);
-    if (after >= H.threatCap - EPS) c.peak = true;
-  }
+  if (mob.archetype === "sovereign") ctx.sovereignDown(mob);
+
+  // A slot just opened, and the window already owed one: it walks in now.
+  if (c.queued > 0 && c.foes.length < H.maxFoes && c.kind === "normal" && !ctx.over) fillQueued(ctx);
 
   if (c.limit != null && c.done >= c.limit) {
     endHunt(ctx, "limit");
@@ -654,62 +651,44 @@ function killFoe(ctx, f) {
   if (!c.foes.length) endEncounter(ctx);
 }
 
-/* An encounter is over. Cleared inside the window, the rest of the window is
-   the walk to the next one. A Threat peak is settled here, between fights.
+/* An encounter is over the moment nothing is left standing, however many
+   reinforcements it took to get there.
 
-   Threat clears in exactly two places now: felling the Sovereign (killFoe) and
-   sitting out a full hide (leaveHiding). Surviving a Sovereign without killing it,
-   or having it pass you by, leaves the region as hot as it was, so hiding is the
-   only reliable way down and dying is never a shortcut. */
+   Two things settle here. The gap to the next encounter is whatever the
+   reinforcement clock still had to run, capped at ten seconds: clear fast and you
+   wait a moment, never a minute, because killing well must never buy an empty
+   screen. And the zone's flat Sovereign chance is rolled once, deciding whether
+   the next encounter is an ordinary pull or the thing that rules this ground. */
 function endEncounter(ctx) {
   const c = ctx.c;
   const zone = getZone(c.zone);
   const took = c.clock;
   const wasSovereign = c.kind === "sovereign";
+  const owed = c.reinforceAt - took;
 
   c.phase = "search";
   c.kind = "normal";
   c.foes = [];
   c.volley = 0;
   c.enrage = 0;
+  c.queued = 0;
+
+  // The breath between encounters: drink now, at or below a quarter, or not at all.
+  if (ctx.p.hp > 0 && ctx.p.hp <= ctx.s.maxHp * H.remedyAt) takeRemedy(ctx);
 
   if (wasSovereign) {
-    c.peak = false;
     c.wait = H.searchMinMs;
     return;
   }
 
-  if (c.peak) {
-    c.peak = false;
-    if (ctx.hide) {
-      goToGround(ctx);
-      return;
-    }
-    if (ctx.rng() < zone.engage) {
-      c.sovereignNext = true;
-      c.wait = H.searchMinMs;
-      return;
-    }
-    // It did not come this time. The region stays at its peak and it may come next.
-    ctx.passed();
+  // It may be waiting in the next one.
+  if (zone.sovereign > 0 && ctx.rng() < zone.sovereign) {
+    c.sovereignNext = true;
+    c.wait = H.searchMinMs;
+    return;
   }
 
-  c.wait = Math.max(H.searchMinMs, zone.windowMs - took);
-}
-
-// Going to ground clears nothing yet: the hour has to be sat out first.
-function goToGround(ctx) {
-  const c = ctx.c;
-  c.phase = "hide";
-  c.wait = H.hideMs;
-  ctx.hid();
-}
-
-// A full hide, seen through: the region forgets you.
-function leaveHiding(ctx) {
-  ctx.setThreat(0);
-  ctx.c.phase = "search";
-  ctx.c.wait = H.searchMinMs;
+  c.wait = Math.max(0, Math.min(owed, H.reinforceGapCapMs));
 }
 
 // Low enough in a Sovereign fight, you break away and the hunt goes on.
@@ -722,9 +701,8 @@ function retreat(ctx) {
   endEncounter(ctx);
 }
 
-/* Dying clears no Threat, whatever put you down. That is the whole point: hiding
-   costs an hour and buys a clean region, death costs a revive and a debuff and
-   buys nothing, so there is never a reason to farm deaths instead of hiding. */
+/* Dying costs a debuff, a bill at the smith and every point of health you had.
+   It buys nothing and bars nothing: the gate is open the moment you are up. */
 function die(ctx, mob) {
   ctx.over = true;
   ctx.died(mob);
@@ -763,16 +741,11 @@ function liveHunt(state, c, env, nowAt) {
 
   const ctx = {
     c, s: statsOf(state), p: state.player, rng: makeRng(state.rng, "hunt"), over: false,
-    hide: !!(state.settings && state.settings.hideSovereign),
     fx: (who, kind, amount) => {
       if (env && env.fx) say("hunt:fx", { who, kind, amount: amount || 0 });
     },
     met: (sov) => say("hunt:sovereign", { monsterId: sov.id }),
-    hid: () => say("hunt:hide", { tier: c.tier, zone: c.zone }),
-    passed: () => say("hunt:passed", { tier: c.tier, zone: c.zone }),
     retreated: (sov, fightMs) => say("hunt:retreat", { monsterId: sov ? sov.id : null, fightMs: Math.round(fightMs) }),
-    threat: () => threatIn(state, c.tier, c.zone),
-    setThreat: (n) => setThreat(state, c.tier, c.zone, n),
     remedy: () => {
       const spot = remedySpot(state);
       if (!spot) return 0;
@@ -796,21 +769,25 @@ function liveHunt(state, c, env, nowAt) {
       state.stats.kills++;
       bountyProgress(state, "slay", mob, env, at);
       dropLoot(state, mob, elite, kN, env, at);
+      // The Inner and the Core are the only ground whose Elites carry the Veil.
+      if (elite && getZone(c.zone).fragments) {
+        stashLoot(state, fragmentOfTier(mob.tier), GameData.ELITE.fragments, env, at);
+      }
       companionFinds(state, "warfare", kKey, kN, env, at);
       if (applyWear(state, ctx.rng, env, at)) refresh();
       state.rolls[mKey] = (state.rolls[mKey] || 0) + 1;
       state.rolls[kKey] = kN + 1;
     },
+    /* What a Sovereign leaves. No gear: the bench makes what you own, the hunt only
+       makes it better. Its Essence comes whole, where twenty Elite Fragments would
+       have had to be merged for the same thing. */
     sovereignDown: (mob) => {
       const at = nowAt();
       const sKey = `s:${mob.tier}`;
       const sN = state.rolls[sKey] || 0;
       state.stats.bosses = (state.stats.bosses || 0) + 1;
-      state.stats.epics++;
-      const pool = gearOfTier(mob.tier);
-      const base = pool[Math.floor(roll(seed, sKey, sN, SALT.sovereignPick) * pool.length)].id;
-      const key = makeKey(base, "epic", `s${mob.tier}.${sN}`, null);
-      const kept = stashLoot(state, key, 1, env, at);
+      const key = essenceOfTier(mob.tier);
+      const kept = stashLoot(state, key, GameData.SOVEREIGN.essence, env, at);
       state.rolls[sKey] = sN + 1;
       emit(state, env, "hunt:felled", { monsterId: mob.id, key: kept ? key : null, fightMs: Math.round(c.clock), at });
     },
@@ -819,17 +796,17 @@ function liveHunt(state, c, env, nowAt) {
       const took = c.elapsed;
       bankRun(state, c);
       state.tasks.combat = null;
-      state.player.camp = null;
       state.stats.deaths++;
       // Which foe, and how often: the Collection's bestiary reads this beside the kill count.
       state.foeDeaths[mob.id] = (state.foeDeaths[mob.id] || 0) + 1;
-      /* The wound runs from the moment you are back on your feet, not from the fall,
-         so the five minutes down and the ten minutes weak do not overlap. Set before
-         the health reset, so you come round at the wounded maximum rather than being
-         clipped back to it on the next frame. */
-      state.debuff = { until: at + H.recoveryMs + H.deathDebuffMs, mult: 1 - H.deathDebuff };
-      state.player.recoveryLeft = H.recoveryMs;
-      state.player.hp = maxHp(state);
+      /* No gate and no free heal. You come round where you fell, on one point of
+         health, with your Attack down for ten minutes: back to the hunt whenever you
+         like, only slower, and only a remedy will put the health back. The camp note
+         is what keeps that 1 rather than letting campPlan hand back a full bar. */
+      state.debuff = { until: at + H.deathDebuffMs, mult: 1 - H.deathDebuff };
+      state.player.recoveryLeft = 0;
+      state.player.hp = 1;
+      state.player.camp = { since: at, hp: 1, walkUntil: at };
       GameData.EQUIP_SLOTS.forEach((slot) => {
         const key = state.equipment[slot];
         const d = key ? itemDef(key) : null;
@@ -852,7 +829,7 @@ function liveHunt(state, c, env, nowAt) {
 /* Plays a hunt forward on a scratch copy: how fast it kills, what it earns
    and how long you last. Seeded, so the same question gets the same answer. */
 
-// opts: { stats (required), hp, threat, hide, remedies: [heal, ...], xpMult, horizonMs, seed, chunkMs }
+// opts: { stats (required), hp, remedies: [heal, ...], xpMult, horizonMs, seed, chunkMs }
 export function projectOnce(tier, zoneId, opts) {
   const o = opts || {};
   if (!o.stats) throw new TypeError("projectOnce needs opts.stats.");
@@ -860,18 +837,13 @@ export function projectOnce(tier, zoneId, opts) {
   const horizon = Math.min(IDLE_CAP, o.horizonMs || IDLE_CAP);
   const c = blankHunt(tier, zoneId, null);
   const heals = (o.remedies || []).slice();
-  let threat = o.threat || 0;
-  const t = { kills: 0, xp: 0, gold: 0, remedies: 0, sovereigns: 0, met: 0, retreats: 0, hides: 0, died: false, ms: 0, killer: null };
+  const t = { kills: 0, xp: 0, gold: 0, remedies: 0, sovereigns: 0, met: 0, retreats: 0, died: false, ms: 0, killer: null };
 
   const ctx = {
-    c, s, p: { hp: o.hp == null ? s.maxHp : o.hp }, rng: seededRng(o.seed || 1), over: false, hide: !!o.hide,
+    c, s, p: { hp: o.hp == null ? s.maxHp : o.hp }, rng: seededRng(o.seed || 1), over: false,
     fx: () => {},
     met: () => { t.met++; },
-    hid: () => { t.hides++; },
-    passed: () => {},
     retreated: () => { t.retreats++; },
-    threat: () => threat,
-    setThreat: (n) => { threat = n; },
     remedy: () => {
       if (!heals.length) return 0;
       t.remedies++;
@@ -910,7 +882,7 @@ export function projectHunt(tier, zoneId, opts) {
 
 export function summariseRuns(results, horizonMs) {
   const runs = results.length;
-  const sum = { runs, kills: 0, xp: 0, gold: 0, ms: 0, deaths: 0, deathMs: 0, remedies: 0, sovereigns: 0, met: 0, retreats: 0, hides: 0, killers: {} };
+  const sum = { runs, kills: 0, xp: 0, gold: 0, ms: 0, deaths: 0, deathMs: 0, remedies: 0, sovereigns: 0, met: 0, retreats: 0, killers: {} };
   results.forEach((t) => {
     sum.kills += t.kills;
     sum.xp += t.xp;
@@ -918,7 +890,6 @@ export function summariseRuns(results, horizonMs) {
     sum.ms += t.ms;
     sum.remedies += t.remedies;
     sum.sovereigns += t.sovereigns;
-    sum.hides += t.hides;
     sum.met += t.met;
     sum.retreats += t.retreats;
     if (t.died) {
@@ -948,14 +919,14 @@ export function summariseRuns(results, horizonMs) {
    says when the answer can be kept. */
 export function huntOddsOpts(state, tier, zone) {
   return {
-    stats: statsOf(state), remedies: remedyHeals(state), hide: !!state.settings.hideSovereign,
-    threat: threatIn(state, tier, zone), xpMult: xpMult(state, "warfare", state.clock), runs: 3, horizonMs: IDLE_CAP,
+    stats: statsOf(state), remedies: remedyHeals(state),
+    xpMult: xpMult(state, "warfare", state.clock), runs: 3, horizonMs: IDLE_CAP,
   };
 }
 
 export function oddsSignature(opts, tier, zone) {
   return [tier, zone, JSON.stringify(opts.stats), opts.remedies.length, opts.remedies[0] || 0,
-    opts.hide, Math.floor(opts.threat / 25), opts.xpMult.toFixed(2)].join("|");
+    opts.xpMult.toFixed(2)].join("|");
 }
 
 /* ================= 6. REMEDIES & LOOT ================= */
@@ -964,10 +935,13 @@ export function oddsSignature(opts, tier, zone) {
    Satchel is reachable in a fight, so a bottle left in Belongings or in camp
    storage does nothing, however many of them there are. */
 function remedySpot(state) {
+  const level = skillLevel(state, "warfare");
   let pick = null;
   for (const w of ORDER.eat) {
     for (const k of Object.keys(state[w].items)) {
       const d = itemDef(k);
+      // A bottle sized for lesser wounds than you take now is passed over, not wasted.
+      if (remedyTooWeak(k, level)) continue;
       if (d && d.heal && d.heal > (pick ? pick.heal : 0)) pick = { key: k, pool: w, heal: d.heal };
     }
   }
@@ -983,10 +957,12 @@ export function bestRemedy(state) {
 // Every remedy the Satchel holds, as heal amounts, best first. Capped: enough for any projection.
 export function remedyHeals(state) {
   const out = [];
+  const level = skillLevel(state, "warfare");
   ORDER.eat.forEach((w) => {
     const items = state[w].items;
     Object.keys(items).forEach((k) => {
       const d = itemDef(k);
+      if (remedyTooWeak(k, level)) return;
       if (d && d.heal) for (let i = 0; i < Math.min(items[k], 400); i++) out.push(d.heal);
     });
   });
@@ -1016,7 +992,12 @@ export function dropLoot(state, mob, elite, kN, env, at) {
   const mKey = `m:${mob.id}`;
   const mN = state.rolls[mKey] || 0;
   mob.drops.forEach(([k, qty, chance], j) => {
-    if (roll(seed, mKey, mN, SALT.drop + j) < chance * bonus) stashLoot(state, k, qty * qtyMult, env, at);
+    if (!(roll(seed, mKey, mN, SALT.drop + j) < chance * bonus)) return;
+    // "@reagent": whichever of the five this one was carrying, on the same stream.
+    const key = k === "@reagent"
+      ? GameData.REAGENTS[Math.floor(roll(seed, mKey, mN, SALT.drop + 50 + j) * GameData.REAGENTS.length)].id
+      : k;
+    stashLoot(state, key, qty * qtyMult, env, at);
   });
 
   // Companions with a nose for it turn up a finer piece now and then.

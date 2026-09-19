@@ -16,7 +16,7 @@ import { openModal } from "../ui/overlay.js";
 import { fmtGold, fmtTime, fmtWhole } from "../ui/format.js";
 import { confirmSpend } from "../ui/widgets.js";
 import { CONFIG } from "../../shared/config.js";
-import { agentRarityDef, regionOfTier } from "../../shared/registry.js";
+import { agentRarityDef, regionOfTier, tierLabel } from "../../shared/registry.js";
 import { requisitionsOpen, requisitionsLeft, requisitionTargets } from "../../shared/world.js";
 import { nextDayAt } from "../../shared/weather.js";
 import { itemDef, itemName } from "../../shared/items.js";
@@ -176,7 +176,7 @@ export default {
       const groups = new Map();
       targets.forEach((key) => {
         const d = itemDef(key);
-        const label = d.reagent ? "Reagents" : `Tier ${d.tier} · ${regionOfTier(d.tier).name}`;
+        const label = d.reagent ? "Reagents" : `${tierLabel(d.tier)} · ${regionOfTier(d.tier).name}`;
         if (!groups.has(label)) groups.set(label, []);
         groups.get(label).push(h("option", { value: key }, d.name));
       });

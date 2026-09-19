@@ -14,11 +14,11 @@ import { CONFIG } from "./config.js";
 import {
   GameData, getRegion, getMaterial, getClass, monsterOfTier, matId, agentRarityDef,
 } from "./registry.js";
-import { itemDef, itemName, parseKey, validKey, agentRarityFromRoll } from "./items.js";
+import { itemDef, itemName, parseKey, validKey, agentRarityFromRoll, remedyTooWeak, tierForLevel } from "./items.js";
 import {
   ORDER, canHold, isPool, poolName, qtyIn, haveQty, placeFor, orderedKeys, transact,
 } from "./storage.js";
-import { skillLevel, maxHp, canPickClass } from "./stats.js";
+import { skillLevel, maxHp, canPickClass, statsOf } from "./stats.js";
 import { dayIndex, windowIndex } from "./weather.js";
 import { makeRng, randIntWith, seedFrom } from "./rng.js";
 import { emit } from "./events.js";
@@ -305,6 +305,10 @@ export function travel(state, { regionId } = {}, env) {
 // A preferred pool first, then Belongings, the Stockpile, the Vault.
 const stowOrder = (preferred) => [preferred, "inv", "bank", "vault"].filter((w, i, all) => all.indexOf(w) === i);
 
+/* Where a piece may actually be stowed. Gear and remedies never fall back into the
+   Stockpile, so unequipping cannot put there what moveItem would refuse. */
+const stowOrderFor = (key, preferred) => stowOrder(preferred).filter((w) => w !== "bank" || !stockpileRefuses(key));
+
 // Checks the key and pool an item action names, and that something is there.
 function held(state, key, from) {
   if (!validKey(key)) return "No such item.";
@@ -348,8 +352,8 @@ export function equip(state, { key, from } = {}, env) {
     const res = transact(state, (tx) => {
       tx.remove(from, key, 1);
       if (old) {
-        if (!placeFor(state, old, stowOrder(from))) tx.fail("Nowhere to stow the old tool.");
-        tx.stash(old, 1, stowOrder(from));
+        if (!placeFor(state, old, stowOrderFor(old, from))) tx.fail("Nowhere to stow the old tool.");
+        tx.stash(old, 1, stowOrderFor(old, from));
       }
       tx.set(state.tools, d.forSkill, d.base);
     });
@@ -372,8 +376,8 @@ export function equip(state, { key, from } = {}, env) {
   const res = transact(state, (tx) => {
     tx.remove(from, key, 1);
     displaced.filter(Boolean).forEach((old) => {
-      if (!placeFor(state, old, stowOrder(from))) tx.fail("No room to stow what you're wearing.");
-      tx.stash(old, 1, stowOrder(from));
+      if (!placeFor(state, old, stowOrderFor(old, from))) tx.fail("No room to stow what you're wearing.");
+      tx.stash(old, 1, stowOrderFor(old, from));
     });
     if (d.slot === "weapon" && d.twoHanded) tx.set(state.equipment, "offhand", null);
     tx.set(state.equipment, d.slot, key);
@@ -387,8 +391,8 @@ export function unequip(state, { slot } = {}, env) {
   const key = state.equipment[slot];
   if (!key) return refuse("Nothing is worn there.");
   const res = transact(state, (tx) => {
-    if (!placeFor(state, key, stowOrder("inv"))) tx.fail("Nowhere to put it.");
-    tx.stash(key, 1, stowOrder("inv"));
+    if (!placeFor(state, key, stowOrderFor(key, "inv"))) tx.fail("Nowhere to put it.");
+    tx.stash(key, 1, stowOrderFor(key, "inv"));
     tx.set(state.equipment, slot, null);
   });
   return res.ok ? OK() : res;
@@ -406,6 +410,15 @@ export function unequipTool(state, { skillId } = {}, env) {
   return res.ok ? OK() : res;
 }
 
+/* What the Stockpile will not take. It is the crews' store -- ore, planks, weave --
+   and a hunter's own kit has no business in it: gear and remedies go to the Vault
+   or stay in Belongings, and nowhere else. */
+export function stockpileRefuses(key) {
+  const d = itemDef(key);
+  if (!d) return false;
+  return d.kind === "gear" || d.heal > 0;
+}
+
 export function moveItem(state, { key, from, to, qty } = {}, env) {
   const bad = held(state, key, from);
   if (bad) return refuse(bad);
@@ -413,6 +426,9 @@ export function moveItem(state, { key, from, to, qty } = {}, env) {
   if (from === to) return refuse("It's already there.");
   // The Satchel is what a fight can reach, so only what a fight can use goes in.
   if (!canHold(to, key)) return refuse(`${poolName(to)} only takes remedies.`);
+  if (to === "bank" && stockpileRefuses(key)) {
+    return refuse(`The Stockpile won't hold that. It goes to the ${poolName("vault")}.`);
+  }
   const n = amountOf(qty, qtyIn(state, from, key));
   if (!n) return refuse("Pick an amount to move.");
 
@@ -501,6 +517,43 @@ export function reorder(state, { pool, key, before } = {}, _env) {
   else ids.splice(ids.indexOf(before), 0, key);
   state[pool].order = ids;
   return OK();
+}
+
+/* ================= REMEDIES BY HAND ================= */
+
+/* The Satchel is what a hunt can reach on its own. This is the other way: standing
+   at camp, out of a fight, you drink one yourself, and it may come from anywhere
+   you keep them. Nothing heals for free any more, so this is how a hunter who came
+   home on one point of health gets back on their feet. */
+export function useRemedy(state, { key, from = "inv" } = {}, env) {
+  const bad = held(state, key, from);
+  if (bad) return refuse(bad);
+  const d = itemDef(key);
+  if (!d || !(d.heal > 0)) return refuse("That isn't a remedy.");
+  if (state.tasks.combat) return refuse("Not in the middle of a fight.");
+
+  const level = skillLevel(state, "warfare");
+  if (remedyTooWeak(key, level)) {
+    return refuse(`${itemName(key)} is too weak to do anything for you now. You need tier ${tierForLevel(level)} or better.`);
+  }
+
+  const s = statsOf(state);
+  if (state.player.hp >= s.maxHp) return refuse("You're already whole.");
+
+  const healed = Math.min(s.maxHp, state.player.hp + d.heal * (s.vital ? 1.2 : 1));
+  const gain = Math.round(healed - state.player.hp);
+  transact(state, (tx) => {
+    tx.remove(from, key, 1);
+    tx.set(state.player, "hp", healed);
+  });
+  // Drinking at camp is the same as resting there: the note has to agree, or the
+  // next hunt sets out on the health you had before the bottle.
+  if (state.player.camp) {
+    state.player.camp.since = state.clock;
+    state.player.camp.hp = healed;
+  }
+  emit(state, env, "remedy:used", { key, healed: gain });
+  return { ok: true, data: { healed: gain } };
 }
 
 /* ================= DISCIPLINE ================= */

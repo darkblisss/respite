@@ -17,8 +17,7 @@ import { fmt, fmtWhole, fmtGold, fmtTime, signedPct, chancePct, titleCase } from
 import { qtyPicker, registerPopup, openPopup } from "../widgets.js";
 import { CONFIG } from "../../../shared/config.js";
 import {
-  GameData, findAction, getSkill, getGear, actionOutput, regionOfTier, itemSources, skillName,
-} from "../../../shared/registry.js";
+  GameData, findAction, getSkill, getGear, actionOutput, regionOfTier, itemSources, skillName, tierLabel } from "../../../shared/registry.js";
 import { itemDef, itemName, makeKey } from "../../../shared/items.js";
 import { haveQty, stockCovers } from "../../../shared/storage.js";
 import { skillLevel } from "../../../shared/stats.js";
@@ -153,13 +152,13 @@ export function makesTip(state, def) {
   if (d.kind === "tool") {
     return tipBody({
       title: d.name,
-      sub: `${skillName(d.forSkill)} tool · Tier ${d.tier}`,
+      sub: `${skillName(d.forSkill)} tool · ${tierLabel(d.tier)}`,
       rows: [...toolRows(state, d), ["Value", fmtGold(d.value)], ["Held", held]],
     });
   }
   return tipBody({
     title: d.name,
-    sub: `${d.category || "Material"} · Tier ${d.tier}`,
+    sub: `${d.category || "Material"} · ${tierLabel(d.tier)}`,
     rows: [["Makes", `${def.out[outKey]} × ${d.name}`], ["Value", `${fmtGold(d.value)} each`], ["Held", held]],
     foot: usesLine(outKey),
   });
@@ -193,7 +192,7 @@ export function nodeTip(state, def, at) {
   if (dbl) rows.push(["Double yield", chancePct(dbl), "good"]);
   sideFinds(state, def).forEach((f) => rows.push([f.label, f.value]));
   rows.push(["Held", fmt(haveQty(state, outKey))]);
-  return tipBody({ title: titleCase(def.name), sub: `${skill.name} · Tier ${def.tier} · ${regionOfTier(def.tier).name}`, rows });
+  return tipBody({ title: titleCase(def.name), sub: `${skill.name} · ${tierLabel(def.tier)} · ${regionOfTier(def.tier).name}`, rows });
 }
 
 /* ================= 2. THE POPUP ================= */
@@ -391,7 +390,7 @@ function openActionPopup(ctx, skillId, actionId) {
   const offTick = ctx.onTick(update);
   m = openModal({
     title: name,
-    sub: [skill.name, `Tier ${def.tier}`, craft ? "At camp" : regionOfTier(def.tier).name].join(" · "),
+    sub: [skill.name, tierLabel(def.tier), craft ? "At camp" : regionOfTier(def.tier).name].join(" · "),
     art: def.icon,
     size: "md",
     // Centres the picker and the verb: this sheet is one decision, so it sits down the middle.

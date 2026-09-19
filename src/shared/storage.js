@@ -5,16 +5,17 @@
      inv      Belongings  (10 slots)
      bank     the Stockpile (30, widened by chests up to 200)
      vault    the Vault   (50)
-     satchel  the Satchel (4), the combat loadout
+     satchel  the Satchel (5), the combat loadout
    A stack takes one slot. Where a new thing goes is decided in one
    place (placeFor, ORDER) so the hunt, the bench, the shop and the
    mail all agree.
 
    Two rules are the Satchel's own. It takes remedies and nothing
-   else, because it is what the hunter can reach mid-fight and gear
-   swaps stay a camp job. And a remedy bought does not stack in
-   Belongings: there it costs a slot a bottle, so carrying a hunt's
-   worth means packing the Satchel rather than the pack.
+   else, because it is what a hunt can reach and gear swaps stay a
+   camp job. And nothing stacks in it: five slots, one bottle each,
+   so five is every drop of healing a hunt gets and what you pack is
+   the whole plan. Belongings stack them freely -- hoard all you
+   like at camp, you still walk out with five.
 
    transact() runs a change as all or nothing: every write made
    through its `tx` is journaled and undone if anything refuses.
@@ -54,10 +55,10 @@ export const poolName = (w) => CONFIG.storage.names[w] || String(w);
    they live. */
 export const canHold = (w, key) => w !== "satchel" || isRemedy(key);
 
-/* Belongings give a remedy a slot a bottle. They are bought there and do not
-   stack there, so ten is all a pack ever carries and a real hunt is packed
-   into the Satchel, where they do stack. */
-export const unstacked = (w, key) => w === "inv" && isRemedy(key);
+/* The Satchel gives a remedy a slot a bottle and never stacks one, so its five
+   slots are five bottles and no more. Belongings stack them normally: the limit
+   is what you can carry into a fight, not what you can own. */
+export const unstacked = (w, key) => w === "satchel" && isRemedy(key);
 
 /* ================= READING ================= */
 

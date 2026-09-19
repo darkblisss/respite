@@ -40,9 +40,9 @@ const MAX_LIMIT = 100000;
 const POOL_IDS = ["inv", "bank", "vault", "satchel"];
 const ZONE_IDS = GameData.ZONES.map((z) => z.id);
 // The longest walk a hunt can owe: lying low, or all of a zone's window, whichever is longer.
-const WALK_MAX = Math.max(H.hideMs, H.searchMinMs, ...GameData.ZONES.map((z) => z.windowMs));
+const WALK_MAX = Math.max(H.searchMinMs, H.reinforceGapCapMs, ...GameData.ZONES.map((z) => z.windowMs));
 // The most foes one encounter holds: a zone's largest party, a Sovereign with its escorts, or a full reinforcement.
-const FOES_MAX = Math.max(H.maxFoes, ...GameData.ZONES.map((z) => Math.max(1 + z.escorts, ...z.sizes.map((p) => p[0]))));
+const FOES_MAX = Math.max(H.maxFoes, 1 + GameData.SOVEREIGN.escorts, ...GameData.ZONES.map((z) => Math.max(...z.sizes.map((p) => p[0]))));
 
 /* ================= CHECKED VALUES ================= */
 
@@ -298,7 +298,7 @@ function migrateTasks(m, lastSeen) {
 function migrateHunt(m, loaded, lastSeen) {
   const p = obj(loaded.player);
   if (typeof p.recoveryLeft !== "number") {
-    m.player.recoveryLeft = clamp((Number(p.recoveryUntil) || 0) - lastSeen, 0, H.recoveryMs);
+    m.player.recoveryLeft = 0;
   }
   delete m.player.recoveryUntil;
   m.settings = { hideSovereign: !!(m.settings && m.settings.hideSovereign) };
@@ -535,7 +535,8 @@ function normalise(src, opts) {
   const goldMax = legacy ? LEGACY_GOLD_MAX : GOLD_MAX;
   s.player.gold = intIn(player.gold, 0, goldMax, 0);
   if (finite(player.gold) && Math.floor(player.gold) > goldMax) ledger.fixed++;
-  s.player.recoveryLeft = intIn(player.recoveryLeft, 0, H.recoveryMs, 0);
+  // A death bars nothing now; the field stays at zero so old saves load clean.
+  s.player.recoveryLeft = 0;
   s.player.klass = typeof player.klass === "string" && getClass(player.klass) ? player.klass : null;
 
   // What is worn comes first: a unique piece worn is the copy that counts.
@@ -586,7 +587,7 @@ function normalise(src, opts) {
     if (extra !== undefined || !/^[1-9]$/.test(tier || "")) return;
     if (zone !== undefined && !ZONE_IDS.includes(zone)) return;
     if (!finite(threat[k])) return;
-    s.threat[tier] = Math.max(s.threat[tier] || 0, clamp(threat[k], 0, H.threatCap));
+    s.threat[tier] = 0;
   });
 
   const records = obj(src.records);
@@ -605,7 +606,7 @@ function normalise(src, opts) {
   // A death's wound, never longer or deeper than the rules would have made it.
   const debuff = obj(src.debuff);
   if (finite(debuff.until) && finite(debuff.mult) && debuff.mult > 0 && debuff.mult < 1) {
-    const until = Math.min(Math.floor(debuff.until), clock + H.recoveryMs + H.deathDebuffMs);
+    const until = Math.min(Math.floor(debuff.until), clock + H.deathDebuffMs);
     const mult = Math.max(debuff.mult, 1 - H.deathDebuff);
     if (until > clock) s.debuff = { until, mult };
   }
@@ -883,7 +884,7 @@ function normaliseHunt(s, c, ledger) {
   if (c.limit != null && limit == null) return null;
   const done = intIn(c.done, 0, BIG, 0);
   if (limit != null && done >= limit) return null;
-  const phase = ["search", "fight", "hide"].includes(c.phase) ? c.phase : null;
+  const phase = ["search", "fight"].includes(c.phase) ? c.phase : null;
   const kind = ["normal", "sovereign"].includes(c.kind) ? c.kind : null;
   if (!phase || !kind) return null;
 
@@ -941,7 +942,7 @@ function normaliseHunt(s, c, ledger) {
   const hunt = {
     tier: c.tier, zone: c.zone, limit, done, elapsed,
     startedAt: intIn(c.startedAt, 0, s.clock, s.clock),
-    phase, wait: numIn(c.wait, -1, H.hideMs, H.searchMinMs), kind,
+    phase, wait: numIn(c.wait, -1, WALK_MAX, H.searchMinMs), kind,
     clock: numIn(c.clock, 0, IDLE_CAP, 0), reinforceAt: numIn(c.reinforceAt, 0, IDLE_CAP * 2, 0),
     enrageAt: numIn(c.enrageAt, 0, IDLE_CAP * 2, 0), enrage: intIn(c.enrage, 0, 1e6, 0),
     foes, uid: Math.max(intIn(c.uid, 1, BIG, 1), ...foes.map((f) => f.uid + 1)),

@@ -1061,10 +1061,6 @@ function settleParty(ctx, row) {
     took.gold = Math.round(owed.gold * (1 + companionBonus(state, "gold")));
     if (took.gold > 0) transact(state, (tx) => tx.gold(took.gold, true));
   }
-  if (owed.threat > 0) {
-    // Region wide, and the same counter a lone kill raises.
-    state.threat[threatKey(row.tier)] = clamp(threatIn(state, row.tier, row.zone) + owed.threat, 0, H.threatCap);
-  }
 
   /* Wear, companion finds and the counters are per kill, as they are alone. The spoils of a kill
      cannot be halved, so the engine gives them to whoever hurt it most: those kills carry the foe
@@ -1089,14 +1085,14 @@ function settleParty(ctx, row) {
     const mob = getMonster(owed.died);
     state.stats.deaths++;
     if (mob) state.foeDeaths[mob.id] = (state.foeDeaths[mob.id] || 0) + 1;
-    /* Exactly what a fall alone costs: five minutes down, ten more weak, every worn piece the
-       worse for it, and no camp note, because the recovery is the price of the walk home. The
-       wound runs from now rather than from the fall, which the fight does not date: a hunter
-       carried home answers for it when they come back to it. */
-    state.debuff = { until: at + H.recoveryMs + H.deathDebuffMs, mult: 1 - H.deathDebuff };
-    state.player.recoveryLeft = H.recoveryMs;
-    state.player.hp = maxHp(state);
-    state.player.camp = null;
+    /* Exactly what a fall alone costs: one point of health, ten minutes of a lighter Attack,
+       every worn piece the worse for it, and a camp note holding that 1 so nothing hands the
+       bar back. The wound runs from now rather than from the fall, which the fight does not
+       date: a hunter carried home answers for it when they come back to it. */
+    state.debuff = { until: at + H.deathDebuffMs, mult: 1 - H.deathDebuff };
+    state.player.recoveryLeft = 0;
+    state.player.hp = 1;
+    state.player.camp = { since: at, hp: 1, walkUntil: at };
     GameData.EQUIP_SLOTS.forEach((slot) => {
       const key = state.equipment[slot];
       const d = key ? itemDef(key) : null;

@@ -48,6 +48,17 @@ const skillBoard = (id) => {
   };
 };
 
+/* Every hunter on one ladder, whatever they chose and whether they chose at all.
+   It reads the Hunt skill straight out of hiscores(), the same way a trade board
+   does, so it needs nothing of the leaderboard() migration and it ranks the
+   undisciplined beside the rest -- which is the only way to compare across
+   disciplines honestly. */
+const huntAllBoard = {
+  id: "hunt_all", name: "All", title: "Hunt", icon: "swords", num: "Level",
+  ask: { how: "skill", key: "warfare" },
+  empty: "Nobody has taken the vanguard yet. The first to swing at anything tops it.",
+};
+
 const huntBoard = (c) => ({
   id: `hunt_${c.id}`, name: c.name, title: c.name, icon: c.icon, num: "Level", mark: c.id,
   ask: { how: "board", key: `hunt_${c.id}` },
@@ -64,7 +75,7 @@ const TABS = [
       empty: "No commander has been counted yet.",
     }],
   },
-  { id: "hunt", name: "Hunt", icon: "swords", pick: "Discipline", boards: GameData.CLASSES.map(huntBoard) },
+  { id: "hunt", name: "Hunt", icon: "swords", pick: "Discipline", boards: [huntAllBoard, ...GameData.CLASSES.map(huntBoard)] },
   { id: "gathering", name: "Gathering", icon: "pick", pick: "Trade", boards: TRADE_ORDER.map(skillBoard) },
   { id: "artisans", name: "Artisans", icon: "hammer", pick: "Bench", boards: ARTISAN_ORDER.map(skillBoard) },
   {

@@ -44,10 +44,10 @@ const storage = {
     inv: 10,     // Belongings
     bank: 30,    // Stockpile
     vault: 50,   // the Vault, reachable from either page
-    /* The Satchel: the only remedies a fight can reach. Six remedies exist, so
-       four slots leave two behind and make the loadout a choice; each slot
-       stacks without limit, so four kinds still cover a twelve-hour hunt. */
-    satchel: 4,
+    /* The Satchel: the only remedies a fight can reach. Five slots, and a
+       remedy does NOT stack here -- one bottle to a slot. Five is the whole
+       hunt's healing, so what you pack is the plan. */
+    satchel: 5,
   },
   bankMax: 200,  // the Stockpile widens no further than this
   // What each storage pool is called on screen.
@@ -68,23 +68,23 @@ const progression = {
 
 const hunt = {
   playerSwingMs: 2400,          // Brute Force, and a Stalker
-  recoveryMs: 5 * 60 * 1000,    // out of the hunt after a death
-  hideMs: 60 * 60 * 1000,       // a full hour of lying low: one of only two things that clears Threat
 
-  /* What a death leaves behind once you are back on your feet: every combat stat
-     down this much, for this long. Dying is a costly detour, not a shortcut -- it
-     clears no Threat, so hiding stays the correct play. */
+  /* A death no longer bars the gate. You come round at 1 health with your Attack
+     down this much for this long: back to the hunt at once if you dare it, only
+     slower. Everything else -- Defence, health, crit -- is untouched. */
   deathDebuff: 0.15,
   deathDebuffMs: 10 * 60 * 1000,
 
   deathWear: 25,                // durability every worn piece loses on a death
-  threatCap: 100,
 
-  /* Threat per weak-equivalent kill. The archetype multiplier (Skirmisher 1,
-     Stalker 2, Brute 3) is the only other dial: the zone mix already sends Threat
-     up with depth, so a second per-zone multiplier double-counted it. Threat is
-     region-wide, not per zone. */
-  threatPerKill: 0.7,
+  /* Health comes back only when nothing is swinging at you: between encounters
+     and at camp, this share of your most a second. Nothing else heals for free. */
+  regenPerSec: 0.01,
+
+  /* Clear an encounter early and the next one is owed you within this, however
+     long the zone's reinforcement clock still had to run. Killing fast is never
+     punished with an empty screen. */
+  reinforceGapCapMs: 10 * 1000,
 
   veilMax: 100,
   maxFoes: 3,
@@ -94,7 +94,7 @@ const hunt = {
   rateMinSpanMs: 1000,          // below this the window is too short to read a rate off
   foeAmbush: 1.5,               // a reinforcement's first blow lands this much harder
   volleyGapMs: 450,             // between a Mage's opening casts
-  remedyAt: 0.45,               // a remedy is taken at or below this share of health
+  remedyAt: 0.25,               // between encounters, a remedy is taken at or below this share of health
   retreatAt: 0.25,              // you break away from a Sovereign at or below this
 
   /* Defence is a number, and what it stops depends on the ground:
@@ -105,8 +105,8 @@ const hunt = {
   mitigationCap: 0.8,
 
   // A tier-1 Stalker, and how each tier grows on it.
-  foeHp: 40,
-  foeAttack: 0.026,
+  foeHp: 400,
+  foeAttack: 0.26,
   foeHpGrowth: 1.8,
   foeAttackGrowth: 1.75,
   foeXp: [1, 4, 8, 14, 21, 30, 41, 54, 68],
@@ -137,12 +137,15 @@ const economy = {
   // Remedies: taken automatically on the hunt. `value` is what they sell for,
   // `price` what the Bonesetter charges. Names live in registry.js.
   remedies: [
-    { tier: 1, heal: 25,   value: 2,   price: 5 },
-    { tier: 3, heal: 70,   value: 6,   price: 15 },
-    { tier: 4, heal: 180,  value: 18,  price: 45 },
-    { tier: 6, heal: 380,  value: 56,  price: 140 },
-    { tier: 7, heal: 800,  value: 168, price: 420, smuggler: true },
-    { tier: 9, heal: 1800, value: 480, price: 1200, smuggler: true },
+    { tier: 1, heal: 250,   value: 2,   price: 5 },
+    { tier: 2, heal: 420,   value: 4,   price: 9 },
+    { tier: 3, heal: 700,   value: 6,   price: 15 },
+    { tier: 4, heal: 1800,  value: 18,  price: 45 },
+    { tier: 5, heal: 2600,  value: 32,  price: 80 },
+    { tier: 6, heal: 3800,  value: 56,  price: 140 },
+    { tier: 7, heal: 8000,  value: 168, price: 420, smuggler: true },
+    { tier: 8, heal: 12000, value: 284, price: 710, smuggler: true },
+    { tier: 9, heal: 18000, value: 480, price: 1200, smuggler: true },
   ],
 
   /* The player market, run by the server. The fee is taken off BOTH legs of a trade:
@@ -221,15 +224,19 @@ const valBase = (t) => Math.pow(2.05, t - 1);
 
 const defenceK = (tier) => hunt.defK * Math.pow(hunt.defGrowth, tier - 1);
 
-// A stat line's value at a tier and rarity multiplier. Never rounds a real stat away to 0.
+// A stat line's value at a tier and rarity multiplier, to two decimals.
+// Never rounds a real stat away to 0.
 function gearStat(base, growth, tier, mult) {
   if (!base) return 0;
-  return Math.max(1, Math.round(base * Math.pow(growth, tier - 1) * (mult || 1)));
+  return Math.max(0.01, Math.round(base * Math.pow(growth, tier - 1) * (mult || 1) * 100) / 100);
 }
 
+// Two decimals, for every number a fight or a sheet shows.
+const round2 = (n) => Math.round(n * 100) / 100;
+
 // Hunt level -> base stats, before a discipline and gear.
-const baseHealth = (level) => 25 + 3 * (level - 1) + 0.13 * (level - 1) * (level - 1);
-const baseAttack = (level) => Math.pow(1.85, (level - 1) / 10);
+const baseHealth = (level) => 250 + 30 * (level - 1) + 1.3 * (level - 1) * (level - 1);
+const baseAttack = (level) => 10 * Math.pow(1.85, (level - 1) / 10);
 const baseDefence = (level) => (hunt.defK / 9) * (Math.pow(1.85, (level - 1) / 10) - 1);
 
 // Veil a Warrior or Rogue builds per blow, by Hunt level. Weapons from tier 5 add more.
@@ -267,6 +274,7 @@ export const CONFIG = deepFreeze({
   valBase,
   defenceK,
   gearStat,
+  round2,
   baseHealth,
   baseAttack,
   baseDefence,

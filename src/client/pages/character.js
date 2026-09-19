@@ -30,8 +30,7 @@ import { openPopup } from "../ui/widgets.js";
 import { dollCard, standingCard } from "./armaments.js";
 import { CONFIG } from "../../shared/config.js";
 import {
-  ARTISAN_ORDER, GameData, SKILL_ORDER, TRADE_ORDER, getSkill, getClass, foesOf, sovereignOf, regionOfTier,
-} from "../../shared/registry.js";
+  ARTISAN_ORDER, GameData, SKILL_ORDER, TRADE_ORDER, getSkill, getClass, foesOf, sovereignOf, regionOfTier, tierLabel } from "../../shared/registry.js";
 import { totalLevel, xpProgress } from "../../shared/stats.js";
 import { skillPlan } from "../../shared/skills.js";
 import { combatPlan } from "../../shared/combat.js";
@@ -198,9 +197,7 @@ function huntCard(ctx) {
     toggleClass(live.fill, "nojump", cp.pct < 6);
     setWidth(live.fill, cp.pct);
     const kills = `${fmtWhole(c.done)} kills`;
-    setText(live.count, c.phase === "hide"
-      ? `${kills} · Hiding, ${fmtTime(c.wait)} left`
-      : `${kills} · ${cp.xpRate == null ? "Reckoning" : `${fmt(Math.round(cp.xpRate))} XP/hr`}`);
+    setText(live.count, `${kills} · ${cp.xpRate == null ? "Reckoning" : `${fmt(Math.round(cp.xpRate))} XP/hr`}`);
     setText(live.left, `${fmtTime(cp.timeLeft)} left`);
   };
   return card;
@@ -370,7 +367,7 @@ function collectionView(ctx) {
             return ref.node;
           });
           return h("div.skills-group",
-            h("div.eyebrow", `${region.name} · Tier ${region.tier}`),
+            h("div.eyebrow", `${region.name} · ${tierLabel(region.tier)}`),
             h("div.grid-cards", tiles));
         }));
         setText(foundChip, `${fmtWhole(found)} of ${fmtWhole(BESTIARY_COUNT)} felled`);

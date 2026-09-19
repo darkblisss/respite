@@ -105,11 +105,13 @@ export function combatStats(loadout) {
   const T = GameData.TECHNIQUE;
   const health = (CONFIG.baseHealth(lo.level) * k.health + equipStat(eq, "health")) * (has("vital") ? 1.05 : 1);
 
+  const r2 = CONFIG.round2;
+
   return {
     level: lo.level, klass: k.id, className: k.name,
-    maxHp: Math.max(1, Math.round(health)),
-    attack: CONFIG.baseAttack(lo.level) * k.attack + equipStat(eq, "attack"),
-    defence: (CONFIG.baseDefence(lo.level) * k.defence + equipStat(eq, "defence")) * (has("bulwark") ? 1.15 : 1),
+    maxHp: Math.max(1, r2(health)),
+    attack: r2(CONFIG.baseAttack(lo.level) * k.attack + equipStat(eq, "attack")),
+    defence: r2((CONFIG.baseDefence(lo.level) * k.defence + equipStat(eq, "defence")) * (has("bulwark") ? 1.15 : 1)),
     speed: k.speed,
     crit: Math.min(0.75, k.crit + equipStat(eq, "crit")),
     critDmg: k.critDmg,
@@ -121,9 +123,8 @@ export function combatStats(loadout) {
   };
 }
 
-/* What a recent death still costs you, as a multiplier on every combat number.
-   It runs on the world clock, so it ticks down while you are away too. 1 when
-   whole. */
+/* What a recent death still costs you, as a multiplier on your Attack. It runs on
+   the world clock, so it ticks down while you are away too. 1 when whole. */
 export function deathPenalty(state, at = state.clock) {
   const d = state.debuff;
   if (!d || !(d.until > at)) return 1;
@@ -132,15 +133,15 @@ export function deathPenalty(state, at = state.clock) {
 
 /* The save's own hunter, with a recent death's wound already taken off. Everything
    that reads a hunter's numbers comes through here, so the penalty lands on the
-   fight, the projections and the stat sheet at once and cannot be read around. */
+   fight, the projections and the stat sheet at once and cannot be read around.
+
+   The wound is on the Attack and nothing else: you are as hard to put down as you
+   ever were, you simply kill slower for ten minutes. */
 export function statsOf(state, at = state.clock) {
   const s = combatStats({ level: skillLevel(state, "warfare"), klass: state.player.klass, equipment: state.equipment });
   const wounded = deathPenalty(state, at);
   if (wounded >= 1) return s;
-  s.maxHp = Math.max(1, Math.round(s.maxHp * wounded));
-  s.attack *= wounded;
-  s.defence *= wounded;
-  s.crit *= wounded;
+  s.attack = CONFIG.round2(s.attack * wounded);
   s.wounded = wounded;
   return s;
 }
@@ -159,7 +160,9 @@ export function canPickClass(state) {
   return !state.player.klass && skillLevel(state, "warfare") >= CONFIG.progression.classPickLevel;
 }
 
-// Out of the hunt after a death. Counts down in game time, so it also runs while away.
-export function recovering(state) {
-  return state.player.recoveryLeft > 0;
+/* A death no longer bars the gate; only the Attack wound remains, and that is read
+   through deathPenalty. Kept returning false so any caller that has not caught up
+   lets the hunt set out. */
+export function recovering(_state) {
+  return false;
 }

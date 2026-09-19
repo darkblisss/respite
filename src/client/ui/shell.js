@@ -47,8 +47,8 @@ function skillRow(id) {
 const NAV = [
   { id: "navVanguard", rows: [
     { route: { page: "character" }, label: "Character", icon: "person" },
-    // The Satchel sits above the Hunt: what you carry into a fight, then the fight.
-    { route: { page: "armaments" }, label: "Satchel", icon: "plate", meta: (s) => `${slotsUsed(s, "inv")}/${slotCap(s, "inv")}` },
+    // Inventory sits above the Hunt: what you carry into a fight, then the fight.
+    { route: { page: "armaments" }, label: "Inventory", icon: "plate", meta: (s) => `${slotsUsed(s, "inv")}/${slotCap(s, "inv")}` },
     { route: { page: "skill", arg: "warfare" }, label: "Hunt", icon: "swords",
       meta: (s) => `Lv ${skillLevel(s, "warfare")}`, dot: (s) => (s.tasks.combat ? "ember" : null) },
     // Companions are out of the live camp until the system is redesigned. Re-enable this row with the route in router.js.
@@ -233,30 +233,14 @@ export function createShell(app) {
     let look;
     if (party) {
       look = party;
-    } else if (plan && plan.phase === "hide") {
-      const sov = sovereignOf(plan.c.tier);
-      const wait = Math.max(0, plan.c.wait);
-      look = {
-        state: "hiding", icon: "eye-off", name: "Hiding", short: "Hiding",
-        meta: `${fmtTime(wait)} left · ${sov ? sov.name : "Something vast"} searches`,
-        pct: ((CONFIG.hunt.hideMs - wait) / CONFIG.hunt.hideMs) * 100,
-        stop: "Pull back from hiding",
-      };
     } else if (plan) {
       const kills = `${fmtWhole(plan.done)} kills`;
       const rate = plan.xpRate == null ? "Reckoning" : `${fmtWhole(Math.round(plan.xpRate))} XP/hr`;
       look = {
         state: "hunting", icon: zoneIcon(plan.zone.id), name: `${plan.zone.name} · ${plan.region.name}`, short: plan.zone.name,
-        meta: `${kills} · ${rate} · Threat ${plan.threat}`,
+        meta: `${kills} · ${rate}`,
         // The fight in hand: a health bar, draining as the foe in front of you goes down.
         pct: plan.target ? plan.pct : 0,
-        stop: "Pull back from the hunt",
-      };
-    } else if (recovering(s)) {
-      const left = s.player.recoveryLeft;
-      look = {
-        state: "recovering", icon: "heart", name: "Recovering", short: fmtTime(left),
-        meta: `Back in ${fmtTime(left)}`, pct: ((CONFIG.hunt.recoveryMs - left) / CONFIG.hunt.recoveryMs) * 100,
         stop: "Pull back from the hunt",
       };
     } else {

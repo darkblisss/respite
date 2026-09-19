@@ -19,7 +19,7 @@ import { iconEl } from "../icons.js";
 import { openModal } from "../overlay.js";
 import { fmt, fmtGold, fmtStat, chancePct, plural } from "../format.js";
 import { registerPopup, openPopup } from "../widgets.js";
-import { GameData, getMonster, getZone, regionOfTier } from "../../../shared/registry.js";
+import { GameData, getMonster, getZone, regionOfTier, tierLabel } from "../../../shared/registry.js";
 import { foeNumbers } from "../../../shared/combat.js";
 import { statsOf, mitigation } from "../../../shared/stats.js";
 import { xpMult } from "../../../shared/progression.js";
@@ -163,7 +163,7 @@ registerPopup("foe", (ctx, monsterId, { back = null } = {}) => {
   let offTick = () => {};
   const m = openModal({
     title: mob.name,
-    sub: `${sov ? "Sovereign" : GameData.ARCHETYPES[mob.archetype].name} · ${region ? region.name : `Tier ${mob.tier}`}`,
+    sub: `${sov ? "Sovereign" : GameData.ARCHETYPES[mob.archetype].name} · ${region ? region.name : tierLabel(mob.tier)}`,
     art: monsterArt(mob),
     artTone: "ember",
     body: foeBody(ctx, mob),

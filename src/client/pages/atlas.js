@@ -16,7 +16,7 @@ import { confirm } from "../ui/overlay.js";
 import { fmt, fmtGold, fmtWhole } from "../ui/format.js";
 import { confirmSpend, hasPopup, openPopup } from "../ui/widgets.js";
 import { CONFIG } from "../../shared/config.js";
-import { GameData, TRADE_ORDER, foesOf, gatherSkillDef, sovereignOf, stratumOf, matId, getRegion, getZone, regionOfTier } from "../../shared/registry.js";
+import { GameData, TRADE_ORDER, foesOf, gatherSkillDef, sovereignOf, stratumOf, matId, getRegion, getZone, regionOfTier, tierLabel } from "../../shared/registry.js";
 import { skillLevel } from "../../shared/stats.js";
 import { itemDef, isRemedy } from "../../shared/items.js";
 import { heldEverywhere } from "../../shared/storage.js";
@@ -254,7 +254,7 @@ export default {
 
       detail.replaceChildren(
         h("div.atlas-vista", { html: vista(r.tier) },
-          h("div.atlas-vista-tier", h("div.chip-row", h("span.tag.tag-gold", `Tier ${r.tier}`), h("span.tag", stratumOf(r.tier).name)))),
+          h("div.atlas-vista-tier", h("div.chip-row", h("span.tag.tag-gold", tierLabel(r.tier)), h("span.tag", stratumOf(r.tier).name)))),
         h("div.atlas-body",
           h("h2.atlas-title", r.name),
           h("p.atlas-note", r.note),

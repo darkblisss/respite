@@ -31,7 +31,7 @@ import { fmtWhole, fmtGold, fmtTime, fmtAgo } from "../ui/format.js";
 import { qtyPicker, confirmSpend, openPopup } from "../ui/widgets.js";
 import { CONFIG } from "../../shared/config.js";
 import { itemDef, isRemedy, stacks } from "../../shared/items.js";
-import { GameData, rarityDef, skillName } from "../../shared/registry.js";
+import { GameData, rarityDef, skillName, tierLabel } from "../../shared/registry.js";
 import { placeFor } from "../../shared/storage.js";
 import { fillPool, marketFee } from "../../shared/market.js";
 
@@ -104,11 +104,11 @@ function itemArt(key, rarity, cls = "art-sm") {
   return h("div.art", { class: cls, "data-rarity": rarity || "common", "aria-hidden": "true" }, iconEl(d ? d.icon : "unknown"));
 }
 
-// "Rare weapon · Tier 2", "Bars · Tier 2", "Reagent", "Tool · Delving · Tier 2".
+// "Rare weapon · Lv10", "Bars · Lv10", "Reagent", "Tool · Delving · Lv10".
 function kindLine(row) {
   const d = itemDef(row.item_key);
   const tier = row.item_tier != null ? row.item_tier : d && d.tier;
-  const tierText = tier ? `Tier ${tier}` : null;
+  const tierText = tier ? tierLabel(tier) : null;
   let parts;
   if (!d) parts = ["Goods", tierText];
   else if (d.kind === "gear") parts = [`${rarityDef(d.rarity).name} ${String(GameData.SLOT_LABELS[d.slot] || "gear").toLowerCase()}`, tierText];
@@ -255,7 +255,7 @@ function marketBody(ctx, page, actions) {
     KINDS.map((k) => h("button.seg-btn", { type: "button", role: "tab", "aria-selected": k.id === filt.kind ? "true" : "false", dataset: { kind: k.id } }, k.label)));
   const tierSel = h("select.select.select-sm", { "aria-label": "Tier" },
     h("option", { value: "0" }, "All tiers"),
-    GameData.TIERS.map((t) => h("option", { value: String(t.i) }, `Tier ${t.i}`)));
+    GameData.TIERS.map((t) => h("option", { value: String(t.i) }, tierLabel(t.i))));
   const sortSel = h("select.select.select-sm", { "aria-label": "Sort" },
     h("option", { value: "price" }, "Cheapest"),
     h("option", { value: "newest" }, "Newest"));

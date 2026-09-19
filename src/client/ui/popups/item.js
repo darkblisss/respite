@@ -30,7 +30,7 @@ import { openModal, confirm, toast } from "../overlay.js";
 import { fmtWhole, fmtGold, fmtStat } from "../format.js";
 import { qtyPicker, registerPopup, openPopup } from "../widgets.js";
 import { CONFIG } from "../../../shared/config.js";
-import { GameData, itemSources, prefixDef, rarityDef, skillName } from "../../../shared/registry.js";
+import { GameData, itemSources, prefixDef, rarityDef, skillName, tierLabel } from "../../../shared/registry.js";
 import { itemDef, itemName, stacks } from "../../../shared/items.js";
 import { ORDER, POOLS, canHold, isPool, poolName, qtyIn, haveQty, roomFor, slotCap, slotsUsed, placeFor } from "../../../shared/storage.js";
 import { displacedBy, salvageValue } from "../../../shared/world.js";
@@ -580,7 +580,7 @@ function openItem(ctx, key, opts, extra) {
     const where = isPool(from)
       ? (qty > 1 ? `${poolName(from)} ×${fmtWhole(qty)}` : `In ${phrase(from)}`)
       : from === "worn" ? (d.kind === "tool" ? "In hand" : "Worn") : null;
-    const sub = [kindLabel(d), d.tier && !d.reagent ? `Tier ${d.tier}` : null, where].filter(Boolean).join(" · ");
+    const sub = [kindLabel(d), d.tier && !d.reagent ? tierLabel(d.tier) : null, where].filter(Boolean).join(" · ");
     if (sub !== P.sub) {
       P.sub = sub;
       m.setTitle(itemName(key), sub);

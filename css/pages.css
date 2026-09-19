@@ -25,7 +25,7 @@
 
 .char-portrait {
   width: 104px;
-  height: 124px;
+  height: 152px;
   border-radius: 16px;
 }
 
@@ -67,7 +67,7 @@
     padding: var(--sp-4);
     border-radius: var(--r-lg);
   }
-  .char-portrait { width: 72px; height: 86px; border-radius: 12px; }
+  .char-portrait { width: 72px; height: 108px; border-radius: 12px; }
   .char-name { font-size: 26px; }
   .char-tags { margin-top: 8px; }
   .char-total {
@@ -648,7 +648,7 @@ button.doll-slot { cursor: pointer; }
 
 .doll-figure .portrait {
   flex: 1 1 auto;
-  min-height: 240px;
+  min-height: 300px;
 }
 
 .doll-name {
@@ -674,7 +674,7 @@ button.doll-slot { cursor: pointer; }
   .doll-slot-l { font-size: 10px; letter-spacing: .06em; }
   .doll-slot-art .ico { width: 22px; height: 22px; }
   .doll-slot-name { font-size: 11px; }
-  .doll-figure .portrait { min-height: 200px; }
+  .doll-figure .portrait { min-height: 240px; }
 }
 
 /* ================= 5. THE HUNT ================= */

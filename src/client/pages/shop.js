@@ -8,6 +8,7 @@
    prices you can't cover and the timers repaint in place.
    ============================================================ */
 
+import { tierLabel } from "../../shared/registry.js";
 import { h, el, setText, setAttr, toggleClass } from "../ui/dom.js";
 import { iconEl } from "../ui/icons.js";
 import { toast } from "../ui/overlay.js";
@@ -88,7 +89,7 @@ export default {
     function paintRemedy(row) {
       const state = ctx.state;
       const total = row.entry.price * clampQty(row.picker.pick.n);
-      setText(row.sub, `Restores ${fmt(row.d.heal)} HP · Tier ${row.d.tier} · ${heldText(state, row.entry.key)}`);
+      setText(row.sub, `Restores ${fmt(row.d.heal)} HP · ${tierLabel(row.d.tier)} · ${heldText(state, row.entry.key)}`);
       setText(row.buy, `Buy for ${fmtGold(total)}`);
       toggleClass(row.price, "is-short", total > state.player.gold);
     }
@@ -138,7 +139,7 @@ export default {
         buildLots(stock);
       }
       lots.forEach((l) => {
-        setText(l.sub, `Tier ${l.d.tier} · ${fmtGold(l.lot.price)} the lot · ${heldText(state, l.lot.key)}`);
+        setText(l.sub, `${tierLabel(l.d.tier)} · ${fmtGold(l.lot.price)} the lot · ${heldText(state, l.lot.key)}`);
         if (l.price) toggleClass(l.price, "is-short", l.lot.price > state.player.gold);
       });
     }

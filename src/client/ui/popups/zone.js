@@ -23,7 +23,7 @@ import { openModal, tipBody, tooltip } from "../overlay.js";
 import { fmt, fmtStat, fmtTime, signedPct } from "../format.js";
 import { registerPopup, openPopup } from "../widgets.js";
 import { CONFIG } from "../../../shared/config.js";
-import { GameData, foesOf, sovereignOf, regionOfTier } from "../../../shared/registry.js";
+import { GameData, foesOf, sovereignOf, regionOfTier, tierLabel } from "../../../shared/registry.js";
 import { bestRun, huntRates, projectOnce, summariseRuns, huntOddsOpts, oddsSignature } from "../../../shared/combat.js";
 import { skillLevel, recovering } from "../../../shared/stats.js";
 import { xpBreakdown, partyMult } from "../../../shared/progression.js";
@@ -151,7 +151,7 @@ registerPopup("zone", (ctx, tier, zoneId) => {
 
   const m = openModal({
     title: `${zone.name} · ${region.name}`,
-    sub: `Hunt · Tier ${tier}`,
+    sub: `Hunt · ${tierLabel(tier)}`,
     art: ZONE_ICONS[zone.id],
     artTone: "ember",
     // One decision, so Start the Hunt sits down the middle rather than off to the right.
@@ -172,11 +172,11 @@ registerPopup("zone", (ctx, tier, zoneId) => {
     return view.hunters.some((u) => u && String(u.userId).toLowerCase() === String(me).toLowerCase());
   };
 
-  // Recovering, where the hunt is, whether the ground is open and suited, hiding: each changes the buttons or the rows.
+  // Where the hunt is, and whether the ground is open and suited: each changes the buttons or the rows.
   function shapeOf(state) {
     const c = state.tasks.combat;
-    return [recovering(state), c ? `${c.tier}:${c.zone}` : "-", state.travel.unlocked.includes(region.id),
-      skillLevel(state, "warfare") < region.level, !!state.settings.hideSovereign, outWithParty()].join("|");
+    return [c ? `${c.tier}:${c.zone}` : "-", state.travel.unlocked.includes(region.id),
+      skillLevel(state, "warfare") < region.level, outWithParty()].join("|");
   }
 
   function stat(parent, label, value, tone) {
@@ -192,18 +192,19 @@ registerPopup("zone", (ctx, tier, zoneId) => {
     const here = !!(c && c.tier === tier && c.zone === zone.id);
     const open = state.travel.unlocked.includes(region.id);
 
-    /* No "Foes at once" (maxFoes is a global now), no Threat line and no "At 100
-       Threat" line: Threat belongs to the region, so it is stated once on the Hunt
-       page rather than on each of four zone sheets. */
+    /* Threat is gone, so there is no counter to report. What the sheet says instead
+       is the flat chance this ground shows its Sovereign, which is the whole of it. */
     const facts = h("div.stats");
     if (skillLevel(state, "warfare") < region.level) stat(facts, "Suited to", `Hunt Lv ${region.level} and up`, "bad");
     stat(facts, "Reinforcements", `Every ${zone.windowMs / 1000}s`);
     stat(facts, "Elites", pctOf(zone.elite));
     stat(facts, "XP a kill", `×${zone.xp}`);
     stat(facts, "Foes here", `×${zone.power} health and damage`);
-    if (!state.settings.hideSovereign && zone.escorts > 0) {
-      stat(facts, "At its side", zone.escorts === 1 ? "An Elite" : `${zone.escorts} Elites`);
+    if (zone.sovereign > 0) {
+      stat(facts, "Sovereign", `${pctOf(zone.sovereign)} an encounter`);
+      stat(facts, "At its side", `${GameData.SOVEREIGN.escorts} Elites`);
     }
+    if (zone.fragments) stat(facts, "Elites leave", "A Veil Fragment");
 
     /* Throughput numbers are gone from this sheet: the live XP/hr and DPS are on the
        run bar and the Hunt page, and a projected kills-an-hour only encouraged
@@ -226,7 +227,7 @@ registerPopup("zone", (ctx, tier, zoneId) => {
       h("span.ap-val", value));
     /* The Sovereign's line is not a per-encounter chance like the rest of the list,
        and a percentage there read as though it were. It says what it is instead. */
-    const sovRow = foeRow(sov, state.settings.hideSovereign ? "Not while you hide" : "Appears when Threat is maxed");
+    const sovRow = foeRow(sov, zone.sovereign > 0 ? `${pctOf(zone.sovereign)} an encounter` : "Not on this ground");
     const list = h("div.ap-list",
       foesOf(tier).map((mob) => foeRow(mob, `${pctOf(zone.mix[mob.archetype])} of foes`)),
       sovRow);

@@ -24,7 +24,7 @@ import { startSkill, stopSkill, nextSkillDue, resolveSkilling } from "./skills.j
 import { startHunt, pullBack, setHide, huntStep, repair } from "./combat.js";
 import {
   refreshBounty, resolveRequisitions, claimBounty, hireAgent, deployAgent, buyRemedy, buySmuggler,
-  travel, equip, unequip, unequipTool, moveItem, sellItem, useChest, salvage, reorder, pickClass,
+  travel, equip, unequip, unequipTool, moveItem, sellItem, useChest, useRemedy, salvage, reorder, pickClass,
 } from "./world.js";
 
 const WINDOW_MS = CONFIG.time.windowMs;
@@ -68,13 +68,13 @@ export function advance(state, target, env = SILENT) {
     if (state.debuff && state.debuff.until > clock) next = Math.min(next, state.debuff.until);
     const dt = next - clock;
 
-    state.player.recoveryLeft = Math.max(0, state.player.recoveryLeft - dt);
+    state.player.recoveryLeft = 0;
 
     // Hunt before bench at equal times.
     const deaths = state.stats.deaths;
     const huntRan = tasks.combat ? huntStep(state, dt, env, clock) : 0;
     // A death partway through starts recovery then, not at the end of the stretch.
-    if (state.stats.deaths > deaths) state.player.recoveryLeft = Math.max(0, state.player.recoveryLeft - (dt - huntRan));
+    if (state.stats.deaths > deaths) state.player.recoveryLeft = 0;
     if (!state.tasks.combat && state.player.hp > maxHp(state)) state.player.hp = maxHp(state);
 
     const skillRan = state.tasks.skilling ? resolveSkilling(state, dt, env, clock) : 0;
@@ -116,6 +116,7 @@ export const COMMANDS = Object.freeze({
   sellItem:     { run: sellItem, predict: true },
   salvage:      { run: salvage, predict: true },
   useChest:     { run: useChest, predict: true },
+  useRemedy:    { run: useRemedy, predict: true },
   repair:       { run: repair, predict: true },
   reorder:      { run: reorder, predict: true },
   buyRemedy:    { run: buyRemedy, predict: true },
