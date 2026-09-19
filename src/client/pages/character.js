@@ -80,7 +80,7 @@ function heroView() {
       tagSig = sig;
       // replaceChildren would write a null out as text, so the absent ones are filtered first.
       tags.replaceChildren(...[
-        klass ? h("span.tag.tag-veil", klass.name) : null,
+        klass ? h("span.tag.tag-violet", klass.name) : null,
         comp ? chipNode({ text: comp.name, icon: "paw" }) : null,
         bountyText ? chipNode({ text: bountyText, tone: "gold", icon: "scroll" }) : null,
       ].filter(Boolean));
@@ -130,12 +130,12 @@ function benchCard(ctx) {
         const skill = getSkill(plan.def.skillId);
         live = { fill: h("i"), count: h("span"), left: h("b") };
         const stop = h("button.btn.btn-sm.btn-quiet", { type: "button", onClick: () => ctx.dispatch("stopSkill", {}) }, "Stop");
-        card.swap(h("article.card.act-card", { "data-tone": "tan" },
+        card.swap(h("article.card.act-card", { "data-tone": "violet" },
           actTop(h("div.art", { "aria-hidden": "true" }, iconEl(skill.icon)), `The crews · ${skill.name}`, titleCase(plan.def.name), stop, `#/skill/${skill.id}`),
           h("div.bar", live.fill),
           h("div.act-card-meta", live.count, live.left)));
       } else {
-        card.swap(idleCard("tan", {
+        card.swap(idleCard("violet", {
           iconName: "hammer", eyebrow: "The crews", title: "No crews at work",
           copy: "Your people are standing around.", link: "#/skill/delving", linkText: "Open Delving",
         }));
@@ -240,7 +240,7 @@ function skillsView() {
     const lv = document.createTextNode("");
     const fill = h("i");
     const node = h("a.skill-card", { href: `#/skill/${id}`, "data-tone": war ? "ember" : null },
-      h("div.art.art-sm", { "data-tone": war ? "ember" : "tan", "aria-hidden": "true" }, iconEl(s.icon)),
+      h("div.art.art-sm", { "data-tone": war ? "ember" : "violet", "aria-hidden": "true" }, iconEl(s.icon)),
       h("div.skill-main", h("div.skill-name", s.name, dot), xp),
       h("div.skill-lv", h("small", "Lv"), lv),
       h("div.bar", { class: war ? "bar-ember" : null }, fill));
@@ -500,8 +500,7 @@ function tabShell(ctx) {
       "aria-controls": `charPanel-${t.id}`,
       tabindex: "-1",
       dataset: { tab: t.id },
-    // Words alone: a tab is a heading you can press, and a heading carries no glyph.
-    }, t.name)));
+    }, iconEl(t.icon), t.name)));
 
   const select = h("select.select.char-tab-select", { "aria-label": "Character" },
     TABS.map((t) => h("option", { value: t.id }, t.name)));

@@ -9,7 +9,6 @@
      dev/kit.html?page=hunt            one page, inside the real shell
        &bench=idle|working|crafting    the crews chip
        &hunt=idle|hunting|recovering|hiding
-       &field=fight|quiet|search|sovereign|down|party   the scene on ?page=hunt
        &conn=online|syncing|offline|guest
        &modal=action|item|stack|sell|settings|account|class|buy|short|reset
        &drawer=open                    open the phone drawer
@@ -65,7 +64,7 @@ const CONN = { online: "212 online", syncing: "Syncing", offline: "Offline", gue
 const LOG = [
   { t: 40 * 1000, m: "Your crews brought up 12 Bog Ore." },
   { t: 3 * 60 * 1000, m: "You put down a Fen Stalker. It dropped 1 Bristle Pelt." },
-  { t: 9 * 60 * 1000, m: "Thane joined the hunt in the Inner of Gallowmoor.", tone: "tan" },
+  { t: 9 * 60 * 1000, m: "Thane joined the hunt in the Inner of Gallowmoor.", tone: "violet" },
   { t: 26 * 60 * 1000, m: "Bog Bar ×20 sold on the market for 266g.", tone: "gold" },
   { t: 2 * 60 * 60 * 1000, m: "Delving reached level 24.", tone: "good" },
   { t: 5 * 60 * 60 * 1000, m: "You fell in the Core of Gallowmoor. Your gear took the worst of it.", tone: "ember" },
@@ -75,8 +74,7 @@ const LOG = [
 
 const ic = (name, cls) => iconEl(name, cls);
 
-// A bare glyph: plain ink unless a tone is asked for (tan, ember, gold, good, veil).
-function art(name, { tone = null, rarity = null, size = null, cls = null } = {}) {
+function art(name, { tone = "violet", rarity = null, size = null, cls = null } = {}) {
   return h("div.art", {
     class: [size && `art-${size}`, cls],
     "data-tone": rarity ? null : tone,
@@ -113,7 +111,7 @@ function itemPill({ name, iconName, sub, stats = [], state = "idle", pct = 0, to
     class: { "is-working": state === "working", "is-locked": state === "locked", "is-short": state === "short" },
     "data-tone": tone,
   },
-    art(iconName, { tone }),
+    art(iconName, { tone: tone || "violet" }),
     h("div.pill-main",
       h("button.pill-hit", { type: "button", onClick: onOpen }, name),
       h("div.pill-sub", sub)),
@@ -403,7 +401,7 @@ function fillTopbar(root, { bench = "working", hunt = "hunting", conn = "online"
   if (crumbBox) {
     clear(crumbBox);
     crumbs.forEach((part, i) => {
-      if (i) crumbBox.appendChild(h("span.tb-crumb-sep", { "aria-hidden": "true" }, "/"));
+      if (i) crumbBox.appendChild(ic("chevron-right"));
       crumbBox.appendChild(i === crumbs.length - 1 ? h("span", { "aria-current": "page" }, part) : h("span", part));
     });
   }
@@ -422,7 +420,7 @@ const NAV = [
     { label: "Shop", icon: "shop", route: "#/shop" },
     { label: "Sky", icon: "sky", route: "#/sky" },
   ] },
-  { id: "Trades", items: SKILLS.filter((s) => s.kind === "gather").map((s) => ({ label: s.name, icon: s.icon, route: `#/skill/${s.id}`, meta: `Lv ${s.lv}`, dot: s.working ? "tan" : null })) },
+  { id: "Trades", items: SKILLS.filter((s) => s.kind === "gather").map((s) => ({ label: s.name, icon: s.icon, route: `#/skill/${s.id}`, meta: `Lv ${s.lv}`, dot: s.working ? "violet" : null })) },
   { id: "Artisans", items: SKILLS.filter((s) => s.kind === "craft").map((s) => ({ label: s.name, icon: s.icon, route: `#/skill/${s.id}`, meta: `Lv ${s.lv}` })) },
   { id: "Field", items: [{ label: "Hunt", icon: "swords", route: "#/skill/warfare", meta: "Lv 31", dot: "ember" }] },
   { id: "Realm", items: [
@@ -436,6 +434,7 @@ const NAV = [
 function navItem(item, current) {
   const active = item.route === current;
   return h("li", h("a.nav-item", { href: item.route, class: active && "is-active", "aria-current": active ? "page" : null },
+    ic(item.icon, "nav-ico"),
     h("span.nav-label", item.label),
     item.dot ? h("span.nav-dot", { "data-tone": item.dot === "ember" ? "ember" : null, role: "img", "aria-label": item.dot === "ember" ? "Hunting" : "Working" }) : null,
     item.meta ? h("span.nav-meta", item.meta) : null,
@@ -468,11 +467,11 @@ PAGES.character = () => h("div.page",
     h("div",
       h("div.eyebrow.page-eyebrow", "In Gallowmoor"),
       h("h1.char-name", ME.name),
-      h("div.chip-row.char-tags", tag("Warrior", "veil"), chip("Tunnel Rat", null, "paw"), chip("Bounty 12 of 17", "gold", "scroll"))),
+      h("div.chip-row.char-tags", tag("Warrior", "violet"), chip("Tunnel Rat", null, "paw"), chip("Bounty 12 of 17", "gold", "scroll"))),
     h("div.char-total", h("span.char-total-v", fmtWhole(ME.total)), h("span.eyebrow", "Total level"))),
 
   h("div.grid-cards.max-2",
-    h("article.card.act-card", { "data-tone": "tan" },
+    h("article.card.act-card", { "data-tone": "violet" },
       h("div.act-card-top",
         art("pick"),
         h("div.grow", h("div.eyebrow", "The crews · Delving"), h("h2.card-title", "Bog Ore")),
@@ -498,7 +497,7 @@ PAGES.character = () => h("div.page",
     h("div.grid-cards.skills-grid", SKILLS.map((s) => {
       const pct = ((s.xp - s.base) / (s.next - s.base)) * 100;
       return h("a.skill-card", { href: `#/skill/${s.id}`, class: (s.working || s.hunting) && "is-working", "data-tone": s.kind === "war" ? "ember" : null },
-        art(s.icon, { tone: s.kind === "war" ? "ember" : "tan", size: "sm" }),
+        art(s.icon, { tone: s.kind === "war" ? "ember" : "violet", size: "sm" }),
         h("div.skill-main",
           h("div.skill-name", s.name, s.working ? h("span.dot.dot-working", { role: "img", "aria-label": "Working" }) : null,
             s.hunting ? h("span.dot.dot-hunting", { role: "img", "aria-label": "Hunting" }) : null),
@@ -534,17 +533,17 @@ PAGES.gather = () => {
         itemPill({
           name: "Bog Ore", iconName: "ore", state: "working", pct: 36, tip: nodeTip("Bog Ore"),
           sub: [h("span", "Working"), h("span", h("b", "42"), " of 200"), h("span", "1h 12m left")],
-          stats: [chip("16s", null, "clock"), chip("3 XP", "tan"), chip("147 held")],
+          stats: [chip("16s", null, "clock"), chip("3 XP", "violet"), chip("147 held")],
         }),
         itemPill({
           name: "Coal", iconName: "coalIco", tip: nodeTip("Coal"),
           sub: "The reagent every bar asks for",
-          stats: [chip("16s", null, "clock"), chip("3 XP", "tan"), chip("30 held")],
+          stats: [chip("16s", null, "clock"), chip("3 XP", "violet"), chip("30 held")],
         }),
         itemPill({
           name: "Cairn Steel", iconName: "ore", state: "locked",
           sub: [ic("lock"), "Needs Delving Lv 30"],
-          stats: [chip("32s", null, "clock"), chip("10 XP", "tan")],
+          stats: [chip("32s", null, "clock"), chip("10 XP", "violet")],
         }))),
 
     h("section.card.card-flush",
@@ -661,7 +660,7 @@ PAGES.storage = () => h("div.page",
         h("div.list",
           [["Delving", "Bog Pick", "pick", "+12% speed", 72], ["Felling", "Blood Ash Axe", "axe", "+12% speed", 31], ["Harvesting", "Bare hands", "sickle", null, null], ["Flaying", "Slag Knife", "knife", "+6% speed", 88], ["Dredging", "Bare hands", "net", null, null]]
             .map(([skillName, tool, iconName, speed, wear]) => h("div.list-row",
-              art(iconName, { size: "sm", tone: tool === "Bare hands" ? "neutral" : "tan" }),
+              art(iconName, { size: "sm", tone: tool === "Bare hands" ? "neutral" : "violet" }),
               h("div.lr-main", h("div.lr-title", tool), h("div.lr-sub", skillName)),
               h("div.lr-end", speed ? chip(speed, "good") : h("span.muted.tiny", "No tool"), wear != null ? h("span.tiny.num", { class: wear > 60 ? "t-good" : wear > 25 ? "t-gold" : "t-bad" }, `${wear}%`) : null))))),
       h("section.card",
@@ -698,7 +697,7 @@ PAGES.armaments = () => h("div.page",
     storageCard({ tabs: [["Belongings", "7/10", true], ["Vault", "8/50"]], items: BELONGINGS, total: 10 }),
     h("aside.storage-side",
       h("section.card",
-        cardHead("Worn", { actions: chip("Warrior", "veil") }),
+        cardHead("Worn", { actions: chip("Warrior", "violet") }),
         h("div.doll",
           h("div.doll-col",
             dollSlot("Head", { name: "Bog Helm", icon: "cowl", rarity: "uncommon", wear: 84 }),
@@ -721,159 +720,87 @@ PAGES.armaments = () => h("div.page",
           stat("Defence", "9.8", null, h("small", "stops 31% here")), stat("Swing", "2.6s"), stat("Crit chance", "7%"),
           stat("Crit damage", "150%"), stat("Penetration", "10%"), stat("Veil", "+11 a blow"), stat("Hunt", "Lv 31", "good"))))));
 
-/* ---- the field: the hunt as a scene (pages.css 5, hunt.js) ----
-   A fighter is a figure, a name and a vital. Nothing here is a card. */
-
-function vital(pct, text, kind) {
-  return h("div.vital", { class: kind && `vital-${kind}` }, h("div.vital-line", h("i", { style: { width: `${pct}%` } })), h("span.vital-text", text));
-}
-
-function foeFighter({ name, kind, hp, max, rank, target, float, on }) {
-  return h("div.fighter.fighter-foe", { class: { "is-target": target, "is-elite": rank === "elite", "is-sovereign": rank === "sovereign" } },
+function foeCard({ name, kind, hp, max, rank, target, float }) {
+  return h("div.foe-card", { class: { "is-target": target, "is-elite": rank === "elite", "is-sovereign": rank === "sovereign" } },
     h("div.fx-layer", float ? h("span.float", { class: [float.kind, "lane0", SHOT && "is-frozen"] }, float.text) : null),
-    h("button.fighter-art.foe-art", { type: "button", "aria-label": `${name}: details`, onClick: () => PAGES_MODALS.foe() }, monsterArt(kind, rank)),
-    h("div.fighter-plate",
-      h("div.fighter-name", h("span", name), rank === "elite" ? tag("Elite", "elite") : null, rank === "sovereign" ? tag("Sovereign", "sovereign") : null),
-      vital((hp / max) * 100, `${fmt(hp)} / ${fmt(max)}`, "foe"),
-      on ? h("div.fighter-on", on) : null));
+    h("button.foe-art", { type: "button", "aria-label": `${name}: details`, onClick: () => PAGES_MODALS.foe() }, monsterArt(kind, rank)),
+    h("div.foe-body",
+      h("div.foe-name", h("span", name), rank === "elite" ? tag("Elite", "elite") : null, rank === "sovereign" ? tag("Sovereign", "sovereign") : null),
+      h("div.hpbar.hpbar-foe", h("i", { style: { width: `${(hp / max) * 100}%` } }), h("span", `${fmt(hp)} / ${fmt(max)}`))));
 }
 
-const commander = () => h("img", { src: "assets/commander-default.webp", alt: "" });
-
-function youFighter({ hp = ME.hp, max = ME.maxHp, veil = 64, veilName = "Bulwark", down = false, float = null } = {}) {
-  const full = veil >= 100;
-  return h("div.fighter.fighter-you", { class: { "is-down": down, "is-charged": full }, "data-veil": veil == null ? null : String(Math.round(veil / 10)) },
-    h("div.fx-layer", float),
-    h("div.portrait.fighter-art", h("div.fighter-mist", { "aria-hidden": "true" }), commander()),
-    h("div.fighter-plate",
-      h("div.fighter-name", ME.name),
-      h("div.vital", { class: hp / max <= 0.35 && "is-low" }, h("div.vital-line", h("i", { style: { width: `${(hp / max) * 100}%` } })), h("span.vital-text", `${hp} / ${max}`)),
-      veil == null ? null : vital(veil, full ? `${veilName} · ready` : `${veilName} · ${veil} of 100`, "veil")));
-}
-
-function bandMate({ name, hp, max, me, down }) {
-  return h("div.fighter.band-mate", { class: { "is-me": me, "is-down": down } },
-    h("div.portrait.fighter-art", commander()),
-    h("div.fighter-plate", h("div.fighter-name", name), vital((hp / max) * 100, down ? "Fallen" : `${hp} / ${max}`, "sm")));
-}
-
-function descentStop({ name, depth, foes, sub, active }) {
-  return h("li", h("button.descent-stop", { type: "button", class: { "is-active": active }, "aria-current": active ? "true" : null, dataset: { depth: String(depth) }, onClick: () => PAGES_MODALS.huntZone() },
-    h("span.descent-mark", { "aria-hidden": "true" }),
-    h("span.descent-name", name),
-    h("span.descent-sub", foes),
-    h("span.descent-sub", sub),
-    h("span.descent-tag", active ? "You hunt here" : "")));
-}
-
-function specimen({ name, kind, archetype, sub, sovereign }) {
-  return h("button.specimen", { type: "button", class: { "is-sovereign": sovereign }, onClick: () => PAGES_MODALS.foe() },
-    h("span.foe-art", monsterArt(kind, sovereign ? "sovereign" : null)),
-    h("span.specimen-kind", archetype),
-    h("span.specimen-name", name),
-    h("span.specimen-sub", sub));
-}
-
-/* &field=fight (the default) | quiet | search | sovereign | down | party: the scene's
-   data-state, and with it the light, the smoke and who is standing in it. */
-function fieldScene(state) {
-  const s = skill("warfare");
-  const quiet = state === "quiet" || state === "down";
-  const party = state === "party";
-  const where = quiet ? "Gallowmoor" : "The Inner of Gallowmoor";
-  const sub = state === "down" ? "You were carried back to camp." : state === "quiet" ? "You take the vanguard."
-    : party ? "The party's hunt · XP by your share, gold and drops the same for everyone" : "Two or three at once · ×1.7 XP a kill";
-  const status = { fight: "Fighting", party: "Fighting", quiet: "Not hunting", search: "Searching", sovereign: "A Sovereign", down: "Recovering" }[state];
-  const timer = { fight: "Reinforcements in 31s", party: "Encounter 12", quiet: "", search: "Next encounter in 4s", sovereign: "Enrages in 22s", down: "Back in 3m 12s" }[state];
-
-  let foes;
-  if (state === "fight") {
-    foes = [
-      foeFighter({ name: "Fen Stalker", kind: "horror", hp: 22, max: 48, target: true, float: { kind: "crit", text: "Crit" } }),
-      foeFighter({ name: "Bog Crawler", kind: "beast", hp: 30, max: 30, rank: "elite" }),
-      foeFighter({ name: "Bog Brute", kind: "man", hp: 64, max: 78 }),
-    ];
-  } else if (state === "sovereign") {
-    foes = [
-      foeFighter({ name: "The Drowned Bailiff", kind: "man", hp: 1840, max: 2600, rank: "sovereign", target: true, float: { kind: "ambush", text: "Ambush" } }),
-      foeFighter({ name: "Fen Stalker", kind: "horror", hp: 96, max: 96, rank: "elite" }),
-    ];
-  } else if (party) {
-    foes = [
-      foeFighter({ name: "Fen Stalker", kind: "horror", hp: 22, max: 48, target: true, on: "On you" }),
-      foeFighter({ name: "Bog Crawler", kind: "beast", hp: 30, max: 30, rank: "elite", on: "On Thane" }),
-      foeFighter({ name: "Bog Brute", kind: "man", hp: 64, max: 78, on: "On Edda" }),
-      foeFighter({ name: "Bog Crawler", kind: "beast", hp: 12, max: 30, on: "On Thane" }),
-      foeFighter({ name: "Fen Stalker", kind: "horror", hp: 48, max: 48, on: "On Wren" }),
-    ];
-  } else {
-    const empty = {
-      quiet: ["Gallowmoor lies quiet", "Nothing is being hunted here."],
-      search: ["Searching the Inner", "The next encounter is close."],
-      down: ["Gallowmoor lies quiet", "You are in no state to hunt."],
-    }[state];
-    foes = [h("div.scene-empty", h("span.scene-empty-title", empty[0]), h("span.scene-empty-sub", empty[1]))];
-  }
-
-  const side = party
-    ? h("div.scene-band", { "data-n": "4" },
-      bandMate({ name: "You", hp: 87, max: 112, me: true }), bandMate({ name: "Thane", hp: 140, max: 160 }),
-      bandMate({ name: "Edda", hp: 31, max: 96 }), bandMate({ name: "Wren", hp: 0, max: 120, down: true }))
-    : youFighter(state === "down" ? { hp: 18, veil: 0, down: true }
-      : state === "sovereign" ? { veil: 100 }
-        : { float: h("span.float.hurt.lane1", { class: SHOT && "is-frozen" }, "Blunted") });
-
-  const kpi = (l, v, withBar) => h("div.kpi", h("span.l", l), h("span.v", v), withBar == null ? null : bar(withBar, "bar-neutral bar-thin"));
-  const foot = quiet
-    ? [h("p.scene-hint", state === "down" ? "You fell. Choose a zone below once you are back on your feet." : "Choose a zone below to take up the hunt."),
-      h("div.scene-actions", h("button.btn", { type: "button", class: state !== "down" && "btn-ember", disabled: state === "down", onClick: () => PAGES_MODALS.huntZone() }, state === "down" ? "Recovering" : "Hunt the Inner"))]
-    : [h("div.kpis",
-      party ? [kpi("Encounters", "12"), kpi("Your damage", "4,210"), kpi("Party damage", "13.9K"), kpi("Your share", "31%", 31), kpi("Time out", "1h 12m")]
-        : [kpi("Kills", "38"), kpi("XP/hr", "4,210"), kpi("DPS", "7.4"), kpi("Sovereign", "1%", 20), kpi("Time left", "10h 48m")]),
-    h("div.scene-actions",
-      h("button.btn.btn-quiet", { type: "button" }, party ? "Break away" : "Pull back"),
-      party ? null : h("button.btn", { type: "button", onClick: () => PAGES_MODALS.huntZone() }, "Change hunt"))];
-
-  return h("section.scene", { class: party && "is-party", "data-state": party ? "fight" : state, "aria-label": "The field" },
-    h("div.scene-sky", { "aria-hidden": "true" }),
-    h("header.scene-head",
-      h("div.scene-where",
-        h("div.eyebrow", "The Field · Hunt"),
-        h("h1.scene-title", where),
-        h("p.scene-sub", sub),
-        quiet ? null : h("div.scene-company", chip(party ? "4 out together" : "Thane hunts here too", "good", "party"))),
-      h("div.scene-rank",
-        h("div.scene-lv", h("small", "Hunt Lv"), String(s.lv)),
-        bar(((s.xp - s.base) / (s.next - s.base)) * 100, "bar-thin"),
-        h("div.scene-xp-meta", h("span.scene-xp-sub", `${fmtWhole(s.xp)} / ${fmtWhole(s.next)} XP`), h("span.scene-xp-next", h("b", fmtWhole(s.next - s.xp)), " to Lv 32")),
-        h("div.chip-row.scene-tags", tag("Warrior", "veil"), chip("+20% Hunt XP · 2 of your party here", "good", "party"), chip(`${signedPct(8)} XP · Veil Hound`, "good")))),
-    h("div.scene-stage",
-      h("div.scene-side", side),
-      h("div.scene-state", { role: "status" }, h("div.scene-status", status), h("div.scene-timer", timer)),
-      h("div.scene-foes", foes)),
-    h("footer.scene-foot", foot));
+function zoneCard({ name, iconName, sub, threat, active }) {
+  return h("button.zone-card", { type: "button", class: { "is-active": active, "is-peaked": threat >= 100 } },
+    art(iconName, { tone: "ember" }),
+    h("span.zone-main", h("span.zone-name", name), h("span.zone-sub", sub)),
+    active ? tag("Hunting", "ember") : threat >= 100 ? tag("Peaked", "sovereign") : h("span"),
+    h("span.meter",
+      h("span.meter-top", h("span", "Threat"), h("b", `${threat} / 100`)),
+      bar(threat, "bar-ember bar-thin")));
 }
 
 PAGES.hunt = () => {
-  const state = ["fight", "quiet", "search", "sovereign", "down", "party"].includes(params.get("field")) ? params.get("field") : "fight";
-  return h("div.page.hunt-page",
-    fieldScene(state),
+  const s = skill("warfare");
+  const floatYou = h("span.float.hurt.lane1", { class: SHOT && "is-frozen" }, "6");
+  return h("div.page",
+    h("section.hero", { "data-tone": "ember" },
+      art("swords", { size: "xl", tone: "ember" }),
+      h("div.hero-main", h("div.eyebrow.hero-eyebrow", "The Field · Gallowmoor"), h("h1.hero-title", "Hunt")),
+      h("div.hero-level", h("div.hero-lv", h("small", "Lv"), s.lv), h("div.hero-lv-sub", `${fmtWhole(s.xp)} / ${fmtWhole(s.next)} XP`)),
+      h("div.chip-row.hero-tags", chip("+20% Hunt XP · 2 of your party here", "violet", "party"), chip(`${signedPct(8)} XP · Veil Hound`, "good")),
+      h("div.hero-xp",
+        bar(((s.xp - s.base) / (s.next - s.base)) * 100, "bar-ember"),
+        h("div.hero-xp-meta", h("span", "You take the vanguard."), h("span", h("b", fmtWhole(s.next - s.xp)), " to Lv 32")))),
+
+    h("section.card.hunt-card",
+      cardHead("The Inner of Gallowmoor", { sub: "Two or three at once · ×1.7 XP a kill", actions: chip("Thane hunts here too", "violet", "party") }),
+      h("div.arena",
+        h("div.arena-you",
+          h("div.fx-layer", floatYou),
+          h("div.portrait.arena-portrait", h("img", { src: "assets/commander-default.webp", alt: "" })),
+          h("div.arena-name", ME.name),
+          h("div.hpbar", h("i", { style: { width: `${(ME.hp / ME.maxHp) * 100}%` } }), h("span", `${ME.hp} / ${ME.maxHp}`)),
+          h("div.veilbar", h("i", { style: { width: "64%" } })),
+          h("div.veil-note", "Bulwark · 64 of 100")),
+        h("div.arena-mid",
+          h("div.arena-vs", { "aria-hidden": "true" }, "VS"),
+          h("div.arena-status", "Fighting"),
+          h("div.arena-timer", "Reinforcements in 31s")),
+        h("div.arena-foes",
+          foeCard({ name: "Fen Stalker", kind: "horror", hp: 22, max: 48, target: true, float: { kind: "crit", text: "14!" } }),
+          foeCard({ name: "Bog Crawler", kind: "beast", hp: 30, max: 30, rank: "elite" }),
+          foeCard({ name: "Bog Brute", kind: "man", hp: 64, max: 78 }))),
+      h("div.hunt-foot",
+        h("div.kpis",
+          h("div.kpi", h("span.l", "Kills"), h("span.v", "38")),
+          h("div.kpi", h("span.l", "XP/hr"), h("span.v", "4,210")),
+          h("div.kpi", h("span.l", "Threat"), h("span.v", "64 / 100"), bar(64, "bar-ember bar-thin")),
+          h("div.kpi", h("span.l", "Time left"), h("span.v", "10h 48m"))),
+        h("div.hunt-actions",
+          h("label.switch", h("input", { type: "checkbox", checked: true }), "Hide when Threat peaks"),
+          h("div.btn-row",
+            h("button.btn.btn-quiet", { type: "button" }, "Pull back"),
+            h("button.btn.btn-ember", { type: "button", onClick: () => PAGES_MODALS.huntZone() }, "Change hunt"))))),
 
     h("section.section",
-      sectionHead("The descent", "Deeper zones field more foes, hit harder and pay more XP. The Inner and the Core are the only ground a Sovereign walks, and the only ground whose Elites carry the Veil."),
-      h("ol.descent",
-        descentStop({ name: "Outer", depth: 1, foes: "1 at once", sub: "×1 XP · ×1 foes" }),
-        descentStop({ name: "Middle", depth: 2, foes: "1 or 2 at once", sub: "×1.3 XP · ×1.15 foes" }),
-        descentStop({ name: "Inner", depth: 3, foes: "2 or 3 at once", sub: "×1.7 XP · ×1.27 foes", active: state !== "quiet" && state !== "down" }),
-        descentStop({ name: "Core", depth: 4, foes: "3 at once", sub: "×2.2 XP · ×1.4 foes" }))),
+      sectionHead("Zones", "Deeper zones field more foes, call reinforcements sooner and pay more XP. At 100 Threat the Sovereign may come for you."),
+      h("div.grid-cards.max-2",
+        zoneCard({ name: "Outer", iconName: "zoneOuter", sub: "1 or 2 at once · ×1 XP", threat: 12 }),
+        zoneCard({ name: "Middle", iconName: "zoneMiddle", sub: "1 or 2 at once · ×1.3 XP", threat: 30 }),
+        zoneCard({ name: "Inner", iconName: "zoneInner", sub: "2 or 3 at once · ×1.7 XP", threat: 64, active: true }),
+        zoneCard({ name: "Core", iconName: "zoneCore", sub: "3 at once · ×2.2 XP", threat: 100 }))),
 
     h("section.section",
       sectionHead("Quarry", "What lives in Gallowmoor. Pick one to see what it hits for and what it drops."),
-      h("div.lineup",
-        specimen({ name: "Bog Crawler", kind: "beast", archetype: "Skirmisher", sub: "30 health · swings every 2.0s" }),
-        specimen({ name: "Fen Stalker", kind: "horror", archetype: "Stalker", sub: "48 health · swings every 2.4s" }),
-        specimen({ name: "Bog Brute", kind: "man", archetype: "Brute", sub: "78 health · swings every 3.0s" }),
-        specimen({ name: "The Drowned Bailiff", kind: "man", archetype: "Sovereign", sub: "Comes on its own odds, with 2 Elites · enrages every 30s", sovereign: true }))));
+      h("div.grid-cards",
+        [["Bog Crawler", "beast", "Skirmisher · 30 health · swings every 2.0s"], ["Fen Stalker", "horror", "Stalker · 48 health · swings every 2.4s"], ["Bog Brute", "man", "Brute · 78 health · swings every 3.0s"]]
+          .map(([name, kind, sub]) => h("button.foe-tile", { type: "button", onClick: () => PAGES_MODALS.foe() },
+            h("span.foe-art", monsterArt(kind)),
+            h("span.foe-tile-main", h("span.foe-tile-name", name), h("span.foe-tile-sub", sub)))),
+        h("button.foe-tile.is-sovereign", { type: "button" },
+          h("span.foe-art", monsterArt("man", "sovereign")),
+          h("span.foe-tile-main", h("span.foe-tile-name", "The Drowned Bailiff"), h("span.foe-tile-sub", "Sovereign · comes when Threat peaks · enrages every 30s")),
+          tag("Sovereign", "sovereign")))));
 };
 
 const REGIONS = [
@@ -895,7 +822,7 @@ PAGES.atlas = () => h("div.page",
       cardHead("Regions", { actions: chip("2 of 9 open") }),
       h("div.pick-list", { role: "listbox", "aria-label": "Regions" }, REGIONS.map((r) => {
         const locked = !r.state;
-        const end = r.state === "here" ? tag("Here", "bone")
+        const end = r.state === "here" ? tag("Here", "violet")
           : r.state === "open" ? tag("Open", "good")
           : h("span.region-toll", { class: r.toll > ME.gold && "is-short" }, ic("lock"), fmtGold(r.toll));
         return h("button.pick-row", {
@@ -919,7 +846,7 @@ PAGES.atlas = () => h("div.page",
           h("div.atlas-fact", h("div.eyebrow", "Toll"), h("div.v.t-gold", "100g"))),
         h("div.atlas-block",
           h("div.eyebrow", "Lives here"),
-          h("div.chip-row", chip("Warren Goblin", null, "man"), chip("Rime Stalker", null, "beast"), chip("Warren Butcher", null, "man"), chip("The Cold Matriarch", "veil", "skull"))),
+          h("div.chip-row", chip("Warren Goblin", null, "man"), chip("Rime Stalker", null, "beast"), chip("Warren Butcher", null, "man"), chip("The Cold Matriarch", "ember", "skull"))),
         h("div.atlas-block",
           h("div.eyebrow", "Yields"),
           h("div.chip-row", chip("Cold Ore", null, "ore"), chip("Iron Bark", null, "log"), chip("Pale Rush", null, "fibre"), chip("Dire Pelt", null, "hide"), chip("Cave Agate", null, "gem"))),
@@ -982,7 +909,7 @@ PAGES.bounties = () => h("div.page",
     h("div.bounty-progress",
       h("div.meter-top", h("span", "Progress"), h("b", "12 of 17")),
       bar((12 / 17) * 100, "bar-gold bar-lg"),
-      h("div.chip-row", chip("Pays 27g", "gold", "coin"), chip("An hour of double XP", "good", "sparkle"))),
+      h("div.chip-row", chip("Pays 27g", "gold", "coin"), chip("An hour of double XP", "violet", "sparkle"))),
     h("div.bounty-foot",
       h("span.small.muted", "Kills anywhere in Gallowmoor count."),
       h("button.btn.btn-gold", { type: "button", disabled: true }, "5 more to go"))),
@@ -995,8 +922,8 @@ PAGES.bounties = () => h("div.page",
 function agentCard({ name, rarity, out, yieldText }) {
   return h("article.card.agent-card", { class: out && "is-out" },
     h("div.agent-top",
-      avatar(name),
-      h("div.grow", h("div.agent-name", name), h("div.chip-row.mt-1", h("span.tag", { "data-rarity": rarity.toLowerCase() }, rarity), out ? tag("Out", "tan") : null))),
+      avatar(name, { tone: out ? null : "gold" }),
+      h("div.grow", h("div.agent-name", name), h("div.chip-row.mt-1", h("span.tag", { "data-rarity": rarity.toLowerCase() }, rarity), out ? tag("Out", "violet") : null))),
     h("p.agent-yield", yieldText),
     out
       ? h("div.agent-deploy", h("span.small.muted", "Back at the daily reset"))
@@ -1025,9 +952,9 @@ PAGES.requisitions = () => h("div.page",
 function compCard({ name, iconName, price, owned, active, rank, bond, trait, traitVal, blurb, unlocks, bondPct }) {
   return h("article.card.comp-card", { class: active && "is-active" },
     h("div.comp-top",
-      art(iconName, { size: "lg", tone: owned ? "tan" : "neutral" }),
+      art(iconName, { size: "lg", tone: owned ? "violet" : "neutral" }),
       h("div.grow", h("div.comp-name", name), h("div.comp-sub", owned ? `Rank ${rank} · Bond ${bond}` : fmtGold(price))),
-      active ? tag("At your side", "tan") : null),
+      active ? tag("At your side", "violet") : null),
     h("p.comp-blurb", blurb),
     h("div.well.comp-trait", h("span.t-name", trait), h("span.t-val", traitVal)),
     owned ? h("div.meter", h("div.meter-top", h("span", `Bond ${bond}`), h("b", `${bondPct}%`)), bar(bondPct)) : null,
@@ -1041,7 +968,7 @@ function compCard({ name, iconName, price, owned, active, rank, bond, trait, tra
 
 PAGES.companions = () => h("div.page",
   pageHead({ eyebrow: "The Vanguard", title: "Companions", sub: "One walks with you at a time. Its Bond grows for every minute at your side while you work or hunt.",
-    actions: chip("Tunnel Rat walks with you", "tan", "paw") }),
+    actions: chip("Tunnel Rat walks with you", "violet", "paw") }),
   h("div.grid-cards",
     compCard({ name: "Tunnel Rat", iconName: "rat", owned: true, active: true, rank: "II", bond: 7, bondPct: 46, trait: "Seam Sense", traitVal: "+10% Delving XP",
       blurb: "Thin, clever and always the first to smell a fresh seam.",
@@ -1112,7 +1039,7 @@ PAGES.market = () => h("div.page",
           h("div.lr-main", h("div.lr-title", { class: l.rarity && `rar-${l.rarity}` }, l.item), h("div.lr-sub", l.sub))),
         h("div.listing-qty", h("span.listing-l", "Left"), fmtWhole(l.qty)),
         h("div.listing-price", h("span.listing-l", "Each"), fmtGold(l.price)),
-        h("div.listing-seller", h("span.listing-l", "Seller"), l.seller, l.mine ? tag("Yours", "bone") : null),
+        h("div.listing-seller", h("span.listing-l", "Seller"), l.seller, l.mine ? tag("Yours", "violet") : null),
         h("div.listing-buy", l.mine
           ? h("button.btn.btn-quiet.btn-sm", { type: "button" }, "Cancel")
           : h("button.btn.btn-gold.btn-soft.btn-sm", { type: "button", onClick: () => PAGES_MODALS.buy({ name: l.item, price: l.price }, 1) }, "Buy")))))),
@@ -1137,7 +1064,7 @@ function member({ name, lv, me, leader, dot, doing, doingTone, doingIcon, bonus 
   return h("article.card.member", { class: { "is-me": me, "is-offline": dot === "offline" } },
     avatar(name, { dot }),
     h("div",
-      h("div.member-name", name, leader ? h("span", { "data-tip": "Party leader", role: "img", "aria-label": "Leader" }, ic("crown")) : null, me ? tag("You", "bone") : null),
+      h("div.member-name", name, leader ? h("span", { "data-tip": "Party leader", role: "img", "aria-label": "Leader" }, ic("crown")) : null, me ? tag("You", "violet") : null),
       h("div.member-lv", `Total level ${lv}`)),
     dot === "online" ? h("span.small.t-good", "Online") : h("span.small.muted", "Away"),
     h("div.member-doing", { "data-tone": doingTone }, ic(doingIcon), h("span", doing)),
@@ -1156,7 +1083,7 @@ PAGES.party = () => h("div.page",
   h("div.grid-cards.max-2",
     member({ name: "Morwen", lv: 187, me: true, leader: true, dot: "online", doing: "Hunting the Inner of Gallowmoor", doingTone: "ember", doingIcon: "swords", bonus: chip("+20% to your Hunt XP", "good", "party") }),
     member({ name: "Thane", lv: 164, dot: "online", doing: "Hunting the Inner of Gallowmoor · 1h 04m", doingTone: "ember", doingIcon: "swords", bonus: chip("Counts toward your bonus", "good", "check") }),
-    member({ name: "Edda", lv: 201, dot: "online", doing: "Forging Bog Bars · 18 of 60", doingTone: "tan", doingIcon: "plate", bonus: chip("Not hunting") }),
+    member({ name: "Edda", lv: 201, dot: "online", doing: "Forging Bog Bars · 18 of 60", doingTone: "violet", doingIcon: "plate", bonus: chip("Not hunting") }),
     member({ name: "Ashlin", lv: 92, dot: "offline", doing: "Last seen 2h ago", doingIcon: "clock", bonus: chip("Offline") })),
   h("div.grid-2",
     h("section.card.card-flush.chat",
@@ -1164,7 +1091,7 @@ PAGES.party = () => h("div.page",
       h("ol.chat-log", { "aria-live": "polite" },
         h("li.msg-note", "Thane joined the party · 2d ago"),
         h("li.msg", avatar("Thane", { size: "sm" }), h("div", h("div.msg-meta", h("b", "Thane"), h("time", "14m")), h("p.msg-text", "Inner is thick with Stalkers tonight. Bring poultices."))),
-        h("li.msg", avatar("Edda", { size: "sm" }), h("div", h("div.msg-meta", h("b", "Edda"), h("time", "9m")), h("p.msg-text", "Forging bars for helms. Anyone short on Coal?"))),
+        h("li.msg", avatar("Edda", { size: "sm", tone: "gold" }), h("div", h("div.msg-meta", h("b", "Edda"), h("time", "9m")), h("p.msg-text", "Forging bars for helms. Anyone short on Coal?"))),
         h("li.msg.is-own", h("div", h("div.msg-meta", h("time", "6m")), h("p.msg-text", "I have 30 spare. Mailing them over after this run."))),
         h("li.msg", avatar("Thane", { size: "sm" }), h("div", h("div.msg-meta", h("b", "Thane"), h("time", "Just now")), h("p.msg-text", "The Bailiff is close. Threat 64 and climbing.")))),
       h("form.composer", { onSubmit: (e) => e.preventDefault() },
@@ -1193,13 +1120,13 @@ PAGES.hiscores = () => h("div.page",
     h("button.chip", { type: "button", role: "tab", "aria-selected": "true" }, "Total"),
     SKILLS.map((s) => h("button.chip", { type: "button", role: "tab", "aria-selected": "false" }, ic(s.icon), s.name))),
   h("section.card",
-    cardHead("Total level", { sub: "Updated as commanders play", actions: chip("You are #7", "bone") }),
+    cardHead("Total level", { sub: "Updated as commanders play", actions: chip("You are #7", "violet") }),
     h("div.table-wrap",
       h("table.table",
         h("thead", h("tr", h("th", "Rank"), h("th", "Commander"), h("th.num", "Level"), h("th.num.hs-hide-sm", "XP"))),
         h("tbody", BOARD.map(([name, lv, xp, me], i) => h("tr", { class: me && "is-me", "aria-current": me ? "true" : null },
           h("td", h("span.hs-rank", { class: i < 3 && `is-${i + 1}` }, i + 1)),
-          h("td.strong", h("span.hs-name", avatar(name, { size: "sm" }), h("span.truncate", name), me ? tag("You", "bone") : null)),
+          h("td.strong", h("span.hs-name", avatar(name, { size: "sm", tone: me ? null : "gold" }), h("span.truncate", name), me ? tag("You", "violet") : null)),
           h("td.num", fmtWhole(lv)),
           h("td.num.hs-hide-sm", xp))))))));
 
@@ -1403,7 +1330,7 @@ function settingsBody(signedIn) {
   ];
 }
 
-PAGES_MODALS.settings = () => openModal({ title: "Settings", sub: "Account, connection and starting over", art: "gear", body: settingsBody(false) });
+PAGES_MODALS.settings = () => openModal({ title: "Settings", sub: "Account, connection and starting over", art: "gear", artTone: "violet", body: settingsBody(false) });
 PAGES_MODALS.account = () => openModal({ title: "Settings", sub: "Account, connection and starting over", art: "gear", body: settingsBody(true) });
 
 PAGES_MODALS.class = () => openModal({
@@ -1564,11 +1491,8 @@ async function bootPage() {
 
   el("tbSettings").addEventListener("click", () => (opts.conn === "guest" ? PAGES_MODALS.settings() : PAGES_MODALS.account()));
   el("tbConn").addEventListener("click", () => (opts.conn === "guest" ? PAGES_MODALS.settings() : PAGES_MODALS.account()));
-  // The bar's buttons start the thing over now (index.html: tbBenchRestart, tbHuntRestart).
-  const benchAgain = el("tbBenchRestart");
-  const huntAgain = el("tbHuntRestart");
-  if (benchAgain) { benchAgain.hidden = false; benchAgain.addEventListener("click", () => toast("The crews start the batch over", { icon: "hammer" })); }
-  if (huntAgain) { huntAgain.hidden = false; huntAgain.addEventListener("click", () => toast("The hunt starts over", { kind: "warn", icon: "swords" })); }
+  el("tbBenchStop").addEventListener("click", () => toast("The crews down tools", { icon: "hammer" }));
+  el("tbHuntStop").addEventListener("click", () => toast("You pulled back", { kind: "warn", icon: "swords" }));
 
   if (!SHOT) liveBars();
 
@@ -1594,16 +1518,15 @@ function liveBars() {
     qsa(".item-pill.is-working .pill-bar > i").forEach((i) => setWidth(i, pct(36)));
   }, 250);
 
-  // A blow now and then in the field.
+  // A blow now and then in the arena.
   setInterval(() => {
-    const target = qs(".fighter-foe.is-target .fx-layer");
+    const target = qs(".foe-card.is-target .fx-layer");
     if (!target || document.hidden) return;
-    // Words, never damage numbers: a line of health winding down says how the fight is going.
-    const kinds = [["crit", "Crit"], ["glance", "Glance"], ["strike", "Devastating"], ["block", "Blunted"]];
+    const kinds = [["hit", "9"], ["crit", "17!"], ["hit", "11"], ["glance", "Glance"]];
     const [kind, text] = kinds[Math.floor(Math.random() * kinds.length)];
     const f = h("span.float", { class: [kind, `lane${Math.floor(Math.random() * 3)}`] }, text);
     target.appendChild(f);
-    const art = qs(".fighter-foe.is-target .fighter-art");
+    const art = qs(".foe-card.is-target .foe-art");
     if (art) { art.classList.remove("struck"); void art.offsetWidth; art.classList.add("struck"); }
     setTimeout(() => f.remove(), 1000);
   }, 1400);
@@ -1646,8 +1569,8 @@ function galleryTokens() {
     block("Text", h("div.kit-swatches",
       swatch("--bone", "", "#e8e1d5 · 12.5:1"), swatch("--bone-dim", "", "#b5adbb · 7.5:1"), swatch("--bone-faint", "", "#948c9f · 5.0:1"), swatch("--bone-ghost", "", "decoration only"))),
     block("Accents", h("div.kit-swatches",
-      swatch("--tan", "", "the bench, work under way"), swatch("--ember", "", "danger and damage"), swatch("--veil", "", "the Veil, and nothing else"),
-      swatch("--gold", "", "money, the spend"), swatch("--good", "", "your health, gains"), swatch("--warn", "", "take care"))),
+      swatch("--violet", "", "the bench, focus"), swatch("--ember", "", "the hunt, danger"), swatch("--gold", "", "money, the spend"),
+      swatch("--good", "", "health, gains"), swatch("--warn", "", "take care"), swatch("--violet-soft", "", "tinted fills"))),
     block("Rarity", h("div.kit-swatches",
       ["common", "uncommon", "rare", "epic", "legendary", "relic"].map((r) => swatch(`--r-${r}`, "", r)))),
     block("Type", stage(h("div.kit-type",
@@ -1681,7 +1604,7 @@ function galleryIcons() {
 function galleryButtons() {
   const kinds = [["", "Default"], ["btn-primary", "Forge"], ["btn-gold", "Buy · 250g"], ["btn-ember", "Hunt"], ["btn-danger", "Wipe my camp"], ["btn-quiet", "Cancel"]];
   return section("buttons", "Buttons",
-    "One solid plate per surface, for the thing the surface is for: bone for the plain decision, gold for a spend, ember for setting out. Repeated actions in lists use <code>.btn-soft</code>.",
+    "One solid button per surface, for the thing the surface is for: violet for the bench, gold for a spend, ember for the hunt. Repeated actions in lists use <code>.btn-soft</code>.",
     block("Kinds", stage(row(kinds.map(([cls, label]) => h("button.btn", { type: "button", class: cls }, label))))),
     block("Soft", stage(row(
       h("button.btn.btn-primary.btn-soft", { type: "button" }, "Take along"),
@@ -1749,7 +1672,7 @@ function galleryChips() {
     block("Chips", stage(row(
       h("span.chip.chip-sm", "Small"), h("span.chip.chip-lg", ic("coin"), "Large · 1,234g"),
       chip("12s", null, "clock"), chip("+9% XP · Faint Gloom", "good"), chip("−9% XP · Faint Gloom", "bad"), chip("Pays 27g", "gold", "coin"),
-      chip("+20% Hunt XP · 2 here", "good", "party"), chip("Threat 64", "ember", "swords"), chip("Stock runs out", "warn", "warn"), chip("Tier 3 of 9")))),
+      chip("+20% Hunt XP · 2 here", "violet", "party"), chip("Threat 64", "ember", "swords"), chip("Stock runs out", "warn", "warn"), chip("Tier 3 of 9")))),
     block("Buttons as chips, and the tooltip chip", stage(row(
       h("button.chip", { type: "button", "aria-pressed": "true" }, "All"),
       h("button.chip", { type: "button", "aria-pressed": "false" }, ic("blade"), "Gear"),
@@ -1758,7 +1681,7 @@ function galleryChips() {
       (() => { const b = h("button.tip-chip", { type: "button" }, ic("info"), "Mastery · +2% double yield"); tooltip(b, masteryTip, { placement: "bottom" }); return b; })()))),
     block("What a recipe takes", stage(row(need("ore", "Bog Ore", 147, 2), need("coalIco", "Coal", 30, 2), need("ore", "Bog Bar", 0, 12)))),
     h("div.kit-cols",
-      block("Tags", stage(row(tag("Warrior", "veil"), tag("Elite", "elite"), tag("Sovereign", "sovereign"), tag("Here", "bone"), tag("Open", "good"),
+      block("Tags", stage(row(tag("Warrior", "violet"), tag("Elite", "elite"), tag("Sovereign", "sovereign"), tag("Here", "violet"), tag("Open", "good"),
         tag("Tier 3", "gold"), tag("Hunting", "ember"), tag("Expired"), h("span.tag", { "data-rarity": "legendary" }, "Legendary")))),
       block("Badges and dots", stage(row(
         h("span.badge", "2"), h("span.badge.badge-gold", "1"), h("span.badge.badge-ember", "!"), h("span.badge.badge-good", "12"),
@@ -1774,10 +1697,10 @@ function galleryBars() {
         bar(62), bar(48, "bar-ember"), bar(71, "bar-gold"), bar(88, "bar-good"), bar(40, "bar-neutral"),
         bar(36, "bar-thin"), bar(64, "bar-ember bar-lg"), bar(60, "bar-striped")))),
       block("Health and meters", stage(h("div.vstack.gap-4",
-        vital(78, "87 / 112"),
-        vital(46, "22 / 48", "foe"),
-        vital(82, "64 / 78", "sm"),
-        vital(64, "Bulwark · 64 of 100", "veil"),
+        h("div.hpbar", h("i", { style: { width: "78%" } }), h("span", "87 / 112")),
+        h("div.hpbar.hpbar-foe", h("i", { style: { width: "46%" } }), h("span", "22 / 48")),
+        h("div.hpbar.hpbar-foe.hpbar-sm", h("i", { style: { width: "82%" } }), h("span", "64 / 78")),
+        h("div.veilbar", h("i", { style: { width: "64%" } })),
         h("div.meter", h("div.meter-top", h("span", "Threat"), h("b", "64 / 100")), bar(64, "bar-ember bar-thin")))))),
     block("Key numbers", h("div.kpis",
       h("div.kpi", h("span.l", "Kills"), h("span.v", "38")),
@@ -1795,7 +1718,7 @@ function galleryCards() {
   return section("cards", "Cards, sections, lists",
     "Cards sit on the page, never inside each other. Inside a card, group with a <code>.well</code>, a <code>.list</code> or a divider.",
     h("div.kit-cols",
-      block("Card anatomy", h("section.card", { "data-tone": "tan" },
+      block("Card anatomy", h("section.card", { "data-tone": "violet" },
         cardHead("The Bonesetter", { eyebrow: "The Camp", sub: "Always open. Remedies go straight into Belongings.", actions: h("button.btn.btn-sm.btn-quiet", { type: "button" }, "Refresh") }),
         h("p.copy", "On the hunt a remedy is taken whenever your health falls to 45% or less, the strongest first."),
         h("div.well.mt-4", h("div.stats", stat("Remedies held", "16"), stat("Strongest", "Gravemoss Poultice"))),
@@ -1817,7 +1740,7 @@ function galleryCards() {
     block("Pick list", h("section.card", { style: { maxWidth: "380px" } }, h("div.pick-list", REGIONS.slice(0, 4).map((r) =>
       h("button.pick-row", { type: "button", class: { "is-current": r.state === "here", "is-locked": !r.state, "is-selected": r.selected }, "aria-selected": r.selected ? "true" : "false" },
         h("span.region-tier", r.tier), h("span.lr-main", h("span.region-name", r.name), h("span.region-sub", r.sub)),
-        r.state === "here" ? tag("Here", "bone") : r.state === "open" ? tag("Open", "good") : h("span.region-toll", ic("lock"), fmtGold(r.toll))))))));
+        r.state === "here" ? tag("Here", "violet") : r.state === "open" ? tag("Open", "good") : h("span.region-toll", ic("lock"), fmtGold(r.toll))))))));
 }
 
 function galleryPills() {
@@ -1826,9 +1749,9 @@ function galleryPills() {
     h("div.pills",
       itemPill({ name: "Bog Ore", iconName: "ore", state: "working", pct: 36, tip: nodeTip("Bog Ore"),
         sub: [h("span", "Working"), h("span", h("b", "42"), " of 200"), h("span", "1h 12m left")],
-        stats: [chip("16s", null, "clock"), chip("3 XP", "tan"), chip("147 held")] }),
-      itemPill({ name: "Coal", iconName: "coalIco", tip: nodeTip("Coal"), sub: "The reagent every bar asks for", stats: [chip("16s", null, "clock"), chip("3 XP", "tan"), chip("30 held")] }),
-      itemPill({ name: "Cairn Steel", iconName: "ore", state: "locked", sub: [ic("lock"), "Needs Delving Lv 30"], stats: [chip("32s", null, "clock"), chip("10 XP", "tan")] }),
+        stats: [chip("16s", null, "clock"), chip("3 XP", "violet"), chip("147 held")] }),
+      itemPill({ name: "Coal", iconName: "coalIco", tip: nodeTip("Coal"), sub: "The reagent every bar asks for", stats: [chip("16s", null, "clock"), chip("3 XP", "violet"), chip("30 held")] }),
+      itemPill({ name: "Cairn Steel", iconName: "ore", state: "locked", sub: [ic("lock"), "Needs Delving Lv 30"], stats: [chip("32s", null, "clock"), chip("10 XP", "violet")] }),
       itemPill({ name: "Bog Sword", iconName: "blade", tip: craftTip("Bog Sword", ["Attack", "Crit", "Durab."]), sub: "Rarity is rolled when it is made",
         stats: [need("blade", "Bog Blade", 4, 1), need("log", "Blood Ash Handle", 2, 1), chip("48s", null, "clock")] }),
       itemPill({ name: "Bog Greatsword", iconName: "greatblade", state: "short", tip: craftTip("Bog Greatsword", ["Attack", "Crit", "Durab."]), sub: "Missing Bog Great Blade",
@@ -1952,7 +1875,20 @@ function galleryFeedback() {
         h("div.act-card-top", art("heart", { tone: "ember" }), h("div.grow", h("div.eyebrow", "The hunt"), h("h2.card-title", "Recovering"))),
         bar(64, "bar-striped"),
         h("div.act-card-meta", h("span", "You fell in the Core of Gallowmoor"), h("b", "Back in 3m 12s"))))),
-    block("The field, recovering", fieldScene("down")),
+    block("The arena, quiet and recovering", h("section.card.hunt-card",
+      h("div.arena",
+        h("div.arena-you.is-down",
+          h("div.fx-layer"),
+          h("div.portrait.arena-portrait", h("img", { src: "assets/commander-default.webp", alt: "" })),
+          h("div.arena-name", ME.name),
+          h("div.hpbar", h("i", { style: { width: "16%" } }), h("span", "18 / 112")),
+          h("div.veilbar.is-locked", h("i", { style: { width: "0%" } })),
+          h("div.veil-note", "The Veil opens at Hunt 5")),
+        h("div.arena-mid", h("div.arena-vs", { "aria-hidden": "true" }, "VS"), h("div.arena-status", "Recovering"), h("div.arena-timer", "Back in 3m 12s")),
+        h("div.arena-foes", h("div.foe-empty", h("span.foe-empty-title", "The Inner lies quiet"), h("span.foe-empty-sub", "You are in no state to hunt.")))),
+      h("div.hunt-foot",
+        h("p.hunt-hint", "Choose a zone below to take up the hunt."),
+        h("div.hunt-actions", h("button.btn.btn-ember", { type: "button", disabled: true }, "Recovering"))))),
     block("Camp log", h("section.card", logList(LOG))));
 }
 
@@ -1965,7 +1901,7 @@ function galleryData() {
           h("thead", h("tr", h("th", "Rank"), h("th", "Commander"), h("th.num", "Level"), h("th.num", "XP"))),
           h("tbody", BOARD.slice(0, 4).concat([BOARD[6]]).map(([name, lv, xp, me], i) => h("tr", { class: me && "is-me" },
             h("td", h("span.hs-rank", { class: i < 3 && `is-${i + 1}` }, me ? 7 : i + 1)),
-            h("td.strong", h("span.hs-name", avatar(name, { size: "sm" }), name, me ? tag("You", "bone") : null)),
+            h("td.strong", h("span.hs-name", avatar(name, { size: "sm" }), name, me ? tag("You", "violet") : null)),
             h("td.num", lv), h("td.num", xp))))))),
     h("div.grid-cards.max-2.mt-4",
       member({ name: "Thane", lv: 164, dot: "online", doing: "Hunting the Inner of Gallowmoor · 1h 04m", doingTone: "ember", doingIcon: "swords", bonus: chip("Counts toward your bonus", "good", "check") }),

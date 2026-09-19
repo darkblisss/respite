@@ -72,7 +72,7 @@ export function huntChips(ctx, { tier = null, zoneId = null } = {}) {
   if (x.buff > 1) out.push({ tone: "good", text: `×${x.buff} XP · Bounty reward` });
   if (tier != null && zoneId) {
     const p = partyHere(ctx, tier, zoneId);
-    if (p.pct > 0) out.push({ tone: "good", icon: "party", text: `${signedPct(p.pct)} Hunt XP · ${p.names.length} of your party here` });
+    if (p.pct > 0) out.push({ tone: "violet", icon: "party", text: `${signedPct(p.pct)} Hunt XP · ${p.names.length} of your party here` });
   }
   return out;
 }

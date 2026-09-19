@@ -204,7 +204,7 @@ function nodePill(ctx, def, locked) {
   ref.time = h("span");
   ref.xp = h("span");
   ref.held = locked ? null : h("span");
-  ref.stats.append(h("span.chip", iconEl("clock"), ref.time), h("span.chip.chip-tan", ref.xp));
+  ref.stats.append(h("span.chip", iconEl("clock"), ref.time), h("span.chip.chip-violet", ref.xp));
   if (ref.held) ref.stats.append(h("span.chip", ref.held));
   return ref;
 }
@@ -437,10 +437,10 @@ function campScene(skillId, stage) {
 
   out.push(
     '<defs>' +
-      '<linearGradient id="campSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0c0b09"/><stop offset="1" stop-color="#17130f"/></linearGradient>' +
+      '<linearGradient id="campSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1e1629"/><stop offset="1" stop-color="#0d0a12"/></linearGradient>' +
       '<radialGradient id="campGlow"><stop offset="0" stop-color="#c1613a" stop-opacity=".5"/><stop offset="1" stop-color="#c1613a" stop-opacity="0"/></radialGradient>' +
-      '<linearGradient id="campFog" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e7e0d2" stop-opacity="0"/><stop offset="1" stop-color="#e7e0d2" stop-opacity=".05"/></linearGradient>' +
-      '<linearGradient id="campHorizon" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b08a5b" stop-opacity="0"/><stop offset=".7" stop-color="#b08a5b" stop-opacity=".1"/><stop offset="1" stop-color="#b08a5b" stop-opacity="0"/></linearGradient>' +
+      '<linearGradient id="campFog" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8d6fd1" stop-opacity="0"/><stop offset="1" stop-color="#8d6fd1" stop-opacity=".08"/></linearGradient>' +
+      '<linearGradient id="campHorizon" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8d6fd1" stop-opacity="0"/><stop offset=".7" stop-color="#8d6fd1" stop-opacity=".1"/><stop offset="1" stop-color="#8d6fd1" stop-opacity="0"/></linearGradient>' +
     '</defs>',
     '<rect width="1000" height="220" fill="url(#campSky)"/>',
     '<rect y="96" width="1000" height="60" fill="url(#campHorizon)"/>',

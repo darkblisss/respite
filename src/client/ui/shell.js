@@ -37,7 +37,7 @@ function skillRow(id) {
     label: skill.name,
     icon: skill.icon,
     meta: (s) => `Lv ${skillLevel(s, id)}`,
-    dot: (s) => (s.tasks.skilling && s.tasks.skilling.skillId === id ? "tan" : null),
+    dot: (s) => (s.tasks.skilling && s.tasks.skilling.skillId === id ? "violet" : null),
   };
 }
 
@@ -98,7 +98,7 @@ function logTone(m) {
   if (/reaches level|rises to Rank|reaches Bond/.test(m)) return "good";
   if (/put you down|broke\.$|are all full|left where it fell|^Nowhere to put/.test(m)) return "ember";
   if (/^Bounty paid|^The post brought|on the market for|came back from the market/.test(m)) return "gold";
-  if (/joins the camp|walks with you|trailing you/.test(m)) return "tan";
+  if (/joins the camp|walks with you|trailing you/.test(m)) return "violet";
   return null;
 }
 
@@ -324,10 +324,9 @@ export function createShell(app) {
     const sig = `${group}|${title}`;
     if (sig === crumbSig) return;
     crumbSig = sig;
-    // A written path, not a row of chevrons: "The Field / Hunt".
     $.crumbs.replaceChildren(
       h("span", group),
-      h("span.tb-crumb-sep", { "aria-hidden": "true" }, "/"),
+      iconEl("chevron-right"),
       h("span", { "aria-current": "page" }, title));
   }
 
@@ -357,9 +356,8 @@ export function createShell(app) {
       list.replaceChildren(...g.rows.map((m) => {
         const meta = m.row.meta ? h("span.nav-meta") : null;
         navRefs.push({ meta, fn: m.row.meta });
-        /* A table of contents: the name and its figure. The icon column went with the
-           redesign; a row's `icon` is still what the topbar and the pages draw. */
         return h("li", h("a.nav-item", { href: hrefOf(m.row.route), "aria-current": m.current ? "page" : null },
+          iconEl(m.row.icon, "nav-ico"),
           h("span.nav-label", m.row.label),
           m.dot ? h("span.nav-dot", { "data-tone": m.dot === "ember" ? "ember" : null, role: "img", "aria-label": m.dot === "ember" ? "Hunting" : "Working" }) : null,
           meta,
@@ -449,7 +447,7 @@ export function createShell(app) {
       }
       if (kind === "outdated") {
         return banner({
-          tone: "tan", icon: "sync", title: "A new version of the camp is out", text: "Reload to carry on.",
+          tone: "violet", icon: "sync", title: "A new version of the camp is out", text: "Reload to carry on.",
           actions: [h("button.btn.btn-primary.btn-sm", { type: "button", onClick: () => location.reload() }, "Reload")],
         });
       }
@@ -466,7 +464,7 @@ export function createShell(app) {
         });
       }
       return banner({
-        tone: "tan", icon: "hourglass", title: "Catching up", text: "The server is playing out the time you were away.",
+        tone: "violet", icon: "hourglass", title: "Catching up", text: "The server is playing out the time you were away.",
         actions: [h("span.spinner.spinner-sm", { role: "status", "aria-label": "Catching up" })],
       });
     }));

@@ -4,16 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#0d0c0a">
+<meta name="theme-color" content="#0b0910">
 <!-- Every path below is relative to the repo root, so the real shell's asset paths work here too. -->
 <base href="../">
 <title>Respite UI Kit</title>
 <link rel="icon" type="image/webp" href="assets/respite-logo.webp">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
-<!-- Ten glyphs of EB Garamond, 0 to 9: the figures the Fell type lacks (tokens.css, "type"). Keep the text= or every heading turns Garamond. -->
-<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,500;1,500&text=0123456789&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/tokens.css">
 <link rel="stylesheet" href="css/base.css">
 <link rel="stylesheet" href="css/components.css">
@@ -34,8 +32,8 @@
     padding: 36px 0 20px;
   }
 
-  .kit-top img { width: 48px; height: 48px; }
-  .kit-top h1 { font-family: var(--font-display); font-size: 38px; font-weight: 400; line-height: 1.1; }
+  .kit-top img { width: 48px; height: 48px; border-radius: 12px; box-shadow: 0 0 0 1px var(--line); }
+  .kit-top h1 { font-family: var(--font-display); font-size: 30px; font-weight: 600; line-height: 1.1; }
   .kit-top p { margin-top: 4px; font-size: var(--text-sm); color: var(--bone-faint); }
 
   .kit-toc {
@@ -43,13 +41,15 @@
     top: 0;
     z-index: 30;
     display: flex;
-    gap: 22px;
+    gap: 6px;
     margin: 0 -32px;
     padding: 10px 32px;
     overflow-x: auto;
     scrollbar-width: none;
-    background: var(--bg);
+    background: rgba(11, 9, 16, .9);
     border-bottom: 1px solid var(--line);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
   }
 
   .kit-toc::-webkit-scrollbar { display: none; }
@@ -62,9 +62,9 @@
 
   .kit-section > header { margin-bottom: 20px; }
   .kit-section > header + * { margin-top: 0 !important; }
-  .kit-section > header h2 { font-family: var(--font-display); font-size: 30px; font-weight: 400; line-height: 1.2; }
+  .kit-section > header h2 { font-family: var(--font-display); font-size: 26px; font-weight: 600; line-height: 1.2; }
   .kit-section > header p { margin-top: 6px; max-width: 72ch; font-size: var(--text-md); color: var(--bone-dim); line-height: 1.6; }
-  .kit-section > header code, .kit-note code { font-size: 12.5px; color: var(--tan-hi); }
+  .kit-section > header code, .kit-note code { font-size: 12.5px; color: var(--violet-hi); }
 
   .kit-section > header + * { margin-top: 0; }
   .kit-section > * + * { margin-top: 28px; }
@@ -88,6 +88,7 @@
 
   .kit-stage {
     padding: 20px;
+    border-radius: 16px;
     border: 1px dashed rgba(232, 225, 213, .12);
     background:
       radial-gradient(circle at 1px 1px, rgba(232, 225, 213, .05) 1px, transparent 0) 0 0 / 16px 16px,
@@ -103,6 +104,7 @@
   }
 
   .kit-swatch {
+    border-radius: 12px;
     overflow: hidden;
     border: 1px solid var(--line);
     background: var(--surface-1);
@@ -119,7 +121,7 @@
 
   .kit-space { display: flex; flex-direction: column; gap: 6px; }
   .kit-space div { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--bone-faint); }
-  .kit-space i { display: block; height: 10px; background: var(--tan-lo); }
+  .kit-space i { display: block; height: 10px; border-radius: 3px; background: var(--violet-lo); }
 
   .kit-radii, .kit-shadows { display: flex; flex-wrap: wrap; gap: 14px; }
   .kit-radii div, .kit-shadows div {
@@ -145,6 +147,7 @@
     align-items: center;
     gap: 8px;
     padding: 14px 6px 10px;
+    border-radius: 10px;
     background: var(--surface-1);
     border: 1px solid var(--line-soft);
     font-size: 11px;
@@ -154,7 +157,7 @@
   }
 
   .kit-icon .ico { width: 24px; height: 24px; color: var(--bone); }
-  .kit-icon.is-new .ico { color: var(--tan-hi); }
+  .kit-icon.is-new .ico { color: var(--violet-hi); }
 
   /* Overlays shown in place, for looking at, not for using. */
   .kit-static .modal { position: relative; opacity: 1; transform: none; max-height: none; margin: 0 auto; }
@@ -166,6 +169,7 @@
 
   .kit-frame {
     position: relative;
+    border-radius: 14px;
     border: 1px solid var(--line);
     overflow: hidden;
     background: var(--bg);
@@ -177,6 +181,7 @@
   .kit-side {
     width: 248px;
     padding: 8px;
+    border-radius: 14px;
     border: 1px solid var(--line);
     background: var(--bg);
   }
@@ -199,12 +204,13 @@
     align-items: center;
     gap: 12px;
     padding: 12px 14px;
+    border-radius: 12px;
     border: 1px solid var(--line);
     background: var(--surface-1);
     font-weight: 600;
   }
 
-  .kit-page-link:hover { border-color: var(--line-strong); }
+  .kit-page-link:hover { border-color: var(--violet-edge); }
   .kit-page-link small { display: block; font-weight: 400; font-size: 12px; color: var(--bone-faint); }
 
   .kit-switch {

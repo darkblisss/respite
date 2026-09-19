@@ -61,7 +61,7 @@ export default {
         type: "button", role: "tab", id: `discTab-${t.id}`,
         "aria-selected": "false", "aria-controls": `discPanel-${t.id}`,
         tabindex: "-1", dataset: { tab: t.id },
-      }, t.name)));
+      }, iconEl(t.icon), t.name)));
 
     const select = h("select.select.char-tab-select", { "aria-label": "Discipline" },
       TABS.map((t) => h("option", { value: t.id }, t.name)));

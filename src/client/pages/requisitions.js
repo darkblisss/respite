@@ -108,12 +108,12 @@ export default {
       const rd = agentRarityDef(a.rarity);
       return h("article.card.agent-card", { class: { "is-out": !!run } },
         h("div.agent-top",
-          h("span.avatar", { "aria-hidden": "true" }, a.name.charAt(0)),
+          h("span.avatar", { "data-tone": run ? null : "gold", "aria-hidden": "true" }, a.name.charAt(0)),
           h("div.grow",
             h("div.agent-name", a.name),
             h("div.chip-row.mt-1",
               h("span.tag", { "data-rarity": a.rarity }, rd.name),
-              run ? h("span.tag.tag-tan", "Out") : null))),
+              run ? h("span.tag.tag-violet", "Out") : null))),
         h("p.agent-yield", run
           ? `Bringing back ${fmtWhole(run.qty)} × ${itemName(run.itemKey)}.`
           : `Returns about ${fmtWhole(bringsBack(a))} of whatever you ask for.`),

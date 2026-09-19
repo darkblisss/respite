@@ -3,39 +3,40 @@
    ------------------------------------------------------------
    What belongs to one page only. Everything here sits on top
    of components.css; if a second page needs it, it moves there.
-
-   Two registers, and a page uses one or both:
-     the scene   where something is happening (the field, the
-                 camp, a region's vista). Full bleed, no edges:
-                 it fades into the page rather than sitting in a
-                 frame. Figures stand on ground; state is type.
-     the ledger  where things are listed. Rules, names, figures.
    ============================================================ */
 
 /* ================= 1. CHARACTER ================= */
 
-/* A title page: the commander standing beside her own name, and the one number
-   that sums her up set as large at the far side. */
 .char-hero {
   position: relative;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: end;
+  align-items: center;
   gap: var(--sp-6);
+  padding: var(--sp-5) var(--sp-6) var(--sp-5) var(--sp-5);
+  border-radius: var(--r-xl);
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(760px 260px at 0% 0%, rgba(157, 130, 224, .17), transparent 70%),
+    linear-gradient(180deg, #19141f, #120e17);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
 }
 
 .char-portrait {
-  width: 92px;
+  width: 104px;
   aspect-ratio: 768 / 1376;
   height: auto;
-  margin: 0 -14px -4px -18px;   /* the painting has air either side of the figure */
+  border-radius: 16px;
 }
 
 .char-name {
+  margin-top: 4px;
   font-family: var(--font-display);
-  font-size: var(--text-5xl);
-  font-weight: 400;
-  line-height: .95;
+  font-size: 38px;
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -.01em;
   color: var(--bone);
   overflow-wrap: anywhere;
 }
@@ -46,40 +47,47 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 2px;
+  gap: 4px;
+  padding-left: var(--sp-6);
+  border-left: 1px solid var(--line-soft);
 }
 
 .char-total-v {
   font-family: var(--font-display);
-  font-size: var(--text-5xl);
-  font-weight: 500;
-  line-height: .9;
+  font-size: 44px;
+  font-weight: 600;
+  line-height: 1;
   color: var(--bone);
+  font-variant-numeric: tabular-nums;
 }
 
 @media (max-width: 599px) {
   .char-hero {
     grid-template-columns: auto minmax(0, 1fr);
     gap: var(--sp-3) var(--sp-4);
+    padding: var(--sp-4);
+    border-radius: var(--r-lg);
   }
-  .char-portrait { width: 64px; margin: 0 -10px -2px -12px; }
+  .char-portrait { width: 72px; height: auto; border-radius: 12px; }
+  .char-name { font-size: 26px; }
   .char-tags { margin-top: 8px; }
   .char-total {
     grid-column: 1 / -1;
     flex-direction: row;
     align-items: baseline;
     justify-content: space-between;
-    padding-top: var(--sp-3);
+    padding: var(--sp-3) 0 0;
+    border-left: 0;
     border-top: 1px solid var(--line-soft);
   }
-  .char-total-v { font-size: var(--text-3xl); order: 2; }
+  .char-total-v { font-size: 28px; order: 2; }
 }
 
 /* The two things running: the crews and the hunt. */
 .act-card {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-3);
+  gap: var(--sp-4);
 }
 
 .act-card-top {
@@ -88,7 +96,7 @@
   gap: var(--sp-3);
 }
 
-.act-card-top > .grow .card-title { margin-top: 0; }
+.act-card-top > .grow .card-title { margin-top: 2px; }
 
 .act-card-meta {
   display: flex;
@@ -96,52 +104,54 @@
   gap: var(--sp-3);
   font-size: var(--text-sm);
   color: var(--bone-faint);
-  font-variant-numeric: var(--figures);
+  font-variant-numeric: tabular-nums;
 }
 
-.act-card-meta b { color: var(--bone-dim); font-weight: 500; }
+.act-card-meta b { color: var(--bone-dim); font-weight: 600; }
 
-.act-card.is-idle .card-title { color: var(--bone-faint); }
+.act-card.is-idle .card-title { color: var(--bone-dim); }
 .act-card.is-idle .act-card-idle {
-  font-family: var(--font-display);
-  font-style: italic;
-  font-size: var(--text-lg);
+  font-size: var(--text-sm);
   line-height: var(--lh);
   color: var(--bone-faint);
 }
 
-/* Standing: six figures, ruled. No cells, no fills. */
+/* Standing: six numbers in a ruled grid. */
 .standing {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  column-gap: var(--sp-6);
+  gap: 1px;
+  border-radius: var(--r-md);
+  background: var(--line-soft);
+  box-shadow: 0 0 0 1px var(--line-soft);
+  overflow: hidden;
 }
 
 .standing-cell {
   min-width: 0;
-  padding: 12px 0 14px;
-  border-top: 1px solid var(--line-soft);
+  padding: 14px 16px;
+  background: var(--surface-1);
 }
 
 .standing-cell .v {
-  font-size: 25px;
-  font-weight: 500;
-  line-height: 1.15;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.1;
   color: var(--bone);
-  font-variant-numeric: var(--figures);
+  font-variant-numeric: tabular-nums;
 }
 
 .standing-cell .v.t-gold { color: var(--gold-hi); }
-.standing-cell .l { margin-top: 2px; }
+.standing-cell .l { margin-top: 4px; }
 
 @media (max-width: 599px) {
-  .standing { column-gap: var(--sp-4); }
-  .standing-cell .v { font-size: 21px; }
+  .standing-cell { padding: 12px; }
+  .standing-cell .v { font-size: 20px; }
 }
 
-/* Skills: a ruled list, three columns of it. The name, the level inked large at
-   the right, and the way to the next as the row's own rule. */
-.skills-grid { --grid-min: 220px; row-gap: 0; }
+/* Skills: small cards, three across at most. */
+.skills-grid { --grid-min: 220px; }
 
 .skill-card {
   position: relative;
@@ -151,13 +161,17 @@
     "art main lv"
     "bar bar bar";
   align-items: center;
-  gap: 10px 12px;
-  padding: 14px 0 0;
-  transition: background var(--dur-1);
+  gap: 12px;
+  padding: 14px 14px 16px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(255, 255, 255, .016), transparent), var(--surface-1);
+  box-shadow: var(--shadow-card);
+  transition: border-color var(--dur-1), background var(--dur-1);
 }
 
-.skill-card > .art { grid-area: art; color: var(--bone-faint); }
-.skill-card > .bar { grid-area: bar; height: 2px; }
+.skill-card > .art { grid-area: art; }
+.skill-card > .bar { grid-area: bar; height: 4px; }
 
 .skill-main { grid-area: main; min-width: 0; }
 
@@ -165,15 +179,16 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: var(--text-lg);
-  font-weight: 500;
+  font-size: var(--text-md);
+  font-weight: 600;
   color: var(--bone);
 }
 
 .skill-xp {
+  margin-top: 2px;
   font-size: var(--text-xs);
   color: var(--bone-faint);
-  font-variant-numeric: var(--figures);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -182,36 +197,46 @@
 .skill-lv {
   grid-area: lv;
   font-family: var(--font-display);
-  font-size: var(--text-2xl);
-  font-weight: 500;
+  font-size: 24px;
+  font-weight: 600;
   line-height: 1;
   color: var(--bone);
+  font-variant-numeric: tabular-nums;
 }
 
 .skill-lv small {
-  margin-right: 5px;
+  margin-right: 3px;
   font-family: var(--font-ui);
-  font-size: var(--caps-sm);
-  font-weight: 500;
-  font-variant-caps: all-small-caps;
+  font-size: var(--text-2xs);
+  font-weight: 600;
   letter-spacing: .08em;
+  text-transform: uppercase;
   color: var(--bone-faint);
 }
 
 @media (hover: hover) {
-  .skill-card:hover { background: var(--wash); }
+  .skill-card:hover { border-color: var(--line-strong); background: linear-gradient(180deg, rgba(255, 255, 255, .03), transparent), var(--surface-1); }
 }
 
-.skill-card.is-working > .art { color: var(--tan-hi); }
-.skill-card.is-working[data-tone="ember"] > .art { color: var(--ember-hi); }
-.skill-card[data-tone="ember"] > .bar > i { background: var(--bone-faint); }
+.skill-card.is-working { border-color: var(--violet-edge); }
 
 @media (max-width: 599px) {
-  .skills-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--sp-5); }
-  .skill-card > .art { display: none; }
-  .skill-card { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "main lv" "bar bar"; }
-  .skill-name { font-size: var(--text-md); }
+  .skills-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .skill-card {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "art lv"
+      "main main"
+      "bar bar";
+    gap: 10px;
+    padding: 12px;
+  }
+  .skill-card > .art { width: 32px; height: 32px; border-radius: 9px; }
+  .skill-card > .art .ico { width: 18px; height: 18px; }
+  .skill-lv { justify-self: end; font-size: 20px; }
+  .skill-name { font-size: var(--text-sm); }
 }
+.skill-card.is-working[data-tone="ember"] { border-color: var(--ember-edge); }
 
 /* ================= 2. SKILL PAGES: WORK, BENCH, CAMP ================= */
 
@@ -220,43 +245,44 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--sp-3) var(--sp-6);
+  gap: var(--sp-3);
 }
 
 .bench-group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
-.bench-group + .bench-group { margin-top: var(--sp-6); }
+.bench-group + .bench-group { margin-top: var(--sp-3); }
 
 .bench-label {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
+  padding: 0 2px;
 }
 
 .bench-label .count {
-  font-size: var(--text-xs);
+  font-size: var(--text-2xs);
+  font-weight: 600;
   color: var(--bone-ghost);
-  font-variant-numeric: var(--figures);
 }
 
 @media (max-width: 599px) {
   .bench-bar { flex-direction: column; align-items: stretch; }
+  .bench-bar .seg { display: flex; }
+  .bench-bar .seg-btn { flex: 1 1 0; }
 }
 
-/* ---- the camp scene under a gathering page ----
-   A scene, so it has no frame: it runs to the column's edges and fades out. */
+/* ---- the camp scene under a gathering page ---- */
 
 .camp-scene {
   position: relative;
-  height: clamp(170px, 19vw, 250px);
-  margin-inline: calc(var(--gutter) * -1);
+  height: clamp(150px, 17vw, 220px);
+  background: #0d0a12;
+  border-bottom: 1px solid var(--line-soft);
   overflow: hidden;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
 }
 
 .camp-scene svg { display: block; width: 100%; height: 100%; }
@@ -266,46 +292,45 @@
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 4px var(--sp-4);
-  padding-top: var(--sp-3);
-  border-top: 1px solid var(--line-soft);
+  padding: var(--sp-3) var(--card-pad) 14px;
   font-size: var(--text-sm);
   color: var(--bone-faint);
 }
 
-.camp-foot b { color: var(--bone); font-weight: 500; }
+.camp-foot b { color: var(--bone); font-weight: 600; }
 
-.c-moon { fill: #d9d2c4; opacity: .2; }
-.c-moon-glow { fill: #d9d2c4; opacity: .035; }
-.c-star { fill: none; stroke: #d9d2c4; stroke-opacity: .3; stroke-width: 1.5; stroke-linecap: round; }
-.c-tree { fill: none; stroke: #1d1a16; stroke-width: 2; stroke-linecap: round; }
-.c-hill-far { fill: #151310; }
-.c-hill-near { fill: #100e0c; }
-.c-hill-mid { fill: #131110; stroke: #26221d; stroke-width: 1.5; }
-.c-ground { fill: #0a0908; }
-.c-stake { fill: #14120f; stroke: #322c25; stroke-width: 1.2; }
-.c-sil { fill: #181512; stroke: #3a332b; stroke-width: 1.5; }
-.c-dark { fill: #0f0d0b; stroke: #2f2a23; stroke-width: 1.5; }
-.c-void { fill: #030302; }
-.c-rim { fill: none; stroke: #6d5233; stroke-opacity: .55; stroke-width: 1.5; }
-.c-wood { fill: none; stroke: #3b302a; stroke-width: 4; stroke-linecap: round; }
+.c-moon { fill: #d9d2c7; opacity: .22; }
+.c-moon-glow { fill: #d9d2c7; opacity: .04; }
+.c-star { fill: none; stroke: #d9d2c7; stroke-opacity: .35; stroke-width: 1.5; stroke-linecap: round; }
+.c-tree { fill: none; stroke: #221a2b; stroke-width: 2; stroke-linecap: round; }
+.c-hill-far { fill: #1c1524; }
+.c-hill-near { fill: #151019; }
+.c-hill-mid { fill: #191320; stroke: #2e2738; stroke-width: 1.5; }
+.c-ground { fill: #0d0a11; }
+.c-stake { fill: #17121c; stroke: #342c3f; stroke-width: 1.2; }
+.c-sil { fill: #1d1724; stroke: #3a3246; stroke-width: 1.5; }
+.c-dark { fill: #120e17; stroke: #322a3c; stroke-width: 1.5; }
+.c-void { fill: #030204; }
+.c-rim { fill: none; stroke: #4d3d75; stroke-opacity: .6; stroke-width: 1.5; }
+.c-wood { fill: none; stroke: #3b302c; stroke-width: 4; stroke-linecap: round; }
 .c-wood.thin { stroke-width: 2.5; }
-.c-rope { fill: none; stroke: #3b302a; stroke-width: 1.2; }
+.c-rope { fill: none; stroke: #3b302c; stroke-width: 1.2; }
 .c-light { fill: #d3ad5c; opacity: .5; }
 .c-lamp { fill: #d3ad5c; }
 .c-lamp-glow { fill: #d3ad5c; opacity: .16; }
 .c-door { fill: #c1613a; opacity: .3; }
 .c-ember { fill: #c1613a; }
 .c-flame { fill: #d3ad5c; }
-.c-cloth { fill: #6b2d21; stroke: #2a251f; stroke-width: 1; }
-.c-fig { fill: #0a0908; stroke: #5c554a; stroke-width: 1; }
-.c-tool { fill: none; stroke: #6f695f; stroke-width: 2; stroke-linecap: round; }
-.c-toolhead { fill: #6f695f; }
+.c-cloth { fill: #6b2d21; stroke: #2a2434; stroke-width: 1; }
+.c-fig { fill: #0b090e; stroke: #524566; stroke-width: 1; }
+.c-tool { fill: none; stroke: #6b6474; stroke-width: 2; stroke-linecap: round; }
+.c-toolhead { fill: #6b6474; }
 .c-herb { fill: #29311f; stroke: #1d2317; stroke-width: 1; }
-.c-hide { fill: #3b2a22; stroke: #2a251f; stroke-width: 1; }
-.c-water { fill: #0e1216; }
-.c-shine { fill: none; stroke: #7e8a94; stroke-opacity: .3; stroke-width: 1.5; stroke-linecap: round; }
+.c-hide { fill: #3b2a22; stroke: #2a2434; stroke-width: 1; }
+.c-water { fill: #0f1520; }
+.c-shine { fill: none; stroke: #6a7fa8; stroke-opacity: .3; stroke-width: 1.5; stroke-linecap: round; }
 .c-plank { fill: none; stroke: #40342e; stroke-width: 6; }
-.c-wheel { fill: #0c0a09; stroke: #3b302a; stroke-width: 2.5; }
+.c-wheel { fill: #0e0b12; stroke: #3b302c; stroke-width: 2.5; }
 
 .camp-fire {
   transform-box: fill-box;
@@ -321,27 +346,28 @@
 
 /* ================= 3. THE ACTION AND ITEM POPUPS ================= */
 
-/* What a thing is, in the chronicle's voice. */
 .ap-desc,
 .ip-desc {
   font-family: var(--font-display);
-  font-style: italic;
-  font-size: var(--text-lg);
-  font-weight: 400;
-  line-height: 1.5;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.55;
   color: var(--bone-dim);
 }
 
 .ap-block {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .ap-list {
   display: flex;
   flex-direction: column;
-  border-top: 1px solid var(--line);
+  padding: 2px 12px;
+  border-radius: var(--r-md);
+  background: var(--surface-sunk);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
 }
 
 .ap-row {
@@ -349,10 +375,11 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-3);
-  min-height: 38px;
-  border-bottom: 1px solid var(--line-soft);
-  font-size: var(--text-md);
+  min-height: 40px;
+  font-size: var(--text-sm);
 }
+
+.ap-row + .ap-row { border-top: 1px solid var(--line-soft); }
 
 @media (pointer: coarse) {
   .ap-row { min-height: 44px; }
@@ -364,34 +391,38 @@
   gap: 8px;
   min-width: 0;
   color: var(--bone);
+  font-weight: 500;
   text-align: left;
 }
 
-.ap-link .ico { width: 16px; height: 16px; color: var(--bone-faint); }
+.ap-link .ico { width: 16px; height: 16px; color: var(--violet-hi); }
 .ap-link[data-tone="ember"] .ico { color: var(--ember-hi); }
 .ap-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 button.ap-link:hover span { text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
 
 .ap-val {
   flex-shrink: 0;
-  color: var(--bone-faint);
-  font-variant-numeric: var(--figures);
+  color: var(--bone-dim);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.ap-val.is-short { color: var(--bad); font-weight: 500; }
+.ap-val.is-short { color: var(--bad); font-weight: 600; }
 
-/* What is running right now, noted in the margin. */
 .ap-run {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 2px 0 4px 16px;
-  border-left: 2px solid var(--tan);
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: linear-gradient(90deg, var(--violet-soft), rgba(157, 130, 224, .04));
+  box-shadow: inset 0 0 0 1px var(--violet-edge);
 }
 
-.ap-run[data-tone="ember"] { border-left-color: var(--ember); }
-.ap-run[data-tone="ember"] .bar > i { background: var(--ember); }
+.ap-run[data-tone="ember"] {
+  background: linear-gradient(90deg, var(--ember-soft), rgba(216, 116, 63, .04));
+  box-shadow: inset 0 0 0 1px var(--ember-edge);
+}
 
 .ap-run-top {
   display: flex;
@@ -399,43 +430,43 @@ button.ap-link:hover span { text-decoration: underline; text-decoration-color: v
   gap: var(--sp-3);
   font-size: var(--text-sm);
   color: var(--bone-dim);
-  font-variant-numeric: var(--figures);
+  font-variant-numeric: tabular-nums;
 }
 
-.ap-run-top b { color: var(--bone); font-weight: 500; }
+.ap-run-top b { color: var(--bone); font-weight: 600; }
 
 .ap-plan {
   display: flex;
   flex-wrap: wrap;
-  gap: 2px 12px;
+  gap: 2px 10px;
   font-size: var(--text-sm);
   line-height: 1.5;
   color: var(--bone-dim);
-  font-variant-numeric: var(--figures);
+  font-variant-numeric: tabular-nums;
 }
 
 /* The zone sheet's survival warning. Silence is the good case, so this only ever
    appears to say something is wrong; the colour does the escalating. */
 .zone-warn {
   margin-top: var(--sp-3);
-  font-family: var(--font-display);
-  font-style: italic;
-  font-size: var(--text-lg);
-  line-height: 1.4;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.5;
 }
 
-.ap-plan b { color: var(--bone); font-weight: 500; }
+.ap-plan b { color: var(--bone); font-weight: 600; }
 
-/* What a relic does. Rarity's colour, as a rule in the margin. */
 .ip-effect {
-  padding: 2px 0 2px 16px;
-  border-left: 2px solid var(--r-epic);
-  font-size: var(--text-md);
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: rgba(184, 139, 219, .09);
+  box-shadow: inset 0 0 0 1px rgba(184, 139, 219, .32);
+  font-size: var(--text-sm);
   line-height: 1.45;
   color: var(--bone-dim);
 }
 
-.ip-effect b { color: var(--r-epic); font-weight: 500; }
+.ip-effect b { color: var(--r-epic); font-weight: 600; }
 
 .ip-compare {
   display: flex;
@@ -446,7 +477,7 @@ button.ap-link:hover span { text-decoration: underline; text-decoration-color: v
 }
 
 .ip-compare .ico { width: 16px; height: 16px; color: var(--bone-faint); }
-.ip-compare b { color: var(--bone); font-weight: 500; }
+.ip-compare b { color: var(--bone); font-weight: 600; }
 
 .ip-sources {
   display: grid;
@@ -464,7 +495,7 @@ button.ap-link:hover span { text-decoration: underline; text-decoration-color: v
 .storage {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--page-gap) var(--sp-12);
+  gap: var(--page-gap);
   align-items: start;
 }
 
@@ -492,11 +523,11 @@ button.ap-link:hover span { text-decoration: underline; text-decoration-color: v
   align-items: center;
   gap: 10px;
   font-size: var(--text-sm);
-  color: var(--bone-faint);
+  color: var(--bone-dim);
 }
 
-.satchel-next .ico { width: 16px; height: 16px; color: var(--bone-ghost); }
-.satchel-next b { color: var(--bone); font-weight: 500; }
+.satchel-next .ico { width: 16px; height: 16px; color: var(--bone-faint); }
+.satchel-next b { color: var(--bone); font-weight: 600; }
 
 .storage-side {
   display: flex;
@@ -510,8 +541,7 @@ button.ap-link:hover span { text-decoration: underline; text-decoration-color: v
   .storage-side { position: sticky; top: calc(var(--topbar-h) + 24px); }
 }
 
-/* The paperdoll: four slots either side of the figure. The figure stands free;
-   the slots are iron brackets, not tiles. */
+/* The paperdoll: four slots either side of the figure. */
 .doll {
   display: grid;
   grid-template-columns: 72px minmax(0, 1fr) 72px;
@@ -536,18 +566,22 @@ button.ap-link:hover span { text-decoration: underline; text-decoration-color: v
   display: grid;
   place-items: center;
   padding: 0;
-  border: 1px solid var(--line);
-  background: var(--surface-1);
+  border-radius: var(--r-md);
+  border: 1px solid var(--rar, var(--line));
+  background: radial-gradient(80% 70% at 50% 45%, var(--rar-soft, transparent), transparent 75%), var(--surface-2);
+  box-shadow: var(--hi);
   text-align: center;
-  transition: border-color var(--dur-1), background var(--dur-1);
+  transition: border-color var(--dur-1), background var(--dur-1), transform var(--dur-1);
 }
+
+.doll-slot:hover { transform: translateY(-1px); }
 
 button.doll-slot { cursor: pointer; }
 
-.doll-slot:not([data-rarity="common"])[data-rarity] { box-shadow: inset 0 -2px 0 var(--rar); }
+.doll-slot:not([data-rarity="common"])[data-rarity] { box-shadow: var(--hi), inset 0 -2px 0 var(--rar); }
 
 @media (hover: hover) {
-  button.doll-slot:hover { border-color: var(--line-strong); background: var(--surface-2); }
+  button.doll-slot:hover { border-color: var(--line-strong); }
 }
 
 .doll-slot-top {
@@ -562,10 +596,10 @@ button.doll-slot { cursor: pointer; }
 .doll-slot-top:has(> :only-child) { justify-content: center; }
 
 .doll-slot-l {
-  font-size: 14px;
-  font-weight: 500;
-  font-variant-caps: all-small-caps;
+  font-size: 10.5px;
+  font-weight: 600;
   letter-spacing: .08em;
+  text-transform: uppercase;
   color: var(--bone-faint);
   white-space: nowrap;
 }
@@ -578,9 +612,10 @@ button.doll-slot { cursor: pointer; }
 
 .doll-slot-name {
   max-width: 100%;
-  font-size: 11.5px;
-  line-height: 1.15;
-  color: var(--bone-dim);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--bone);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -591,7 +626,7 @@ button.doll-slot { cursor: pointer; }
 .doll-wear {
   font-size: var(--text-2xs);
   font-weight: 700;
-  font-variant-numeric: var(--figures);
+  font-variant-numeric: tabular-nums;
 }
 
 .doll-wear.is-fine { color: var(--good); }
@@ -599,14 +634,15 @@ button.doll-slot { cursor: pointer; }
 .doll-wear.is-bad { color: var(--ember-hi); }
 
 .doll-slot.is-empty {
-  background: var(--surface-sunk);
-  border-color: var(--line-soft);
+  background: transparent;
+  border-style: dashed;
+  box-shadow: none;
 }
 
 .doll-slot.is-empty .doll-slot-art { color: var(--bone-ghost); }
-.doll-slot.is-empty .doll-slot-name { color: var(--bone-ghost); }
+.doll-slot.is-empty .doll-slot-name { color: var(--bone-faint); }
 
-.doll-slot.is-blocked { opacity: .5; }
+.doll-slot.is-blocked { opacity: .55; }
 
 .doll-figure {
   display: flex;
@@ -622,19 +658,16 @@ button.doll-slot { cursor: pointer; }
    it at any column width, and the column centres what is left over. */
 .doll-figure .portrait {
   flex: 0 1 auto;
-  align-self: center;
   aspect-ratio: 768 / 1376;
-  width: 100%;
-  max-width: 300px;
   max-height: 100%;
   min-height: 0;
 }
 
 .doll-name {
   font-family: var(--font-display);
-  font-size: var(--text-2xl);
-  font-weight: 400;
-  line-height: 1.15;
+  font-size: var(--text-xl);
+  font-weight: 600;
+  line-height: 1.2;
   text-align: center;
   color: var(--bone);
 }
@@ -651,488 +684,296 @@ button.doll-slot { cursor: pointer; }
   .doll-col { gap: 6px; }
   .doll-slot { width: 58px; }
   .doll-slot-art .ico { width: 24px; height: 24px; }
-  .doll-slot-name { font-size: 10.5px; }
+  .doll-slot-name { font-size: 9.5px; }
+
 }
 
-/* ================= 5. THE FIELD ================= */
+/* ================= 5. THE HUNT ================= */
 
-/* The hunt is a place. One scene the width of the column with no edge to it: sky,
-   a dead treeline, smoke, ground. Your commander stands on that ground at the left;
-   what you hunt looms out of the dark at the right; what the fight is doing is
-   written between you. Nothing in here is a card, a tile or a pill.
+.hunt-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
 
-     section.scene[data-state]            quiet | search | fight | sovereign | down
-       div.scene-sky                      the backdrop, and nothing else
-       header.scene-head                  where you are (the page's title), who hunts beside
-                                          you, and your level and the way to the next
-       div.scene-stage
-         div.scene-side > .fighter-you    (or .scene-band while the party is out)
-         div.scene-state                  "Fighting" · "Reinforcements in 52s"
-         div.scene-foes > .fighter-foe    up to three, the one you are on nearest
-       footer.scene-foot                  the run's figures, and the way out
-
-   A fighter is div.fighter > .fx-layer, .fighter-art, div.fighter-plate (name, vital). */
-
-.hunt-page { gap: var(--sp-10); }
-
-/* The field leads the page, so it starts higher than a masthead would. */
-.hunt-page > .scene:first-child { margin-top: calc(var(--sp-5) * -1); }
-
-.scene {
-  --scene-glow: rgba(176, 138, 91, .1);   /* the light along the horizon */
-  --scene-heat: transparent;               /* the light on the ground where the foes stand */
-  /* How tall you stand. Everything in the scene is cut from this one measure, and the
-     measure is cut from the window: the whole fight, down to the last line of health,
-     stays above the fold on a laptop and grows into a tall screen. */
-  --figure-h: clamp(260px, calc(100vh - 510px), 500px);
-  --figure-h: clamp(260px, calc(100dvh - 510px), 500px);
+.arena {
   position: relative;
-  isolation: isolate;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  min-height: 520px;
-  margin-inline: calc(var(--gutter) * -1);
-  padding: var(--sp-5) var(--gutter) var(--sp-5);
-  /* Smoke and mist run past the edges of the scene; the page must not scroll for them. */
-  overflow: hidden;
-}
-
-/* The light that belongs to the fighters, not to the sky: a pale pool where you
-   stand, and heat on the ground under whatever you are fighting. */
-.scene::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
+  grid-template-columns: minmax(0, .9fr) auto minmax(0, 1.35fr);
+  align-items: center;
+  gap: var(--sp-5);
+  padding: var(--sp-6) var(--sp-5);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line-soft);
   background:
-    radial-gradient(38% 17% at 74% 76%, var(--scene-heat), transparent 72%),
-    radial-gradient(21% 13% at 16% 77%, rgba(231, 224, 210, .075), transparent 72%);
-  transition: opacity 900ms linear;
-}
-
-.scene[data-state="fight"] { --scene-heat: rgba(207, 95, 46, .2); }
-.scene[data-state="search"] { --scene-glow: rgba(176, 138, 91, .07); }
-/* A Sovereign is of the Veil: the whole sky goes cold and the ground lights violet. */
-.scene[data-state="sovereign"] { --scene-glow: rgba(124, 100, 204, .17); --scene-heat: rgba(164, 140, 232, .2); }
-.scene[data-state="down"] { --scene-glow: rgba(231, 224, 210, .04); }
-
-/* ---- the backdrop ---- */
-
-.scene-sky {
-  position: absolute;
-  inset: 0;
-  z-index: -2;
+    radial-gradient(420px 200px at 18% 100%, rgba(157, 130, 224, .13), transparent 70%),
+    radial-gradient(520px 220px at 82% 100%, rgba(216, 116, 63, .13), transparent 70%),
+    linear-gradient(180deg, #110d17 0%, #0b0910 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03), inset 0 -40px 60px -40px rgba(0, 0, 0, .6);
   overflow: hidden;
-  pointer-events: none;
-  background:
-    /* a moon behind the smoke: a small hard disc, a wide soft one */
-    radial-gradient(circle at 80% 30%, rgba(231, 224, 210, .17) 0, rgba(231, 224, 210, .13) 13px, rgba(231, 224, 210, .045) 21px, transparent 170px),
-    radial-gradient(72% 40% at 60% 63%, var(--scene-glow), transparent 72%),
-    linear-gradient(180deg, transparent 0 62.9%, #0a0908 63%, #060504 100%),
-    linear-gradient(180deg, #0a0908 0%, #100e0b 38%, #19150f 63%);
-  /* No frame: the scene thins out into the page at both sides and at the top. */
-  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 7%, #000 93%, transparent 100%), linear-gradient(180deg, transparent 0, #000 16%);
-  -webkit-mask-composite: source-in;
-  mask-image: linear-gradient(90deg, transparent 0, #000 7%, #000 93%, transparent 100%), linear-gradient(180deg, transparent 0, #000 16%);
-  mask-composite: intersect;
+  isolation: isolate;
 }
 
-/* A dead treeline, twice: far and faint, then nearer and darker. */
-.scene-sky::before {
+.arena::before {
   content: "";
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 36.5%;
-  height: 20%;
-  background:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 200' preserveAspectRatio='none'%3E%3Cpath d='M0 200 L0 165 L40 165 L80 166 L120 168 L160 171 L200 172 L240 172 L280 170 L320 167 L360 164 L400 161 L440 160 L480 161 L517 165 L518 112 L503 102 L520 107 L524 54 L526 54 L525 116 L539 109 L524 122 L523 165 L520 165 L536 167 L535 90 L516 76 L536 85 L535 56 L537 56 L542 102 L562 93 L543 108 L544 167 L560 170 L600 175 L640 179 L680 182 L720 182 L760 181 L800 178 L840 175 L880 173 L920 172 L960 173 L1000 175 L1040 178 L1080 181 L1120 181 L1160 180 L1198 177 L1196 144 L1185 135 L1197 139 L1193 107 L1195 107 L1200 131 L1219 123 L1200 137 L1202 177 L1200 177 L1236 172 L1237 135 L1223 126 L1238 130 L1241 111 L1243 111 L1245 137 L1262 128 L1245 143 L1244 172 L1240 172 L1280 167 L1320 162 L1358 160 L1358 116 L1344 106 L1359 111 L1359 82 L1361 82 L1362 119 L1378 112 L1362 125 L1362 160 L1360 160 L1400 159 L1440 161 L1477 165 L1476 102 L1464 93 L1476 97 L1474 46 L1476 46 L1481 102 L1491 101 L1482 108 L1483 165 L1480 165 L1518 168 L1517 126 L1502 115 L1518 121 L1516 104 L1518 104 L1521 139 L1530 138 L1521 145 L1522 168 L1520 168 L1560 171 L1600 173 L1600 200 Z' fill='%23090807'/%3E%3C/svg%3E") left bottom / 1500px 100% repeat-x,
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 200' preserveAspectRatio='none'%3E%3Cpath d='M0 200 L0 157 L40 153 L76 151 L74 128 L58 115 L75 123 L74 111 L76 111 L82 126 L102 118 L82 132 L84 151 L80 151 L120 151 L160 154 L200 160 L217 163 L216 140 L199 127 L216 135 L214 128 L216 128 L221 141 L231 141 L222 147 L223 163 L240 166 L280 173 L320 177 L360 178 L378 177 L376 161 L368 154 L377 156 L373 147 L375 147 L380 154 L394 151 L380 160 L382 177 L400 176 L440 171 L480 164 L520 158 L560 153 L600 151 L640 152 L656 153 L658 122 L634 107 L659 117 L664 97 L666 97 L666 119 L686 108 L666 125 L664 153 L680 154 L718 158 L718 141 L705 132 L719 136 L719 124 L721 124 L722 138 L740 129 L722 144 L722 158 L720 158 L760 160 L800 161 L840 159 L880 154 L920 149 L960 143 L996 140 L997 108 L978 96 L998 103 L1002 87 L1004 87 L1005 107 L1021 100 L1005 113 L1004 140 L1000 140 L1040 139 L1080 142 L1120 147 L1160 154 L1200 161 L1240 167 L1258 168 L1260 141 L1239 128 L1261 136 L1264 128 L1266 128 L1264 141 L1272 139 L1264 147 L1262 168 L1280 169 L1320 169 L1360 166 L1400 162 L1437 159 L1436 131 L1418 118 L1436 126 L1434 113 L1436 113 L1441 134 L1452 133 L1442 140 L1443 159 L1440 159 L1480 158 L1496 158 L1498 144 L1474 128 L1499 139 L1505 128 L1507 128 L1506 141 L1526 129 L1506 147 L1504 158 L1520 158 L1560 162 L1600 166 L1600 200 Z' fill='%23110f0c'/%3E%3C/svg%3E") 300px bottom / 1900px 82% repeat-x;
-}
-
-/* Smoke along the ground, drifting. Two slow blots of it and no more. */
-.scene-sky::after {
-  content: "";
-  position: absolute;
-  left: -20%;
-  right: -20%;
-  top: 40%;
+  bottom: 0;
   height: 42%;
-  background:
-    radial-gradient(28% 46% at 24% 58%, rgba(231, 224, 210, .06), transparent 72%),
-    radial-gradient(34% 56% at 68% 46%, rgba(231, 224, 210, .05), transparent 72%),
-    radial-gradient(22% 36% at 48% 82%, rgba(231, 224, 210, .045), transparent 72%);
-  animation: scene-drift 48s ease-in-out infinite alternate;
+  z-index: -1;
+  background: repeating-linear-gradient(90deg, rgba(255, 255, 255, .018) 0 1px, transparent 1px 48px);
+  mask-image: linear-gradient(180deg, transparent, #000);
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000);
 }
 
-.scene[data-state="search"] .scene-sky::after { animation-duration: 20s; }
-
-@keyframes scene-drift { from { transform: translateX(-5%); } to { transform: translateX(5%); } }
-
-/* Where the browser can clip without making a scroller (which would unstick the
-   sticky side panels elsewhere), the sky is let out of the column altogether: it runs
-   from the sidebar to the far edge of the window, however wide the window is. */
-@supports (overflow: clip) {
-  .main { overflow-x: clip; }
-  .scene { overflow: visible; }
-  .scene-sky { left: 50%; right: auto; width: calc(100vw - var(--sidebar-w)); transform: translateX(-50%); }
-
-  @media (max-width: 1023px) {
-    .scene-sky { width: 100vw; }
-  }
-}
-
-/* ---- where you are ----
-   The ground is the page's title. Opposite it, small: the level, the way to the next
-   one as a hairline, and whatever is bending XP. This is all the masthead the hunt has. */
-
-.scene-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--sp-4) var(--sp-8);
-}
-
-.scene-where { min-width: 0; flex: 1 1 380px; }
-
-.scene-title {
-  margin-top: 2px;
-  font-family: var(--font-display);
-  font-size: var(--text-4xl);
-  font-weight: 400;
-  line-height: 1;
-  color: var(--bone);
-  text-wrap: balance;
-}
-
-.scene-sub {
-  margin-top: 10px;
-  font-size: var(--text-md);
-  color: var(--bone-faint);
-  font-variant-numeric: var(--figures);
-}
-
-.scene-company { margin-top: 6px; }
-
-.scene-rank {
-  flex: 0 1 300px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 220px;
-  padding-top: 4px;
-}
-
-.scene-lv {
-  display: flex;
-  align-items: baseline;
-  justify-content: flex-end;
-  gap: 8px;
-  font-family: var(--font-display);
-  font-size: var(--text-3xl);
-  font-weight: 500;
-  line-height: .9;
-  color: var(--bone);
-}
-
-.scene-lv small {
-  font-family: var(--font-ui);
-  font-size: var(--caps);
-  font-weight: 500;
-  font-variant-caps: all-small-caps;
-  letter-spacing: var(--tracking-caps);
-  color: var(--bone-faint);
-}
-
-.scene-xp-meta {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  font-size: var(--text-xs);
-  color: var(--bone-faint);
-  font-variant-numeric: var(--figures);
-}
-
-.scene-xp-next b { color: var(--bone-dim); font-weight: 500; }
-.scene-tags { justify-content: flex-end; gap: 2px 16px; }
-
-/* ---- the stage ---- */
-
-.scene-stage {
-  display: grid;
-  grid-template-columns: minmax(200px, 24%) minmax(170px, 1fr) minmax(0, 52%);
-  grid-template-areas: "side state foes";
-  align-items: end;
-  column-gap: var(--sp-6);
-  min-height: 0;
-  padding: var(--sp-5) 0 var(--sp-6);
-}
-
-.scene-side {
-  grid-area: side;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  min-width: 0;
-}
-
-/* A fighter: someone standing, their name, their health. Every plate is the same
-   height, so every pair of feet comes down on the same ground. */
-.fighter {
+.arena-you {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 10px;
   min-width: 0;
 }
 
-.fighter-art {
+.arena-portrait {
   position: relative;
-  display: block;
-  flex-shrink: 0;
-}
-
-.fighter-plate {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  min-height: 92px;
-  padding-top: 16px;
-  text-align: center;
-}
-
-.fighter-name {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: center;
-  gap: 0 10px;
-  font-family: var(--font-display);
-  font-size: var(--text-xl);
-  font-weight: 400;
-  line-height: 1.15;
-  color: var(--bone);
-}
-
-.fighter-on {
-  font-size: var(--text-xs);
-  color: var(--bone-faint);
-}
-
-/* ---- you ---- */
-
-.fighter-you { width: 100%; max-width: 260px; }
-
-.fighter-you .fighter-art {
-  height: var(--figure-h);
+  width: clamp(112px, 12vw, 150px);
   aspect-ratio: 768 / 1376;
   transition: opacity 300ms, filter 300ms, transform 300ms;
 }
 
-.fighter-you .fighter-name { font-size: var(--text-2xl); }
-.fighter-you .vital { max-width: 240px; }
-
-.fighter-you.is-down .fighter-art { opacity: .35; filter: grayscale(.9); }
-.fighter-you.is-dead .fighter-art { opacity: .15; filter: grayscale(1); transform: translateY(8px); }
-
-/* The Veil, gathering. It is the only violet in the field while no Sovereign is: a
-   mist at your feet that thickens in tenths as the charge builds (data-veil), and
-   a rim of light on you once it is whole. */
-.fighter-mist {
-  position: absolute;
-  left: -62%;
-  right: -62%;
-  bottom: -4%;
-  height: 40%;
-  z-index: 0;
-  pointer-events: none;
-  opacity: 0;
-  background:
-    radial-gradient(46% 58% at 50% 100%, rgba(164, 140, 232, .6), transparent 72%),
-    radial-gradient(26% 92% at 34% 100%, rgba(164, 140, 232, .34), transparent 72%),
-    radial-gradient(22% 80% at 69% 100%, rgba(200, 184, 248, .3), transparent 72%);
-  filter: blur(9px);
-  transition: opacity 700ms linear;
-  animation: mist-breathe 5.5s ease-in-out infinite;
-}
-
-@keyframes mist-breathe {
-  0%, 100% { transform: scale(1, 1); }
-  50% { transform: scale(1.06, 1.14); }
-}
-
-.fighter-you[data-veil="1"] .fighter-mist { opacity: .12; }
-.fighter-you[data-veil="2"] .fighter-mist { opacity: .2; }
-.fighter-you[data-veil="3"] .fighter-mist { opacity: .28; }
-.fighter-you[data-veil="4"] .fighter-mist { opacity: .36; }
-.fighter-you[data-veil="5"] .fighter-mist { opacity: .45; }
-.fighter-you[data-veil="6"] .fighter-mist { opacity: .54; }
-.fighter-you[data-veil="7"] .fighter-mist { opacity: .64; }
-.fighter-you[data-veil="8"] .fighter-mist { opacity: .74; }
-.fighter-you[data-veil="9"] .fighter-mist { opacity: .86; }
-.fighter-you[data-veil="10"] .fighter-mist { opacity: 1; }
-
-.fighter-you.is-charged .fighter-art img { filter: drop-shadow(0 0 14px rgba(164, 140, 232, .5)); }
-.fighter-you.is-charged .vital-veil .vital-text { color: var(--veil-hi); font-weight: 500; }
-
-/* ---- the warband, while the party is out ---- */
-
-.scene-band {
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  gap: var(--sp-2);
-  width: 100%;
-}
-
-.band-mate { flex: 0 1 calc(var(--figure-h) * .36); }
-.band-mate .fighter-art { width: 100%; aspect-ratio: 768 / 1376; }
-.band-mate .fighter-name { font-size: var(--text-lg); }
-.band-mate .fighter-plate { min-height: 78px; padding-top: 12px; }
-.band-mate .vital { flex-direction: column; gap: 4px; }
-.band-mate .vital-line { width: 100%; flex: 0 0 auto; }
-.band-mate.is-down { opacity: .4; }
-.band-mate.is-down .fighter-art img { filter: grayscale(1); }
-
-/* ---- what the fight is doing ---- */
-
-.scene-state {
-  grid-area: state;
-  align-self: center;
-  min-width: 0;
-  padding-bottom: 14%;
-}
-
-.scene-status {
+.arena-name {
   font-family: var(--font-display);
-  font-style: italic;
-  font-size: var(--text-4xl);
-  font-weight: 400;
-  line-height: 1;
+  font-size: var(--text-xl);
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
   color: var(--bone);
-  text-wrap: balance;
 }
 
-.scene-timer {
-  min-height: 20px;
-  margin-top: 12px;
-  font-size: 20px;
-  font-variant-caps: all-small-caps;
-  letter-spacing: var(--tracking-caps);
-  color: var(--bone-faint);
-  font-variant-numeric: var(--figures);
+.arena-you .hpbar,
+.arena-you .veilbar { max-width: 240px; }
+
+/* The warband while the party is out: a square each, you first. Two across for a
+   pair, two over one for a three, two by two for a four -- everyone on screen at
+   once, with room to breathe rather than crammed into a column of thin rows. */
+.arena-band {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  width: 100%;
+  max-width: 300px;
+  margin-top: 2px;
+  justify-items: center;
 }
 
-/* Nobody is out: the quiet is said once, where the foes would stand, and said large. */
-.scene[data-state="quiet"] .scene-state { visibility: hidden; }
-.scene[data-state="quiet"] .scene-empty-title { font-style: italic; font-size: var(--text-3xl); }
+/* One alone takes the width; the third of a three sits centred under the first two. */
+.arena-band[data-n="1"] { grid-template-columns: minmax(0, 1fr); max-width: 170px; }
+.arena-band[data-n="3"] > .band-mate:last-child { grid-column: 1 / -1; }
 
-.scene[data-state="sovereign"] .scene-status { color: var(--veil-hi); }
-.scene[data-state="down"] .scene-status,
-.scene[data-state="quiet"] .scene-status { color: var(--bone-faint); }
-
-/* ---- what you hunt ---- */
-
-.scene-foes {
-  grid-area: foes;
-  display: flex;
-  align-items: flex-end;
-  justify-content: flex-start;
-  gap: clamp(8px, 2vw, 28px);
-  min-width: 0;
-  min-height: 300px;
-}
-
-.fighter-foe {
-  flex: 0 1 auto;
-  transition: opacity 600ms ease-out, transform 600ms ease-out, filter 400ms;
-  animation: foe-in 520ms var(--ease);
-}
-
-/* Those hanging back: smaller, dimmer, further into the smoke. */
-.fighter-foe .fighter-art {
-  width: min(clamp(104px, 12vw, 160px), calc(var(--figure-h) * .4));
-  aspect-ratio: 1;
-  transition: width 420ms var(--ease);
-  -webkit-mask-image: linear-gradient(180deg, #000 72%, transparent 100%);
-  mask-image: linear-gradient(180deg, #000 72%, transparent 100%);
-}
-
-.fighter-foe:not(.is-target) { filter: brightness(.62); }
-.fighter-foe:not(.is-target) .fighter-plate { opacity: .8; }
-
-/* The one you are on: nearest, largest, fully lit. */
-.fighter-foe.is-target .fighter-art { width: min(clamp(160px, 19vw, 250px), calc(var(--figure-h) * .62)); }
-.fighter-foe.is-target .fighter-name { font-size: var(--text-2xl); }
-
-.fighter-foe.is-sovereign .fighter-art { width: min(clamp(210px, 26vw, 340px), calc(var(--figure-h) * .84)); }
-.fighter-foe.is-sovereign .fighter-name { font-size: var(--text-3xl); }
-
-.fighter-foe.is-gone { opacity: 0; transform: translateY(14px) scale(.96); pointer-events: none; }
-
-@keyframes foe-in { from { opacity: 0; transform: translateX(34px); } to { opacity: 1; transform: none; } }
-
-button.fighter-art { cursor: pointer; }
-button.fighter-art:focus-visible { outline-offset: 4px; }
-
-/* In the field a foe is a shape more than a drawing: black against the smoke, a rim
-   of firelight, the eyes lit. */
-.scene .m-art { width: 100%; height: 100%; overflow: visible; }
-.scene .m-body { fill: #070605; stroke: #9a4d2c; stroke-width: 1.3; }
-.scene .m-art.elite .m-body { stroke: var(--r-rare); }
-.scene .m-art.sovereign .m-body { stroke: var(--veil); }
-.scene .m-eye { fill: #f08a4a; filter: drop-shadow(0 0 2px rgba(240, 138, 74, .9)); }
-.scene .m-art.sovereign .m-eye { fill: var(--veil-hi); filter: drop-shadow(0 0 3px rgba(164, 140, 232, .95)); }
-
-.scene.is-party .scene-stage {
-  grid-template-columns: minmax(0, 44%) minmax(0, 1fr);
-  grid-template-areas:
-    "state state"
-    "side foes";
-  row-gap: var(--sp-5);
-}
-
-.scene.is-party .scene-state { padding-bottom: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px var(--sp-5); }
-.scene.is-party .scene-status { font-size: var(--text-3xl); }
-.scene.is-party .scene-timer { margin-top: 0; }
-
-/* A party's roster of foes scales with the party, up to a dozen, so they stand in ranks. */
-.scene.is-party .scene-foes { flex-wrap: wrap; justify-content: flex-start; row-gap: var(--sp-3); }
-.scene.is-party .fighter-foe { width: clamp(96px, 9vw, 128px); }
-.scene.is-party .fighter-foe .fighter-art,
-.scene.is-party .fighter-foe.is-target .fighter-art { width: clamp(84px, 8vw, 112px); }
-.scene.is-party .fighter-foe.is-sovereign { width: auto; }
-.scene.is-party .fighter-foe.is-sovereign .fighter-art { width: clamp(150px, 15vw, 200px); }
-.scene.is-party .fighter-foe .fighter-name,
-.scene.is-party .fighter-foe.is-target .fighter-name { font-size: var(--text-lg); }
-.scene.is-party .fighter-foe .fighter-plate { min-height: 84px; padding-top: 8px; }
-.scene.is-party .fighter-foe .vital { flex-direction: column; gap: 3px; }
-.scene.is-party .fighter-foe .vital-line { width: 100%; flex: 0 0 auto; }
-
-/* Nothing in front of you: said in the chronicle's voice, where the foes would stand. */
-.scene-empty {
-  align-self: center;
+.band-mate {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-width: 36ch;
-  padding-bottom: 8%;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  max-width: 132px;
+  min-width: 0;
 }
 
-.scene-empty-title {
-  font-family: var(--font-display);
-  font-size: var(--text-2xl);
-  font-weight: 400;
-  line-height: 1.15;
+.band-art {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: radial-gradient(circle at 50% 28%, #2c2140, #120e17 75%);
+}
+
+.band-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 12%;
+}
+
+.band-mate.is-me .band-art { border-color: var(--violet-edge); }
+.band-mate.is-down { opacity: .45; }
+.band-mate.is-down .band-art img { filter: grayscale(1); }
+.band-mate .hpbar { width: 100%; }
+
+.band-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-xs);
+  font-weight: 600;
   color: var(--bone-dim);
 }
 
-.scene-empty-sub {
+.veilbar {
+  width: 100%;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: #16111b;
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+  overflow: hidden;
+}
+
+.veilbar > i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--veil-deep), var(--veil));
+  box-shadow: 0 0 8px rgba(168, 142, 230, .6);
+  transition: width 220ms ease-out;
+}
+
+.veilbar.is-locked { opacity: .4; }
+
+.veil-note {
+  min-height: 16px;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: .02em;
+  text-align: center;
+  color: var(--violet-hi);
+}
+
+.veilbar.is-locked + .veil-note { color: var(--bone-faint); }
+
+.arena-you.is-down .arena-portrait { opacity: .38; filter: grayscale(.85); }
+.arena-you.is-dead .arena-portrait { opacity: .18; filter: grayscale(1); transform: translateY(8px); }
+
+.arena-mid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 170px;
+  text-align: center;
+}
+
+.arena-vs {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: .2em;
+  margin-right: -.2em;
+  color: var(--bone-ghost);
+}
+
+.arena-status {
+  margin-top: 4px;
   font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--bone);
+}
+
+.arena-timer {
+  min-height: 16px;
+  font-size: var(--text-xs);
+  color: var(--bone-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.arena-foes {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 176px;
+}
+
+/* A party's roster of foes scales with the party, up to a dozen, so they stand two abreast
+   rather than running the card down the page. auto-fit, so one foe is still one wide card. */
+.arena.is-party .arena-foes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  align-content: center;
+}
+
+.arena.is-party .foe-empty { grid-column: 1 / -1; }
+
+.foe-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px 8px 8px;
+  border-radius: var(--r-md);
+  border: 1px solid rgba(216, 116, 63, .2);
+  background: rgba(24, 14, 17, .74);
+  transition: opacity 600ms ease-out, transform 600ms ease-out, border-color 200ms, box-shadow 200ms;
+  animation: foe-in 380ms var(--ease);
+}
+
+.foe-card.is-target { border-color: var(--ember-edge); box-shadow: inset 3px 0 0 var(--ember); }
+.foe-card.is-elite { border-color: rgba(122, 162, 220, .45); }
+.foe-card.is-sovereign { border-color: rgba(184, 139, 219, .55); background: rgba(28, 16, 32, .82); }
+.foe-card.is-gone { opacity: 0; transform: translateX(14px); pointer-events: none; }
+
+@keyframes foe-in { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+
+.foe-art {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 40%, #3a211c, #140e12 75%);
+  box-shadow: inset 0 0 0 1px #5e3325;
+  transition: box-shadow 150ms;
+}
+
+button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
+.foe-art .m-art { width: 88%; height: 88%; }
+
+.foe-body { min-width: 0; }
+
+.foe-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--bone);
+}
+
+.foe-card .hpbar { margin-top: 6px; height: 16px; border-radius: 5px; }
+
+.foe-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 150px;
+  padding: 16px;
+  border-radius: var(--r-md);
+  border: 1px dashed rgba(216, 116, 63, .22);
+  text-align: center;
+}
+
+.foe-empty-title {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--bone-dim);
+}
+
+.foe-empty-sub {
+  font-size: var(--text-sm);
   line-height: 1.45;
   color: var(--bone-faint);
 }
@@ -1141,55 +982,58 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
 
 @keyframes struck {
   0% { transform: translateX(0); }
-  25% { transform: translateX(-7px); filter: brightness(2); }
+  25% { transform: translateX(-6px); filter: brightness(1.7); }
   60% { transform: translateX(4px); }
   100% { transform: none; }
 }
 
-/* Words thrown off whoever took the blow. Ink, not a badge. */
+/* Numbers that float up off whoever took the blow. */
 .fx-layer {
   position: absolute;
   left: 0;
   right: 0;
-  top: 14%;
+  top: 0;
   height: 0;
   z-index: 5;
   pointer-events: none;
 }
 
-/* Off you, they leave by the shoulder that faces the foes, clear of your face. */
-.fighter-you .fx-layer { top: 24%; left: 42%; right: -42%; }
+.foe-card .fx-layer { left: 8px; right: auto; width: 56px; top: 6px; }
 
 .float {
   position: absolute;
   left: 50%;
-  top: 0;
+  top: 36px;
   white-space: nowrap;
   font-family: var(--font-display);
-  font-style: italic;
-  font-size: 30px;
-  font-weight: 400;
+  font-size: 24px;
+  font-weight: 700;
   line-height: 1;
   color: var(--bone);
-  text-shadow: 0 2px 10px #000, 0 0 2px #000;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, .9);
   animation: float-up 950ms ease-out forwards;
 }
 
-.float.lane0 { margin-left: -34px; }
-.float.lane1 { margin-left: 28px; top: 26px; }
-.float.lane2 { margin-left: -4px; top: -18px; }
+.foe-card .float { top: 14px; font-size: 20px; }
 
-.float.crit { font-size: 44px; color: var(--gold-hi); }
+.float.lane0 { margin-left: -28px; }
+.float.lane1 { margin-left: 22px; top: 52px; }
+.float.lane2 { margin-left: -4px; top: 22px; }
+.foe-card .float.lane1 { top: 24px; }
+.foe-card .float.lane2 { top: 8px; }
+
+.float.crit { font-size: 32px; color: var(--gold-hi); }
+.foe-card .float.crit { font-size: 25px; }
 .float.veil,
 .float.strike,
 .float.ambush,
-.float.empowered { font-size: 40px; color: var(--veil-hi); text-shadow: 0 0 18px rgba(164, 140, 232, .7), 0 2px 10px #000; }
-.float.volley { font-size: 32px; color: var(--veil-hi); }
+.float.empowered { font-size: 30px; color: #c4b0f5; }
+.float.volley { font-size: 26px; color: #c4b0f5; }
 .float.bleed,
-.float.thorns { font-size: 22px; color: var(--ember-hi); }
+.float.thorns { font-size: 18px; color: #e3927a; }
 .float.hurt { color: var(--ember-hi); }
-.float.ambushed { font-size: 38px; color: var(--ember-hi); }
-.float.heal { font-style: normal; font-family: var(--font-ui); font-weight: 500; font-size: 22px; color: var(--good-hi); font-variant-numeric: var(--figures); }
+.float.ambushed { font-size: 30px; color: var(--ember-hi); }
+.float.heal { color: var(--good-hi); }
 
 .float.block,
 .float.dodge,
@@ -1197,11 +1041,10 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
 .float.join,
 .float.enrage {
   font-family: var(--font-ui);
-  font-style: normal;
-  font-size: 20px;
-  font-weight: 500;
-  font-variant-caps: all-small-caps;
-  letter-spacing: .14em;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
   color: var(--bone-dim);
 }
 
@@ -1209,383 +1052,231 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
 .float.enrage { color: var(--ember-hi); }
 
 @keyframes float-up {
-  0% { opacity: 0; transform: translate(-50%, 12px) scale(.85); }
-  15% { opacity: 1; transform: translate(-50%, 0) scale(1.08); }
-  100% { opacity: 0; transform: translate(-50%, -64px) scale(1); }
+  0% { opacity: 0; transform: translate(-50%, 10px) scale(.85); }
+  15% { opacity: 1; transform: translate(-50%, 0) scale(1.1); }
+  100% { opacity: 0; transform: translate(-50%, -52px) scale(1); }
 }
 
 /* Monster drawings (120 by 120). */
 .m-art { display: block; }
 
-/* A foe drawing standing in for a glyph (the foe popup's header). */
-.art .m-art { width: 100%; height: 100%; }
-.m-body { fill: #0b0a08; stroke: #9a4d2c; stroke-width: 1.6; stroke-linejoin: round; }
+/* A foe drawing in an art tile (the foe popup's header). */
+.art .m-art { width: 88%; height: 88%; }
+.m-body { fill: #120d16; stroke: #8a4632; stroke-width: 1.6; stroke-linejoin: round; }
 .m-art.elite .m-body { stroke: var(--r-rare); }
 .m-art.boss .m-body,
-.m-art.sovereign .m-body { stroke: var(--veil); }
-.m-void { fill: #030302; }
+.m-art.sovereign .m-body { stroke: var(--r-epic); }
+.m-void { fill: #040305; }
 .m-eye { fill: #e0703f; }
-.m-edge { fill: none; stroke: #3a302a; stroke-width: 2; stroke-linecap: round; }
-.m-steel { fill: #2a2622; stroke: #5f584e; stroke-width: 1; }
+.m-edge { fill: none; stroke: #3a2f2a; stroke-width: 2; stroke-linecap: round; }
+.m-steel { fill: #2c2833; stroke: #5c5666; stroke-width: 1; }
 .m-crack { fill: none; stroke: #c1613a; stroke-opacity: .6; stroke-width: 1.5; }
-.m-bone { fill: none; stroke: #938a7a; stroke-width: 1.2; }
+.m-bone { fill: none; stroke: #948d9c; stroke-width: 1.2; }
 
-/* ---- the run's figures, and the way out ---- */
-
-.scene-foot {
+.hunt-foot {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--sp-4) var(--sp-8);
-  padding-top: var(--sp-5);
-  border-top: 1px solid var(--line-soft);
+  align-items: center;
+  gap: var(--sp-3) var(--sp-4);
 }
 
-.scene-hint {
-  flex: 1 1 280px;
-  font-family: var(--font-display);
-  font-style: italic;
-  font-size: var(--text-lg);
-  color: var(--bone-faint);
-}
+.hunt-foot > .kpis { flex: 1 1 440px; }
 
-.scene-actions {
+.hunt-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--sp-2);
+  gap: var(--sp-2) var(--sp-3);
   margin-left: auto;
 }
 
-/* ---- the descent: four zones, one road down ---- */
+.hunt-hint {
+  flex: 1 1 280px;
+  font-size: var(--text-sm);
+  color: var(--bone-faint);
+}
 
+/* Zones: two by two. The bar is the zone's Threat. */
+/* Threat moved to the region header, so a card is just art, name and tag. The
+   "threat" row stays named for a card that still carries a meter. */
 .section-end { display: flex; align-items: flex-end; gap: var(--sp-3); flex-wrap: wrap; }
 .region-threat { min-width: 180px; }
 
-.descent {
+.zone-card {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin-top: var(--sp-2);
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "art main tag"
+    "threat threat threat";
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 16px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(255, 255, 255, .016), transparent), var(--surface-1);
+  box-shadow: var(--shadow-card);
+  text-align: left;
+  transition: border-color var(--dur-1), background var(--dur-1);
 }
 
-/* The road itself: bone at the camp's edge, ember by the Core. */
-.descent::before {
-  content: "";
-  position: absolute;
-  left: 7px;
-  right: calc(25% - 8px);
-  top: 7px;
-  height: 1px;
-  background: linear-gradient(90deg, var(--line-strong), rgba(207, 95, 46, .7));
-}
+.zone-card > .art { grid-area: art; }
+.zone-card > .tag { grid-area: tag; align-self: start; }
+.zone-card > .meter { grid-area: threat; }
 
-.descent-stop {
-  position: relative;
+.zone-main {
+  grid-area: main;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  width: 100%;
-  padding-right: var(--sp-5);
-  text-align: left;
 }
 
-.descent-mark {
-  position: relative;
-  z-index: 1;
-  width: 15px;
-  height: 15px;
-  margin-bottom: 14px;
-  border-radius: 50%;
-  border: 1px solid var(--bone-faint);
-  background: var(--bg);
-  transition: border-color var(--dur-1), background var(--dur-1), box-shadow var(--dur-1);
-}
-
-.descent-stop[data-depth="2"] .descent-mark { border-color: #a5806a; }
-.descent-stop[data-depth="3"] .descent-mark { border-color: #bb6f4a; }
-.descent-stop[data-depth="4"] .descent-mark { border-color: var(--ember); }
-
-.descent-name {
+.zone-name {
   font-family: var(--font-display);
-  font-size: var(--text-2xl);
-  font-weight: 400;
-  line-height: 1.15;
-  color: var(--bone-dim);
-  transition: color var(--dur-1);
-}
-
-.descent-sub {
-  font-size: var(--text-sm);
-  line-height: 1.45;
-  color: var(--bone-faint);
-  font-variant-numeric: var(--figures);
-}
-
-.descent-tag {
-  min-height: 18px;
-  margin-top: 4px;
-  font-size: var(--caps-sm);
-  font-weight: 500;
-  font-variant-caps: all-small-caps;
-  letter-spacing: var(--tracking-caps);
-  color: var(--ember-hi);
-}
-
-@media (hover: hover) {
-  .descent-stop:hover .descent-name { color: var(--bone); }
-  .descent-stop:hover .descent-mark { border-color: var(--bone); }
-}
-
-.descent-stop.is-active .descent-name { color: var(--bone); }
-.descent-stop.is-active .descent-mark {
-  border-color: var(--ember);
-  background: var(--ember);
-  box-shadow: 0 0 0 4px var(--ember-soft);
-}
-
-/* ---- the quarry: stood in a line on one floor ---- */
-
-.lineup {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.45fr);
-  align-items: start;
-}
-
-.specimen {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  width: 100%;
-  padding-right: var(--sp-5);
-  text-align: left;
-}
-
-/* Every drawing stands in a box of the same height with its feet on the box's floor,
-   and the floors meet: one line under all four. */
-.specimen .foe-art {
-  display: flex;
-  align-items: flex-end;
-  width: calc(100% + var(--sp-5));
-  height: 176px;
-  margin-bottom: 12px;
-  border-bottom: 1px solid var(--line);
-}
-
-.specimen .m-art { width: 124px; height: 124px; opacity: .88; transition: opacity var(--dur-1), transform var(--dur-2) var(--ease); }
-.specimen.is-sovereign .m-art { width: 176px; height: 176px; }
-.specimen.is-sovereign .foe-art { width: 100%; }
-.specimen.is-sovereign { padding-right: 0; }
-
-.specimen-kind {
-  font-size: var(--caps-sm);
-  font-weight: 500;
-  font-variant-caps: all-small-caps;
-  letter-spacing: var(--tracking-caps);
-  color: var(--bone-faint);
-}
-
-.specimen.is-sovereign .specimen-kind { color: var(--veil-hi); }
-
-.specimen-name {
-  font-family: var(--font-display);
-  font-size: var(--text-xl);
-  font-weight: 400;
-  line-height: 1.2;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.25;
   color: var(--bone);
 }
 
-.specimen.is-sovereign .specimen-name { font-size: var(--text-2xl); }
-
-.specimen-sub {
+.zone-sub {
   margin-top: 2px;
   font-size: var(--text-sm);
-  line-height: 1.45;
   color: var(--bone-faint);
-  font-variant-numeric: var(--figures);
+  font-variant-numeric: tabular-nums;
 }
 
 @media (hover: hover) {
-  .specimen:hover .m-art { opacity: 1; transform: translateY(-3px); }
+  .zone-card:hover { border-color: var(--line-strong); }
 }
 
-/* ---- a foe as an entry (the Collection on the Character page) ---- */
-
-.foe-art {
-  position: relative;
-  display: grid;
-  place-items: center;
+.zone-card.is-active {
+  border-color: var(--ember-edge);
+  background: linear-gradient(90deg, var(--ember-soft), transparent 65%), var(--surface-1);
 }
 
+.zone-card.is-peaked .meter-top b { color: var(--ember-hi); }
+
+/* Quarry: three foes and the Sovereign across the bottom. */
 .foe-tile {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 14px;
   width: 100%;
-  padding: 12px 0;
-  border-top: 1px solid var(--line-soft);
+  padding: 14px 16px 14px 14px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(255, 255, 255, .016), transparent), var(--surface-1);
+  box-shadow: var(--shadow-card);
   text-align: left;
-  transition: background var(--dur-1);
+  transition: border-color var(--dur-1);
 }
 
 @media (hover: hover) {
-  button.foe-tile:hover { background: var(--wash); }
+  .foe-tile:hover { border-color: var(--line-strong); }
 }
 
 .foe-tile .foe-art { width: 52px; height: 52px; }
-.foe-tile .foe-art .m-art { width: 100%; height: 100%; }
 
 .foe-tile-main { min-width: 0; display: flex; flex-direction: column; }
 
 .foe-tile-name {
   font-family: var(--font-display);
-  font-size: var(--text-xl);
-  font-weight: 400;
-  line-height: 1.2;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.25;
   color: var(--bone);
 }
 
 .foe-tile-sub {
-  margin-top: 1px;
+  margin-top: 2px;
   font-size: var(--text-sm);
   color: var(--bone-faint);
-  font-variant-numeric: var(--figures);
+  font-variant-numeric: tabular-nums;
 }
 
 .foe-tile.is-sovereign {
   grid-column: 1 / -1;
   grid-template-columns: auto minmax(0, 1fr) auto;
+  border-color: rgba(184, 139, 219, .32);
+  background:
+    radial-gradient(420px 160px at 0% 50%, rgba(184, 139, 219, .12), transparent 70%),
+    var(--surface-1);
 }
 
-.foe-tile.is-sovereign .foe-art { width: 64px; height: 64px; }
-.foe-tile.is-sovereign .foe-tile-name { font-size: var(--text-2xl); }
-
-/* ---- the field on narrow screens: foes above, the state between, you below ---- */
-
-@media (max-width: 899px) {
-  .scene-stage { grid-template-columns: minmax(170px, 28%) minmax(120px, 1fr) minmax(0, 50%); column-gap: var(--sp-4); }
-  .scene-status { font-size: var(--text-3xl); }
-  .fighter-foe .fighter-art { width: min(clamp(84px, 11vw, 118px), calc(var(--figure-h) * .4)); }
-  .fighter-foe.is-target .fighter-art { width: min(clamp(130px, 18vw, 176px), calc(var(--figure-h) * .62)); }
+.foe-tile.is-sovereign .foe-art {
+  width: 64px;
+  height: 64px;
+  background: radial-gradient(circle at 50% 40%, #35243f, #140e18 75%);
+  box-shadow: inset 0 0 0 1px rgba(184, 139, 219, .45);
 }
+
+.foe-tile.is-sovereign .foe-tile-name { font-size: 20px; }
 
 @media (max-width: 767px) {
-  .scene {
-    min-height: 0;
-    padding-top: var(--sp-5);
-  }
-
-  .scene-head { gap: var(--sp-4); }
-  .scene-where { flex-basis: 100%; }
-  .scene-title { font-size: var(--text-3xl); }
-  .scene-rank { flex: 1 1 100%; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px var(--sp-4); min-width: 0; padding-top: 0; }
-  .scene-lv { font-size: var(--text-xl); }
-  .scene-rank > .bar { flex: 1 1 120px; }
-  .scene-xp-meta { flex: 1 1 100%; }
-  .scene-tags { flex: 1 1 100%; justify-content: flex-start; }
-
-  .scene-sky {
-    background:
-      radial-gradient(90% 30% at 50% 30%, var(--scene-glow), transparent 72%),
-      linear-gradient(180deg, transparent 0 33.9%, #0a0908 34%, #060504 100%),
-      linear-gradient(180deg, #0a0908 0%, #17130f 34%);
-  }
-
-  .scene::before {
-    background:
-      radial-gradient(60% 14% at 50% 40%, var(--scene-heat), transparent 72%),
-      radial-gradient(40% 10% at 22% 84%, rgba(231, 224, 210, .07), transparent 72%);
-  }
-
-  .scene-sky::before { bottom: 66%; height: 12%; }
-  .scene-sky::after { top: 18%; height: 30%; }
-
-  .scene-stage,
-  .scene.is-party .scene-stage {
+  .arena {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      "foes"
-      "state"
-      "side";
-    row-gap: var(--sp-4);
-    padding: var(--sp-4) 0 var(--sp-5);
+    gap: var(--sp-3);
+    padding: var(--sp-3);
   }
 
-  .scene-foes { justify-content: center; min-height: 190px; gap: 6px; }
-  .fighter-foe .fighter-art { width: min(24vw, 104px); }
-  .fighter-foe.is-target .fighter-art { width: min(36vw, 160px); }
-  .fighter-foe.is-sovereign .fighter-art { width: min(58vw, 250px); }
-  .fighter-foe .fighter-plate { min-height: 0; padding-top: 8px; gap: 3px; }
-  .fighter-foe .fighter-name,
-  .fighter-foe.is-target .fighter-name { font-size: var(--text-lg); }
-  .fighter-foe.is-sovereign .fighter-name { font-size: var(--text-2xl); }
-  .fighter-foe:not(.is-target) .vital { flex-direction: column; gap: 3px; }
-  .fighter-foe:not(.is-target) .vital-line { width: 100%; flex: 0 0 auto; }
-  .fighter-foe:not(.is-target) .vital-text { font-size: var(--text-xs); }
+  .arena-you {
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr);
+    grid-template-areas:
+      "art name"
+      "art hp"
+      "art veil"
+      "art note";
+    column-gap: var(--sp-3);
+    row-gap: 6px;
+    align-items: center;
+  }
 
-  .scene-empty { align-items: center; max-width: none; padding: var(--sp-6) 0; text-align: center; margin-inline: auto; }
+  .arena-portrait { grid-area: art; width: 72px; align-self: start; border-radius: 12px; }
+  .arena-name { grid-area: name; text-align: left; font-size: var(--text-lg); }
+  .arena-you .hpbar { grid-area: hp; max-width: none; }
+  /* Under your own bars, in the same column: a name that lands under the portrait reads as a
+     label for it. A mate's bar is not your bar, so it keeps out of the areas this grid names. */
+  .arena-band { grid-column: 2; max-width: none; }
+  .arena-band .hpbar { grid-area: auto; }
+  .band-mate { max-width: 104px; }
+  .arena.is-party .arena-foes { grid-template-columns: minmax(0, 1fr); }
+  .arena-you .veilbar { grid-area: veil; max-width: none; }
+  .arena-you .veil-note { grid-area: note; text-align: left; }
+  .arena-you .fx-layer { right: auto; width: 72px; }
+  .arena-you .float { top: 22px; font-size: 18px; }
 
-  .scene-state,
-  .scene.is-party .scene-state {
-    display: flex;
+  .arena-mid {
+    flex-direction: row;
     flex-wrap: wrap;
     align-items: baseline;
-    justify-content: center;
-    gap: 2px var(--sp-4);
-    padding: var(--sp-2) 0;
-    text-align: center;
+    justify-content: space-between;
+    max-width: none;
+    padding: 8px 2px;
+    border-top: 1px solid var(--line-soft);
+    border-bottom: 1px solid var(--line-soft);
   }
 
-  .scene-status,
-  .scene.is-party .scene-status { font-size: var(--text-3xl); }
-  .scene-timer { margin-top: 0; font-size: var(--text-md); }
+  .arena-vs { display: none; }
+  .arena-status { margin: 0; }
+  .arena-foes { min-height: 0; }
+  .foe-empty { min-height: 92px; }
+  .foe-card { grid-template-columns: 48px minmax(0, 1fr); gap: 10px; padding: 7px 10px 7px 7px; }
+  .foe-art { width: 48px; height: 48px; }
+  .foe-card .fx-layer { left: 7px; width: 48px; }
+  .foe-name { font-size: 14px; }
+  .foe-card .hpbar { height: 14px; }
+  .float { font-size: 18px; }
+  .float.crit, .float.veil, .float.strike, .float.ambush, .float.empowered { font-size: 22px; }
 
-  /* You: the figure at the left, your name and lines beside it rather than under it. */
-  .scene-side { justify-content: flex-start; }
-  .fighter-you { flex-direction: row; align-items: flex-end; max-width: none; gap: var(--sp-2); }
-  .fighter-you .fighter-art { height: 200px; margin-left: -18px; }
-  .fighter-you .fighter-plate { flex: 1 1 auto; min-height: 0; align-items: stretch; padding: 0 0 18px; text-align: left; }
-  .fighter-you .fighter-name { justify-content: flex-start; }
-  .fighter-you .vital { max-width: none; }
-  .fighter-you .fx-layer { top: 20%; left: 56px; right: auto; width: 96px; }
+  .hunt-foot > .kpis { flex-basis: 100%; }
+  .hunt-actions { width: 100%; margin-left: 0; justify-content: space-between; }
 
-  /* A party is four at most: the whole band stands in one rank, however narrow the ground. */
-  .scene-band { justify-content: flex-start; flex-wrap: nowrap; gap: var(--sp-2); }
-  .band-mate { flex: 1 1 0; min-width: 0; max-width: 96px; }
-  .band-mate .fighter-name { font-size: 16px; }
-
-  .scene.is-party .scene-foes { gap: var(--sp-3) 10px; }
-  .scene.is-party .fighter-foe { width: min(28vw, 112px); }
-  .scene.is-party .fighter-foe .fighter-art,
-  .scene.is-party .fighter-foe.is-target .fighter-art { width: min(24vw, 96px); }
-  .scene.is-party .fighter-foe .fighter-name,
-  .scene.is-party .fighter-foe.is-target .fighter-name { font-size: 16px; }
-
-  .float { font-size: 22px; }
-  .float.crit, .float.veil, .float.strike, .float.ambush, .float.empowered, .float.ambushed { font-size: 28px; }
-
-  .scene-foot { gap: var(--sp-4); }
-  .scene-actions { width: 100%; margin-left: 0; justify-content: space-between; }
-
-  /* The road turns on its end: a line down the margin, a stop a row. */
-  .descent { grid-template-columns: minmax(0, 1fr); row-gap: var(--sp-4); }
-  .descent::before { left: 7px; right: auto; top: 8px; bottom: 28px; width: 1px; height: auto; background: linear-gradient(180deg, var(--line-strong), rgba(207, 95, 46, .7)); }
-  .descent-stop { display: grid; grid-template-columns: 15px minmax(0, 1fr); column-gap: var(--sp-4); padding-right: 0; }
-  .descent-mark { grid-row: 1 / span 4; margin: 8px 0 0; }
-  .descent-stop > :not(.descent-mark) { grid-column: 2; }
-  .descent-tag { min-height: 0; }
-
-  /* Two by two: the Sovereign takes the fourth place rather than a row of its own. */
-  .lineup { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: var(--sp-6); }
-  .specimen .foe-art { height: 132px; }
-  .specimen:nth-child(2n) .foe-art { width: 100%; }
-  .specimen:nth-child(2n) { padding-right: 0; }
-  .specimen .m-art { width: 96px; height: 96px; }
-  .specimen.is-sovereign .m-art { width: 124px; height: 124px; }
-
+  .zone-card { padding: 14px; gap: 10px 12px; }
   .foe-tile.is-sovereign { grid-template-columns: auto minmax(0, 1fr); }
   .foe-tile.is-sovereign > .tag { grid-column: 2; justify-self: start; }
 }
@@ -1595,45 +1286,55 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
 .atlas {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--page-gap) var(--sp-12);
+  gap: var(--page-gap);
   align-items: start;
 }
 
 @media (min-width: 768px) {
-  .atlas { grid-template-columns: minmax(250px, 320px) minmax(0, 1fr); }
+  .atlas { grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); }
   .atlas-detail { position: sticky; top: calc(var(--topbar-h) + var(--hpline-h) + 24px); }
 }
 
-.atlas-regions > .card-head { margin-bottom: var(--sp-3); }
+.atlas-regions { padding: 8px; }
+.atlas-regions > .card-head { padding: 8px 8px 0; margin-bottom: 8px; }
 
-/* The tier is a numeral inked in the margin, not a tile. */
 .region-tier {
   display: grid;
   place-items: center;
-  width: 26px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--line);
   font-family: var(--font-display);
-  font-size: var(--text-2xl);
-  font-weight: 500;
-  line-height: 1;
-  color: var(--bone-faint);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--bone-dim);
+  font-variant-numeric: tabular-nums;
 }
 
-.pick-row.is-current .region-tier { color: var(--bone); }
-.pick-row.is-locked .region-tier { color: var(--bone-ghost); }
+.pick-row.is-current .region-tier {
+  background: var(--violet-soft);
+  box-shadow: inset 0 0 0 1px var(--violet-edge);
+  color: var(--violet-hi);
+}
+
+.pick-row.is-locked .region-tier { color: var(--bone-faint); background: transparent; box-shadow: inset 0 0 0 1px var(--line-soft); }
 
 .region-name {
   display: block;
   font-family: var(--font-display);
-  font-size: var(--text-xl);
-  font-weight: 400;
-  line-height: 1.2;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.25;
   color: var(--bone);
 }
 
-.pick-row.is-locked .region-name { color: var(--bone-faint); }
+.pick-row.is-locked .region-name { color: var(--bone-dim); }
 
 .region-sub {
   display: block;
+  margin-top: 1px;
   font-size: var(--text-xs);
   color: var(--bone-faint);
 }
@@ -1643,88 +1344,86 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
   align-items: center;
   gap: 5px;
   font-size: var(--text-sm);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--gold-hi);
-  font-variant-numeric: var(--figures);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
 .region-toll .ico { width: 14px; height: 14px; color: var(--bone-faint); }
 .region-toll.is-short { color: var(--bone-faint); }
 
-.atlas-detail { overflow: visible; border-top: 0; padding-top: 0; }
+.atlas-detail { overflow: hidden; }
 
-/* A region's vista is a scene: no frame, faded at its sides. */
 .atlas-vista {
   position: relative;
-  height: 170px;
+  height: 148px;
   background:
-    radial-gradient(60% 80% at 66% 84%, rgba(176, 138, 91, .22), transparent 72%),
-    radial-gradient(circle at 78% 34%, rgba(231, 224, 210, .16) 0, rgba(231, 224, 210, .1) 9px, rgba(231, 224, 210, .035) 15px, transparent 110px),
-    linear-gradient(180deg, #0a0908, #1d1812);
+    radial-gradient(560px 180px at 70% 0%, rgba(157, 130, 224, .22), transparent 70%),
+    radial-gradient(300px 120px at 20% 100%, rgba(216, 116, 63, .12), transparent 70%),
+    linear-gradient(180deg, #1d1628, #110d17);
+  border-bottom: 1px solid var(--line-soft);
   overflow: hidden;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent), linear-gradient(180deg, transparent, #000 30%);
-  -webkit-mask-composite: source-in;
-  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent), linear-gradient(180deg, transparent, #000 30%);
-  mask-composite: intersect;
 }
 
 .atlas-vista svg { position: absolute; inset: auto 0 0 0; width: 100%; height: 70%; }
-.atlas-vista .v-far { fill: #211c16; }
-.atlas-vista .v-mid { fill: #15120e; }
-.atlas-vista .v-near { fill: #0b0a08; }
+.atlas-vista .v-far { fill: #2b2239; }
+.atlas-vista .v-mid { fill: #1f1829; }
+.atlas-vista .v-near { fill: #15101b; }
 
 .atlas-vista-tier {
   position: absolute;
-  left: 12%;
-  top: 34%;
+  left: var(--card-pad);
+  top: var(--card-pad);
 }
 
-.atlas-body { padding: var(--sp-4) 0 0; }
+.atlas-body { padding: var(--sp-5) var(--card-pad) var(--card-pad); }
 
 .atlas-title {
   font-family: var(--font-display);
-  font-size: var(--text-4xl);
-  font-weight: 400;
-  line-height: 1;
+  font-size: var(--text-3xl);
+  font-weight: 600;
+  line-height: 1.15;
   color: var(--bone);
 }
 
 .atlas-note {
-  margin-top: 10px;
-  max-width: 62ch;
-  font-family: var(--font-display);
-  font-style: italic;
-  font-size: var(--text-lg);
-  line-height: 1.5;
+  margin-top: 6px;
+  font-size: var(--text-md);
+  line-height: var(--lh-loose);
   color: var(--bone-dim);
 }
 
 .atlas-facts {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  column-gap: var(--sp-6);
-  margin-top: var(--sp-6);
+  gap: 1px;
+  margin-top: var(--sp-5);
+  border-radius: var(--r-md);
+  background: var(--line-soft);
+  box-shadow: 0 0 0 1px var(--line-soft);
+  overflow: hidden;
 }
 
 .atlas-fact {
   min-width: 0;
-  padding: 10px 0 12px;
-  border-top: 1px solid var(--line-soft);
+  padding: 12px 14px;
+  background: var(--surface-1);
 }
 
 .atlas-fact .v {
-  font-size: var(--text-xl);
-  font-weight: 500;
+  margin-top: 4px;
+  font-size: var(--text-lg);
+  font-weight: 600;
   color: var(--bone);
-  font-variant-numeric: var(--figures);
+  font-variant-numeric: tabular-nums;
 }
 
 .atlas-fact .v.t-gold { color: var(--gold-hi); }
 .atlas-fact .v.t-good { color: var(--good); }
 .atlas-fact .v.t-bad { color: var(--bad); }
 
-.atlas-block { margin-top: var(--sp-6); }
+.atlas-block { margin-top: var(--sp-5); }
 .atlas-block > .eyebrow { margin-bottom: 8px; }
 
 .atlas-actions {
@@ -1733,13 +1432,15 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-2) var(--sp-3);
-  margin-top: var(--sp-6);
-  padding-top: var(--sp-4);
+  padding: var(--sp-3) var(--card-pad);
   border-top: 1px solid var(--line-soft);
+  background: rgba(0, 0, 0, .12);
 }
 
 @media (max-width: 599px) {
-  .atlas-fact .v { font-size: var(--text-lg); }
+  .atlas-title { font-size: 24px; }
+  .atlas-fact { padding: 10px; }
+  .atlas-fact .v { font-size: var(--text-md); }
   .atlas-actions .btn { flex: 1 1 auto; }
 }
 
@@ -1747,17 +1448,22 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
 .atlas-group {
   display: flex;
   flex-direction: column;
+  gap: 2px;
 }
 
-.atlas-stratum { padding: var(--sp-5) 0 var(--sp-2); }
+.atlas-stratum { padding: var(--sp-3) 12px var(--sp-1); }
 .atlas-group:first-child > .atlas-stratum { padding-top: 0; }
 
 /* A region past a road not yet opened: listed, plainly out of reach. */
 .pick-row.is-far .lr-main,
-.pick-row.is-far .region-toll { opacity: .5; }
+.pick-row.is-far .region-toll { opacity: .55; }
 
 /* A yield no trade of yours is high enough to work yet. */
-.atlas-yields .chip.is-locked { --chip-fg: var(--bone-ghost); font-style: italic; }
+.atlas-yields .chip.is-locked {
+  --chip-fg: var(--bone-faint);
+  --chip-bg: transparent;
+  border-style: dashed;
+}
 
 /* Threat in each of a region's four zones, once you have hunted there. */
 .atlas-threat { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -1768,26 +1474,30 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
 
 /* ================= 7. SHOP AND BOUNTIES ================= */
 
-/* The world clock: a time, written. */
 .clock {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: var(--text-xl);
-  font-weight: 500;
+  height: 36px;
+  padding: 0 14px 0 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line);
+  background: var(--surface-1);
+  font-size: var(--text-md);
+  font-weight: 600;
   color: var(--bone);
-  font-variant-numeric: var(--figures);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.clock .ico { width: 17px; height: 17px; color: var(--bone-faint); }
+.clock .ico { width: 16px; height: 16px; color: var(--bone-faint); }
 
-.qty-sm { height: max(var(--tap), 32px); }
-.qty-sm .qty-btn { width: max(var(--tap), 30px); }
+.qty-sm { height: max(var(--tap), 34px); border-radius: 8px; }
+.qty-sm .qty-btn { width: max(var(--tap), 32px); }
 .qty-sm .qty-input { width: 52px; font-size: var(--text-md); }
 
 .shop-row.is-dealt .lr-title,
-.shop-row.is-dealt .art { opacity: .45; }
+.shop-row.is-dealt .art { opacity: .55; }
 
 /* A Bonesetter row's stepper and Buy button stay together. The button's floor lines the steppers up. */
 .shop-buy {
@@ -1816,9 +1526,9 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
 
 .bounty-title {
   font-family: var(--font-display);
-  font-size: var(--text-3xl);
-  font-weight: 400;
-  line-height: 1.05;
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  line-height: 1.2;
   color: var(--bone);
 }
 
@@ -1842,6 +1552,7 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
 @media (max-width: 599px) {
   .bounty { grid-template-columns: minmax(0, 1fr); }
   .bounty > .art { display: none; }
+  .bounty-title { font-size: 20px; }
   .bounty-foot .btn { flex: 1 1 100%; }
 }
 
@@ -1850,17 +1561,18 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
 .req-slots {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
 }
 
-/* A tally, not a row of lozenges. */
 .req-pip {
-  width: 3px;
-  height: 16px;
-  background: var(--line-strong);
+  width: 26px;
+  height: 8px;
+  border-radius: var(--r-pill);
+  background: var(--surface-3);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
 }
 
-.req-pip.is-used { background: var(--tan-hi); }
+.req-pip.is-used { background: var(--violet); box-shadow: none; }
 
 .agent-card {
   display: flex;
@@ -1877,7 +1589,7 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
 .agent-name {
   font-family: var(--font-display);
   font-size: var(--text-xl);
-  font-weight: 400;
+  font-weight: 600;
   line-height: 1.2;
   color: var(--bone);
 }
@@ -1897,7 +1609,7 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
 .agent-deploy .select { flex: 1 1 auto; }
 
 .agent-card.is-out .agent-name,
-.agent-card.is-out .avatar { opacity: .55; }
+.agent-card.is-out .avatar { opacity: .6; }
 
 .comp-card {
   display: flex;
@@ -1914,7 +1626,7 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
 .comp-name {
   font-family: var(--font-display);
   font-size: var(--text-xl);
-  font-weight: 400;
+  font-weight: 600;
   line-height: 1.2;
   color: var(--bone);
 }
@@ -1923,7 +1635,7 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
   margin-top: 2px;
   font-size: var(--text-sm);
   color: var(--bone-faint);
-  font-variant-numeric: var(--figures);
+  font-variant-numeric: tabular-nums;
 }
 
 .comp-blurb {
@@ -1940,8 +1652,8 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
   gap: 4px 12px;
 }
 
-.comp-trait .t-name { font-size: var(--text-md); font-weight: 500; color: var(--bone); }
-.comp-trait .t-val { font-size: var(--text-sm); font-weight: 500; color: var(--good); }
+.comp-trait .t-name { font-size: var(--text-md); font-weight: 600; color: var(--bone); }
+.comp-trait .t-val { font-size: var(--text-sm); font-weight: 600; color: var(--good); }
 
 .comp-unlocks {
   display: flex;
@@ -1959,18 +1671,18 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
 }
 
 .comp-unlocks .g {
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   display: grid;
   place-items: center;
   border-radius: 50%;
   border: 1px dashed var(--line-strong);
 }
 
-.comp-unlocks .g .ico { width: 9px; height: 9px; stroke-width: 2.4; }
-.comp-unlocks .req { font-size: var(--text-xs); font-variant-numeric: var(--figures); }
+.comp-unlocks .g .ico { width: 11px; height: 11px; stroke-width: 2.2; }
+.comp-unlocks .req { font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
 .comp-unlocks li.is-open { color: var(--bone-dim); }
-.comp-unlocks li.is-open .g { color: var(--on-accent); border: 0; background: var(--bone-dim); }
+.comp-unlocks li.is-open .g { color: var(--on-accent); border: 0; background: var(--violet); }
 
 .comp-actions {
   display: flex;
@@ -1981,15 +1693,21 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
 
 .comp-actions .btn { flex: 1 1 auto; }
 
-.comp-card.is-active { border-top-color: var(--tan); }
+.comp-card.is-active {
+  border-color: var(--violet-edge);
+  background: linear-gradient(180deg, rgba(157, 130, 224, .09), transparent 180px), var(--surface-1);
+}
 
 /* ================= 9. SKY ================= */
 
-/* The week as seven ruled columns. Today is inked; the rest is pencil. */
 .forecast {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  column-gap: var(--sp-4);
+  gap: 1px;
+  border-radius: var(--r-md);
+  background: var(--line-soft);
+  box-shadow: 0 0 0 1px var(--line-soft);
+  overflow: hidden;
 }
 
 .fc-day {
@@ -1998,31 +1716,32 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 12px 0 14px;
-  border-top: 1px solid var(--line-soft);
+  padding: 14px 12px 16px;
+  background: var(--surface-1);
 }
 
-.fc-day.is-today { border-top: 2px solid var(--bone); padding-top: 11px; }
+.fc-day.is-today {
+  background: linear-gradient(180deg, rgba(157, 130, 224, .14), transparent 70%), var(--surface-1);
+  box-shadow: inset 0 2px 0 var(--violet);
+}
 
-.fc-day.is-past > * { opacity: .4; }
+.fc-day.is-past > * { opacity: .45; }
 
-.fc-when { display: flex; flex-direction: column; gap: 0; }
-.fc-day.is-today .fc-when .eyebrow { color: var(--bone); }
+.fc-when { display: flex; flex-direction: column; gap: 2px; }
+.fc-day.is-today .fc-when .eyebrow { color: var(--violet-hi); }
 
 .fc-date {
   font-size: var(--text-xs);
   color: var(--bone-faint);
-  font-variant-numeric: var(--figures);
 }
 
-.fc-ico { color: var(--bone-faint); }
-.fc-day.is-today .fc-ico { color: var(--bone); }
+.fc-ico { color: var(--gold); }
 .fc-ico .ico { width: 26px; height: 26px; }
 
 .fc-name {
-  font-family: var(--font-display);
-  font-size: var(--text-lg);
-  line-height: 1.2;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.3;
   color: var(--bone);
 }
 
@@ -2031,7 +1750,8 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
   flex-direction: column;
   gap: 2px;
   font-size: var(--text-xs);
-  font-variant-numeric: var(--figures);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
 .fc-mods .up { color: var(--good); }
@@ -2046,9 +1766,9 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
     grid-template-columns: 76px 30px minmax(0, 1fr) auto;
     align-items: center;
     gap: 4px 12px;
-    padding: 12px 0;
+    padding: 12px 14px;
   }
-  .fc-day.is-today { border-top: 1px solid var(--line-soft); padding-top: 12px; box-shadow: inset 2px 0 0 var(--bone); padding-left: 12px; }
+  .fc-day.is-today { box-shadow: inset 3px 0 0 var(--violet); }
   .fc-mods { flex-direction: row; flex-wrap: wrap; gap: 0 10px; }
   .fc-body { min-width: 0; }
   .fc-day .tag { margin-top: 0; align-self: center; }
@@ -2061,16 +1781,16 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
   grid-template-columns: 76px 30px minmax(0, 1fr) auto;
   align-items: center;
   gap: 4px 12px;
-  padding: 12px 0;
+  padding: 12px 14px;
 }
-.forecast.forecast-list .fc-day.is-today { border-top: 1px solid var(--line-soft); padding-top: 12px; box-shadow: inset 2px 0 0 var(--bone); padding-left: 12px; }
+.forecast.forecast-list .fc-day.is-today { box-shadow: inset 3px 0 0 var(--violet); }
 .forecast.forecast-list .fc-mods { flex-direction: row; flex-wrap: wrap; gap: 0 10px; }
 .forecast.forecast-list .fc-body { min-width: 0; }
 .forecast.forecast-list .fc-day .tag { margin-top: 0; align-self: center; }
 
 /* Skills grouped the same way everywhere: each artisan under the trade it works from. */
-.skills-group + .skills-group { margin-top: var(--sp-7); }
-.skills-group > .eyebrow { margin-bottom: 0; padding-bottom: var(--sp-2); border-bottom: 1px solid var(--line); }
+.skills-group + .skills-group { margin-top: var(--sp-5); }
+.skills-group > .eyebrow { margin-bottom: var(--sp-2); }
 
 /* ================= 10. MARKET ================= */
 
@@ -2091,20 +1811,20 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
   grid-template-columns: minmax(0, 2.4fr) minmax(64px, .6fr) minmax(90px, .8fr) minmax(0, 1fr) 96px;
   align-items: center;
   gap: var(--sp-4);
-  padding: 11px 0;
+  padding: 12px var(--card-pad);
 }
 
 .listing-head {
   padding-top: 0;
-  padding-bottom: 8px;
+  padding-bottom: 10px;
   border-bottom: 1px solid var(--line);
 }
 
 .listing-head > * {
-  font-size: var(--caps);
-  font-weight: 500;
-  font-variant-caps: all-small-caps;
+  font-size: var(--text-2xs);
+  font-weight: 600;
   letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
   color: var(--bone-faint);
   white-space: nowrap;
 }
@@ -2129,25 +1849,24 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
   min-width: 0;
   font-size: var(--text-md);
   color: var(--bone-dim);
-  font-variant-numeric: var(--figures);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.listing-price { font-weight: 500; color: var(--gold-hi); }
+.listing-price { font-weight: 600; color: var(--gold-hi); }
 /* The market names nobody, so the column that held the seller holds the pool's price
    bands instead ("40 at 12g · 15 at 13g"). .listing-seller stays for the kit's sample. */
 .listing-seller,
 .listing-depth { display: flex; align-items: center; gap: 6px; }
-.listing-depth { font-size: var(--text-sm); color: var(--bone-faint); }
+.listing-depth { font-size: var(--text-sm); }
 .listing-buy { display: flex; justify-content: flex-end; }
 .listing-l { display: none; }
-/* Your own listing: marked in the margin, as your line on a board is. */
+/* Your own listing: a tint and a thin left accent, in place of the old "Yours" pill. */
 .listing.is-mine {
-  background: var(--wash);
-  box-shadow: inset 2px 0 0 var(--bone);
-  padding-left: 12px;
+  background: linear-gradient(90deg, rgba(157, 130, 224, .07), transparent 50%);
+  box-shadow: inset 2px 0 0 var(--violet-hi);
 }
 
 .listing-head .num,
@@ -2162,7 +1881,7 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
       "item item price"
       "qty seller buy";
     gap: 10px var(--sp-3);
-    padding: 14px 0;
+    padding: 14px var(--card-pad);
   }
   .listing-item { grid-area: item; }
   .listing-price { grid-area: price; align-self: start; font-size: var(--text-lg); }
@@ -2174,17 +1893,20 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
     display: inline;
     margin-right: 4px;
     font-size: var(--text-xs);
+    font-weight: 500;
     color: var(--bone-faint);
   }
   .listing-price .listing-l { display: none; }
 }
 
 .fee {
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  padding: 2px 14px;
+  border-radius: var(--r-md);
+  background: var(--surface-sunk);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
 }
 
-.fee .cost-row.is-total .v { color: var(--gold-hi); font-size: var(--text-xl); }
+.fee .cost-row.is-total .v { color: var(--gold-hi); font-size: var(--text-lg); }
 
 /* ================= 11. PARTY ================= */
 
@@ -2198,19 +1920,20 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
 .member-name {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 10px;
-  font-family: var(--font-display);
-  font-size: var(--text-xl);
+  align-items: center;
+  gap: 4px 8px;
+  font-size: var(--text-md);
+  font-weight: 600;
   color: var(--bone);
 }
 
-.member-name .ico { width: 14px; height: 14px; color: var(--gold); align-self: center; }
+.member-name .ico { width: 14px; height: 14px; color: var(--gold); }
 
 .member-lv {
+  margin-top: 1px;
   font-size: var(--text-xs);
   color: var(--bone-faint);
-  font-variant-numeric: var(--figures);
+  font-variant-numeric: tabular-nums;
 }
 
 .member-doing {
@@ -2223,9 +1946,9 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
   color: var(--bone-dim);
 }
 
-.member-doing > .ico { width: 16px; height: 16px; margin-top: 2px; color: var(--bone-faint); }
+.member-doing > .ico { width: 16px; height: 16px; margin-top: 1px; color: var(--bone-faint); }
 .member-doing[data-tone="ember"] > .ico { color: var(--ember-hi); }
-.member-doing[data-tone="tan"] > .ico { color: var(--tan-hi); }
+.member-doing[data-tone="violet"] > .ico { color: var(--violet-hi); }
 
 .member-foot {
   grid-column: 1 / -1;
@@ -2238,12 +1961,10 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
   border-top: 1px solid var(--line-soft);
 }
 
-.member.is-offline .avatar { opacity: .5; }
-.member.is-offline .member-name { color: var(--bone-faint); }
-.member.is-me { border-top-color: var(--bone-dim); }
+.member.is-offline .avatar { opacity: .6; }
+.member.is-offline .member-name { color: var(--bone-dim); }
+.member.is-me { border-color: var(--violet-edge); }
 
-/* Talk is a log, not a row of balloons: who, when, what. Yours is set to the right
-   with a rule in its margin. */
 .chat {
   display: flex;
   flex-direction: column;
@@ -2255,7 +1976,7 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
   flex-direction: column;
   gap: var(--sp-3);
   height: 380px;
-  padding: var(--sp-4) 0;
+  padding: var(--sp-4) var(--card-pad);
   overflow-y: auto;
   overscroll-behavior: contain;
   border-top: 1px solid var(--line-soft);
@@ -2264,8 +1985,8 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
 .msg {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  gap: 10px;
+  align-items: end;
+  gap: 8px;
   max-width: min(86%, 560px);
   align-self: flex-start;
 }
@@ -2274,14 +1995,18 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
   display: flex;
   align-items: baseline;
   gap: 8px;
+  margin: 0 0 3px 2px;
   font-size: var(--text-xs);
-  color: var(--bone-ghost);
-  font-variant-numeric: var(--figures);
+  color: var(--bone-faint);
 }
 
-.msg-meta b { font-weight: 500; color: var(--bone-dim); }
+.msg-meta b { font-weight: 600; color: var(--bone-dim); }
 
 .msg-text {
+  padding: 8px 12px;
+  border-radius: 4px 14px 14px 14px;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
   font-size: var(--text-md);
   line-height: 1.45;
   color: var(--bone);
@@ -2291,18 +2016,20 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
 .msg.is-own {
   align-self: flex-end;
   grid-template-columns: minmax(0, 1fr);
-  padding-right: 12px;
-  border-right: 2px solid var(--line-strong);
-  text-align: right;
 }
 
-.msg.is-own .msg-meta { justify-content: flex-end; }
+.msg.is-own .msg-meta { justify-content: flex-end; margin: 0 2px 3px 0; }
+
+.msg.is-own .msg-text {
+  border-radius: 14px 4px 14px 14px;
+  background: linear-gradient(180deg, rgba(157, 130, 224, .22), rgba(157, 130, 224, .14));
+  box-shadow: inset 0 0 0 1px var(--violet-edge);
+}
 
 .msg-note {
   align-self: center;
   padding: 2px 10px;
   font-size: var(--text-xs);
-  font-style: italic;
   color: var(--bone-faint);
   text-align: center;
 }
@@ -2311,8 +2038,9 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  padding: var(--sp-3) 0 0;
+  padding: var(--sp-3) var(--card-pad);
   border-top: 1px solid var(--line-soft);
+  background: rgba(0, 0, 0, .12);
 }
 
 .composer .input-wrap { flex: 1 1 auto; }
@@ -2320,7 +2048,7 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
 .composer-count {
   font-size: var(--text-xs);
   color: var(--bone-faint);
-  font-variant-numeric: var(--figures);
+  font-variant-numeric: tabular-nums;
 }
 
 .composer-count.is-near { color: var(--warn); }
@@ -2334,7 +2062,7 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
 
 .hs-skills {
   display: flex;
-  gap: var(--sp-5);
+  gap: 6px;
   overflow-x: auto;
   padding-bottom: 2px;
   scrollbar-width: none;
@@ -2343,20 +2071,23 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
 .hs-skills::-webkit-scrollbar { display: none; }
 .hs-skills .chip { flex-shrink: 0; }
 
-/* A rank is a numeral. The first three are inked in metal. */
 .hs-rank {
-  display: inline-block;
-  min-width: 26px;
-  font-size: var(--text-lg);
-  font-weight: 500;
-  line-height: 1;
-  color: var(--bone-faint);
-  font-variant-numeric: var(--figures);
+  display: inline-grid;
+  place-items: center;
+  min-width: 30px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--wash);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--bone-dim);
+  font-variant-numeric: tabular-nums;
 }
 
-.hs-rank.is-1 { color: var(--gold-hi); }
-.hs-rank.is-2 { color: #d2ccc0; }
-.hs-rank.is-3 { color: #c99a70; }
+.hs-rank.is-1 { background: var(--gold-soft); color: var(--gold-hi); box-shadow: inset 0 0 0 1px var(--gold-edge); }
+.hs-rank.is-2 { background: rgba(201, 195, 207, .1); color: #d6d0dc; box-shadow: inset 0 0 0 1px rgba(201, 195, 207, .3); }
+.hs-rank.is-3 { background: rgba(201, 139, 91, .12); color: #dca27a; box-shadow: inset 0 0 0 1px rgba(201, 139, 91, .35); }
 
 .hs-name {
   display: flex;
@@ -2391,8 +2122,8 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
 }
 
 .set-title {
-  font-family: var(--font-display);
-  font-size: var(--text-xl);
+  font-size: var(--text-md);
+  font-weight: 600;
   color: var(--bone);
 }
 
@@ -2425,8 +2156,10 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
 .account .grow .strong { display: block; }
 
 .danger-zone {
-  padding: 2px 0 2px 16px;
-  border-left: 2px solid var(--ember);
+  padding: 14px;
+  border-radius: var(--r-md);
+  background: linear-gradient(90deg, rgba(216, 116, 63, .08), transparent 70%);
+  box-shadow: inset 0 0 0 1px var(--ember-edge);
 }
 
 .danger-zone .set-title { color: var(--ember-hi); }
@@ -2448,29 +2181,26 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
 
 .class-name {
   font-family: var(--font-display);
-  font-size: var(--text-2xl);
-  font-weight: 400;
+  font-size: var(--text-xl);
+  font-weight: 600;
   color: var(--bone);
 }
 
 .class-blurb {
-  font-family: var(--font-display);
-  font-style: italic;
-  font-size: var(--text-lg);
-  line-height: 1.45;
-  color: var(--bone-dim);
+  font-size: var(--text-sm);
+  line-height: var(--lh-loose);
+  color: var(--bone-faint);
 }
 
-/* What a discipline does with the Veil: the one place this sheet goes violet. */
 .class-veil {
   font-size: var(--text-sm);
   line-height: 1.45;
-  color: var(--veil-hi);
+  color: var(--violet-hi);
 }
 
 /* ================= 14. STORAGE: REORDERING AND THE TWO-HANDED WEAPON ================= */
 
-/* A tray you can drag to reorder (data-reorder): a held finger picks a slot
+/* A grid you can drag to reorder (data-reorder): a held finger picks a slot
    up instead of selecting its name or opening the touch callout. */
 .slot-grid[data-reorder] .slot {
   -webkit-user-select: none;
@@ -2524,11 +2254,12 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
 .skel-w-60 { width: 60%; }
 .skel-w-80 { width: 80%; }
 
-/* Listing and list skeletons use the small glyph square the real rows use. */
+/* Listing and list skeletons use the small art tile the real rows use. */
 .realm-skel .listing-item > .skel-art,
 .realm-skel .list-row > .skel-art {
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   flex-shrink: 0;
 }
 
@@ -2537,16 +2268,17 @@ button.fighter-art:focus-visible { outline-offset: 4px; }
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 0;
+  padding: 8px var(--card-pad);
   border-top: 1px solid var(--line-soft);
   font-size: var(--text-xs);
+  font-weight: 500;
   line-height: 1.4;
   color: var(--bad);
 }
 
 .chat-alert .ico { width: 14px; height: 14px; flex-shrink: 0; }
 
-/* Hiscores: the word tabs on wider screens, a select on phones. */
+/* Hiscores: the chip tabs on wider screens, a select on phones. */
 .hs-pick-select { display: none; }
 
 @media (max-width: 599px) {

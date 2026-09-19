@@ -434,7 +434,7 @@ function partyBody(ctx, page) {
     decline.addEventListener("click", () => answer(false));
     accept.addEventListener("click", () => answer(true));
     return h("div.list-row.stack-sm", { dataset: { invite: String(inv.id) } },
-      h("span.avatar.avatar-sm", { "aria-hidden": "true" }, initial(inv.from_name)),
+      h("span.avatar.avatar-sm", { "data-tone": "ember", "aria-hidden": "true" }, initial(inv.from_name)),
       h("div.lr-main",
         h("div.lr-title", `${display(inv.from_name)} invites you`),
         h("div.lr-sub", inviteInSub(inv, now))),
@@ -695,7 +695,7 @@ function partyBody(ctx, page) {
           h("div.member-name",
             h("span", display(m.username)),
             isLeader ? h("span", { "data-tip": "Party leader", role: "img", "aria-label": "Leader" }, iconEl("crown")) : null,
-            mine ? h("span.tag.tag-bone", "You") : null),
+            mine ? h("span.tag.tag-violet", "You") : null),
           level),
         status,
         foot);
@@ -726,7 +726,7 @@ function partyBody(ctx, page) {
           if (online) {
             const task = mine ? ctx.state.tasks.skilling : null;
             const work = mine ? (task ? workOf({ skill: task.skillId, action: task.actionId }) : null) : workOf(member.activity);
-            if (work) want.push({ tone: "tan", icon: work.icon, text: work.text });
+            if (work) want.push({ tone: "violet", icon: work.icon, text: work.text });
             else if (!hunt) want.push({ tone: null, icon: "hourglass", text: "Idle at camp" });
           } else {
             const seen = when(member.last_seen);
@@ -842,7 +842,7 @@ function partyBody(ctx, page) {
         if (bSig !== bonusSig) {
           bonusSig = bSig;
           bonusChip.replaceChildren(...bonusChipParts(bonus, myHunt));
-          setAttr(bonusChip, "class", pct > 0 ? "chip chip-good" : "chip");
+          setAttr(bonusChip, "class", pct > 0 ? "chip chip-violet" : "chip");
         }
 
         const online = members.filter((m) => sameId(m.user_id, me) || (when(m.last_seen) != null && now - when(m.last_seen) < ONLINE_MS)).length;
