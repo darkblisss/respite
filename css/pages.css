@@ -23,18 +23,13 @@
   overflow: hidden;
 }
 
+/* The crop itself is .portrait-bust, in components.css -- one rule, applied
+   here rather than restated. This is sizing only. */
 .char-portrait {
   width: 104px;
   aspect-ratio: 1 / 1;
   height: auto;
   border-radius: 16px;
-}
-
-.char-portrait img {
-  object-fit: cover;
-  object-position: center top;
-  transform: scale(1.6);
-  transform-origin: center top;
 }
 
 .char-name {
@@ -743,18 +738,12 @@ button.doll-slot { cursor: pointer; }
   min-width: 0;
 }
 
+/* The crop itself is .portrait-bust, in components.css. This is sizing only. */
 .arena-portrait {
   position: relative;
   width: clamp(112px, 12vw, 150px);
   aspect-ratio: 1 / 1;
   transition: opacity 300ms, filter 300ms, transform 300ms;
-}
-
-.arena-portrait img {
-  object-fit: cover;
-  object-position: center top;
-  transform: scale(1.6);
-  transform-origin: center top;
 }
 
 .arena-name {
@@ -806,12 +795,7 @@ button.doll-slot { cursor: pointer; }
   background: radial-gradient(circle at 50% 28%, #2c2140, #120e17 75%);
 }
 
-.band-art img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center 12%;
-}
+/* The crop itself is .portrait-bust, in components.css. This is sizing only. */
 
 .band-mate.is-me .band-art { border-color: var(--violet-edge); }
 .band-mate.is-down { opacity: .45; }
