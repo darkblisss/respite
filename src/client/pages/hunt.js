@@ -30,6 +30,7 @@ import { huntChips, chipNode, partyHere, ZONE_ICONS } from "../ui/popups/zone.js
 import { CONFIG } from "../../shared/config.js";
 import { GameData, getMonster, getZone, getSkill, foesOf, sovereignOf, regionOfTier } from "../../shared/registry.js";
 import { campPlan, huntRates } from "../../shared/combat.js";
+import { itemDef, itemName } from "../../shared/items.js";
 import { statsOf, canPickClass, recovering, myClass, xpProgress } from "../../shared/stats.js";
 import { currentRegion } from "../../shared/world.js";
 
@@ -105,7 +106,12 @@ export default {
       const t = setTimeout(() => { timers.delete(t); fn(); }, ms);
       timers.add(t);
     };
-    const sigs = { tags: null, next: null, company: null, zones: null, quarry: null, band: null };
+    const sigs = { tags: null, next: null, company: null, zones: null, quarry: null, band: null, drops: null };
+    // XP/hr and DPS eased toward their true value each tick, so a combat system that
+    // only actually changes these numbers at a swing or a kill still reads as live
+    // instead of sitting still between hits and then jumping.
+    let dispXp = null;
+    let dispDps = null;
     const mates = new Map();   // the party's other hunters, by user id
     let wasParty = false;      // which fight the arena was last drawn for
 
@@ -174,7 +180,13 @@ export default {
     const kKills = kpi("Kills");
     const kRate = kpi("XP/hr");
     const kDps = kpi("DPS");
+    // The fourth box is shared: solo shows what this run has turned up (a stack of
+    // icons, not a chance meter -- that number never told you anything useful);
+    // the party fight still shows your share of the group's damage in it instead.
     const kSov = kpi("Sovereign", true);
+    const kSovBar = kSov.node.querySelector(".bar");
+    const dropsList = h("div.kpi-drops", { hidden: true });
+    kSov.node.append(dropsList);
     const kLeft = kpi("Time left");
     const kpis = h("div.kpis", kKills.node, kRate.node, kDps.node, kSov.node, kLeft.node);
     const hint = h("p.hunt-hint");
@@ -242,27 +254,25 @@ export default {
 
     const cards = new Map();   // `${hunt}:${uid}` -> { node, art, fill, text, on, gone }
 
-    function buildCard(f, shared) {
+    function buildCard(f) {
       const mob = getMonster(f.id);
       const sov = mob.archetype === "sovereign";
       const fill = h("i");
       const text = h("span");
-      // Who a foe is on only matters when there is more than one of you for it to choose between.
-      const on = shared ? h("div.small.muted.mt-1") : null;
       const art = h("button.foe-art", { type: "button", "aria-label": `${mob.name}: details`, dataset: { monster: mob.id }, html: monsterArt(mob, f.elite) });
       const node = h("div.foe-card", { class: { "is-elite": f.elite && !sov, "is-sovereign": sov } },
         art,
         h("div.foe-body",
           h("div.foe-name", h("span", mob.name), sov ? h("span.tag.tag-sovereign", "Sovereign") : f.elite ? h("span.tag.tag-elite", "Elite") : null),
-          h("div.hpbar.hpbar-foe", fill, text),
-          on));
-      return { node, art, fill, text, on, gone: false };
+          h("div.hpbar.hpbar-foe", fill, text)));
+      return { node, art, fill, text, gone: false };
     }
 
-    /* One roster of foe cards for both fights. `shared` is null for your own hunt, where the
-       first foe is the one you are on; for the party's it says who each foe is on, which is the
-       thing that makes the fight read as shared. */
-    function syncFoes(foes, hunt, shared) {
+    /* One roster of foe cards for both fights, and the same one either way: a party's
+       encounter is one shared roster (up to CONFIG.hunt.maxFoes, scaled, never one per
+       hunter), so it draws exactly like your own with no per-player targeting shown --
+       nobody sees who a foe happens to be swinging at, or the numbers behind it. */
+    function syncFoes(foes, hunt) {
       const standing = new Set(foes.map((f) => `${hunt}:${f.uid}`));
 
       cards.forEach((card, key) => {
@@ -279,14 +289,13 @@ export default {
         const key = `${hunt}:${f.uid}`;
         let card = cards.get(key);
         if (!card) {
-          card = buildCard(f, !!shared);
+          card = buildCard(f);
           cards.set(key, card);
           foesBox.appendChild(card.node);
         }
-        toggleClass(card.node, "is-target", shared ? sameId(f.target, shared.me) : i === 0);
+        toggleClass(card.node, "is-target", i === 0);
         setWidth(card.fill, (f.hp / f.max) * 100);
         setText(card.text, `${fmt(Math.max(0, Math.ceil(f.hp)))} / ${fmt(f.max)}`);
-        if (card.on) setText(card.on, sameId(f.target, shared.me) ? "On you" : `On ${shared.names.get(String(f.target).toLowerCase()) || "the party"}`);
       });
 
       let fading = false;
@@ -461,7 +470,7 @@ export default {
       setText(emptyTitle, et);
       setText(emptySub, es);
 
-      syncFoes(c && c.phase === "fight" ? c.foes : [], c ? huntKey(c) : null, null);
+      syncFoes(c && c.phase === "fight" ? c.foes : [], c ? huntKey(c) : null);
       drainFx(ctx.now);
 
       // ---- the numbers ----
@@ -471,19 +480,31 @@ export default {
       setText(kKills.l, "Kills");
       setText(kRate.l, "XP/hr");
       setText(kDps.l, "DPS");
-      setText(kSov.l, "Sovereign");
+      setText(kSov.l, "Drops");
+      setAttr(kSov.v, "hidden", true);
+      setAttr(kSovBar, "hidden", true);
+      setAttr(dropsList, "hidden", false);
       setText(kLeft.l, "Time left");
       if (c) {
         setText(kKills.v, fmt(c.done));
-        // Live off a rolling window: both figures move every second instead of
-        // sitting still for five minutes and then jumping.
+        // Eased toward the true rate each tick: combat only actually moves xp/dmg
+        // at a swing or a kill, so snapping straight to the new value on every read
+        // looked frozen between hits and then jumped. This glides instead.
         const rates = huntRates(c);
-        setText(kRate.v, rates.xpRate == null ? "Reckoning" : fmt(Math.round(rates.xpRate)));
-        setText(kDps.v, rates.dps == null ? "Reckoning" : fmtStat(rates.dps));
-        // Not a counter filling any more: the flat odds this ground shows it, per encounter cleared.
-        const sovChance = getZone(c.zone).sovereign || 0;
-        setText(kSov.v, sovChance > 0 ? `${+(sovChance * 100).toFixed(2)}%` : "-");
-        setWidth(kSov.fill, sovChance > 0 ? Math.min(100, sovChance * 100 * 20) : 0);
+        dispXp = rates.xpRate == null ? null : dispXp == null ? rates.xpRate : dispXp + (rates.xpRate - dispXp) * 0.2;
+        dispDps = rates.dps == null ? null : dispDps == null ? rates.dps : dispDps + (rates.dps - dispDps) * 0.2;
+        setText(kRate.v, dispXp == null ? "Reckoning" : fmt(Math.round(dispXp)));
+        setText(kDps.v, dispDps == null ? "Reckoning" : fmtStat(dispDps));
+        // What this run has actually turned up, not the flat odds of a Sovereign.
+        const drops = c.drops || {};
+        const keys = Object.keys(drops);
+        const dsig = keys.map((k) => `${k}:${drops[k]}`).join(",");
+        if (dsig !== sigs.drops) {
+          sigs.drops = dsig;
+          dropsList.replaceChildren(...(keys.length
+            ? keys.map((k) => h("span.drop-pip", { "data-tip": itemName(k) }, iconEl(itemDef(k).icon), fmt(drops[k])))
+            : [h("span.drop-pip.is-empty", "Nothing yet")]));
+        }
         setText(kLeft.v, fmtTime(Math.max(0, IDLE_CAP - c.elapsed)));
       } else {
         // The time left is already on the arena's status line.
@@ -562,7 +583,7 @@ export default {
       setText(emptySub, es);
 
       // A foe this build cannot name is left out rather than drawn as an unknown.
-      syncFoes(enc ? enc.foes.filter((f) => getMonster(f.id)) : [], enc ? `p${view.partyId}:${enc.id}` : null, { me, names });
+      syncFoes(enc ? enc.foes.filter((f) => getMonster(f.id)) : [], enc ? `p${view.partyId}:${enc.id}` : null);
       toggleClass(arena, "is-party", true);
 
       // ---- the numbers ----
@@ -580,6 +601,9 @@ export default {
       setText(kDps.l, "Party damage");
       setText(kDps.v, fmt(Math.round(total)));
       setText(kSov.l, "Your share");
+      setAttr(kSov.v, "hidden", false);
+      setAttr(kSovBar, "hidden", false);
+      setAttr(dropsList, "hidden", true);
       setText(kSov.v, `${Math.round(share)}%`);
       setWidth(kSov.fill, share);
       setText(kLeft.l, "Time out");
