@@ -2866,6 +2866,15 @@ button.chip:disabled { opacity: .45; }
   border-radius: inherit;
 }
 
+.portrait-bust {
+  aspect-ratio: 1 / 1;
+}
+
+.portrait-bust img {
+  object-fit: cover;
+  object-position: center 12%;
+}
+
 /* The inline picker: Min and Max sit inside the stepper, so the row reads
    Min - value + Max and nothing else. The chips lose their pill shape here and
    take the stepper's ends instead, which is what makes it read as one control. */
