@@ -427,7 +427,6 @@ function boardBody(ctx, page) {
             h("td.strong", h("span.hs-name",
               h("span.avatar.avatar-sm", { "data-tone": isMe ? null : "gold", "aria-hidden": "true" }, display(r.username).charAt(0)),
               h("span.truncate", display(r.username)),
-              isMe ? h("span.tag.tag-violet", "You") : null,
               loose ? h("span.tag.hs-hide-sm", "Undisciplined") : null)),
             h("td.num", b.oneFigure ? fmtWhole(xp) : fmtWhole(level)),
             b.oneFigure ? null : h("td.num.hs-hide-sm", { title: `${fmtWhole(xp)} XP` }, fmt(xp)));
