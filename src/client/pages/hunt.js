@@ -36,32 +36,15 @@ import { currentRegion } from "../../shared/world.js";
 const H = CONFIG.hunt;
 const IDLE_CAP = CONFIG.time.idleCapMs;
 
-const FLOAT_MS = 1000;
-const FLOATS_MAX = 12;          // on screen at once, across the whole arena
-const FLOATS_PER_FRAME = 8;     // a long frame (a slow device, a burst) shows only its last few blows
 const FX_STALE_MS = 1500;       // simulated age past which a blow is not worth drawing
 const FX_QUEUE_MAX = 60;
 const GONE_MS = 700;            // the fade in pages.css, then the card goes
 const DEAD_MS = 1400;
 
-/* What floats up for each kind of blow. No damage number floats any more, in
-   either direction: a health bar winding down says how the fight is going, and the
-   DPS on the run bar says how fast. What is left here is the things a number could
-   never say -- that a blow was a critical, that armour turned one, that a technique
-   landed -- and healing, which is not damage and is worth counting. Kinds with no
-   text (hit, volley, bleed, thorns, hurt, kill, spawn, leave, fall) only move things. */
-const FLOAT_TEXT = {
-  crit: () => "Crit",
-  strike: () => "Devastating",
-  ambush: () => "Ambush",
-  empowered: () => "Empowered",
-  ambushed: () => "Ambushed",
-  block: () => "Blunted",
-  glance: () => "Glance",
-  heal: (n) => `+${fmt(n)}`,
-  join: () => "Joins",
-  enrage: () => "Enraged",
-};
+// No floating text of any kind any more (no "Crit", "Glance", damage numbers):
+// a health bar winding down says how the fight is going, and the DPS on the run
+// bar says how fast. A struck card still shakes (see strike() below), which is
+// the one bit of hit feedback that's left.
 const STRUCK = new Set(["hit", "crit", "strike", "ambush", "volley", "empowered", "hurt", "ambushed", "block", "kill"]);
 
 const WORDS = { 1: "one", 2: "two", 3: "three" };
@@ -161,14 +144,13 @@ export default {
     const company = h("div.card-actions");
     const huntHead = h("div.card-head", h("div", huntTitle, huntSub), company);
 
-    const youFx = h("div.fx-layer");
     const youPortrait = h("div.portrait.arena-portrait", h("img", { src: "assets/commander-default.webp", alt: "" }));
     const youName = h("div.arena-name");
     const youFill = h("i");
     const youText = h("span");
     // The rest of the warband, only while the party is out: name and health, one row each.
     const band = h("div.arena-band", { hidden: true });
-    const you = h("div.arena-you", youFx, youPortrait, youName, h("div.hpbar", youFill, youText), band);
+    const you = h("div.arena-you", youPortrait, youName, h("div.hpbar", youFill, youText), band);
     let veil = null;   // { bar, fill, note }, only once a discipline is held
 
     const status = h("div.arena-status");
@@ -179,7 +161,7 @@ export default {
     const foesBox = h("div.arena-foes", empty);
     const arena = h("div.arena",
       you,
-      h("div.arena-mid", h("div.arena-vs", { "aria-hidden": "true" }, "VS"), status, timer),
+      h("div.arena-mid", status, timer),
       foesBox);
 
     // The label is a node too: the party's fight has different numbers to report in the same strip.
@@ -258,25 +240,23 @@ export default {
 
     /* ================= FOE CARDS ================= */
 
-    const cards = new Map();   // `${hunt}:${uid}` -> { node, art, fx, fill, text, on, gone }
+    const cards = new Map();   // `${hunt}:${uid}` -> { node, art, fill, text, on, gone }
 
     function buildCard(f, shared) {
       const mob = getMonster(f.id);
       const sov = mob.archetype === "sovereign";
       const fill = h("i");
       const text = h("span");
-      const fx = h("div.fx-layer");
       // Who a foe is on only matters when there is more than one of you for it to choose between.
       const on = shared ? h("div.small.muted.mt-1") : null;
       const art = h("button.foe-art", { type: "button", "aria-label": `${mob.name}: details`, dataset: { monster: mob.id }, html: monsterArt(mob, f.elite) });
       const node = h("div.foe-card", { class: { "is-elite": f.elite && !sov, "is-sovereign": sov } },
-        fx,
         art,
         h("div.foe-body",
           h("div.foe-name", h("span", mob.name), sov ? h("span.tag.tag-sovereign", "Sovereign") : f.elite ? h("span.tag.tag-elite", "Elite") : null),
           h("div.hpbar.hpbar-foe", fill, text),
           on));
-      return { node, art, fx, fill, text, on, gone: false };
+      return { node, art, fill, text, on, gone: false };
     }
 
     /* One roster of foe cards for both fights. `shared` is null for your own hunt, where the
@@ -314,11 +294,9 @@ export default {
       setAttr(empty, "hidden", foes.length > 0 || fading);
     }
 
-    /* ================= FLOATS ================= */
+    /* ================= FX ================= */
 
     const fxQueue = [];
-    const floats = [];
-    let lane = 0;
 
     ctx.on("hunt:fx", (p) => {
       if (document.hidden) return;
@@ -333,6 +311,8 @@ export default {
       node.classList.add("struck");
     }
 
+    // No floating text any more (no "Crit", "Glance", damage numbers, ...): a
+    // struck card still shakes, which says a blow landed without printing it.
     function showFx(ev) {
       if (ev.kind === "fall") {
         toggleClass(you, "is-dead", true);
@@ -342,24 +322,13 @@ export default {
       const card = ev.who === "you" ? null : cards.get(`${ev.hunt}:${ev.who}`);
       if (ev.who !== "you" && !card) return;
       if (STRUCK.has(ev.kind)) strike(card ? card.art : youPortrait);
-      const text = FLOAT_TEXT[ev.kind];
-      if (!text) return;
-      const f = h("span.float", { class: [ev.kind, `lane${lane++ % 3}`] }, text(ev.amount));
-      (card ? card.fx : youFx).appendChild(f);
-      floats.push(f);
-      while (floats.length > FLOATS_MAX) floats.shift().remove();
-      later(() => {
-        f.remove();
-        const i = floats.indexOf(f);
-        if (i >= 0) floats.splice(i, 1);
-      }, FLOAT_MS);
     }
 
     function drainFx(now) {
       if (!fxQueue.length) return;
       const events = fxQueue.splice(0);
       if (document.hidden || reducedMotion()) return;
-      events.filter((ev) => now - ev.at < FX_STALE_MS).slice(-FLOATS_PER_FRAME).forEach(showFx);
+      events.filter((ev) => now - ev.at < FX_STALE_MS).forEach(showFx);
     }
 
     /* ================= WIRING ================= */
@@ -423,11 +392,10 @@ export default {
     function setVeil(want) {
       if (want && !veil) {
         const fill = h("i");
-        veil = { fill, bar: h("div.veilbar", fill), note: h("div.veil-note") };
-        you.append(veil.bar, veil.note);
+        veil = { fill, bar: h("div.veilbar", fill) };
+        you.append(veil.bar);
       } else if (!want && veil) {
         veil.bar.remove();
-        veil.note.remove();
         veil = null;
       }
     }
@@ -462,9 +430,6 @@ export default {
       if (veil) {
         const v = c ? Math.max(0, Math.min(H.veilMax, c.veil)) : 0;
         setWidth(veil.fill, (v / H.veilMax) * 100);
-        setText(veil.note, !c ? kls.veilName
-          : c.volley > 0 ? `Volley · ${c.volley} to come`
-          : `${kls.veilName} · ${Math.floor(v)} of ${H.veilMax}`);
       }
 
       // ---- what is happening ----
@@ -672,8 +637,13 @@ export default {
       GameData.ZONES.forEach((z) => {
         const r = zoneRefs.get(z.id);
         const active = !!(c && c.tier === tier && c.zone === z.id);
+        // A hunt already under way locks every other zone: pull back before picking a new one.
+        const locked = !!c && !active;
         toggleClass(r.node, "is-active", active);
         toggleClass(r.node, "is-peaked", peaked);
+        toggleClass(r.node, "is-locked", locked);
+        setAttr(r.node, "disabled", locked);
+        setAttr(r.node, "aria-disabled", locked);
         toggleClass(r.tag, "tag", active || peaked);
         toggleClass(r.tag, "tag-ember", active);
         toggleClass(r.tag, "tag-sovereign", !active && peaked);
