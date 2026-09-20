@@ -35,6 +35,10 @@ alter table public.saves add column if not exists clock bigint;
 create table if not exists public.profiles (
   user_id uuid primary key,
   username text unique not null,
+  -- The face a party square and a board row draw. Migration 009 adds it to a realm
+  -- that predates it and fills it; here it is so a fresh one needs no migration to
+  -- run party_state, which reads it.
+  skin text,
   total_level int not null default 0,
   levels jsonb not null default '{}',
   skills jsonb not null default '{}',
@@ -890,6 +894,8 @@ begin
                jsonb_build_object(
                  'user_id', m.user_id,
                  'username', m.username,
+                 -- The face a party square draws. Null until they have picked one.
+                 'skin', pr.skin,
                  'joined_at', m.joined_at,
                  'last_seen', pr.last_seen,
                  'activity', coalesce(pr.activity, '{}'::jsonb),

@@ -42,16 +42,16 @@ supabase/functions/game/index.ts  Deno wrapper around src/server/handler.js
 tests/                      node test suites (not deployed)
 ```
 
-## Save state (schema 10)
+## Save state (schema 11)
 
 ENGINE.md is the binding engine spec and adds to this shape: `rolls` (roll counters), `lootLostAt`, task ids and a hunt `rng`, and removes `meta.lastSeen` (use `clock`).
 
 ```js
 {
-  schema: 10,
+  schema: 11,
   clock: 0,                         // ms timestamp the state has been simulated up to
   meta: { createdAt, playtimeMs, account, userId },
-  player: { gold, hp, recoveryLeft, klass, sex },   // sex: "male" | "female" | null, asked for once
+  player: { gold, hp, recoveryLeft, klass, skin },  // skin: a GameData.SKINS id or null, asked for once
   skills: { [skillId]: xp },        // xp may be fractional
   inv:   { slots, items: {key: qty}, order: [key] },   // Belongings; a remedy costs a slot a bottle here
   bank:  { slots, items, order },   // Stockpile (was Provisions)
@@ -78,13 +78,17 @@ ENGINE.md is the binding engine spec and adds to this shape: `rolls` (roll count
 }
 ```
 
-### What schema 10 adds
+### What schema 10 and 11 add
 
 Three systems, all of them read off the save alone:
 
-- **A likeness.** `player.sex` is `"male"`, `"female"` or null. Nothing a fight
-  reads turns on it. A save that has never carried one is asked for one the next
-  time the Character page opens, and `setSex` refuses once it is set.
+- **A skin (11).** `player.skin` is a `GameData.SKINS` id (`drifter`,
+  `outrider`) or null. It is a face and nothing else: no stat, no roll, no drop
+  turns on it. It is drawn wherever a commander is -- the Character hero, the
+  paperdoll, the arena, a party square -- from `assets/skin-<id>.webp`, falling
+  back to `commander-default.webp`. A save that has never carried one is asked
+  the next time the Character page opens, and `setSkin` refuses once set.
+  Schema 10's `player.sex` is not read across, so every camp picks again.
 - **Weapon mastery.** `mastery` holds points a gear line (`sword`, `shield`,
   `dagger`, `bow`, `staff`, and `greatsword`/`grimoire` once released). One kill
   teaches exactly one line -- the off-hand when anything is in it, the weapon
@@ -238,7 +242,7 @@ The handler runs one transaction:
 
 ## Commands (shared `applyCommand(state, {type, args}, env)` → `{ ok, error?, data? }`)
 
-`startSkill {skillId, actionId, limit|null}`, `stopSkill {}`, `startHunt {tier, zone, limit|null}`, `pullBack {}`, `setHide {on}`, `pickClass {id}`, `setSex {sex}`, `walkPath {node}`, `resetPath {}`, `enchant {key, from, stones}`, `equip {key, from}`, `unequip {slot}`, `unequipTool {skillId}`, `moveItem {key, from, to, qty}`, `sellItem {key, from, qty}`, `salvage {key, from}`, `useChest {key, from}`, `repair {key}`, `reorder {pool, key, before}`, `buyRemedy {key, qty}`, `buySmuggler {slot}`, `travel {regionId}`, `claimBounty {}`, `hireAgent {}`, `deployAgent {agentId, itemKey}`, `buyCompanion {id}`, `setCompanion {id|null}`.
+`startSkill {skillId, actionId, limit|null}`, `stopSkill {}`, `startHunt {tier, zone, limit|null}`, `pullBack {}`, `setHide {on}`, `pickClass {id}`, `setSkin {skin}`, `walkPath {node}`, `resetPath {}`, `enchant {key, from, stones}`, `equip {key, from}`, `unequip {slot}`, `unequipTool {skillId}`, `moveItem {key, from, to, qty}`, `sellItem {key, from, qty}`, `salvage {key, from}`, `useChest {key, from}`, `repair {key}`, `reorder {pool, key, before}`, `buyRemedy {key, qty}`, `buySmuggler {slot}`, `travel {regionId}`, `claimBounty {}`, `hireAgent {}`, `deployAgent {agentId, itemKey}`, `buyCompanion {id}`, `setCompanion {id|null}`.
 
 Server-only commands, which need the database: `marketList {key, from, qty, price}`, `marketBuy {listingId, qty}` (gear and tools, one listing at a time), `marketBuyPool {key, qty, maxEach}` (a material out of the pool every seller's listing of it makes, cheapest first and oldest first among equal prices, never a unit above `maxEach`), `marketCancel {listingId}`, `partyHuntStart {tier, zone}`, `partyHuntJoin {}`, `partyHuntLeave {}`. The market's fee is taken off both legs (`CONFIG.economy.marketFee`): the buyer pays the ask plus it, the seller receives the ask less it, rounded up and never under 1 gold. The party's fight is played by the server alone (`src/shared/partyHunt.js`, `public.party_hunts`), so the browser cannot predict one and never tries: it draws what the server reports (docs/SERVER.md section 3).
 
@@ -247,7 +251,7 @@ Server-only commands, which need the database: `marketList {key, from, qty, pric
 - Skills: `skill:level`, `skill:mastery`, `task:ended`, `item:crafted`, `storage:full`
 - Hunt: `hunt:ended`, `hunt:death`, `hunt:sovereign`, `hunt:felled`, `hunt:retreat`, `hunt:hide`, `hunt:passed`, `hunt:fx`, `loot:lost`, `loot:found`
 - Items and companions: `item:broke`, `item:repaired`, `companion:bond`, `companion:found`, `companion:bought`, `companion:active`
-- Camp: `bounty:complete`, `bounty:paid`, `agent:hired`, `agent:deployed`, `requisitions:returned`, `shop:bought`, `smuggler:bought`, `travel:unlocked`, `travel:moved`, `class:picked`, `class:available`, `class:laidDown`, `sex:picked`, `path:taken`, `path:reset`, `item:enchanted`, `chest:opened`, `item:salvaged`, `item:sold`, `item:moved`, `settings:hide`
+- Camp: `bounty:complete`, `bounty:paid`, `agent:hired`, `agent:deployed`, `requisitions:returned`, `shop:bought`, `smuggler:bought`, `travel:unlocked`, `travel:moved`, `class:picked`, `class:available`, `class:laidDown`, `skin:picked`, `path:taken`, `path:reset`, `item:enchanted`, `chest:opened`, `item:salvaged`, `item:sold`, `item:moved`, `settings:hide`
 - Market: `market:listed`, `market:bought` (`cost` is what left the purse, the fee included, and `fee` is that fee), `market:cancelled`, `mail:claimed`
 - Sessions: `away`
 - Party hunts (raised by the server when a share is settled, no camp log line of their own): `party:spoils { tier, zone, kills, xp, gold, drops, remedies, died }`. The events the settlement raises as it pays (`skill:level`, `loot:found`, `loot:lost`, `item:broke`, `companion:found`, `hunt:death`) are the rules' own and are logged as ever.

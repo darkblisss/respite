@@ -854,12 +854,17 @@ function buildRegistry() {
      object in two places, so nothing can be reached (or frozen) twice. */
   const PATH_NODE_IDS = Object.values(PATHS).flat().map((n) => n.id);
 
-  /* Your own likeness, chosen when the camp is founded. It changes nothing a
-     fight can read -- no stat, no roll, no drop -- because it is who you are
-     rather than what you can do. Set once, and kept. */
-  const SEXES = [
-    { id: "male", name: "Man", they: "he", them: "him", their: "his" },
-    { id: "female", name: "Woman", they: "she", them: "her", their: "her" },
+  /* The skin you wear. Two to start with, chosen when the camp is founded and
+     worn everywhere a commander is drawn -- the hero, the paperdoll, the arena,
+     your square in a band, your row on a board. It changes nothing a fight can
+     read: no stat, no roll, no drop. It is a face, and that is all it is.
+
+     Adding a third is this array plus assets/skin-<id>.webp. */
+  const SKINS = [
+    { id: "drifter", name: "The Drifter",
+      note: "Hair tied back out of the way, and a coat cut short for moving through it." },
+    { id: "outrider", name: "The Outrider",
+      note: "A scarf against the ash and a long coat over everything, for the ground nobody walks twice." },
   ];
 
   const CLASSES = [
@@ -1003,7 +1008,7 @@ function buildRegistry() {
     REGIONS, ZONES, ARCHETYPES, ARCHETYPE_ORDER, ELITE, SOVEREIGN, REGION_FOES, FOE_DROPS, MONSTERS,
     FRAG_PER_ESSENCE, VEIL_BANDS,
     BENCH_TABS, WEATHER_TYPES, WEATHER_SEVERITIES, WEEKDAY_NAMES, MASTERY_TRACK,
-    CLASSES, SEXES, PATHS, PATH_NODE_IDS, WEAPON_LINES, WEAPON_LINE_IDS, LIVE_LINES, CLASS_WEAPONS,
+    CLASSES, SKINS, PATHS, PATH_NODE_IDS, WEAPON_LINES, WEAPON_LINE_IDS, LIVE_LINES, CLASS_WEAPONS,
     BRUTE_FORCE, BASE_COMBAT, TECHNIQUE, AGENT_RARITIES, AGENT_NAMES,
     COMPANIONS, RANK_NUMERALS, RETIRED_PETS,
     SOURCES: { GATHERED_BY, MADE_BY, USED_IN, DROPPED_BY },
@@ -1100,7 +1105,7 @@ export const monsterOfTier = (tier) => foeOf(tier, "stalker");
 // Definitions
 
 export const getClass = (id) => GameData.CLASSES.find((c) => c.id === id) || null;
-export const getSex = (id) => GameData.SEXES.find((x) => x.id === id) || null;
+export const getSkin = (id) => GameData.SKINS.find((x) => x.id === id) || null;
 export const weaponLine = (line) => GameData.WEAPON_LINES.find((w) => w.line === line) || null;
 export const pathOf = (klass) => (klass && Object.hasOwn(GameData.PATHS, klass) ? GameData.PATHS[klass] : []);
 // A node by id, whichever discipline walks it. Node ids are unique across all three.

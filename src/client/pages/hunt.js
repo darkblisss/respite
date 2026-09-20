@@ -24,7 +24,7 @@
 import { h, on, setAttr, setText, setWidth, toggleClass } from "../ui/dom.js";
 import { iconEl } from "../ui/icons.js";
 import { fmt, fmtStat, fmtWhole, fmtTime } from "../ui/format.js";
-import { openPopup } from "../ui/widgets.js";
+import { openPopup, portraitImg, paintPortrait } from "../ui/widgets.js";
 import { monsterArt } from "../ui/popups/foe.js";
 import { huntChips, chipNode, partyHere, ZONE_ICONS } from "../ui/popups/zone.js";
 import { CONFIG } from "../../shared/config.js";
@@ -73,6 +73,17 @@ function namesOf(ctx) {
   const out = new Map();
   members.forEach((m) => {
     if (m && m.user_id) out.set(String(m.user_id).toLowerCase(), cap(String(m.username || "Someone")));
+  });
+  return out;
+}
+
+/* And what each of them looks like. The realm publishes a member's skin on the
+   party roster; one it does not know yet reads as null and wears the default. */
+function skinsOf(ctx) {
+  const members = ctx.party && Array.isArray(ctx.party.members) ? ctx.party.members : [];
+  const out = new Map();
+  members.forEach((m) => {
+    if (m && m.user_id && typeof m.skin === "string") out.set(String(m.user_id).toLowerCase(), m.skin);
   });
   return out;
 }
@@ -150,7 +161,9 @@ export default {
     const company = h("div.card-actions");
     const huntHead = h("div.card-head", h("div", huntTitle, huntSub), company);
 
-    const youPortrait = h("div.portrait.portrait-bust.arena-portrait", h("img", { src: "assets/commander-default.webp", alt: "" }));
+    const youPortrait = h("div.portrait.portrait-bust.arena-portrait", portraitImg(ctx.state.player.skin));
+    // The face in the arena is yours, so it is the skin on the save.
+    let youSkinSig = ctx.state.player.skin;
     const youName = h("div.arena-name");
     const youFill = h("i");
     const youText = h("span");
@@ -436,6 +449,7 @@ export default {
       const rest = c ? null : campPlan(state, ctx.now);
       const hp = Math.max(0, Math.min(s.maxHp, Math.ceil(rest ? rest.hp : state.player.hp)));
       setText(youName, commanderName(ctx));
+      youSkinSig = paintPortrait(youPortrait, ctx.state.player.skin, youSkinSig);
       setWidth(youFill, (hp / s.maxHp) * 100);
       setText(youText, `${fmt(hp)} / ${fmt(s.maxHp)}`);
       toggleClass(you, "is-down", down);
@@ -540,6 +554,7 @@ export default {
       const region = regionOfTier(view.tier);
       const me = ctx.account ? ctx.account.userId : null;
       const names = namesOf(ctx);
+      const skins = skinsOf(ctx);
       const hunters = Array.isArray(view.hunters) ? view.hunters : [];
       const mine = hunters.find((u) => sameId(u.userId, me)) || null;
       const e = view.phase === "fight" ? view.enc : null;
@@ -641,8 +656,11 @@ export default {
           const text = h("span");
           const isMe = sameId(u.userId, me);
           const label = isMe ? "You" : (names.get(String(u.userId).toLowerCase()) || "Someone");
+          /* Your own face in the band is yours. A party mate's skin comes off the
+             realm when it knows one, and falls back to the default bust when it
+             does not. */
           const node = h("div.band-mate", { class: { "is-down": u.down, "is-me": isMe } },
-            h("div.band-art.portrait-bust", h("img", { src: "assets/commander-default.webp", alt: "" })),
+            h("div.band-art.portrait-bust", portraitImg(isMe ? ctx.state.player.skin : skins.get(String(u.userId).toLowerCase()) || null)),
             h("span.band-name", label),
             h("div.hpbar.hpbar-sm", fill, text));
           mates.set(String(u.userId).toLowerCase(), { fill, text });

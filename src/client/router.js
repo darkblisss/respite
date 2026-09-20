@@ -46,6 +46,13 @@ export function parseHash(hash) {
     const skill = getSkill(parts[1]);
     return skill ? { page: "skill", arg: skill.id } : null;
   }
+  /* A commander, by name: #/player/ashen. The name is whatever the board or the
+     roster carried, so it is only shape-checked here and looked up case
+     insensitively by the realm. */
+  if (page === "player") {
+    const name = decodeURIComponent(parts[1] || "").trim();
+    return /^[a-zA-Z0-9_]{1,40}$/.test(name) ? { page: "player", arg: name } : null;
+  }
   return Object.hasOwn(PAGES, page) ? { page, arg: null } : null;
 }
 
@@ -54,10 +61,12 @@ export const hashOf = (route) => `#/${route.page}${route.arg ? `/${route.arg}` :
 // The Hunt shares #/skill/ with the benches but has a module of its own.
 export function moduleOf(route) {
   if (route.page === "skill") return route.arg === "warfare" ? "hunt" : "skill";
+  if (route.page === "player") return "player";
   return PAGES[route.page][0];
 }
 
 function defaults(route) {
+  if (route.page === "player") return { group: "The Realm", title: route.arg };
   if (route.page === "skill") {
     const skill = getSkill(route.arg);
     return { group: KIND_GROUP[skill.kind] || "Trades", title: skill.name };
@@ -278,6 +287,6 @@ export function createRouter({ view, getState, makeCtx, onRoute = () => {}, load
     preload(files) {
       files.forEach((f) => load(f));
     },
-    files: () => [...new Set([...Object.values(PAGES).map((p) => p[0]), "skill", "hunt"])],
+    files: () => [...new Set([...Object.values(PAGES).map((p) => p[0]), "skill", "hunt", "player"])],
   };
 }

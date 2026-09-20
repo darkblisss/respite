@@ -21,7 +21,7 @@ import { bindDrawer, closeModals, toast } from "./ui/overlay.js";
 import { openPopup } from "./ui/widgets.js";
 
 // Every popup module in CLIENT.md 6 (settings.js registers both settings and account).
-const POPUPS = ["item", "action", "zone", "foe", "class", "likeness", "enchant", "sell", "settings", "sky"];
+const POPUPS = ["item", "action", "zone", "foe", "class", "skin", "enchant", "sell", "settings", "sky"];
 
 const now = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
 

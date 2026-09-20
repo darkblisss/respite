@@ -114,18 +114,27 @@ export function itemDef(key) {
   return def;
 }
 
+/* What a thing is called. Rarity is NOT part of it: an Epic pair of boots is a
+   pair of boots, and calling it "Epic Mangy Boots" buries the item under a word
+   the colour already says. Rarity rides on data-rarity, which tints the art, the
+   slot and the frame everywhere one is drawn, and is spelled out in the item
+   dialog's own line ("Epic boots") where it is worth spelling out.
+
+   What DOES earn a place in the name is something the item actually has that
+   another of its kind does not: a relic's prefix in front (Stalwart Mangy
+   Boots), and an enchantment on the end where a smith would read it (+7). */
 export function itemName(key) {
   const d = itemDef(key);
   if (!d) return String(key);
-  // An enchantment is worn on the end, where a smith would read it: Slag Sword +7.
   const plus = d.plus > 0 ? ` +${d.plus}` : "";
-  // A relic wears its prefix instead of the word "Relic": Echoing Slag Sword.
   const pfx = d.prefix ? prefixDef(d.prefix) : null;
-  if (pfx) return `${pfx.name} ${d.name}${plus}`;
-  if ((d.kind === "gear" || d.kind === "tool") && d.rarity && d.rarity !== "common") {
-    return `${rarityDef(d.rarity).name} ${d.name}${plus}`;
-  }
-  return `${d.name}${plus}`;
+  return `${pfx ? `${pfx.name} ` : ""}${d.name}${plus}`;
+}
+
+// The rarity's own word, for the places that want to say it beside the name.
+export function rarityName(key) {
+  const d = itemDef(key);
+  return d && d.rarity ? rarityDef(d.rarity).name : null;
 }
 
 export function isRemedy(key) {

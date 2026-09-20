@@ -484,6 +484,22 @@ export function createNet({
     return { rows: Array.isArray(data) ? data : [], error: null, missing: false };
   }
 
+  /* One commander, by name, as migration 009 publishes them: skin, discipline,
+     the ground they stand on, levels, worn gear, what they have done, when they
+     were last seen, and their hunt if one is out. Same `missing` promise as the
+     boards: a realm that has not run 009 has no such function, and a name on a
+     board simply is not clickable. Item keys come back raw and are read by the
+     registry both sides share. */
+  async function playerProfile(username) {
+    const { data, error, code } = await rpc("player_profile", { p_username: String(username || "") });
+    if (error) {
+      const missing = code === "PGRST202" || /could not find the function|does not exist/i.test(error);
+      return { row: null, error, missing };
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    return { row: row && typeof row === "object" ? row : null, error: null, missing: false };
+  }
+
   async function onlineCount() {
     const { data, error } = await rpc("online_count");
     const n = Number(data);
@@ -516,6 +532,7 @@ export function createNet({
     leaderboard,
     masteryBoard,
     masteryRanks,
+    playerProfile,
     onlineCount,
     heartbeat,
     get client() { return client; },

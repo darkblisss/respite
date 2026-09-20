@@ -937,7 +937,7 @@ async function partyState() {
   same('party_state member: party', st.party, { id: P1, name: 'Wardens', leader_id: U.ash });
   same('party_state member: members, oldest first', st.members.map((m) => m.user_id), [U.ash, U.bram]);
   same('party_state member: member keys', st.members.map((m) => Object.keys(m).sort()),
-    Array(2).fill(['activity', 'hunt', 'joined_at', 'last_seen', 'levels', 'total_level', 'user_id', 'username']));
+    Array(2).fill(['activity', 'hunt', 'joined_at', 'last_seen', 'levels', 'skin', 'total_level', 'user_id', 'username']));
   same('party_state member: profile fields',
     [st.members[0].username, st.members[0].total_level, st.members[0].levels, st.members[1].activity, st.members[1].last_seen !== null],
     ['ash', 42, { delving: 12 }, { doing: 'felling' }, true]);
