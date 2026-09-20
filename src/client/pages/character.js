@@ -58,7 +58,7 @@ function heroView() {
   const tags = h("div.chip-row.char-tags");
   const total = h("span.char-total-v");
   const node = h("section.char-hero",
-    h("div.portrait.char-portrait", h("img", { src: "assets/commander-default.webp", alt: "" })),
+    h("div.portrait.portrait-bust.char-portrait", h("img", { src: "assets/commander-default.webp", alt: "" })),
     h("div", eyebrow, name, tags),
     h("div.char-total", total, h("span.eyebrow", "Total level")));
   let tagSig = null;
