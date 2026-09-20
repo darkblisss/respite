@@ -66,7 +66,7 @@ function vista(tier) {
     }
     return `${d} V100 H0Z`;
   };
-  return '<svg viewBox="0 0 600 100" preserveAspectRatio="none" aria-hidden="true">' +
+  return '<svg width="600" height="100" viewBox="0 0 600 100" preserveAspectRatio="none" aria-hidden="true">' +
     `<path class="v-far" d="${ridge(0, 44, 9)}"/>` +
     `<path class="v-mid" d="${ridge(1, 66, 6)}"/>` +
     `<path class="v-near" d="${ridge(2, 85, 3.5)}"/></svg>`;
