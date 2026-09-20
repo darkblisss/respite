@@ -2396,97 +2396,589 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
 
 /* ================= THE PATH (pages/discipline.js) ================= */
 
-/* The tree is a grid of faces, three across: an icon, a check or a lock over it, and
-   the ranks as pips underneath. Everything a node says lives in its tooltip, so the
-   grid stays a grid however wordy the tree gets. */
-.path-grid {
+/* A road, not a grid. One spine down the middle, lit as far as the points have
+   gone and dark below it; a rung of four hanging off it a band, two either
+   side; and the ranks read off a ring around each face, because pips in a row
+   read as pagination and a tree is not a carousel. The rail carries the node in
+   hand and what the whole walk is worth. */
+
+.path-body {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--sp-3);
-  max-width: 420px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-6);
 }
 
-.path-cell {
+.path-tree {
+  --path-face: 92px;
+  --path-spine: 44px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* ---- the bands and their gates ---- */
+
+.path-band { position: relative; }
+
+.path-gate {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: 34px;
+}
+
+/* The spine: through the gate, on down the rung, and out at the end. */
+.path-gate::before,
+.path-rung::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--violet-lo);
+}
+
+.path-band:first-child .path-gate::before { top: 50%; }
+.path-band:last-child .path-rung::before { background: linear-gradient(var(--line), transparent); }
+.path-band:last-child:not(.is-shut) .path-rung::before { background: linear-gradient(var(--violet-lo), transparent); }
+
+/* The gate itself, on the spine between one band and the next. */
+.path-gate::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 15px;
+  height: 15px;
+  margin: -8px 0 0 -8px;
+  transform: rotate(45deg);
+  background: var(--surface-2);
+  border: 1px solid var(--violet-edge);
+}
+
+.path-gate-name { color: var(--bone-dim); }
+
+.path-gate-note {
+  margin-left: auto;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  background: var(--violet-soft);
+  border: 1px solid var(--violet-edge);
+  font-size: var(--text-2xs);
+  font-weight: 500;
+  color: var(--violet-hi);
+  white-space: nowrap;
+}
+
+/* A band still shut: the road plainly runs out here. */
+.path-band.is-shut .path-gate::before,
+.path-band.is-shut .path-rung::before { background: var(--line); }
+.path-band.is-shut .path-gate::after { background: var(--surface-sunk); border-color: var(--line-strong); }
+.path-band.is-shut .path-gate-name { color: var(--bone-faint); }
+
+.path-band.is-shut .path-gate-note {
+  background: var(--wash);
+  border-color: var(--line);
+  color: var(--bone-faint);
+}
+
+/* ---- the rung ---- */
+
+.path-rung {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) var(--path-spine) repeat(2, minmax(0, 1fr));
+  gap: var(--sp-3);
+  align-items: start;
+  /* Held in around the spine: four faces flung to the corners of a wide card
+     stop reading as one rung. The spine stays on the band's centre either way. */
+  max-width: 720px;
+  margin-inline: auto;
+  padding: var(--sp-3) 0 var(--sp-5);
+}
+
+/* The crossbar the four of them hang off. */
+.path-rung::after {
+  content: "";
+  position: absolute;
+  left: 7%;
+  right: 7%;
+  top: calc(var(--sp-3) + var(--path-face) / 2);
+  height: 1px;
+  background: var(--line);
+}
+
+.path-rung > .path-node:nth-child(1) { grid-column: 1; }
+.path-rung > .path-node:nth-child(2) { grid-column: 2; }
+.path-rung > .path-node:nth-child(3) { grid-column: 4; }
+.path-rung > .path-node:nth-child(4) { grid-column: 5; }
+
+/* The two at the end: one either side of where the spine runs out. */
+.path-rung-pair { grid-template-columns: minmax(0, 1fr) var(--path-spine) minmax(0, 1fr); }
+.path-rung-pair > .path-node:nth-child(1) { grid-column: 1; }
+.path-rung-pair > .path-node:nth-child(2) { grid-column: 3; }
+.path-rung-pair::after { display: none; }
+
+/* ---- a node ---- */
+
+.path-node {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--sp-2);
-  padding: var(--sp-3) var(--sp-2);
-  border: 1px solid var(--line);
-  border-radius: var(--r-2);
-  background: var(--surface-1);
-  cursor: pointer;
-  transition: border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease),
-              transform var(--dur-1) var(--ease), opacity var(--dur-1) var(--ease);
+  gap: 7px;
+  min-width: 0;
+  text-align: center;
 }
-.path-cell:hover:not(:disabled),
-.path-cell:focus-visible { border-color: var(--violet); transform: translateY(-1px); }
-.path-cell:disabled { cursor: default; }
+
+.path-face {
+  position: relative;
+  width: var(--path-face);
+  height: var(--path-face);
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform var(--dur-1) var(--ease);
+}
+
+.path-face:hover { transform: translateY(-2px); }
+.path-face:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+
+.path-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.path-plate {
+  fill: var(--surface-1);
+  stroke: var(--line-strong);
+  stroke-width: 1.5;
+  transition: fill var(--dur-1) var(--ease), stroke var(--dur-1) var(--ease);
+}
+
+.path-halo { fill: none; stroke: none; }
+.path-hoop { fill: none; stroke: var(--line-soft); stroke-width: 1; }
+
+/* One segment a rank, filling clockwise from the top. */
+.path-seg {
+  fill: none;
+  stroke: var(--wash-strong);
+  stroke-width: 3;
+  stroke-linecap: round;
+  transition: stroke var(--dur-1) var(--ease);
+}
+
+.path-seg.is-on { stroke: var(--violet); }
+.path-seg.is-staged { stroke: var(--violet-hi); stroke-dasharray: 6 5; }
 
 .path-art {
-  width: 46px;
-  height: 46px;
-  display: grid;
-  place-items: center;
-  border-radius: var(--r-1);
-}
-.path-art .ico { width: 26px; height: 26px; }
-
-/* A node the points are there for: it says so without a word on it. */
-.path-cell.is-ready {
-  border-color: color-mix(in oklab, var(--violet) 55%, var(--line));
-  box-shadow: 0 0 0 1px color-mix(in oklab, var(--violet) 25%, transparent) inset;
-}
-.path-cell.is-taken .path-art,
-.path-cell.is-maxed .path-art { color: var(--violet-hi); }
-.path-cell.is-maxed { border-color: color-mix(in oklab, var(--violet) 45%, var(--line)); }
-
-/* A band whose gate has not been passed: still legible, plainly not yours yet. */
-.path-cell.is-shut { opacity: .45; }
-.path-cell.is-shut .path-art { color: var(--muted); }
-
-/* The corner mark: a tick when it is walked to the end, a lock when the band is shut. */
-.path-mark {
   position: absolute;
-  top: 4px;
-  right: 4px;
+  left: 50%;
+  top: 50%;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
   display: grid;
   place-items: center;
-  color: var(--muted);
+  color: var(--bone-dim);
+  transition: color var(--dur-1) var(--ease);
 }
-.path-mark:empty { display: none; }
-.path-mark .ico { width: 14px; height: 14px; }
-.path-cell.is-maxed .path-mark { color: var(--violet); }
-.path-cell.is-keystone.is-maxed .path-mark { color: var(--gold); }
 
-.path-pips { display: flex; gap: 4px; }
+.path-art .ico { width: 100%; height: 100%; }
 
-.path-pip {
-  width: 9px;
-  height: 9px;
+.path-lock {
+  position: absolute;
+  right: 0;
+  bottom: 4px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
   border-radius: 50%;
-  border: 1px solid var(--line);
-  background: transparent;
-  transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+  background: var(--surface-sunk);
+  border: 1px solid var(--line-strong);
+  color: var(--bone-faint);
 }
-.path-pip.is-on { background: var(--violet); border-color: var(--violet); }
 
-/* The two at the end of a path are a different kind of thing, and look it. */
-.path-cell.is-keystone {
-  border-color: color-mix(in oklab, var(--gold) 35%, var(--line));
-  background:
-    radial-gradient(120% 90% at 50% 0%, color-mix(in oklab, var(--gold) 7%, transparent), transparent 70%),
-    var(--surface-1);
+.path-lock[hidden] { display: none; }
+.path-lock .ico { width: 12px; height: 12px; }
+
+.path-name {
+  font-family: var(--font-display);
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--bone);
 }
-.path-cell.is-keystone .path-pip.is-on { background: var(--gold); border-color: var(--gold); }
-.path-cell.is-keystone.is-maxed { border-color: color-mix(in oklab, var(--gold) 70%, transparent); }
 
-.path-legend { margin: 0; }
+.path-rank {
+  font-size: var(--text-xs);
+  line-height: 1.3;
+  letter-spacing: .03em;
+  color: var(--bone-faint);
+}
+
+/* ---- what a node's state looks like ---- */
+
+.path-node.is-ready .path-plate { stroke: color-mix(in oklab, var(--violet) 55%, var(--line)); }
+
+.path-node.is-taken .path-plate { fill: var(--surface-2); stroke: var(--violet-edge); }
+.path-node.is-taken .path-art { color: var(--violet-hi); }
+.path-node.is-taken .path-rank { color: var(--violet); }
+
+.path-node.is-maxed .path-plate { fill: var(--surface-3); stroke: var(--violet-hi); }
+.path-node.is-maxed .path-rank { color: var(--violet-hi); }
+
+.path-node.is-staged .path-plate { stroke: var(--violet-hi); stroke-dasharray: 5 4; }
+.path-node.is-staged .path-rank { color: var(--violet-hi); }
+
+.path-node.is-hand .path-halo { stroke: var(--violet-hi); stroke-width: .9; opacity: .5; }
+
+.path-node.is-hand .path-face::before {
+  content: "";
+  position: absolute;
+  inset: -12px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--violet-soft), transparent);
+  pointer-events: none;
+}
+
+.path-node.is-keystone .path-face {
+  width: calc(var(--path-face) + 18px);
+  height: calc(var(--path-face) + 18px);
+}
+
+.path-node.is-keystone .path-art { width: 38px; height: 38px; margin: -19px 0 0 -19px; }
+.path-node.is-keystone .path-name { font-size: 14.5px; }
+.path-node.is-keystone.is-taken .path-hoop { stroke: var(--violet-edge); }
+
+.path-node.is-shut .path-plate { fill: var(--surface-sunk); stroke: var(--line); }
+.path-node.is-shut .path-seg { stroke: var(--line-soft); }
+.path-node.is-shut .path-art { color: var(--bone-ghost); }
+.path-node.is-shut .path-name { color: var(--bone-faint); }
+
+/* ---- the rail ---- */
+
+.path-rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+/* Wells, not cards: a card never sits inside a card. */
+.path-panel {
+  padding: var(--sp-4);
+  border-radius: var(--r-md);
+  border: 1px solid var(--line-soft);
+  background: var(--surface-sunk);
+}
+
+.path-panel > .eyebrow {
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--bone-faint);
+}
+
+.path-hand-top {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+}
+
+.path-hand-art {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-md);
+  background: var(--violet-soft);
+  color: var(--violet-hi);
+}
+
+.path-hand-art .ico { width: 22px; height: 22px; }
+
+.path-hand-name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--bone);
+}
+
+.path-hand-where {
+  margin: 2px 0 0;
+  font-size: var(--text-xs);
+  color: var(--bone-faint);
+}
+
+.path-hand-note {
+  margin: var(--sp-3) 0 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: var(--text-md);
+  line-height: 1.5;
+  color: var(--bone-dim);
+}
+
+.path-ranks {
+  list-style: none;
+  margin: var(--sp-4) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.path-rank-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  padding: 7px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  font-size: var(--text-sm);
+  color: var(--bone-faint);
+}
+
+.path-rank-no {
+  width: 26px;
+  flex-shrink: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  text-align: center;
+  color: var(--bone-ghost);
+}
+
+.path-rank-what { flex: 1 1 auto; min-width: 0; }
+
+.path-rank-tag {
+  flex-shrink: 0;
+  font-size: var(--text-2xs);
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.path-rank-row.is-held { background: var(--violet-soft); color: var(--bone); }
+.path-rank-row.is-held .path-rank-no,
+.path-rank-row.is-held .path-rank-tag { color: var(--violet-hi); }
+
+.path-rank-row.is-staged {
+  background: var(--violet-soft);
+  border-color: var(--violet-edge);
+  border-style: dashed;
+  color: var(--bone);
+}
+
+.path-rank-row.is-staged .path-rank-no,
+.path-rank-row.is-staged .path-rank-tag { color: var(--violet-hi); }
+
+.path-rank-row.is-next { border-color: var(--violet-edge); color: var(--bone-dim); }
+.path-rank-row.is-next .path-rank-no,
+.path-rank-row.is-next .path-rank-tag { color: var(--violet); }
+
+.path-stepper {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+}
+
+.path-step {
+  width: max(var(--tap), 40px);
+  height: max(var(--tap), 40px);
+  flex-shrink: 0;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-2);
+  color: var(--bone-dim);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--dur-1), color var(--dur-1), border-color var(--dur-1);
+}
+
+.path-step:hover:not(:disabled) { background: var(--surface-3); color: var(--bone); }
+.path-step:disabled { opacity: .4; cursor: default; }
+.path-step-add { background: var(--violet-soft); border-color: var(--violet-edge); color: var(--violet-hi); }
+.path-step-add:hover:not(:disabled) { background: rgba(157, 130, 224, .22); color: var(--violet-hi); }
+
+.path-step-mid {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: center;
+}
+
+.path-step-count {
+  display: block;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 500;
+  color: var(--bone);
+}
+
+.path-step-price {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--bone-faint);
+}
+
+.path-hand-why {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--violet);
+}
+
+.path-hand-why[hidden] { display: none; }
+
+.path-carry {
+  margin-top: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.path-carry-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  font-size: var(--text-sm);
+}
+
+.path-carry-label { flex: 1 1 auto; min-width: 0; color: var(--bone-dim); }
+
+.path-carry-value {
+  flex-shrink: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  color: var(--bone);
+  font-variant-numeric: tabular-nums;
+}
+
+.path-carry-value.is-staged { color: var(--violet-hi); }
+.path-carry-none { margin: 0; font-size: var(--text-xs); line-height: 1.5; color: var(--bone-faint); }
+
+/* ---- the foot: spend freely, seal once ---- */
+
+.path-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  flex-wrap: wrap;
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--line);
+}
+
+.path-tally { flex: 1 1 280px; min-width: 0; }
+
+.path-tally-top {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  font-size: var(--text-xs);
+  color: var(--bone-faint);
+}
+
+.path-tally-top > b {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 500;
+  color: var(--bone);
+}
+
+.path-tally-staged { color: var(--violet-hi); }
+.path-tally-staged[hidden] { display: none; }
+
+.path-bar {
+  display: flex;
+  height: 4px;
+  margin: var(--sp-2) 0 6px;
+  border-radius: var(--r-pill);
+  background: var(--surface-sunk);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+  overflow: hidden;
+}
+
+.path-bar > i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--violet);
+  transition: width var(--bar-dur) linear;
+}
+
+.path-bar > i.is-staged { background: var(--violet-hi); opacity: .55; }
+
+.path-tally-note {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--bone-faint);
+}
+
+.path-foot-acts {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-left: auto;
+}
+
+/* ---- room for the rail, and the rung on a phone ---- */
+
+@media (min-width: 1280px) {
+  .path-body { grid-template-columns: minmax(0, 1fr) 320px; }
+}
+
+/* No room for a rail beside the tree: it goes under it, two panels abreast
+   rather than two very wide ones stacked. */
+@media (max-width: 1279px) {
+  .path-rail { flex-direction: row; align-items: flex-start; gap: var(--sp-4); }
+  .path-rail > .path-panel { flex: 1 1 0; min-width: 0; }
+}
+
+@media (max-width: 1023px) {
+  .path-tree { --path-face: 82px; --path-spine: 34px; }
+}
 
 @media (max-width: 599px) {
-  .path-grid { max-width: none; }
-  .path-art { width: 40px; height: 40px; }
+  .path-tree { --path-face: 74px; --path-spine: 26px; }
+
+  /* Two either side of the spine, two rows a band. */
+  .path-rung {
+    grid-template-columns: minmax(0, 1fr) var(--path-spine) minmax(0, 1fr);
+    row-gap: var(--sp-5);
+  }
+
+  .path-rung > .path-node:nth-child(1),
+  .path-rung > .path-node:nth-child(3) { grid-column: 1; }
+  .path-rung > .path-node:nth-child(2),
+  .path-rung > .path-node:nth-child(4) { grid-column: 3; }
+  .path-rung::after { display: none; }
+
+  .path-name { font-size: 12.5px; }
+
+  /* The note must not reach the spine, so it wraps instead. */
+  .path-gate-note { max-width: 46%; white-space: normal; text-align: right; }
+
+  .path-rail { flex-direction: column; align-items: stretch; }
+  .path-foot-acts { margin-left: 0; width: 100%; }
+  .path-foot-acts > .btn-primary { flex: 1 1 auto; }
 }
 
 /* The lines a discipline cannot carry, under the ones it can. */

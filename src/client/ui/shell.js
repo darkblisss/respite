@@ -387,7 +387,7 @@ export function createShell(app) {
           meta,
           m.badge ? h("span.badge", { class: m.badge.tone && `badge-${m.badge.tone}`, "aria-label": m.badge.label }, m.badge.text) : null));
       }));
-      // :has() hides an empty group; hidden covers browsers without it.
+      // The only thing that hides an empty group: no CSS :has(:empty), which Safari never re-runs.
       section.hidden = g.rows.length === 0;
     }
   }

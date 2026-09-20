@@ -478,8 +478,15 @@ button.conn:hover { background: var(--wash-strong); border-color: var(--line); }
   gap: 6px;
 }
 
-/* A group with nothing open in it is not shown at all. */
-.nav-group:has(> .nav-list:empty) { display: none; }
+/* A group with nothing open in it is not shown at all. shell.js sets `hidden` on
+   the section as it builds the nav, which is the whole rule: do NOT bring back a
+   `:has(> .nav-list:empty)` version of this. Every list starts empty in
+   index.html, so that selector matches on first paint, and WebKit does not
+   re-run a `:has()` that turns on `:empty` when the list is filled by script --
+   the sidebar then stays blank until something else forces a style recalc
+   (opening a popup, resizing the bar). Safari showed the weather card and no nav
+   at all. */
+.nav-group[hidden] { display: none; }
 
 .nav-head {
   padding: 6px 10px 4px;
