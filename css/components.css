@@ -79,12 +79,12 @@
 
 .art.is-dim { filter: grayscale(1); opacity: .55; }
 
-/* Gilded frame overlay for the top two rarities, on both places an item
-   icon shows up (the inventory .slot card and the plain .art tile). */
-.slot[data-rarity="relic"]::after,
-.art[data-rarity="relic"]::after,
-.slot[data-rarity="legendary"]::after,
-.art[data-rarity="legendary"]::after {
+/* Gilded frame overlay for the top two rarities, worn gear only: the doll
+   slot on the paperdoll (equipped), never the inventory grid or a bare
+   .art tile, so it reads as "this is on you" rather than decorating every
+   icon of that rarity wherever it shows up. */
+.doll-slot[data-rarity="relic"]::after,
+.doll-slot[data-rarity="legendary"]::after {
   content: "";
   position: absolute;
   inset: -4px;
@@ -2867,17 +2867,6 @@ button.chip:disabled { opacity: .45; }
   height: 100%;
   object-fit: contain;
   object-position: center bottom;
-}
-
-.portrait::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(ellipse 60% 9% at 50% 97%, rgba(11, 9, 16, .75), transparent 70%),
-    linear-gradient(180deg, transparent 62%, rgba(11, 9, 16, .45));
-  border-radius: inherit;
 }
 
 .portrait-bust {
