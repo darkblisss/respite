@@ -496,6 +496,21 @@ export function salvage(state, { key, from } = {}, env) {
   return OK();
 }
 
+// Debug/testing only: stashes any valid item key at will, bypassing normal
+// acquisition. Never wire this to the UI or ship it reachable by a live client.
+export function debugGive(state, { key, qty = 1 } = {}, env) {
+  const d = itemDef(key);
+  if (!d) return refuse("No such item.");
+  const n = Number.isInteger(qty) && qty > 0 ? qty : 1;
+
+  const res = transact(state, (tx) => {
+    tx.stash(key, n);
+  });
+  if (!res.ok) return res;
+  emit(state, env, "item:debugGiven", { key, qty: n });
+  return OK();
+}
+
 // Moves key before `before` in the pool's order, or to the end when before is null.
 export function reorder(state, { pool, key, before } = {}, _env) {
   if (!isPool(pool)) return refuse("No such store.");
