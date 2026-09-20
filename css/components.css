@@ -43,6 +43,7 @@
 /* An art tile: the square that holds an item, skill or foe icon. */
 /* Takes its colour from data-tone on itself or on anything around it; violet if none. */
 .art {
+  position: relative;
   width: 44px;
   height: 44px;
   flex-shrink: 0;
@@ -77,6 +78,19 @@
 }
 
 .art.is-dim { filter: grayscale(1); opacity: .55; }
+
+/* Gilded frame overlay for the top two rarities, on both places an item
+   icon shows up (the inventory .slot card and the plain .art tile). */
+.slot[data-rarity="relic"]::after,
+.art[data-rarity="relic"]::after,
+.slot[data-rarity="legendary"]::after,
+.art[data-rarity="legendary"]::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  background: url("../assets/rarity/gilded-frame.webp") center / cover no-repeat;
+  pointer-events: none;
+}
 
 /* ================= 2. BUTTONS ================= */
 

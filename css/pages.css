@@ -25,9 +25,14 @@
 
 .char-portrait {
   width: 104px;
-  aspect-ratio: 768 / 1376;
+  aspect-ratio: 1 / 1;
   height: auto;
   border-radius: 16px;
+}
+
+.char-portrait img {
+  object-fit: cover;
+  object-position: center 12%;
 }
 
 .char-name {
@@ -739,8 +744,13 @@ button.doll-slot { cursor: pointer; }
 .arena-portrait {
   position: relative;
   width: clamp(112px, 12vw, 150px);
-  aspect-ratio: 768 / 1376;
+  aspect-ratio: 1 / 1;
   transition: opacity 300ms, filter 300ms, transform 300ms;
+}
+
+.arena-portrait img {
+  object-fit: cover;
+  object-position: center 12%;
 }
 
 .arena-name {
