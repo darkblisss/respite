@@ -24,7 +24,7 @@ import { fmt, fmtWhole } from "../ui/format.js";
 import { myClass, skillLevel } from "../../shared/stats.js";
 import { GameData, classWeapons } from "../../shared/registry.js";
 import { masterySheet } from "../../shared/mastery.js";
-import { pathSheet } from "../../shared/path.js";
+import { pathSheet, pathMods } from "../../shared/path.js";
 import { confirmSpend } from "../ui/widgets.js";
 import { fmtGold } from "../ui/format.js";
 import { CONFIG } from "../../shared/config.js";
@@ -33,16 +33,23 @@ import { CONFIG } from "../../shared/config.js";
 
 /* ================= 1a. THE PATH ================= */
 
-/* Ten nodes in three bands, and never quite enough points for all of them. Every
-   number comes off pathSheet(), so the page does no arithmetic of its own.
+/* Ten nodes in three bands, drawn as a road rather than a grid: one spine down
+   the middle of the tree, lit as far as the points have gone and dark below it,
+   with a rung of four hanging off it a band, two either side. A band opens on
+   what has been spent and not on the node above it, so nothing inside a band
+   pretends to be ordered. Every number comes off pathSheet().
 
-   The grid is icons and nothing else: three across, as many rows as the tree is
-   deep. What a node does, what it costs and why it will not open yet all live in
-   the tooltip, so the page reads as a tree at a glance rather than ten paragraphs
-   -- and taking one asks first, because a point spent is spent until a reset is
-   paid for. */
+   Points are STAGED, not spent. Clicking a face marks a rank and nothing else;
+   the foot bar seals the lot in one command a rank. A misclick costs nothing
+   until then, which is the only fair way to sell a tree that can never be
+   filled -- and it puts the one warning where it belongs, on the seal.
+
+   The rail says what the face in hand is worth rank by rank, and under it what
+   the whole walk carries. The old grid said none of that: ten icons, no names. */
 
 const BAND_NAMES = ["Groundwork", "The Craft", "Keystones"];
+const ROMAN = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
+const roman = (n) => ROMAN[n] || String(n);
 
 // "+3% Defence", "1.5s faster", "+2 Veil a blow" -- one line a rank, in the reader's words.
 const PER_WORDS = {
@@ -63,49 +70,221 @@ const perLine = (per, mult = 1) => Object.keys(per)
   .map((k) => PER_WORDS[k](+(per[k] * mult).toFixed(4)))
   .join(", ");
 
+/* What the walk adds up to, for the foot of the rail. Only the lines a tree
+   actually moves are drawn, so a Rogue is never told its Veil absorption is nil. */
+const plus = (v) => `+${pct(v)}`;
+const flat = (v) => `+${+v.toFixed(2)}`;
+const CARRY = [
+  ["attackPct", "Attack", plus],
+  ["defencePct", "Defence", plus],
+  ["healthPct", "Health", plus],
+  ["speedPct", "Swing speed", (v) => `${pct(v)} faster`],
+  ["critFlat", "Crit chance", plus],
+  ["critDmgFlat", "Crit damage", plus],
+  ["penFlat", "Penetration", plus],
+  ["veilFlat", "Veil a blow", flat],
+  ["absorbFlat", "Veil a second", flat],
+  ["techPct", "From a full Veil", plus],
+];
+
+/* The face of a node: a hex plate inside a ring of one segment a rank. 112 is the
+   drawing's own grid and the CSS sizes it; the ring is the whole rank readout,
+   because pips in a row read as pagination and a tree is not a carousel. */
+const HEX = "90.64,76 56,96 21.36,76 21.36,36 56,16 90.64,36";
+const HALO = "translate(56 56) scale(1.17) translate(-56 -56)";
+const RING_R = 52;
+const RING_MID = 56;
+const RING_GAP = 11;      // degrees of dark between one rank and the next
+
+function ringArc(i, n) {
+  const step = 360 / n;
+  const from = -90 + i * step + RING_GAP / 2;
+  const to = -90 + (i + 1) * step - RING_GAP / 2;
+  const at = (deg) => {
+    const r = (deg * Math.PI) / 180;
+    return `${(RING_MID + RING_R * Math.cos(r)).toFixed(2)} ${(RING_MID + RING_R * Math.sin(r)).toFixed(2)}`;
+  };
+  return `M${at(from)}A${RING_R} ${RING_R} 0 ${to - from > 180 ? 1 : 0} 1 ${at(to)}`;
+}
+
 function pathViewBuild(ctx) {
   let busy = false;
-  const cells = new Map();       // node id -> refs
-  let sheetNow = null;           // the last sheet drawn, for the tooltips to read
+  let sheetNow = null;        // the last sheet drawn, for the tooltips and the rail
+  let staged = new Map();     // node id -> ranks marked but not yet sealed
+  let hand = null;            // the node the rail is reading
+  let builtFor = null;        // the discipline the tree was built for
+  let bands = [];
+  let railSig = null;
+  const cells = new Map();
+
+  const stagedOn = (id) => staged.get(id) || 0;
+
+  /* ---- the shell of the card ---- */
 
   const sub = h("p.card-sub");
   const pts = h("span.chip.chip-gold");
-  const reset = h("button.btn.btn-sm.btn-quiet", { type: "button" }, iconEl("sync"), "Reset path");
-  const grid = h("div.path-grid");
-  const legend = h("p.small.muted.path-legend");
-  const body = h("div.vstack.gap-3", grid, legend);
+  const tree = h("div.path-tree");
+  const rail = h("aside.path-rail");
+  const body = h("div.path-body", tree, rail);
+
+  const tallySpent = h("b");
+  const tallyStaged = h("span.path-tally-staged");
+  const tallyLeft = h("span.path-tally-left");
+  const barSpent = h("i");
+  const barStaged = h("i.is-staged");
+  const tallyNote = h("p.path-tally-note");
+  const reset = h("button.btn.btn-sm.btn-quiet", { type: "button" }, iconEl("sync"), "Reset the path");
+  const seal = h("button.btn.btn-primary", { type: "button" });
+  const foot = h("div.path-foot",
+    h("div.path-tally",
+      h("div.path-tally-top", tallySpent, tallyStaged, tallyLeft),
+      h("div.path-bar", { "aria-hidden": "true" }, barSpent, barStaged),
+      tallyNote),
+    h("div.path-foot-acts", reset, seal));
+
   const node = h("section.card",
-    h("div.card-head", h("div", h("h2.card-title", iconEl("book"), "Path"), sub), h("div.card-actions", pts, reset)),
-    body);
+    h("div.card-head", h("div", h("h2.card-title", iconEl("book"), "Path"), sub), h("div.card-actions", pts)),
+    body, foot);
 
   const locked = h("div.well", iconEl("lock"),
     h("span", `No path without a discipline. The Veil opens at Hunt ${CONFIG.progression.classPickLevel}, and the path opens with it.`));
 
-  /* Taking one asks first. The cost is points, not gold, so this is a plain confirm with
-     what it buys and what is left after it spelled out. */
-  async function take(id) {
+  /* ---- the rail ---- */
+
+  const R = {
+    art: h("span.path-hand-art", { "aria-hidden": "true" }),
+    name: h("h3.path-hand-name"),
+    where: h("p.path-hand-where"),
+    note: h("p.path-hand-note"),
+    ranks: h("ol.path-ranks"),
+    minus: h("button.path-step", { type: "button", "aria-label": "Take back a staged rank" }, "−"),
+    count: h("b.path-step-count"),
+    price: h("span.path-step-price"),
+    plus: h("button.path-step.path-step-add", { type: "button", "aria-label": "Stage another rank" }, "+"),
+    why: h("p.path-hand-why"),
+    carry: h("div.path-carry"),
+  };
+  rail.append(
+    h("section.path-panel.path-hand",
+      h("div.eyebrow", "In hand"),
+      h("div.path-hand-top", R.art, h("div", R.name, R.where)),
+      R.note,
+      R.ranks,
+      h("div.path-stepper", R.minus, h("span.path-step-mid", R.count, R.price), R.plus),
+      R.why),
+    h("section.path-panel",
+      h("div.eyebrow", "What the path carries"),
+      R.carry));
+
+  /* ================= what is staged, once it has been checked =================
+     Replays every staged rank in band order and drops anything that no longer
+     fits, so what the page draws is always something seal() can carry out. A
+     band is judged on what is spent BEFORE the rank in question, exactly as
+     blockedReason() judges it, or the page would offer a rank the engine
+     refuses. */
+
+  function effective(sheet) {
+    const want = staged;
+    const kept = new Map();
+    let spent = sheet.spent;
+    let left = sheet.earned - spent;
+    sheet.nodes.slice().sort((a, b) => a.node.band - b.node.band).forEach((row) => {
+      const def = row.node;
+      let has = row.rank;
+      let n = want.get(def.id) || 0;
+      while (n > 0 && has < def.ranks && spent >= row.gate && left >= def.cost) {
+        kept.set(def.id, (kept.get(def.id) || 0) + 1);
+        spent += def.cost;
+        left -= def.cost;
+        has += 1;
+        n -= 1;
+      }
+    });
+    staged = kept;
+
+    const rows = new Map();
+    sheet.nodes.forEach((row) => {
+      const def = row.node;
+      const shown = row.rank + (kept.get(def.id) || 0);
+      const open = spent >= row.gate;
+      const short = row.gate - spent;
+      rows.set(def.id, {
+        open,
+        shown,
+        can: open && shown < def.ranks && left >= def.cost,
+        why: !open ? `${short} more ${short === 1 ? "point" : "points"} on the path first.`
+          : shown >= def.ranks ? "That is as far as it goes."
+            : left < def.cost ? (sheet.nextAt ? `No points left. The next comes at Hunt ${sheet.nextAt}.` : "No points left.")
+              : null,
+      });
+    });
+    return { spent, left, mark: spent - sheet.spent, rows };
+  }
+
+  // The ranks on a node as a save would hold them, with or without what is staged.
+  function bagOf(sheet, withStaged) {
+    const bag = {};
+    sheet.nodes.forEach((row) => {
+      const n = row.rank + (withStaged ? stagedOn(row.node.id) : 0);
+      if (n > 0) bag[row.node.id] = n;
+    });
+    return bag;
+  }
+
+  /* ================= staging ================= */
+
+  function pick(id, take) {
+    if (!sheetNow) return;
+    const moved = hand !== id;
+    hand = id;
+    if (take) stage(id);
+    else if (moved) paint(ctx);
+  }
+
+  function stage(id) {
+    staged.set(id, stagedOn(id) + 1);
+    paint(ctx);     // effective() drops it straight back out if it does not fit
+  }
+
+  function unstage(id) {
+    const n = stagedOn(id);
+    if (n <= 0) return;
+    if (n === 1) staged.delete(id);
+    else staged.set(id, n - 1);
+    paint(ctx);
+  }
+
+  /* One command a rank, in band order, so a gate a lower band opens is already
+     open when the next rank reaches it. The warning lives here now: this is the
+     moment points stop being a sketch. */
+  async function sealPath() {
     if (busy || !sheetNow) return;
-    const row = sheetNow.nodes.find((r) => r.node.id === id);
-    if (!row || !row.can) return;
-    const def = row.node;
-    const cost = def.cost;
-    const next = row.rank + 1;
+    const plan = [];
+    sheetNow.nodes.slice().sort((a, b) => a.node.band - b.node.band).forEach((row) => {
+      for (let i = 0; i < stagedOn(row.node.id); i += 1) plan.push(row.node.id);
+    });
+    if (!plan.length) return;
+    const names = [...new Set(plan)].map((id) => {
+      const row = sheetNow.nodes.find((r) => r.node.id === id);
+      const n = stagedOn(id);
+      return `${row.node.name}${n > 1 ? ` ×${n}` : ""}`;
+    });
     const yes = await confirm({
-      title: `Take ${def.name}?`,
-      body: [
-        def.note,
-        `It is worth ${perLine(def.per)}${def.ranks > 1 ? ` a rank, and this is rank ${next} of ${def.ranks}` : ""}.`,
-        `${cost === 1 ? "One point" : `${cost} points`}, and ${sheetNow.left - cost === 0 ? "none" : fmtWhole(sheetNow.left - cost)} left after it. A point comes back only with a reset, which costs ${fmtGold(sheetNow.respecGold)}.`,
-      ].join(" "),
-      confirmText: cost === 1 ? "Spend the point" : `Spend ${cost} points`,
-      art: def.icon || "book",
+      title: plan.length === 1 ? "Seal one point?" : `Seal ${plan.length} points?`,
+      body: `${names.join(", ")}. A point comes back only with a reset, which costs ${fmtGold(CONFIG.path.respecGold)} apiece.`,
+      confirmText: plan.length === 1 ? "Spend the point" : `Spend ${plan.length} points`,
+      art: "book",
     });
     if (!yes) return;
     busy = true;
     try {
-      await ctx.dispatch("walkPath", { node: id });
+      for (const id of plan) {
+        await ctx.dispatch("walkPath", { node: id });
+      }
     } finally {
+      staged = new Map();
       busy = false;
+      paint(ctx);
     }
   }
 
@@ -125,109 +304,258 @@ function pathViewBuild(ctx) {
     try {
       await ctx.dispatch("resetPath", {});
     } finally {
+      staged = new Map();
       busy = false;
+      paint(ctx);
     }
   });
 
-  /* What the tooltip says about a node: the name, the band it sits in, what a rank is
-     worth, where it stands, and -- when it will not open -- why. Read fresh every time it
-     opens, so it never contradicts the grid under it. */
+  seal.addEventListener("click", sealPath);
+  R.plus.addEventListener("click", () => { if (hand) stage(hand); });
+  R.minus.addEventListener("click", () => { if (hand) unstage(hand); });
+
+  /* ================= drawing ================= */
+
+  /* What the tooltip says about a node: the name, the band it sits in, what a rank
+     is worth, where it stands, and -- when it will not open -- why. Read fresh every
+     time it opens, so it never contradicts the face under it. */
   function tipFor(id) {
     const row = sheetNow && sheetNow.nodes.find((r) => r.node.id === id);
     if (!row) return "";
     const def = row.node;
+    const mark = stagedOn(id);
     const rows = [["Each rank", perLine(def.per)]];
-    if (def.ranks > 1) rows.push(["Ranks", `${row.rank} of ${def.ranks}`]);
+    if (def.ranks > 1) rows.push(["Ranks", `${row.rank + mark} of ${def.ranks}`]);
     if (row.rank > 0) rows.push(["Now", perLine(def.per, row.rank), "gold"]);
+    if (mark > 0) rows.push(["Staged", perLine(def.per, row.rank + mark)]);
     rows.push(["Cost", def.cost === 1 ? "1 point" : `${def.cost} points`]);
+    const e = lastEff && lastEff.rows.get(id);
     return tipBody({
       title: def.name,
       sub: def.keystone ? "Keystone" : BAND_NAMES[def.band - 1] || `Band ${def.band}`,
       text: def.note,
       rows,
-      foot: row.maxed ? "Walked to the end." : row.can ? "Click to take it." : row.why || "",
-      footTone: row.maxed ? "gold" : row.can ? null : "bad",
+      foot: mark ? "Staged. Seal the path to spend it." : e && e.can ? "Click to stage a rank." : (e && e.why) || "",
+      footTone: mark ? null : e && e.can ? null : "bad",
     });
   }
 
-  function cellFor(row) {
+  let lastEff = null;
+
+  function faceFor(row) {
     const def = row.node;
-    const R = {
-      pips: h("span.path-pips", { "aria-hidden": "true" }),
-      art: h("span.art.path-art", { "aria-hidden": "true" }, iconEl(def.icon || "book")),
-      mark: h("span.path-mark", { "aria-hidden": "true" }),
+    const segs = def.ranks > 1
+      ? Array.from({ length: def.ranks }, (_, i) => h("path.path-seg", { d: ringArc(i, def.ranks) }))
+      : [h("circle.path-seg", { cx: RING_MID, cy: RING_MID, r: RING_R })];
+    const C = {
+      segs,
+      rank: h("span.path-rank"),
+      lock: h("span.path-lock", { "aria-hidden": "true" }, iconEl("lock")),
     };
-    R.node = h("button.path-cell", {
-      type: "button", dataset: { node: def.id }, class: { "is-keystone": def.keystone },
-    }, R.art, R.mark, R.pips);
-    R.tip = tooltip(R.node, () => tipFor(def.id));
-    return R;
+    C.face = h("button.path-face", { type: "button", dataset: { node: def.id } },
+      h("svg.path-ring", { viewBox: "0 0 112 112", "aria-hidden": "true", focusable: "false" },
+        def.keystone ? h("circle.path-hoop", { cx: RING_MID, cy: RING_MID, r: 60 }) : null,
+        h("polygon.path-halo", { points: HEX, transform: HALO }),
+        h("polygon.path-plate", { points: HEX }),
+        ...segs),
+      h("span.path-art", { "aria-hidden": "true" }, iconEl(def.icon || "book")),
+      C.lock);
+    C.node = h("div.path-node", { class: { "is-keystone": def.keystone } },
+      C.face, h("span.path-name", def.name), C.rank);
+    C.tip = tooltip(C.face, () => tipFor(def.id));
+    return C;
   }
 
-  function paintCell(R, row) {
-    const { node: def, rank } = row;
-    R.pips.replaceChildren(...Array.from({ length: def.ranks }, (_, i) => h(
-      `span.path-pip${i < rank ? ".is-on" : ""}`)));
-    const mark = row.maxed ? iconEl("check") : row.open ? null : iconEl("lock");
-    if (mark) R.mark.replaceChildren(mark);
-    else R.mark.replaceChildren();
-    toggleClass(R.node, "is-maxed", row.maxed);
-    toggleClass(R.node, "is-shut", !row.open);
-    toggleClass(R.node, "is-taken", rank > 0 && !row.maxed);
-    toggleClass(R.node, "is-ready", !!row.can);
-    R.node.disabled = !row.can;
-    // The name lives in the tooltip, so the button says it where a screen reader will read it.
-    setAttr(R.node, "aria-label", `${def.name}${def.ranks > 1 ? `, rank ${rank} of ${def.ranks}` : rank ? ", walked" : ""}${row.can ? "" : ", shut"}`);
+  // What sits under a face: where it stands, in as few words as it takes.
+  function rankWord(def, held, mark) {
+    const shown = held + mark;
+    const tail = mark ? " · staged" : "";
+    if (def.keystone) return shown ? `Taken${tail}` : `${def.cost} points`;
+    if (!shown) return `${def.ranks} ranks`;
+    if (shown >= def.ranks) return `Walked out${tail}`;
+    return `${roman(shown)} of ${roman(def.ranks)}${tail}`;
+  }
+
+  function paintFace(C, row, e) {
+    const def = row.node;
+    const mark = stagedOn(def.id);
+    const shown = row.rank + mark;
+    C.segs.forEach((seg, i) => {
+      toggleClass(seg, "is-on", i < row.rank);
+      toggleClass(seg, "is-staged", i >= row.rank && i < shown);
+    });
+    toggleClass(C.node, "is-shut", !e.open);
+    toggleClass(C.node, "is-taken", shown > 0);
+    toggleClass(C.node, "is-maxed", shown >= def.ranks);
+    toggleClass(C.node, "is-staged", mark > 0);
+    toggleClass(C.node, "is-ready", e.can);
+    toggleClass(C.node, "is-hand", hand === def.id);
+    setAttr(C.lock, "hidden", e.open);
+    setText(C.rank, rankWord(def, row.rank, mark));
+    setAttr(C.face, "aria-label",
+      `${def.name}, ${shown} of ${def.ranks}${mark ? `, ${mark} staged` : ""}${e.open ? "" : ", shut"}`);
+  }
+
+  /* The tree is built once a discipline: its shape cannot change without the oath
+     changing, and everything that moves is written in place. */
+  function buildTree(sheet) {
+    if (builtFor === sheet.klass) return;
+    builtFor = sheet.klass;
+    cells.forEach((C) => C.tip.destroy());
+    cells.clear();
+    bands = [];
+
+    const byBand = new Map();
+    sheet.nodes.forEach((row) => {
+      if (!byBand.has(row.node.band)) byBand.set(row.node.band, []);
+      byBand.get(row.node.band).push(row);
+    });
+
+    tree.replaceChildren(...[...byBand.keys()].sort((a, b) => a - b).map((band) => {
+      const rows = byBand.get(band);
+      const note = h("span.path-gate-note");
+      const rung = h("div.path-rung", { class: { "path-rung-pair": rows.length <= 2 } },
+        ...rows.map((row) => {
+          const C = faceFor(row);
+          cells.set(row.node.id, C);
+          return C.node;
+        }));
+      const wrap = h("div.path-band",
+        h("div.path-gate", h("span.eyebrow.path-gate-name", BAND_NAMES[band - 1] || `Band ${band}`), note),
+        rung);
+      bands.push({ band, wrap, note });
+      return wrap;
+    }));
+  }
+
+  function paintRail(sheet, eff) {
+    const row = sheet.nodes.find((r) => r.node.id === hand);
+    if (!row) return;
+    const def = row.node;
+    const e = eff.rows.get(def.id);
+    const mark = stagedOn(def.id);
+    const shown = row.rank + mark;
+
+    const sig = `${def.id}|${row.rank}|${mark}|${e.can}|${e.open}|${eff.spent}|${eff.left}`;
+    if (sig === railSig) return;
+    railSig = sig;
+
+    R.art.replaceChildren(iconEl(def.icon || "book"));
+    setText(R.name, def.name);
+    setText(R.where, `${def.keystone ? "Keystone" : BAND_NAMES[def.band - 1] || `Band ${def.band}`} · ${def.cost === 1 ? "one point a rank" : `${def.cost} points, one rank`}`);
+    setText(R.note, def.note);
+
+    // Every rank, what it would come to, and which of them are yours.
+    R.ranks.replaceChildren(...Array.from({ length: def.ranks }, (_, i) => {
+      const n = i + 1;
+      const where = n <= row.rank ? "held" : n <= shown ? "staged" : n === shown + 1 && e.can ? "next" : "";
+      return h(`li.path-rank-row${where ? `.is-${where}` : ""}`,
+        h("span.path-rank-no", def.ranks > 1 ? roman(n) : "•"),
+        h("span.path-rank-what", perLine(def.per, n)),
+        h("span.path-rank-tag", where === "held" ? "Taken" : where === "staged" ? "Staged" : where === "next" ? "Next" : ""));
+    }));
+
+    setText(R.count, def.ranks > 1
+      ? (shown ? `${roman(shown)} of ${roman(def.ranks)}` : `None of ${roman(def.ranks)}`)
+      : (shown ? "Taken" : "Not taken"));
+    setText(R.price, def.cost === 1 ? "One point a rank" : `${def.cost} points`);
+    R.minus.disabled = mark === 0;
+    R.plus.disabled = !e.can;
+    setText(R.why, mark ? "Staged. Nothing is spent until the path is sealed." : e.why || "");
+    setAttr(R.why, "hidden", !(mark || e.why));
+
+    const now = pathMods(sheet.klass, bagOf(sheet, false));
+    const soon = pathMods(sheet.klass, bagOf(sheet, true));
+    const lines = CARRY
+      .filter(([key]) => now[key] || soon[key])
+      .map(([key, label, words]) => h("div.path-carry-row",
+        h("span.path-carry-label", label),
+        h("span.path-carry-value", { class: { "is-staged": soon[key] !== now[key] } }, words(soon[key]))));
+    R.carry.replaceChildren(...(lines.length
+      ? lines
+      : [h("p.path-carry-none", "Nothing on the path yet. Every rank lands on the same sheet your gear does.")]));
+  }
+
+  function paintFoot(sheet, eff) {
+    setText(tallySpent, `${fmtWhole(sheet.spent)} spent`);
+    setText(tallyStaged, eff.mark ? `${fmtWhole(eff.mark)} staged` : "");
+    setAttr(tallyStaged, "hidden", !eff.mark);
+    setText(tallyLeft, eff.left === 1 ? "1 still in hand" : `${fmtWhole(eff.left)} still in hand`);
+    setWidth(barSpent, sheet.full ? (sheet.spent / sheet.full) * 100 : 0);
+    setWidth(barStaged, sheet.full ? (eff.mark / sheet.full) * 100 : 0);
+    setText(tallyNote, `${fmtWhole(sheet.spent + eff.mark)} of the ${sheet.full} this tree wants.${sheet.nextAt ? ` The next point comes at Hunt ${sheet.nextAt}.` : ""}`);
+    reset.disabled = !sheet.spent || busy;
+    seal.disabled = !eff.mark || busy;
+    setText(seal, !eff.mark ? "Seal the path" : eff.mark === 1 ? "Seal one point" : `Seal ${eff.mark} points`);
   }
 
   function paint(next) {
     const state = next.state;
     const k = myClass(state);
     if (!k) {
-      if (body.firstChild !== locked) body.replaceChildren(locked);
+      if (body.parentNode) node.removeChild(body);
+      if (foot.parentNode) node.removeChild(foot);
+      if (!locked.parentNode) node.appendChild(locked);
       setText(sub, "No discipline, no path.");
-      setText(pts, "\u2014");
-      reset.disabled = true;
+      setText(pts, "—");
       sheetNow = null;
+      builtFor = null;
       return;
     }
-    if (body.firstChild === locked) body.replaceChildren(grid, legend);
+    if (locked.parentNode) {
+      node.removeChild(locked);
+      node.append(body, foot);
+    }
 
     const sheet = pathSheet(state);
     sheetNow = sheet;
-    setText(sub, `${k.name}. ${sheet.earned} ${sheet.earned === 1 ? "point" : "points"} earned of a tree that wants ${sheet.full}: what you leave out is the choice.`);
-    setText(pts, sheet.left === 1 ? "1 point to spend" : `${fmtWhole(sheet.left)} points to spend`);
-    reset.disabled = !sheet.spent;
+    buildTree(sheet);
+    const eff = effective(sheet);
+    lastEff = eff;
 
-    // One line under the grid for the bands, which are the only thing an icon cannot show.
-    setText(legend, sheet.bands.map(({ band, at, open }) => {
-      const name = BAND_NAMES[band - 1] || `Band ${band}`;
-      if (open) return `${name}: open`;
-      return `${name}: ${at - sheet.spent} more ${at - sheet.spent === 1 ? "point" : "points"} down the path`;
-    }).join(" \u00b7 "));
+    if (!hand || !cells.has(hand)) {
+      const first = sheet.nodes.find((r) => r.rank > 0 && r.rank < r.node.ranks)
+        || sheet.nodes.find((r) => eff.rows.get(r.node.id).can)
+        || sheet.nodes[0];
+      hand = first ? first.node.id : null;
+    }
+
+    setText(sub, `${k.name}. ${sheet.earned} ${sheet.earned === 1 ? "point" : "points"} earned of a tree that wants ${sheet.full}: what you leave out is the choice.`);
+    setText(pts, eff.left === 1 ? "1 point to spend" : `${fmtWhole(eff.left)} points to spend`);
+
+    bands.forEach((b) => {
+      const gate = sheet.bands.find((x) => x.band === b.band);
+      const at = gate ? gate.at : 0;
+      const open = eff.spent >= at;
+      const short = at - eff.spent;
+      toggleClass(b.wrap, "is-shut", !open);
+      setText(b.note, open
+        ? (at ? `Open at ${at} spent` : "Open with the oath")
+        : `${short} more ${short === 1 ? "point" : "points"} down the path`);
+    });
 
     sheet.nodes.forEach((row) => {
-      let R = cells.get(row.node.id);
-      if (!R) {
-        R = cellFor(row);
-        cells.set(row.node.id, R);
-        grid.appendChild(R.node);
-      }
-      paintCell(R, row);
+      const C = cells.get(row.node.id);
+      if (C) paintFace(C, row, eff.rows.get(row.node.id));
     });
+    paintRail(sheet, eff);
+    paintFoot(sheet, eff);
   }
 
-  const off = on(grid, "click", "[data-node]", (e, t) => {
-    if (!t.disabled) take(t.dataset.node);
-  });
+  const offs = [
+    on(tree, "click", "[data-node]", (e, t) => pick(t.dataset.node, true)),
+    // Reading a node should not cost a click: the rail follows the pointer.
+    on(tree, "pointerover", "[data-node]", (e, t) => pick(t.dataset.node, false)),
+    on(tree, "focusin", "[data-node]", (e, t) => pick(t.dataset.node, false)),
+  ];
 
   paint(ctx);
   return {
     node,
     update: paint,
     destroy() {
-      off();
-      cells.forEach((R) => R.tip.destroy());
+      offs.forEach((off) => off());
+      cells.forEach((C) => C.tip.destroy());
       cells.clear();
     },
   };

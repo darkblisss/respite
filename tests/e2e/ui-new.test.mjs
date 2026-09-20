@@ -105,33 +105,53 @@ await run(async () => {
     await go("#/discipline");
     await live(app, () => [...document.querySelectorAll("[role=tab]")].find((t) => /Path/.test(t.textContent)).click());
     await app.page.waitForTimeout(400);
-    const nodes = await live(app, () => [...document.querySelectorAll(".path-grid .path-cell")].map((n) => n.dataset.node));
-    same("ten faces in the grid, all of them the Warrior's", nodes.length, 10);
+    const nodes = await live(app, () => [...document.querySelectorAll(".path-tree .path-face")].map((n) => n.dataset.node));
+    same("ten faces on the road, all of them the Warrior's", nodes.length, 10);
     check("and none of them another discipline's", nodes.every((id) => id.startsWith("wr_")), nodes);
-    const bare = await live(app, () => {
-      const cell = document.querySelector('.path-cell[data-node="wr_ironhide"]');
-      return { text: cell.textContent.trim(), art: !!cell.querySelector(".path-art .ico"), pips: cell.querySelectorAll(".path-pip").length };
+    const named = await live(app, () => {
+      const cell = document.querySelector('.path-face[data-node="wr_ironhide"]').closest(".path-node");
+      return {
+        name: cell.querySelector(".path-name").textContent,
+        rank: cell.querySelector(".path-rank").textContent,
+        segs: cell.querySelectorAll(".path-seg").length,
+        art: !!cell.querySelector(".path-art .ico"),
+      };
     });
-    check("a cell is an icon and its ranks, and says nothing on its face", bare.text === "" && bare.art && bare.pips === 4, bare);
+    check("a node says its name and reads its ranks off the ring, one segment apiece",
+      named.name === "Ironhide" && named.segs === 4 && named.art && /ranks/.test(named.rank), named);
     const shut = await live(app, () => {
-      const cell = document.querySelector('.path-cell.is-shut');
-      return cell ? { id: cell.dataset.node, locked: !!cell.querySelector(".path-mark .ico"), off: cell.disabled } : null;
+      const cell = document.querySelector(".path-node.is-shut");
+      return cell ? { id: cell.querySelector(".path-face").dataset.node, locked: !cell.querySelector(".path-lock").hidden } : null;
     });
-    check("a band still shut wears a lock and refuses the press", !!shut && shut.locked && shut.off, shut);
+    check("a band still shut wears a lock", !!shut && shut.locked, shut);
 
-    // Spending asks first: the grid dispatches nothing until the dialog is answered.
+    // Clicking stages and nothing more: the foot bar is the only thing that spends.
     const before = await live(app, () => window.__respite.store.state.path || {});
-    await live(app, () => document.querySelector('.path-cell[data-node="wr_ironhide"]').click());
+    await live(app, () => document.querySelector('.path-face[data-node="wr_ironhide"]').click());
+    await app.page.waitForTimeout(300);
+    const marked = await live(app, () => {
+      const cell = document.querySelector('.path-face[data-node="wr_ironhide"]').closest(".path-node");
+      return {
+        staged: cell.classList.contains("is-staged"),
+        saved: window.__respite.store.state.path || {},
+        seal: document.querySelector(".path-foot .btn-primary").textContent,
+      };
+    });
+    check("clicking a node stages a rank and spends nothing",
+      marked.staged && (marked.saved.wr_ironhide || 0) === (before.wr_ironhide || 0), marked);
+    check("and the foot offers to seal it", /Seal one point/.test(marked.seal), marked.seal);
+
+    await live(app, () => document.querySelector(".path-foot .btn-primary").click());
     await app.page.waitForTimeout(500);
     const asked = await live(app, () => {
       const m = document.querySelector(".modal");
       return m ? m.textContent : "";
     });
-    check("pressing one asks before it spends", /Take Ironhide\?/.test(asked), asked.slice(0, 160));
+    check("sealing asks before it spends", /Seal one point\?/.test(asked), asked.slice(0, 160));
     const held = await live(app, () => window.__respite.store.state.path || {});
     same("and nothing is spent while it is asking", held.wr_ironhide || 0, before.wr_ironhide || 0);
     await live(app, () => [...document.querySelectorAll(".modal button")].find((b) => /Spend the point/.test(b.textContent)).click());
-    await app.page.waitForTimeout(800);
+    await app.page.waitForTimeout(900);
     const after = await live(app, () => window.__respite.store.state.path || {});
     check("answering it spends the point", (after.wr_ironhide || 0) > (before.wr_ironhide || 0), { before, after });
   }
