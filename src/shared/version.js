@@ -1,4 +1,5 @@
 /* ============================================================
+/* ============================================================
    Respite · version.js · The Seal
    ------------------------------------------------------------
    Which edition of the rules this is. The browser predicts with
@@ -7,9 +8,8 @@
    browser predict differently, and the server turns it away.
    ============================================================ */
 
-/* 4: the Satchel. A fourth pool, the combat loadout, holding remedies and
-   nothing else; the hunt drinks from it alone, so a bottle in Belongings does
-   nothing in a fight; the Bonesetter sells into Belongings, where a remedy
-   costs a slot a bottle instead of stacking; and a save without a Satchel has
-   one packed for it on migration. */
-export const ENGINE_VERSION = 4;
+/* 5: Bountiful Weekend no longer stacks with the day's favoured/hindered
+   weather roll. Saturday and Sunday now grant the flat +20% alone; the roll
+   only ever applies Monday through Friday. Changes the XP a trade action
+   pays out on a weekend, so an older browser's prediction would disagree. */
+export const ENGINE_VERSION = 5;
