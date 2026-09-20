@@ -1,3 +1,5 @@
 node_modules/
 tests/e2e/shots/
 *.log
+.DS_Store
+package-lock.json

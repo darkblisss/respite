@@ -8,8 +8,10 @@
    ============================================================ */
 
 import { CONFIG } from "./config.js";
-import { GameData, getClass } from "./registry.js";
+import { GameData, getClass, classHolds } from "./registry.js";
 import { itemDef, parseKey } from "./items.js";
+import { masteryMods } from "./mastery.js";
+import { pathMods } from "./path.js";
 
 const EQUIP_SLOTS = GameData.EQUIP_SLOTS;
 
@@ -96,7 +98,9 @@ export function myClass(state) {
 /* ================= COMBAT STATS ================= */
 
 /* Everything a fight needs to know about a hunter, as one snapshot.
-   loadout: { level, klass, equipment }. */
+   loadout: { level, klass, equipment, mastery }. `mastery` is a save's
+   state.mastery, or anything shaped like it; left out, no weapon mastery is
+   counted, which is what a bare projection wants. */
 export function combatStats(loadout) {
   const lo = loadout;
   const eq = lo.equipment || {};
@@ -105,19 +109,28 @@ export function combatStats(loadout) {
   const T = GameData.TECHNIQUE;
   const health = (CONFIG.baseHealth(lo.level) * k.health + equipStat(eq, "health")) * (has("vital") ? 1.05 : 1);
 
+  /* What the hours spent carrying these two pieces are worth: a weapon pays in
+     damage, a shield in Defence, and only while the piece is actually worn. */
+  const mast = masteryMods(eq, lo.mastery || null);
+  /* And what the path walked is worth. Both land here, beside gear, so nothing in
+     the fight has to know either of them exists. */
+  const pw = pathMods(k.id, lo.path || null);
+
   const r2 = CONFIG.round2;
 
   return {
     level: lo.level, klass: k.id, className: k.name,
-    maxHp: Math.max(1, r2(health)),
-    attack: r2(CONFIG.baseAttack(lo.level) * k.attack + equipStat(eq, "attack")),
-    defence: r2((CONFIG.baseDefence(lo.level) * k.defence + equipStat(eq, "defence")) * (has("bulwark") ? 1.15 : 1)),
-    speed: k.speed,
-    crit: Math.min(0.75, k.crit + equipStat(eq, "crit")),
-    critDmg: k.critDmg,
-    pen: Math.min(0.9, k.pen + (has("sundering") ? 0.15 : 0)),
-    veilGain: k.id === "warrior" || k.id === "rogue" ? CONFIG.veilPerBlow(lo.level) + equipStat(eq, "veil") : 0,
-    absorb: k.id === "mage" ? T.absorb + equipStat(eq, "veil") / 10 : 0,
+    maxHp: Math.max(1, r2(health * (1 + pw.healthPct))),
+    attack: r2((CONFIG.baseAttack(lo.level) * k.attack + equipStat(eq, "attack")) * mast.attack * (1 + pw.attackPct)),
+    defence: r2((CONFIG.baseDefence(lo.level) * k.defence + equipStat(eq, "defence")) * (has("bulwark") ? 1.15 : 1) * mast.defence * (1 + pw.defencePct)),
+    speed: Math.max(400, Math.round(k.speed * (1 - Math.min(0.5, pw.speedPct)))),
+    crit: Math.min(0.75, k.crit + equipStat(eq, "crit") + pw.critFlat),
+    critDmg: k.critDmg + pw.critDmgFlat,
+    pen: Math.min(0.9, k.pen + (has("sundering") ? 0.15 : 0) + pw.penFlat),
+    // What a full Veil is worth when it goes off: 1 until the path says otherwise.
+    tech: 1 + pw.techPct,
+    veilGain: k.id === "warrior" || k.id === "rogue" ? CONFIG.veilPerBlow(lo.level) + equipStat(eq, "veil") + pw.veilFlat : 0,
+    absorb: k.id === "mage" ? T.absorb + equipStat(eq, "veil") / 10 + pw.absorbFlat : 0,
     echoing: has("echoing"), furious: has("furious"), executioner: has("executioner"), wounding: has("wounding"),
     stalwart: has("stalwart"), vital: has("vital"), thorned: has("thorned"), resilient: has("resilient"),
   };
@@ -138,7 +151,10 @@ export function deathPenalty(state, at = state.clock) {
    The wound is on the Attack and nothing else: you are as hard to put down as you
    ever were, you simply kill slower for ten minutes. */
 export function statsOf(state, at = state.clock) {
-  const s = combatStats({ level: skillLevel(state, "warfare"), klass: state.player.klass, equipment: state.equipment });
+  const s = combatStats({
+    level: skillLevel(state, "warfare"), klass: state.player.klass,
+    equipment: state.equipment, mastery: state.mastery, path: state.path,
+  });
   const wounded = deathPenalty(state, at);
   if (wounded >= 1) return s;
   s.attack = CONFIG.round2(s.attack * wounded);
@@ -158,6 +174,20 @@ export function mitigation(defence, tier) {
 
 export function canPickClass(state) {
   return !state.player.klass && skillLevel(state, "warfare") >= CONFIG.progression.classPickLevel;
+}
+
+/* Whether a loadout may hold a piece at all. Only the armed lines are anyone's
+   business: a discipline narrows what you carry in your hands, never what you
+   wear on your back. Undisciplined, everything is open. */
+export function classCanHold(klass, key) {
+  const d = key ? itemDef(key) : null;
+  if (!d || d.kind !== "gear") return true;
+  return classHolds(klass, d.line);
+}
+
+// What is worn that this discipline may not hold, by slot. Empty when all is well.
+export function heldWrongly(klass, equipment) {
+  return GameData.EQUIP_SLOTS.filter((slot) => equipment[slot] && !classCanHold(klass, equipment[slot]));
 }
 
 /* A death no longer bars the gate; only the Attack wound remains, and that is read

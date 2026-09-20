@@ -24,6 +24,10 @@ import {
 } from "./lib.mjs";
 
 // Page and popup code by path, or by the router's own words about a page it could not run.
+import { CONFIG } from "../../src/shared/config.js";
+
+const ENGINE_SCHEMA = CONFIG.schema;
+
 const PAGE_CODE = /src\/client\/(pages|ui\/popups)\/|router: pages\//;
 const held = (state, key) => ["inv", "bank", "vault"].reduce((n, w) => n + ((state && state[w].items[key]) || 0), 0);
 
@@ -97,9 +101,9 @@ await run(async () => {
     await accountMode(A, "smoke_a").then(() => check("the store switches to account mode as smoke_a", true))
       .catch(async () => check("the store switches to account mode as smoke_a", false, await storeStatus(A.page)));
     await waitForSync(A.page);
-    check("and syncs: online, nothing pending, a schema 9 save from the server", await live(A, () => {
+    check("and syncs: online, nothing pending, a current-schema save from the server", await live(A, () => {
       const s = window.__respite.store;
-      return s.status.conn === "online" && s.status.pending === 0 && s.state.schema === 9 && s.state.meta.account === "smoke_a" && s.status.lastSyncAt > 0;
+      return s.status.conn === "online" && s.status.pending === 0 && s.state.schema === ENGINE_SCHEMA && s.state.meta.account === "smoke_a" && s.status.lastSyncAt > 0;
     }));
     const firstSave = await serverSave(stack, "smoke_a");
     check("the server holds smoke_a's save", !!firstSave && firstSave.rev >= 1, firstSave && firstSave.rev);

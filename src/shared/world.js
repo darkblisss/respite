@@ -12,15 +12,16 @@
 
 import { CONFIG } from "./config.js";
 import {
-  GameData, getRegion, getMaterial, getClass, monsterOfTier, matId, agentRarityDef,
+  GameData, getRegion, getMaterial, getClass, getSex, classWeapons, weaponLine, essenceOfTier,
+  monsterOfTier, matId, agentRarityDef,
 } from "./registry.js";
 import { itemDef, itemName, parseKey, validKey, agentRarityFromRoll, remedyTooWeak, tierForLevel, makeKey, prefixFromRoll } from "./items.js";
 import {
   ORDER, canHold, isPool, poolName, qtyIn, haveQty, placeFor, orderedKeys, transact,
 } from "./storage.js";
-import { skillLevel, maxHp, canPickClass, statsOf } from "./stats.js";
+import { skillLevel, maxHp, canPickClass, statsOf, classCanHold, heldWrongly } from "./stats.js";
 import { dayIndex, windowIndex } from "./weather.js";
-import { makeRng, randIntWith, seedFrom } from "./rng.js";
+import { makeRng, randIntWith, seedFrom, roll, SALT } from "./rng.js";
 import { emit } from "./events.js";
 import { fmtGold, titleCase } from "./format.js";
 
@@ -94,19 +95,158 @@ export function bountyProgress(state, kind, thing, env, at) {
 // A paid bounty's reward besides the gold: double experience for an hour.
 export const BOUNTY_BUFF = Object.freeze({ ms: 60 * 60 * 1000, mult: 2 });
 
+/* What a gather posting still wants in hand. A posting is paid on DELIVERY:
+   the board counts what you brought in, and then takes it. Gathering the goods
+   and selling them is not a bounty filled, it is a bounty you no longer hold
+   the goods for. Returns 0 for a slay posting, whose deliverable is the corpses. */
+export function bountyOwed(state) {
+  const b = state.bounty;
+  if (!b || b.claimed || b.kind !== "gather") return 0;
+  return Math.max(0, b.amount - haveQty(state, b.targetId));
+}
+
 // advance() keeps the board current, so the posting here is this window's.
 export function claimBounty(state, _args, env) {
   const b = state.bounty;
   if (!b) return refuse("There's no bounty posted.");
   if (b.claimed) return refuse("That bounty is already paid.");
   if (b.progress < b.amount) return refuse("The bounty isn't finished.");
+  // Handed over, not merely gathered: the goods leave your stores with the payment.
+  const short = bountyOwed(state);
+  if (short > 0) {
+    return refuse(`The board wants all ${b.amount} ${itemName(b.targetId)} in hand; you are ${short} short.`);
+  }
 
-  transact(state, (tx) => {
+  const res = transact(state, (tx) => {
+    if (b.kind === "gather") tx.pay({ [b.targetId]: b.amount });
     tx.set(b, "claimed", true);
     tx.gold(b.gold, true);
     tx.set(state, "buff", { until: state.clock + BOUNTY_BUFF.ms, mult: BOUNTY_BUFF.mult });
   });
-  emit(state, env, "bounty:paid", { gold: b.gold });
+  if (!res.ok) return res;
+  emit(state, env, "bounty:paid", {
+    gold: b.gold,
+    handed: b.kind === "gather" ? { key: b.targetId, qty: b.amount } : null,
+  });
+  return OK();
+}
+
+/* ================= THE VEIL WORKED INTO GEAR ================= */
+/* Enchanting. The stone is Veil Essence of the piece's own band, which is the
+   only thing in the camp Essence has ever been for. One to three stones an
+   attempt: more stones, better odds, and at the very top three is both the
+   quicker road and the cheaper one, which is the decision the whole thing is for.
+
+   A failure takes the stones and nothing else. The piece is unharmed, the level
+   is where it was, and nothing is ever destroyed -- this camp is grim enough
+   without a smith who can eat your sword.
+
+   The roll comes off one counter, state.rolls.ench, so the outcome of the next
+   attempt is fixed before you choose the stone count and cannot be fished for by
+   trying a cheap piece first. */
+
+const EN = CONFIG.enchant;
+
+// The Essence a piece's tier is worked with, or null for anything that is not gear.
+export function stoneFor(key) {
+  const d = itemDef(key);
+  return d && d.kind === "gear" ? essenceOfTier(d.tier) : null;
+}
+
+/* The chance an attempt takes, as a share. Held at 100%: three stones on a bare
+   piece is a certainty, and that is on purpose. */
+export function enchantChance(level, stones) {
+  const n = Math.max(1, Math.min(EN.maxStones, Math.floor(stones) || 1));
+  return Math.max(0, Math.min(1, EN.baseChance + EN.perStone * (n - 1) - EN.perLevel * Math.max(0, level)));
+}
+
+/* Everything the smith's panel needs about one piece: what it stands at, what it
+   is worked with, how many you hold, and the three prices on the board. */
+export function enchantPlan(state, key) {
+  const d = itemDef(key);
+  if (!d || d.kind !== "gear") return null;
+  const level = parseKey(key).plus;
+  const stone = essenceOfTier(d.tier);
+  const have = haveQty(state, stone);
+  return {
+    key, level, stone, have, def: d,
+    maxed: level >= EN.max,
+    max: EN.max,
+    gain: EN.gainPerLevel,
+    options: level >= EN.max ? [] : Array.from({ length: EN.maxStones }, (_, i) => ({
+      stones: i + 1,
+      chance: enchantChance(level, i + 1),
+      afford: have >= i + 1,
+    })),
+  };
+}
+
+/* `from` is a storage pool, or the equipment slot the piece is worn in: a smith
+   does not need it off your back to work it, and making the player strip first
+   would be friction for nothing. */
+function findPiece(state, key, from) {
+  if (GameData.EQUIP_SLOTS.includes(from)) {
+    return state.equipment[from] === key ? { worn: from } : null;
+  }
+  if (!isPool(from) || qtyIn(state, from, key) <= 0) return null;
+  return { pool: from };
+}
+
+export function enchant(state, { key, from, stones = 1 } = {}, env) {
+  if (!validKey(key)) return refuse("No such item.");
+  const at = findPiece(state, key, from);
+  if (!at) return refuse("You don't have that there.");
+
+  const d = itemDef(key);
+  if (!d || d.kind !== "gear") return refuse("Only gear takes the Veil.");
+  const p = parseKey(key);
+  if (p.plus >= EN.max) return refuse(`That is as much Veil as a piece will hold (+${EN.max}).`);
+  if (!Number.isInteger(stones) || stones < 1 || stones > EN.maxStones) {
+    return refuse(`One to ${EN.maxStones} stones an attempt.`);
+  }
+
+  const stone = essenceOfTier(d.tier);
+  if (haveQty(state, stone) < stones) {
+    return refuse(`You need ${stones} ${itemName(stone)}${stones === 1 ? "" : "s"}.`);
+  }
+
+  /* The next attempt's number is already decided, whatever is staked on it.
+     A uid is minted for a Common the first time the Veil goes into it, off the
+     same counter, so two worked Commons are never the same piece. */
+  const n = state.rolls.ench || 0;
+  const r = roll(state.rng.seed, "ench", n, SALT.enchant);
+  const won = r < enchantChance(p.plus, stones);
+  const uid = p.uid || `e${n}`;
+  const next = makeKey(p.base, p.rarity, uid, p.prefix, p.plus + 1);
+
+  const res = transact(state, (tx) => {
+    tx.pay({ [stone]: stones });
+    tx.set(state.rolls, "ench", n + 1);
+    if (!won) return;
+    if (at.worn) {
+      tx.set(state.equipment, at.worn, next);
+      return;
+    }
+    tx.remove(at.pool, key, 1);
+    if (!placeFor(state, next, stowOrderFor(next, at.pool))) tx.fail("Nowhere to put it once it is worked.");
+    tx.stash(next, 1, stowOrderFor(next, at.pool));
+  });
+  if (!res.ok) return res;
+
+  emit(state, env, "item:enchanted", { key: won ? next : key, was: key, won, stones, level: won ? p.plus + 1 : p.plus });
+  return { ok: true, data: { won, key: won ? next : key, level: won ? p.plus + 1 : p.plus, stones } };
+}
+
+/* ================= LIKENESS ================= */
+
+/* Chosen when the camp is founded, and kept. Nothing a fight reads depends on
+   it, so it is refused once set rather than sold back: a camp has one commander. */
+export function setSex(state, { sex } = {}, env) {
+  const def = typeof sex === "string" ? getSex(sex) : null;
+  if (!def) return refuse("No such likeness.");
+  if (state.player.sex) return refuse("Your likeness is already set.");
+  state.player.sex = def.id;
+  emit(state, env, "sex:picked", { sex: def.id });
   return OK();
 }
 
@@ -357,6 +497,9 @@ export function equip(state, { key, from } = {}, env) {
   }
 
   if (d.kind !== "gear" || !d.slot) return refuse("That can't be worn.");
+  /* A discipline narrows what your hands may hold, and nothing else. Undisciplined,
+     everything is open -- which is most of what the first five levels are for. */
+  if (!classCanHold(state.player.klass, key)) return refuse(holdRefusal(state.player.klass, d.line));
   if (d.slot === "offhand") {
     const w = state.equipment.weapon;
     const wd = w ? itemDef(w) : null;
@@ -579,15 +722,55 @@ export function useRemedy(state, { key, from = "inv" } = {}, env) {
 
 /* ================= DISCIPLINE ================= */
 
+/* Why a discipline will not hold a line, in words, naming what it does hold so the
+   refusal teaches rather than merely stops. */
+export function holdRefusal(klass, line) {
+  const k = getClass(klass);
+  const w = weaponLine(line);
+  const mine = classWeapons(klass).map((id) => weaponLine(id)).filter(Boolean).map((x) => x.name);
+  const list = mine.length > 1 ? `${mine.slice(0, -1).join(", ")} and ${mine[mine.length - 1]}` : mine[0] || "nothing";
+  return `A ${k ? k.name : "hunter"} does not hold a ${w ? w.name.toLowerCase() : "weapon like that"}. Yours are ${list}.`;
+}
+
+/* Taking a discipline narrows your hands for good, so anything already in them
+   that it will not hold comes off first -- into Belongings, or wherever there is
+   room. One transaction for the lot: either every piece finds somewhere to go or
+   nothing moves at all, so a half-stripped loadout is not a state that can exist.
+   Nothing is ever destroyed. */
+function layDownWrongly(state, klass) {
+  const slots = heldWrongly(klass, state.equipment);
+  if (!slots.length) return { ok: true, value: [] };
+  return transact(state, (tx) => {
+    const laid = [];
+    slots.forEach((slot) => {
+      const key = state.equipment[slot];
+      const order = stowOrderFor(key, "inv");
+      if (!placeFor(state, key, order)) tx.fail("Make room in Belongings first: a discipline lays down what it cannot hold.");
+      tx.stash(key, 1, order);
+      tx.set(state.equipment, slot, null);
+      laid.push(key);
+    });
+    return laid;
+  });
+}
+
 export function pickClass(state, { id } = {}, env) {
   const def = typeof id === "string" ? getClass(id) : null;
   if (!def) return refuse("No such discipline.");
   if (state.player.klass) return refuse("Your discipline is already chosen.");
   if (!canPickClass(state)) return refuse(`The Veil opens at Hunt ${CONFIG.progression.classPickLevel}.`);
+
+  /* Everything a discipline will not hold has to come off before it is taken, or
+     the sheet would go on counting a greatsword no Rogue can lift. If there is no
+     room to put a piece down, the oath waits until there is. */
+  const laid = layDownWrongly(state, def.id);
+  if (!laid.ok) return laid;
+
   state.player.klass = def.id;
   state.player.hp = maxHp(state);
   // Chosen at camp, the refill holds for the next hunt too.
   if (state.player.camp) state.player.camp.hp = state.player.hp;
+  if (laid.value.length) emit(state, env, "class:laidDown", { keys: laid.value, id: def.id });
   emit(state, env, "class:picked", { id: def.id });
   return OK();
 }

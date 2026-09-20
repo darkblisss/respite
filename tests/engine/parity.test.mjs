@@ -148,7 +148,17 @@ await run(async () => {
   toolIds.forEach((id) => keys.push(id, `${id}|common`, `${id}|rare|5`, `${id}|relic|5|vital`));
   sameOver("itemDef for every key shape of every base", keys, (k) => v4.call("itemDef", k), (k) => I.itemDef(k));
   sameOver("itemName for every key shape of every base", keys, (k) => v4.call("itemName", k), (k) => I.itemName(k));
-  sameOver("parseKey and stacks", keys, (k) => [v4.call("parseKey", k), v4.call("stacks", k)], (k) => [I.parseKey(k), I.stacks(k)]);
+  /* v5 keys carry an enchantment on the end, so parseKey answers with a `plus`
+     v4 had no notion of. Every key v4 could write reads as +0, which is checked
+     on its own below; the rest of the parse still has to match v4 exactly. */
+  const bare = (p) => ({ base: p.base, rarity: p.rarity, uid: p.uid, prefix: p.prefix });
+  sameOver("parseKey and stacks", keys, (k) => [v4.call("parseKey", k), v4.call("stacks", k)], (k) => [bare(I.parseKey(k)), I.stacks(k)]);
+  check("every key v4 could write reads as +0", keys.every((k) => I.parseKey(k).plus === 0));
+  check("and an enchanted key reads its level, and stops stacking",
+    I.parseKey("slag_sword|rare|c1.2|+7").plus === 7 &&
+    I.parseKey("slag_sword|relic|f1.1|echoing|+3").plus === 3 &&
+    I.parseKey("slag_sword|relic|f1.1|echoing|+3").prefix === "echoing" &&
+    !I.stacks("slag_sword|common|e5|+1"));
   sameOver("itemDef and itemName for unknown bases", ["nope", "nope|common", "", "slag|rare|1"],
     (k) => [v4.call("itemDef", k), v4.call("itemName", k)], (k) => [I.itemDef(k), I.itemName(k)]);
   check("itemDef results are frozen and cached", Object.isFrozen(I.itemDef("slag_sword|rare|1")) && I.itemDef("slag_sword|rare|1") === I.itemDef("slag_sword|rare|2"));

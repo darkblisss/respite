@@ -57,7 +57,7 @@ await run(async () => {
       [{ ok: false, error: "Unknown command." }, { ok: false, error: "Unknown command." }, { ok: false, error: "Unknown command." }, { ok: false, error: "Unknown command." }, { ok: false, error: "Unknown command." }, before]);
     same("server-only commands", E.SERVER_ONLY.map((t) => cmd(s, t, { key: "coal" })), E.SERVER_ONLY.map(() => ({ ok: false, error: "That needs the server." })));
     same("COMMANDS: the predictable ones and the server's", Object.keys(E.COMMANDS).filter((t) => E.COMMANDS[t].predict).sort(),
-      ["startSkill", "stopSkill", "startHunt", "pullBack", "setHide", "pickClass", "equip", "unequip", "unequipTool", "moveItem", "sellItem", "salvage", "useChest", "repair", "reorder", "buyRemedy", "buySmuggler", "travel", "claimBounty", "hireAgent", "deployAgent", "buyCompanion", "setCompanion"].sort());
+      ["startSkill", "stopSkill", "startHunt", "pullBack", "setHide", "pickClass", "setSex", "equip", "unequip", "unequipTool", "moveItem", "sellItem", "salvage", "useChest", "repair", "reorder", "buyRemedy", "buySmuggler", "travel", "claimBounty", "hireAgent", "deployAgent", "buyCompanion", "setCompanion"].sort());
     check("SERVER_ONLY is the market and the party's fight", E.SERVER_ONLY.join(",") === "marketList,marketBuy,marketBuyPool,marketCancel,partyHuntStart,partyHuntJoin,partyHuntLeave" && E.SERVER_ONLY.every((t) => E.COMMANDS[t] && !E.COMMANDS[t].predict));
     check("args that aren't an object count as none", cmd(s, "stopSkill", "junk").ok && cmd(s, "stopSkill", [1, 2]).ok && cmd(s, "setHide", null).error === "Hiding is on or off.");
   }
@@ -294,7 +294,16 @@ await run(async () => {
     refused("an unfinished bounty", s, "claimBounty", {}, "The bounty isn't finished.");
     s.bounty.progress = s.bounty.amount;
     const gold = s.bounty.gold;
+    /* A gather posting is paid on DELIVERY: the board takes the goods with the
+       payment, so gathering them and then selling them is not a bounty filled. */
+    if (s.bounty.kind === "gather") {
+      check("claimBounty refuses a gather posting with nothing in hand",
+        !cmd(s, "claimBounty", {}).ok && !s.bounty.claimed && s.player.gold === 0);
+      put(s, "bank", s.bounty.targetId, s.bounty.amount + 3);
+    }
+    const handed = s.bounty.kind === "gather" ? { key: s.bounty.targetId, amount: s.bounty.amount } : null;
     check("claimBounty pays, and doubles XP for an hour", cmd(s, "claimBounty", {}).ok && s.player.gold === gold && s.stats.goldEarned === gold && s.buff.until === T0 + 3600000 && s.buff.mult === 2 && s.bounty.claimed);
+    if (handed) check("and the goods handed over are gone", S.qtyIn(s, "bank", handed.key) === 3);
     refused("a paid bounty", s, "claimBounty", {}, "That bounty is already paid.");
     s.bounty = null;
     refused("no bounty", s, "claimBounty", {}, "There's no bounty posted.");
@@ -304,6 +313,7 @@ await run(async () => {
     const s = fresh();
     s.player.gold = 100;
     s.bounty.progress = s.bounty.amount;
+    if (s.bounty.kind === "gather") put(s, "bank", s.bounty.targetId, s.bounty.amount);
     const first = clone(s.bounty);
     check("claim in the Ashen Verge", cmd(s, "claimBounty", {}).ok && s.bounty.claimed);
     cmd(s, "travel", { regionId: "region_2" });
@@ -376,7 +386,7 @@ await run(async () => {
   {
     const JUNK = [undefined, null, 0, -1, 1.5, NaN, Infinity, "", "x".repeat(500), {}, [], true, "__proto__", "constructor", "inv", "coal", { toString: 1 }];
     const FIELDS = {
-      startSkill: ["skillId", "actionId", "limit"], startHunt: ["tier", "zone", "limit"], setHide: ["on"], pickClass: ["id"],
+      startSkill: ["skillId", "actionId", "limit"], startHunt: ["tier", "zone", "limit"], setHide: ["on"], pickClass: ["id"], setSex: ["sex"],
       equip: ["key", "from"], unequip: ["slot"], unequipTool: ["skillId"], moveItem: ["key", "from", "to", "qty"],
       sellItem: ["key", "from", "qty"], salvage: ["key", "from"], useChest: ["key", "from"], repair: ["key"],
       reorder: ["pool", "key", "before"], buyRemedy: ["key", "qty"], buySmuggler: ["slot"], travel: ["regionId"],
@@ -385,7 +395,7 @@ await run(async () => {
     };
     const GOOD = {
       startSkill: { skillId: "delving", actionId: "delving_t1_raw", limit: 5 }, startHunt: { tier: 1, zone: "outer", limit: 5 },
-      setHide: { on: true }, pickClass: { id: "rogue" }, equip: { key: "slag_sword|rare|c1.1", from: "inv" }, unequip: { slot: "head" },
+      setHide: { on: true }, pickClass: { id: "rogue" }, setSex: { sex: "female" }, equip: { key: "slag_sword|rare|c1.1", from: "inv" }, unequip: { slot: "head" },
       unequipTool: { skillId: "felling" }, moveItem: { key: "coal", from: "bank", to: "vault", qty: 1 }, sellItem: { key: "coal", from: "bank", qty: 1 },
       salvage: { key: "slag_helm|common", from: "inv" }, useChest: { key: "vault_chest", from: "vault" }, repair: { key: "slag_helm|epic|s1.0" },
       reorder: { pool: "bank", key: "coal", before: null }, buyRemedy: { key: "provision_t1", qty: 1 }, buySmuggler: { slot: 0 },
@@ -405,6 +415,8 @@ await run(async () => {
     base.agents.push({ id: "agent_1", name: "Silt", rarity: "rare" });
     base.companions.owned.rat = { bond: 0, rank: 1, dupes: 0 };
     base.bounty.progress = base.bounty.amount;
+    // Paid on delivery: the goods a gather posting wants have to be in hand to claim it.
+    if (base.bounty.kind === "gather") put(base, "bank", base.bounty.targetId, base.bounty.amount);
 
     let cases = 0;
     let bad = null;

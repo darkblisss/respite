@@ -46,7 +46,7 @@ export function rollAt(seed, a, b, salt) {
 // drop and companion are bases: a monster's j-th drop rolls drop + j, the
 // i-th companion in the registry rolls companion + i.
 export const SALT = Object.freeze({
-  double: 1, reagent: 2, reagentExtra: 3, rarity: 4, prefix: 5,
+  double: 1, reagent: 2, reagentExtra: 3, rarity: 4, prefix: 5, enchant: 6,
   drop: 10,
   rare: 30, rareRarity: 31, rarePick: 32,
   sovereignPick: 40, sovereignPrefix: 41,

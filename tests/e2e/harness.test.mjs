@@ -13,6 +13,7 @@
    ============================================================ */
 
 import { ENGINE_VERSION } from "../../src/shared/version.js";
+import { CONFIG } from "../../src/shared/config.js";
 import { startDevServer } from "../../dev/server.mjs";
 import {
   run, check, same, section, sleep, waitFor, HOUR,
@@ -147,9 +148,9 @@ await run(async () => {
     section("the game function");
 
     const gameA = await call(A, "game", []);
-    check("player A's first call makes a schema 9 save for ashen", gameA.status === 200 && gameA.body.ok && gameA.body.state.schema === 9 && gameA.body.state.meta.account === "ashen" && gameA.cors === "*", gameA.status);
+    check("player A's first call makes a current-schema save for ashen", gameA.status === 200 && gameA.body.ok && gameA.body.state.schema === CONFIG.schema && gameA.body.state.meta.account === "ashen" && gameA.cors === "*", gameA.status);
     const gameB = await call(B, "game", []);
-    check("player B's for bram", gameB.status === 200 && gameB.body.state.schema === 9 && gameB.body.state.meta.account === "bram" && gameB.body.state.meta.userId === b.userId, gameB.status);
+    check("player B's for bram", gameB.status === 200 && gameB.body.state.schema === CONFIG.schema && gameB.body.state.meta.account === "bram" && gameB.body.state.meta.userId === b.userId, gameB.status);
 
     const direct = async (token, body) => {
       const res = await fetch(`${stack.url}/functions/v1/game`, { method: "POST", headers: { "content-type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) });

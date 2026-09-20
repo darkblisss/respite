@@ -33,7 +33,7 @@ import { CONFIG } from "../../../shared/config.js";
 import { GameData, itemSources, prefixDef, rarityDef, skillName, tierLabel } from "../../../shared/registry.js";
 import { itemDef, itemName, stacks } from "../../../shared/items.js";
 import { ORDER, POOLS, canHold, isPool, poolName, qtyIn, haveQty, roomFor, slotCap, slotsUsed, placeFor } from "../../../shared/storage.js";
-import { displacedBy, salvageValue } from "../../../shared/world.js";
+import { displacedBy, salvageValue, enchantPlan } from "../../../shared/world.js";
 import { statsOf, combatStats, skillLevel } from "../../../shared/stats.js";
 import { itemLore } from "../../../shared/lore.js";
 
@@ -450,6 +450,29 @@ function openItem(ctx, key, opts, extra) {
           return false;
         },
       });
+    }
+
+    /* Working the Veil into it. A worn piece is worked where it is: the smith
+       does not need it off your back, and making you strip first is friction for
+       nothing. The bargain itself is laid out in the Veilsmith's own dialog. */
+    if (d.kind === "gear" && d.slot) {
+      const plan = enchantPlan(state, key);
+      const slot = from === "worn" ? wornSlot(state, key, d) : from;
+      if (plan && slot) {
+        list.push({
+          id: "enchant", kind: "primary", soft: true, wide: true, icon: "gem",
+          label: plan.maxed
+            ? `Fully worked \u00b7 +${plan.max}`
+            : plan.have < 1
+              ? `Needs ${itemName(plan.stone)}`
+              : `Work the Veil \u00b7 +${plan.level} \u2192 +${plan.level + 1}`,
+          disabled: plan.maxed || plan.have < 1,
+          onClick: () => {
+            openPopup("enchant", ctx, key, { from: slot });
+            return false;
+          },
+        });
+      }
     }
 
     const sv = salvageValue(key);

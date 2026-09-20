@@ -20,10 +20,11 @@
    ============================================================ */
 
 import { CONFIG } from "./config.js";
-import { GameData, findAction, getSkill, getMonster, getCompanion, getClass, getTool, regionOfTier } from "./registry.js";
+import { GameData, findAction, getSkill, getMonster, getCompanion, getClass, getSex, getTool, pathOf, regionOfTier } from "./registry.js";
 import { itemDef, parseKey, stacks, validKey } from "./items.js";
 import { canHold, unstacked } from "./storage.js";
 import { combatStats, levelFromXp, skillLevel, maxHp } from "./stats.js";
+import { pointsEarned, pointsSpent } from "./path.js";
 import { dayIndex, windowIndex } from "./weather.js";
 import { hashString } from "./rng.js";
 import { foeNumbers, newHunt } from "./combat.js";
@@ -96,7 +97,7 @@ function blankState(clock, seed) {
     schema: CONFIG.schema,
     clock,
     meta: { createdAt: clock, playtimeMs: 0, account: null, userId: null },
-    player: { gold: 0, hp: 1, recoveryLeft: 0, klass: null, camp: null },
+    player: { gold: 0, hp: 1, recoveryLeft: 0, klass: null, sex: null, camp: null },
     skills,
     inv:   { slots: S.slots.inv,   items: {}, order: [] },
     bank:  { slots: S.slots.bank,  items: {}, order: [] },
@@ -105,6 +106,10 @@ function blankState(clock, seed) {
     satchel: { slots: S.slots.satchel, items: {}, order: [] },
     uid: 1,
     equipment,
+    // Weapon mastery, by gear line. Earned a kill at a time; see mastery.js.
+    mastery: {},
+    // The discipline's tree, node id -> rank. See path.js.
+    path: {},
     tools: {},
     tasks: { skilling: null, combat: null },
     region: "region_1",
@@ -535,6 +540,33 @@ function normalise(src, opts) {
   // A death bars nothing now; the field stays at zero so old saves load clean.
   s.player.recoveryLeft = 0;
   s.player.klass = typeof player.klass === "string" && getClass(player.klass) ? player.klass : null;
+  // A likeness a save has never carried stays null, and the camp asks for one.
+  s.player.sex = typeof player.sex === "string" && getSex(player.sex) ? player.sex : null;
+
+  /* Weapon mastery: one non-negative number a known line, and nothing else. A save
+     from before the track existed simply has none, which reads as Untried. */
+  const mast = obj(src.mastery);
+  s.mastery = {};
+  GameData.WEAPON_LINE_IDS.forEach((line) => {
+    const n = numIn(mast[line], 0, CONFIG.masteryTable[CONFIG.mastery.max], 0);
+    if (n > 0) s.mastery[line] = n;
+  });
+
+  /* The path: a whole rank inside a node's own range, and only for nodes this
+     discipline actually walks. A save carrying a Rogue's nodes on a Warrior (or
+     one hand-edited to hold thirty ranks of a keystone) keeps neither. */
+  const walk = obj(src.path);
+  s.path = {};
+  pathOf(s.player.klass).forEach((node) => {
+    const r = intIn(walk[node.id], 0, node.ranks, 0);
+    if (r > 0) s.path[node.id] = r;
+  });
+  /* And never more spent than Hunt levels have paid for. A save that claims more
+     has the lot handed back rather than being trusted or thrown away. */
+  if (pointsSpent(s) > pointsEarned(s)) {
+    s.path = {};
+    ledger.fixed++;
+  }
 
   // What is worn comes first: a unique piece worn is the copy that counts.
   const eq = obj(src.equipment);
