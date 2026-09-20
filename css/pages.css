@@ -2444,3 +2444,36 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
 
 .skin-card .class-name { font-size: var(--text-lg); }
 .skin-card .class-blurb { text-wrap: balance; }
+
+/* ================= A COMMANDER, LOOKED AT (pages/player.js) ================= */
+
+.pp-head { align-items: center; }
+.pp-bust { width: 88px; flex: none; border-radius: var(--r-md); background: var(--surface-2); }
+.pp-name { margin-bottom: 6px; }
+.pp-tags { gap: var(--sp-2); }
+
+.pp-slots { margin-top: var(--sp-3); }
+.pp-stats { margin-top: var(--sp-3); }
+.mt-4 { margin-top: var(--sp-4); }
+
+@media (max-width: 599px) {
+  .pp-bust { width: 64px; }
+}
+
+/* A board row is a row of people: a face, then a name that opens their page. */
+.hs-face {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+}
+
+.hs-link {
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--r-sm, 6px);
+}
+.hs-link:hover .truncate { text-decoration: underline; }
+.hs-link:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }

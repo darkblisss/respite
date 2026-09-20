@@ -1,7 +1,7 @@
-/* What this batch added, opened in a real browser: the likeness picker a fresh
-   camp is asked for and the face it puts on every page, the Discipline page's
-   two tabs, a path spending a point, weapon mastery ranked by the realm, and
-   the Veilsmith's dialog off an item.
+/* What these batches added, opened in a real browser: the skin a fresh camp
+   picks and the face it puts on every page, the Discipline page's two tabs, a
+   path spending a point, weapon mastery ranked by the realm, a commander anyone
+   can look up, and the Veilsmith's dialog off an item.
 
      node tests/e2e/ui-new.test.mjs */
 
@@ -119,6 +119,7 @@ await run(async () => {
   {
     // A sword behind a shield is a shield being learned. Points set outright.
     await editSave(stack, "uinew_a", (s2) => {
+      s2.player.skin = "outrider";
       s2.mastery = { sword: 40000, shield: 900 };
       s2.equipment.weapon = "slag_sword|common";
       s2.equipment.offhand = "bitter_shield|common";
@@ -154,6 +155,44 @@ await run(async () => {
     });
     check("the Mastery board lists this camp with a level off its points",
       /uinew_a/i.test(board) && !/not kept yet/i.test(board), board.slice(0, 200));
+  }
+
+  section("a commander anyone can look at");
+  {
+    await go("#/hiscores");
+    await app.page.waitForTimeout(800);
+    await live(app, () => [...document.querySelectorAll("[role=tab]")].find((t) => /Mastery/.test(t.textContent)).click());
+    await app.page.waitForTimeout(2000);
+
+    const faces = await live(app, () => [...document.querySelectorAll(".hs-face img")].map((i) => i.getAttribute("src")));
+    check("a board row shows a face, not an initial in a circle", faces.length > 0 && faces.every((f) => /\.webp$/.test(f)), faces);
+    check("and the camp's own row wears the skin on its save", faces.some((f) => /skin-outrider\.webp$/.test(f)), faces);
+    const links = await live(app, () => [...document.querySelectorAll("a.hs-link")].map((a) => a.getAttribute("href")));
+    check("and the name is a link to their page", links.some((l) => /^#\/player\/uinew_a$/i.test(l || "")), links);
+
+    await go("#/player/uinew_a");
+    await app.page.waitForTimeout(2500);
+    const page = await live(app, () => document.querySelector(".page").textContent);
+    check("the profile opens and names them", /Uinew_a/.test(page), page.slice(0, 120));
+    check("the head says their discipline and their ground",
+      /Warrior/.test(page) && /Verge|Gallowmoor|Warrens|Graveshelf|Fen|Umberdeep|Wyrmreach|Fade|Godsdown/.test(page), page.slice(0, 200));
+    const bust = await live(app, () => {
+      const i = document.querySelector(".pp-bust img");
+      return i ? i.getAttribute("src") : null;
+    });
+    check("and wears their skin", /skin-outrider\.webp$/.test(bust || ""), bust);
+    const worn = await live(app, () => [...document.querySelectorAll(".pp-slots .slot")].length);
+    same("Standing lays out all eight slots", worn, 8);
+
+    await live(app, () => [...document.querySelectorAll("[role=tab]")].find((t) => /Skills/.test(t.textContent)).click());
+    await app.page.waitForTimeout(400);
+    const skills = await live(app, () => [...document.querySelectorAll(".skills-grid .skill-card")].length);
+    check("and Skills lists every one of them", skills === 11, skills);
+
+    await go("#/player/nobodyatall");
+    await app.page.waitForTimeout(2000);
+    const none = await live(app, () => document.querySelector(".page").textContent);
+    check("a name nobody answers to says so plainly", /No such commander/.test(none), none.slice(0, 160));
   }
 
   section("the Veilsmith");

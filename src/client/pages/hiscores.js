@@ -27,7 +27,7 @@
 import { h, setText, setAttr, toggleClass, on } from "../ui/dom.js";
 import { iconEl } from "../ui/icons.js";
 import { fmt, fmtWhole } from "../ui/format.js";
-import { openPopup } from "../ui/widgets.js";
+import { openPopup, portraitImg } from "../ui/widgets.js";
 import { GameData, TRADE_ORDER, ARTISAN_ORDER, getSkill } from "../../shared/registry.js";
 import { CONFIG } from "../../shared/config.js";
 import { masteryLevel } from "../../shared/mastery.js";
@@ -451,8 +451,11 @@ function boardBody(ctx, page) {
           const loose = !!b.mark && !r.discipline;
           return h("tr", { class: isMe && "is-me", "aria-current": isMe ? "true" : null },
             h("td", h("span.hs-rank", { class: rank <= 3 && `is-${rank}` }, fmtWhole(rank))),
-            h("td.strong", h("span.hs-name",
-              h("span.avatar.avatar-sm", { "data-tone": isMe ? null : "gold", "aria-hidden": "true" }, display(r.username).charAt(0)),
+            /* A face, not an initial in a circle: the skin is locked in, so a board
+               reads as a row of people. The name opens their page; a realm that
+               does not publish skins yet simply shows the default bust. */
+            h("td.strong", h("a.hs-name.hs-link", { href: `#/player/${encodeURIComponent(r.username)}` },
+              h("span.portrait.portrait-bust.hs-face", { "aria-hidden": "true" }, portraitImg(r.skin || null)),
               h("span.truncate", display(r.username)),
               loose ? h("span.tag.hs-hide-sm", "Undisciplined") : null)),
             h("td.num", b.oneFigure ? fmtWhole(xp) : fmtWhole(level)),

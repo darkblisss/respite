@@ -95,6 +95,11 @@ where s.user_id = p.user_id;
 -- null: the mastery curve lives in CONFIG and the page reads the level off the points it is
 -- handed, so the curve can be retuned without a database change.
 
+-- Dropped first: Postgres will not replace a function whose return type changed, and a
+-- later migration widens this one. Running the migrations in order, however many times,
+-- therefore always ends on the widest version rather than failing on the second pass.
+drop function if exists public.mastery_board(text, int);
+
 create or replace function public.mastery_board(p_line text, p_limit int default 50)
 returns table (rank bigint, username text, level int, xp numeric, discipline text)
 language plpgsql
