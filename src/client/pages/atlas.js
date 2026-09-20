@@ -253,7 +253,6 @@ export default {
           block("Your standing",
             threat,
             h("div.stats", { class: { "mt-3": !!threat } },
-              hunted ? null : stat("Threat here", "None yet").node,
               huntNow.node,
               bounty ? bounty.node : null,
               remedies.node))),
