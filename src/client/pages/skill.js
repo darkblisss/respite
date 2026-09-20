@@ -554,7 +554,7 @@ function campView(skill) {
       if (s === stage) return;
       stage = s;
       setText(stageChip, `${tierLabel(s)} · ${s} of ${TIERS.length}`);
-      scene.replaceChildren(html(`<svg viewBox="0 34 1000 186" preserveAspectRatio="xMidYMax slice" role="img" aria-label="The ${skill.name} camp">${campScene(skill.id, s)}</svg>`));
+      scene.replaceChildren(html(`<svg width="1000" height="186" viewBox="0 34 1000 186" preserveAspectRatio="xMidYMax slice" role="img" aria-label="The ${skill.name} camp">${campScene(skill.id, s)}</svg>`));
       setText(now, CAMP_STAGES[s - 1]);
       setText(next, s < TIERS.length ? `Next at Lv ${TIERS[s].level}: ${CAMP_STAGES[s].toLowerCase()}` : "Nothing left to build.");
     },
