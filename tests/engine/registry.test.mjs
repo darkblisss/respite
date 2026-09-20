@@ -85,6 +85,8 @@ const DIVERGED = {
     why: "the Satchel is a fourth pool, the combat loadout, and v4 had no name for it",
     at: ["satchel"],
   },
+  findAction: { why: "the Greatsword and Grimoire lines are marked released: false in the registry, so their recipes and the components only they wanted are pruned off the benches; v4 shipped them all" },
+  "getRecipe = craft action by id": { why: "the Greatsword and Grimoire lines are marked released: false in the registry, so their recipes and the components only they wanted are pruned off the benches; v4 shipped them all" },
   "CONFIG.hunt.hideMs = HIDE_MS": { why: "going to ground is a full hour now, not five minutes" },
   "CONFIG.hunt.xpMarkMs = XP_MARK_MS": { why: "the five-minute XP mark gave way to rateMarkMs, rateWindowMs and rateMinSpanMs" },
 };

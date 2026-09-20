@@ -458,6 +458,32 @@ export function createNet({
     return { rows: Array.isArray(data) ? data : [], error: null, missing: false };
   }
 
+  /* The weapon mastery boards, which migration 008 adds. Same shape and the same
+     `missing` promise as leaderboard() above: a realm that has not run 008 has no
+     such function, and the Mastery page goes quiet about ranks rather than
+     pretending nobody has any. A board ranks on raw points; the level beside a
+     rank is worked out here in JS from the one curve in CONFIG. */
+  async function masteryBoard(line, limit = 50) {
+    const { data, error, code } = await rpc("mastery_board", { p_line: String(line || ""), p_limit: limit });
+    if (error) {
+      const missing = code === "PGRST202" || /could not find the function|does not exist/i.test(error);
+      return { rows: [], error, missing };
+    }
+    return { rows: Array.isArray(data) ? data : [], error: null, missing: false };
+  }
+
+  /* Where this player stands on every line they have points in, in one call:
+     [{ line, points, rank, total }]. The Mastery page asks once on mount rather
+     than seven times, and a rank of 1 is what lights the Saint. */
+  async function masteryRanks() {
+    const { data, error, code } = await rpc("mastery_ranks");
+    if (error) {
+      const missing = code === "PGRST202" || /could not find the function|does not exist/i.test(error);
+      return { rows: [], error, missing };
+    }
+    return { rows: Array.isArray(data) ? data : [], error: null, missing: false };
+  }
+
   async function onlineCount() {
     const { data, error } = await rpc("online_count");
     const n = Number(data);
@@ -488,6 +514,8 @@ export function createNet({
     party,
     hiscores,
     leaderboard,
+    masteryBoard,
+    masteryRanks,
     onlineCount,
     heartbeat,
     get client() { return client; },
