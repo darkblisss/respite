@@ -198,7 +198,7 @@ registerPopup("zone", (ctx, tier, zoneId) => {
     if (skillLevel(state, "warfare") < region.level) stat(facts, "Suited to", `Hunt Lv ${region.level} and up`, "bad");
     stat(facts, "Reinforcements", `Every ${zone.windowMs / 1000}s`);
     stat(facts, "Elites", pctOf(zone.elite));
-    stat(facts, "XP a kill", `×${zone.xp}`);
+    stat(facts, "XP per kill", `×${zone.xp}`);
     stat(facts, "Foes here", `×${zone.power} health and damage`);
     if (zone.sovereign > 0) {
       stat(facts, "Sovereign", `${pctOf(zone.sovereign)} an encounter`);

@@ -21,6 +21,7 @@ import { campPlan, combatPlan } from "../../shared/combat.js";
 import { maxHp, myClass, recovering, skillLevel } from "../../shared/stats.js";
 import { slotCap, slotsUsed } from "../../shared/storage.js";
 import { requisitionsLeft, requisitionsOpen } from "../../shared/world.js";
+import { unreadCount } from "../partyRead.js";
 import { dayIndex, tomorrowRevealed, weatherAt, weatherForDay } from "../../shared/weather.js";
 
 /* ================= 1. THE NAV ================= */
@@ -52,17 +53,23 @@ const NAV = [
     { route: { page: "discipline" }, label: "Discipline", icon: "book", meta: (s) => (myClass(s) ? myClass(s).name : "-") },
     { route: { page: "skill", arg: "warfare" }, label: "Hunt", icon: "swords",
       meta: (s) => `Lv ${skillLevel(s, "warfare")}`, dot: (s) => (s.tasks.combat ? "ember" : null) },
+    /* Your band, which is a Vanguard thing rather than a place in the realm. The badge
+       counts invites waiting; the dot says the party has said something since you looked. */
+    { route: { page: "party" }, label: "Party", icon: "party",
+      badge: (s, store) => {
+        const n = store.party && Array.isArray(store.party.invites_in) ? store.party.invites_in.length : 0;
+        return n ? { text: String(n), tone: null, label: n === 1 ? "An invite is waiting" : `${n} invites are waiting` } : null;
+      },
+      dot: (s, store) => {
+        const n = unreadCount(store.party);
+        return n ? { tone: "violet", label: n === 1 ? "A word from your party" : `${n} words from your party` } : null;
+      } },
     // Companions are out of the live camp until the system is redesigned. Re-enable this row with the route in router.js.
     // { route: { page: "companions" }, label: "Companions", icon: "paw" },
   ] },
   { id: "navRealm", rows: [
     { route: { page: "atlas" }, label: "Atlas", icon: "atlas" },
     { route: { page: "market" }, label: "Market", icon: "market" },
-    { route: { page: "party" }, label: "Party", icon: "party",
-      badge: (s, store) => {
-        const n = store.party && Array.isArray(store.party.invites_in) ? store.party.invites_in.length : 0;
-        return n ? { text: String(n), tone: null, label: n === 1 ? "An invite is waiting" : `${n} invites are waiting` } : null;
-      } },
     { route: { page: "hiscores" }, label: "Leaderboard", icon: "trophy" },
   ] },
   { id: "navCamp", rows: [
@@ -76,6 +83,15 @@ const NAV = [
   { id: "navTrades", rows: TRADES.map(skillRow) },
   { id: "navArtisans", rows: ARTISANS.map(skillRow) },
 ];
+
+/* A row's dot() may answer with a tone ("ember", "violet") or with { tone, label }. The
+   plain string keeps the two the nav was born with; the object lets a row say what its
+   dot means to someone who cannot see it. */
+function dotOf(v) {
+  if (!v) return null;
+  if (typeof v === "string") return { tone: v, label: v === "ember" ? "Hunting" : "Working" };
+  return { tone: v.tone || null, label: v.label || "Something new" };
+}
 
 const keyOf = (route) => (route ? `${route.page}${route.arg ? `/${route.arg}` : ""}` : "");
 const hrefOf = (route) => `#/${keyOf(route)}`;
@@ -350,7 +366,7 @@ export function createShell(app) {
           row: r,
           key: keyOf(r.route),
           current: keyOf(r.route) === keyOf(route),
-          dot: r.dot ? r.dot(s) : null,
+          dot: dotOf(r.dot ? r.dot(s, store) : null),
           badge: r.badge ? r.badge(s, store) : null,
         })),
     }));
@@ -367,7 +383,7 @@ export function createShell(app) {
         return h("li", h("a.nav-item", { href: hrefOf(m.row.route), "aria-current": m.current ? "page" : null },
           iconEl(m.row.icon, "nav-ico"),
           h("span.nav-label", m.row.label),
-          m.dot ? h("span.nav-dot", { "data-tone": m.dot === "ember" ? "ember" : null, role: "img", "aria-label": m.dot === "ember" ? "Hunting" : "Working" }) : null,
+          m.dot ? h("span.nav-dot", { "data-tone": m.dot.tone === "ember" ? "ember" : null, role: "img", "aria-label": m.dot.label }) : null,
           meta,
           m.badge ? h("span.badge", { class: m.badge.tone && `badge-${m.badge.tone}`, "aria-label": m.badge.label }, m.badge.text) : null));
       }));
@@ -378,7 +394,7 @@ export function createShell(app) {
 
   function paintNav(s, store, route) {
     const model = navModel(s, store, route);
-    const sig = model.map((g) => g.rows.map((m) => `${m.key}${m.current ? "*" : ""}:${m.dot || ""}:${m.badge ? `${m.badge.tone}${m.badge.text}` : ""}`).join(",")).join("|");
+    const sig = model.map((g) => g.rows.map((m) => `${m.key}${m.current ? "*" : ""}:${m.dot ? `${m.dot.tone}${m.dot.label}` : ""}:${m.badge ? `${m.badge.tone}${m.badge.text}` : ""}`).join(",")).join("|");
     if (sig !== navSig) {
       navSig = sig;
       buildNav(model);

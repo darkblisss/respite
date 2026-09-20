@@ -45,9 +45,10 @@ function landing(state, key, order, n) {
   return `${INTO[order[0]].replace(/^the /, "The ")} is full, so ${one ? "it goes" : "they go"} into ${INTO[w]}.`;
 }
 
+// What the camp already has of it. Nothing at all is worth no words: the row says the rest.
 function heldText(state, key) {
   const all = haveQty(state, key);
-  if (!all) return "None held";
+  if (!all) return "";
   return qtyIn(state, "inv", key) === all ? `${fmtWhole(all)} in Belongings` : `${fmtWhole(all)} held`;
 }
 
@@ -90,7 +91,7 @@ export default {
     function paintRemedy(row) {
       const state = ctx.state;
       const total = row.entry.price * clampQty(row.picker.pick.n);
-      setText(row.sub, `Restores ${fmt(row.d.heal)} HP · ${tierLabel(row.d.tier)} · ${heldText(state, row.entry.key)}`);
+      setText(row.sub, [`Restores ${fmt(row.d.heal)} HP`, tierLabel(row.d.tier), heldText(state, row.entry.key)].filter(Boolean).join(" \u00b7 "));
       setText(row.buy, `Buy for ${fmtGold(total)}`);
       toggleClass(row.price, "is-short", total > state.player.gold);
     }
@@ -141,7 +142,7 @@ export default {
         buildLots(stock);
       }
       lots.forEach((l) => {
-        setText(l.sub, `${tierLabel(l.d.tier)} · ${fmtGold(l.lot.price)} the lot · ${heldText(state, l.lot.key)}`);
+        setText(l.sub, [tierLabel(l.d.tier), `${fmtGold(l.lot.price)} the lot`, heldText(state, l.lot.key)].filter(Boolean).join(" \u00b7 "));
         if (l.price) toggleClass(l.price, "is-short", l.lot.price > state.player.gold);
       });
     }

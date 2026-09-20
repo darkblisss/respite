@@ -32,6 +32,7 @@ import { GameData, findAction, getSkill, getZone, regionOfTier } from "../../sha
 import { partyMult } from "../../shared/progression.js";
 import { recovering, totalLevel } from "../../shared/stats.js";
 import { currentRegion } from "../../shared/world.js";
+import { markRead, newestMessage } from "../partyRead.js";
 
 const P = CONFIG.party;
 const ONLINE_MS = 3 * 60 * 1000;   // last_seen this recent counts as online, as online_count() does
@@ -160,7 +161,7 @@ function signInCard(ctx) {
 export default {
   id: "party",
   title: () => "Party",
-  group: "The Realm",
+  group: "The Vanguard",
 
   mount(view, ctx) {
     const page = h("div.page");
@@ -506,7 +507,7 @@ function partyBody(ctx, page) {
 
       // The ground is the one you stand in, as on the Hunt page; the server checks it is open to you.
       const select = h("select.select.grow", { "aria-label": "Ground" },
-        GameData.ZONES.map((z) => h("option", { value: z.id }, `${z.name} · ×${z.xp} XP a kill`)));
+        GameData.ZONES.map((z) => h("option", { value: z.id }, `${z.name} · ×${z.xp} XP per kill`)));
       const go = h("button.btn.btn-ember", { type: "button" }, iconEl("swords"), "Set out together");
       go.addEventListener("click", () => send("partyHuntStart", { tier, zone: select.value }, go, () => {
         toast(`The party sets out for ${ground(tier, select.value)}`, { kind: "good", icon: "swords" });
@@ -693,7 +694,8 @@ function partyBody(ctx, page) {
         h("span.avatar", { "aria-hidden": "true" }, initial(m.username), dot),
         h("div",
           h("div.member-name",
-            h("span", display(m.username)),
+            // A name in the roster opens their page, the same as one on a board.
+            h("a.hs-link", { href: `#/player/${encodeURIComponent(String(m.username || ""))}` }, display(m.username)),
             isLeader ? h("span", { "data-tip": "Party leader", role: "img", "aria-label": "Leader" }, iconEl("crown")) : null),
           level),
         status,
@@ -852,6 +854,8 @@ function partyBody(ctx, page) {
         paintMembers(st, now, myHunt, bonus);
         paintInvites(st, now, leader);
         chat.paint(list(st.messages), now);
+        // The chat is on screen, so it has been read. The sidebar's dot reads the same mark.
+        if (st.party && st.party.id) markRead(st.party.id, newestMessage(st));
       },
       destroy() {
         chat.destroy();

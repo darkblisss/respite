@@ -111,6 +111,11 @@ where s.user_id = p.user_id;
 -- never has an opinion about what a piece of gear is worth and can never disagree with the
 -- client about it.
 
+-- Postgres will not replace a function whose return type changed, and migration 011 widens
+-- this one. Dropped first so that a re-run of this file (the suites run every migration twice)
+-- lands its own shape cleanly and 011 lands its own after it.
+drop function if exists public.player_profile(text);
+
 create or replace function public.player_profile(p_username text)
 returns table (
   username text,

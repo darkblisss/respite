@@ -164,6 +164,9 @@ function checkQty(qty) {
    call; this holds no game state between calls. */
 const RUNNING = new WeakMap();
 
+// What normalise() will keep in the roll map: anything odder is not written in the first place.
+const FOUND_KEY = /^[a-z0-9_]{1,40}$/;
+
 class Tx {
   constructor(state, journal) {
     this.state = state;
@@ -206,8 +209,14 @@ class Tx {
     return removed;
   }
 
-  // Into one pool. A new stack needs a free slot, and so does every bottle
-  // of a remedy going into Belongings, where they do not stack.
+  /* Into one pool. A new stack needs a free slot, and so does every bottle
+     of a remedy going into Belongings, where they do not stack.
+
+     This is the only door anything comes in through, from a drop, a bench, a
+     purchase or a letter, so it is also where the Collection's record is kept:
+     `i:<base>` counts what has passed through, and a base with anything against
+     it is one this camp has held. It counts moves between pools too, which is
+     why nothing reads the number -- only whether it is there at all. */
   add(w, key, qty) {
     checkQty(qty);
     if (!canHold(w, key)) this.fail(`${poolName(w)} only takes remedies.`);
@@ -216,7 +225,18 @@ class Tx {
     if (!roomFor(this.state, w, key, qty)) this.fail(`${poolName(w)} is full.`);
     this.set(pool.items, key, have + qty);
     if (!pool.order.includes(key)) this.push(pool.order, key);
+    this.found(key, qty);
     return qty;
+  }
+
+  // Marks a base as held, once, journalled so a rolled-back transaction un-marks it.
+  found(key, qty) {
+    const base = String(key).split("|")[0];
+    if (!FOUND_KEY.test(base)) return;
+    const rolls = this.state.rolls;
+    if (!rolls || typeof rolls !== "object") return;
+    const at = `i:${base}`;
+    this.set(rolls, at, (rolls[at] || 0) + qty);
   }
 
   // Wherever it belongs. Returns the pool it went into.

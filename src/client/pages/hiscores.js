@@ -76,7 +76,7 @@ const huntBoard = (c) => ({
 const masteryBoardOf = (w) => ({
   id: `mastery_${w.line}`, name: w.name, title: `${w.name} mastery`, icon: w.icon, num: "Mastery",
   ask: { how: "mastery", key: w.line },
-  note: `Earned a kill at a time by whoever was carrying one. First in the realm on a line is its ${CONFIG.mastery.saint}.`,
+  note: `Earned by whoever carries one into a fight. First in the realm on a line is its ${CONFIG.mastery.saint}.`,
   empty: `Nobody has carried a ${w.name.toLowerCase()} long enough to be counted. The first to do so tops it.`,
   unkept: "The realm keeps no tally of weapon mastery yet, so nothing is ranked here.",
 });
@@ -391,8 +391,10 @@ function boardBody(ctx, page) {
     const acc = ctx.account;
     const me = String(acc.username || "").toLowerCase();
     refreshBtn.hidden = !b.ask;
-    // A board with a note says what it actually counts, which Wealth needs more than "updated".
-    setText(cardSub, b.note || (b.ask ? "Updated as commanders play" : "Nothing is kept for this board yet"));
+    /* A board with a note says what it actually counts. A board without one says nothing:
+       "Updated as commanders play" told a reader what they could already see. */
+    setText(cardSub, b.note || (b.ask ? "" : "Nothing is kept for this board yet"));
+    setAttr(cardSub, "hidden", !(b.note || !b.ask));
 
     if (!got) {
       meChip.hidden = true;

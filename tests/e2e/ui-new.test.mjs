@@ -105,14 +105,35 @@ await run(async () => {
     await go("#/discipline");
     await live(app, () => [...document.querySelectorAll("[role=tab]")].find((t) => /Path/.test(t.textContent)).click());
     await app.page.waitForTimeout(400);
-    const nodes = await live(app, () => [...document.querySelectorAll(".path-node")].map((n) => n.dataset.node));
-    same("ten nodes, all of them the Warrior's", nodes.length, 10);
+    const nodes = await live(app, () => [...document.querySelectorAll(".path-grid .path-cell")].map((n) => n.dataset.node));
+    same("ten faces in the grid, all of them the Warrior's", nodes.length, 10);
     check("and none of them another discipline's", nodes.every((id) => id.startsWith("wr_")), nodes);
+    const bare = await live(app, () => {
+      const cell = document.querySelector('.path-cell[data-node="wr_ironhide"]');
+      return { text: cell.textContent.trim(), art: !!cell.querySelector(".path-art .ico"), pips: cell.querySelectorAll(".path-pip").length };
+    });
+    check("a cell is an icon and its ranks, and says nothing on its face", bare.text === "" && bare.art && bare.pips === 4, bare);
+    const shut = await live(app, () => {
+      const cell = document.querySelector('.path-cell.is-shut');
+      return cell ? { id: cell.dataset.node, locked: !!cell.querySelector(".path-mark .ico"), off: cell.disabled } : null;
+    });
+    check("a band still shut wears a lock and refuses the press", !!shut && shut.locked && shut.off, shut);
+
+    // Spending asks first: the grid dispatches nothing until the dialog is answered.
     const before = await live(app, () => window.__respite.store.state.path || {});
-    await live(app, () => document.querySelector('.path-node[data-node="wr_ironhide"] button[data-node]').click());
-    await app.page.waitForTimeout(700);
+    await live(app, () => document.querySelector('.path-cell[data-node="wr_ironhide"]').click());
+    await app.page.waitForTimeout(500);
+    const asked = await live(app, () => {
+      const m = document.querySelector(".modal");
+      return m ? m.textContent : "";
+    });
+    check("pressing one asks before it spends", /Take Ironhide\?/.test(asked), asked.slice(0, 160));
+    const held = await live(app, () => window.__respite.store.state.path || {});
+    same("and nothing is spent while it is asking", held.wr_ironhide || 0, before.wr_ironhide || 0);
+    await live(app, () => [...document.querySelectorAll(".modal button")].find((b) => /Spend the point/.test(b.textContent)).click());
+    await app.page.waitForTimeout(800);
     const after = await live(app, () => window.__respite.store.state.path || {});
-    check("pressing one spends a point", (after.wr_ironhide || 0) > (before.wr_ironhide || 0), { before, after });
+    check("answering it spends the point", (after.wr_ironhide || 0) > (before.wr_ironhide || 0), { before, after });
   }
 
   section("weapon mastery, ranked by the realm");
@@ -143,7 +164,27 @@ await run(async () => {
     });
     check("the sword reads its level and grade", /Mastery \d/.test(detail.text) && /Swordhand/.test(detail.text), detail.text.slice(0, 140));
     check("the realm ranks it, and this camp is first on it", detail.saint && /Saint/i.test(detail.rank || ""), detail);
-    check("and it says how a line is learned at all", /a kill teaches your off-hand/.test(detail.text), detail.text.slice(0, 160));
+    check("and it says how a line is learned at all", /your off-hand first/.test(detail.text), detail.text.slice(0, 160));
+
+    // The detail sits above the list, and the lines this discipline cannot hold sit under it.
+    const order = await live(app, () => {
+      const root = document.querySelector(".page");
+      const detailEl = root.querySelector(".mastery-detail");
+      const listEl = root.querySelector(".list [data-line]");
+      return detailEl && listEl
+        ? (detailEl.compareDocumentPosition(listEl) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+        : null;
+    });
+    check("the panel you came for is above the list, not under it", order === true, order);
+    const shutLines = await live(app, () => {
+      const head = document.querySelector(".mastery-shut-head");
+      return {
+        headed: !!head && !head.hidden,
+        text: document.querySelector(".page").textContent,
+      };
+    });
+    check("a line you cannot carry is under its own quiet heading", shutLines.headed, shutLines.headed);
+    check("and nowhere does it say a line is not yours to hold", !/Not yours to hold/.test(shutLines.text), shutLines.text.slice(0, 200));
 
     await go("#/hiscores");
     await app.page.waitForTimeout(600);
@@ -177,12 +218,22 @@ await run(async () => {
     check("the head says their discipline and their ground",
       /Warrior/.test(page) && /Verge|Gallowmoor|Warrens|Graveshelf|Fen|Umberdeep|Wyrmreach|Fade|Godsdown/.test(page), page.slice(0, 200));
     const bust = await live(app, () => {
-      const i = document.querySelector(".pp-bust img");
+      const i = document.querySelector(".pp-head .char-portrait img");
       return i ? i.getAttribute("src") : null;
     });
     check("and wears their skin", /skin-outrider\.webp$/.test(bust || ""), bust);
-    const worn = await live(app, () => [...document.querySelectorAll(".pp-slots .slot")].length);
-    same("Standing lays out all eight slots", worn, 8);
+    const worn = await live(app, () => [...document.querySelectorAll(".char-face .doll .doll-slot")].length);
+    same("Standing wears the Satchel's own paperdoll, all eight slots", worn, 8);
+    const beside = await live(app, () => {
+      const face = document.querySelector(".char-face");
+      return !!(face && face.querySelector(".doll") && face.querySelector(".stats"));
+    });
+    check("with the standing beside it, not under it", beside === true, beside);
+    const figure = await live(app, () => {
+      const i = document.querySelector(".char-face .doll-figure img");
+      return i ? i.getAttribute("src") : null;
+    });
+    check("and the figure in the middle of it wears their skin too", /skin-outrider\.webp$/.test(figure || ""), figure);
 
     await live(app, () => [...document.querySelectorAll("[role=tab]")].find((t) => /Skills/.test(t.textContent)).click());
     await app.page.waitForTimeout(400);
@@ -193,6 +244,122 @@ await run(async () => {
     await app.page.waitForTimeout(2000);
     const none = await live(app, () => document.querySelector(".page").textContent);
     check("a name nobody answers to says so plainly", /No such commander/.test(none), none.slice(0, 160));
+  }
+
+  section("the market, one row a shelf");
+  {
+    /* Three Slag Swords at three prices and two rarities, plus ore. The shelf shows the
+       sword once at the cheapest of them, and opening it lists the pieces. */
+    await editSave(stack, "uinew_a", (s2) => {
+      put(s2, "bank", "slag_sword|common", 2);
+      put(s2, "bank", "slag_sword|epic|c4.1", 1);
+      put(s2, "bank", "slag_delve", 30);
+    });
+    await live(app, () => window.__respite.store.sync());
+    await app.page.waitForTimeout(1200);
+    await dispatch(app.page, "marketList", { key: "slag_sword|common", from: "bank", qty: 2, price: 140 });
+    await dispatch(app.page, "marketList", { key: "slag_sword|epic|c4.1", from: "bank", qty: 1, price: 900 });
+    await dispatch(app.page, "marketList", { key: "slag_delve", from: "bank", qty: 30, price: 6 });
+    await app.page.waitForTimeout(600);
+
+    await go("#/market");
+    await app.page.waitForTimeout(2500);
+    const rows = await live(app, () => [...document.querySelectorAll(".listing[data-base]")].map((n) => ({
+      base: n.dataset.base,
+      name: n.querySelector(".listing-name").textContent,
+      cheapest: n.querySelector(".listing-price").textContent,
+      shelf: n.querySelector(".listing-depth").textContent,
+    })));
+    const sword = rows.find((r) => r.base === "slag_sword");
+    check("gear is one row a base, not one a listing", rows.filter((r) => r.base === "slag_sword").length === 1, rows);
+    check("named plainly, with no rarity in it", !!sword && sword.name === "Slag Sword", sword);
+    check("priced at the cheapest on the shelf", !!sword && /140/.test(sword.cheapest), sword);
+    check("and the rarities behind it are named", !!sword && /Common/.test(sword.shelf) && /Epic/.test(sword.shelf), sword);
+    const pools = await live(app, () => [...document.querySelectorAll(".listing[data-key]")].map((n) => n.dataset.key));
+    check("your own ore is not in the pool, because a pool is what you can buy", !pools.includes("slag_delve"), pools);
+    const mine = await live(app, () => document.querySelector(".grid-2 .list").textContent);
+    check("it is on your own card instead, with Remove", /Slag Ore/.test(mine) && /Remove/.test(mine), mine.slice(0, 200));
+
+    await live(app, () => document.querySelector('.listing[data-base="slag_sword"] [data-act="shelf"]').click());
+    await app.page.waitForTimeout(1800);
+    const sheet = await live(app, () => {
+      const m = document.querySelector(".modal");
+      return m ? { title: m.querySelector(".modal-title").textContent, lots: [...m.querySelectorAll(".list-row")].map((r) => r.textContent) } : null;
+    });
+    check("opening it lists every piece on it", !!sheet && sheet.lots.length === 2, sheet && sheet.lots);
+    check("each with its own rarity and price", !!sheet && /Common/.test(sheet.lots.join(" ")) && /Epic/.test(sheet.lots.join(" ")) && /900/.test(sheet.lots.join(" ")), sheet && sheet.lots);
+    check("and they are your own, so they say Remove", !!sheet && /Remove/.test(sheet.lots.join(" ")), sheet && sheet.lots);
+    await live(app, () => [...document.querySelectorAll(".modal button")].find((b) => /Close/.test(b.textContent)).click());
+    await app.page.waitForTimeout(400);
+
+    // The rarity floor lifts the shelf price to the cheapest that passes it.
+    await live(app, () => {
+      const sel = [...document.querySelectorAll(".market-bar select")].find((x) => /rarity/i.test(x.getAttribute("aria-label") || ""));
+      sel.value = "epic";
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await app.page.waitForTimeout(2200);
+    const floored = await live(app, () => [...document.querySelectorAll(".listing")].map((n) => ({
+      base: n.dataset.base || null, key: n.dataset.key || null, price: n.querySelector(".listing-price").textContent,
+    })));
+    const epicSword = floored.find((r) => r.base === "slag_sword");
+    check("a rarity floor lifts the price to the cheapest that passes it", !!epicSword && /900/.test(epicSword.price), floored);
+    check("and closes the material pools, which have no rarity at all", floored.every((r) => !r.key), floored);
+  }
+
+  section("the Collection, in four views");
+  {
+    await editSave(stack, "uinew_a", (s2) => {
+      s2.rolls["m:mob_t1_skirmisher"] = 2080;
+      s2.player.gold = 5000;
+    });
+    await live(app, () => window.__respite.store.sync());
+    await app.page.waitForTimeout(1200);
+    /* Bought rather than put into the save by hand: the record is written where items
+       actually enter a camp (Tx.add), so a buy is what proves it is written at all. */
+    await dispatch(app.page, "buyRemedy", { key: "provision_t1", qty: 1 });
+    await app.page.waitForTimeout(600);
+
+    await go("#/character");
+    await live(app, () => [...document.querySelectorAll("[role=tab]")].find((t) => /Collection/.test(t.textContent)).click());
+    await app.page.waitForTimeout(600);
+    const views = await live(app, () => [...document.querySelectorAll(".coll-tabs [role=tab]")].map((t) => t.textContent.trim()));
+    same("four of them, monsters first", views, ["Monsters", "Gear", "Components", "Everything"]);
+    const felled = await live(app, () => document.querySelector(".char-bestiary").textContent);
+    check("a monster you have put down says how many", /Defeated 2,080/.test(felled), felled.slice(0, 200));
+    check("and never says it the old way", !/\d felled\b/i.test(felled) && !/of yours/.test(felled), felled.slice(0, 200));
+
+    await live(app, () => [...document.querySelectorAll(".coll-tabs [role=tab]")].find((t) => /Gear/.test(t.textContent)).click());
+    await app.page.waitForTimeout(500);
+    const gear = await live(app, () => ({
+      tiles: document.querySelectorAll(".char-bestiary .coll-tile").length,
+      chip: document.querySelector(".section-head .chip").textContent,
+    }));
+    check("gear lists every piece there is, held or not", gear.tiles > 20, gear);
+    check("and the count says how much of it", /of \d+ held/.test(gear.chip), gear.chip);
+
+    await live(app, () => [...document.querySelectorAll(".coll-tabs [role=tab]")].find((t) => /Components/.test(t.textContent)).click());
+    await app.page.waitForTimeout(500);
+    const parts = await live(app, () => ({
+      held: [...document.querySelectorAll("button.coll-tile")].map((b) => b.dataset.item),
+      chip: document.querySelector(".section-head .chip").textContent,
+    }));
+    check("what was bought is lit, because that is where a record is written",
+      parts.held.includes("provision_t1"), parts.held.slice(0, 12));
+    check("and it is a record, not a stock count: it survives spending it",
+      /of \d+ held/.test(parts.chip), parts.chip);
+  }
+
+  section("the party, and where it sits");
+  {
+    const nav = await live(app, () => {
+      const row = [...document.querySelectorAll("#sidebar a, #sidebar button")].map((a) => ({
+        label: a.textContent.trim(),
+        group: a.closest("[id^=nav]") ? a.closest("[id^=nav]").id : null,
+      }));
+      return row.filter((r) => /^Party/.test(r.label));
+    });
+    check("Party sits under the Vanguard now", nav.length === 1 && /^navVanguard/.test(nav[0].group || ""), nav);
   }
 
   section("the Veilsmith");

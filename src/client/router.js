@@ -23,6 +23,8 @@ const PAGES = Object.freeze({
   character: ["character", "The Vanguard", "Character"],
   armaments: ["armaments", "The Vanguard", "Inventory"],
   discipline: ["discipline", "The Vanguard", "Discipline"],
+  // Your band is a Vanguard matter, not a place in the realm.
+  party: ["party", "The Vanguard", "Party"],
   // Companions are unhooked from the live camp until the system is redesigned: the module and its
   // shared state stay put, so restoring this line (and the nav row in ui/shell.js) brings it back.
   // companions: ["companions", "The Vanguard", "Companions"],
@@ -32,7 +34,6 @@ const PAGES = Object.freeze({
   shop: ["shop", "The Camp", "Shop"],
   atlas: ["atlas", "The Realm", "Atlas"],
   market: ["market", "The Realm", "Market"],
-  party: ["party", "The Realm", "Party"],
   hiscores: ["hiscores", "The Realm", "Leaderboard"],
 });
 

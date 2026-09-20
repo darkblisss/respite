@@ -136,6 +136,14 @@ net.market.pools({ q = "", tier = null, limit = 50, bands = 8 })
                                               // -> { rows, error }; market_pools(): materials aggregated by item key, cheapest
                                               // pool first: { item_key, item_name, item_base, item_kind, item_tier, qty_left,
                                               // price_min, bands: [{ each, qty }] }. Your own listings are not counted
+net.market.bases({ q = "", kind = null, tier = null, rarity = null, sort = "price" | "newest", limit = 50 })
+                                              // -> { rows, error }; market_bases(): gear and tools grouped by base, one row a
+                                              // shelf: { item_base, item_name, item_kind, item_tier, lots, mine_lots, qty_left,
+                                              // price_min, price_max, newest, rarities: [{ rarity, lots, qty, min }] }.
+                                              // `rarity` is a floor ("rare" = Rare and up) and decides price_min with it
+net.market.baseListings({ base, rarity = null, limit = 50 })
+                                              // -> { rows, error }; market_base_listings(): every open lot of one base, in the
+                                              // shape browse() answers, cheapest first. The buy still runs against one listing
 net.market.mine()                             // -> { rows, error }; the player's own listings, newest first, all statuses, 50
 net.market.sales()                            // -> { rows, error }; market_sales_mine(): your own trades, newest 50,
                                               // { id, side: "sold" | "bought", item_key, item_name, qty, price_each, fee, created_at }

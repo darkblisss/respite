@@ -1530,14 +1530,19 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
 .shop-row.is-dealt .lr-title,
 .shop-row.is-dealt .art { opacity: .55; }
 
-/* A Bonesetter row's stepper and Buy button stay together. The button's floor lines the steppers up. */
+/* A Bonesetter row's stepper and Buy button stay together. The button's floor lines the
+   steppers up, and the price's floor lines the buttons up: both texts grow with the
+   number in them, and a column of rows that each start somewhere else reads as a mess. */
 .shop-buy {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
 }
 
-.shop-buy > .btn { min-width: 132px; }
+.shop-buy > .btn { min-width: 150px; justify-content: center; }
+
+.shop-row > .lr-end { gap: var(--sp-3); }
+.shop-row > .lr-end > .price { display: inline-block; min-width: 104px; text-align: right; }
 
 /* Phones: when the price, stepper and Buy don't fit on one line, the pair drops under the price. */
 @media (max-width: 599px) {
@@ -1825,14 +1830,29 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
 
 /* ================= 10. MARKET ================= */
 
+/* Its own row under the card head: a search, five tabs and three selects have no
+   business sharing a line with a title. */
 .market-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--sp-2) var(--sp-3);
+  padding: 0 var(--card-pad) var(--sp-3);
 }
 
-.market-search { flex: 1 1 240px; }
+.market-search { flex: 0 1 200px; }
+
+.market-filters {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-left: auto;
+}
+
+@media (max-width: 899px) {
+  .market-search { flex: 1 1 100%; }
+  .market-filters { margin-left: 0; }
+}
 
 .listings { display: flex; flex-direction: column; }
 
@@ -1894,8 +1914,10 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
 .listing-depth { font-size: var(--text-sm); }
 .listing-buy { display: flex; justify-content: flex-end; }
 .listing-l { display: none; }
-/* Your own listing: a tint and a thin left accent, in place of the old "Yours" pill. */
-.listing.is-mine {
+/* Your own listing: a tint and a thin left accent, in place of the old "Yours" pill.
+   The same on a row of a shelf sheet, where your own lots stand beside everyone else's. */
+.listing.is-mine,
+.list-row.is-mine {
   background: linear-gradient(90deg, rgba(157, 130, 224, .07), transparent 50%);
   box-shadow: inset 2px 0 0 var(--violet-hi);
 }
@@ -2186,6 +2208,12 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
 
 .account .grow .strong { display: block; }
 
+/* Sign out and Start over are the dialog's two real actions and sit on the same edge,
+   one above the other, rather than one against each margin. */
+.account > .btn { flex: none; min-width: 124px; justify-content: center; }
+.set-foot { display: flex; justify-content: flex-end; }
+.set-foot > .btn { min-width: 124px; justify-content: center; }
+
 .danger-zone {
   padding: 14px;
   border-radius: var(--r-md);
@@ -2368,7 +2396,71 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
 
 /* ================= THE PATH (pages/discipline.js) ================= */
 
-.path-pips { gap: 4px; }
+/* The tree is a grid of faces, three across: an icon, a check or a lock over it, and
+   the ranks as pips underneath. Everything a node says lives in its tooltip, so the
+   grid stays a grid however wordy the tree gets. */
+.path-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-3);
+  max-width: 420px;
+}
+
+.path-cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--surface-1);
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease),
+              transform var(--dur-1) var(--ease), opacity var(--dur-1) var(--ease);
+}
+.path-cell:hover:not(:disabled),
+.path-cell:focus-visible { border-color: var(--violet); transform: translateY(-1px); }
+.path-cell:disabled { cursor: default; }
+
+.path-art {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-1);
+}
+.path-art .ico { width: 26px; height: 26px; }
+
+/* A node the points are there for: it says so without a word on it. */
+.path-cell.is-ready {
+  border-color: color-mix(in oklab, var(--violet) 55%, var(--line));
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--violet) 25%, transparent) inset;
+}
+.path-cell.is-taken .path-art,
+.path-cell.is-maxed .path-art { color: var(--violet-hi); }
+.path-cell.is-maxed { border-color: color-mix(in oklab, var(--violet) 45%, var(--line)); }
+
+/* A band whose gate has not been passed: still legible, plainly not yours yet. */
+.path-cell.is-shut { opacity: .45; }
+.path-cell.is-shut .path-art { color: var(--muted); }
+
+/* The corner mark: a tick when it is walked to the end, a lock when the band is shut. */
+.path-mark {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+.path-mark:empty { display: none; }
+.path-mark .ico { width: 14px; height: 14px; }
+.path-cell.is-maxed .path-mark { color: var(--violet); }
+.path-cell.is-keystone.is-maxed .path-mark { color: var(--gold); }
+
+.path-pips { display: flex; gap: 4px; }
 
 .path-pip {
   width: 9px;
@@ -2380,30 +2472,32 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
 }
 .path-pip.is-on { background: var(--violet); border-color: var(--violet); }
 
-.path-node { display: flex; flex-direction: column; gap: var(--sp-2); }
-.path-node .card-foot { margin-top: auto; }
-
-/* A band whose gate has not been passed, and the nodes inside it: still legible,
-   plainly not yours yet. */
-.path-node.is-shut,
-.is-shut > .section-head { opacity: .5; }
-
-.path-node.is-maxed { border-color: color-mix(in oklab, var(--violet) 45%, var(--line)); }
-.path-node.is-maxed .card-title::after {
-  content: "\2713";
-  margin-left: 6px;
-  color: var(--violet);
-}
-
 /* The two at the end of a path are a different kind of thing, and look it. */
-.path-node.is-keystone {
+.path-cell.is-keystone {
   border-color: color-mix(in oklab, var(--gold) 35%, var(--line));
   background:
     radial-gradient(120% 90% at 50% 0%, color-mix(in oklab, var(--gold) 7%, transparent), transparent 70%),
     var(--surface-1);
 }
-.path-node.is-keystone.is-maxed { border-color: color-mix(in oklab, var(--gold) 70%, transparent); }
-.path-node.is-keystone.is-maxed .card-title::after { color: var(--gold); }
+.path-cell.is-keystone .path-pip.is-on { background: var(--gold); border-color: var(--gold); }
+.path-cell.is-keystone.is-maxed { border-color: color-mix(in oklab, var(--gold) 70%, transparent); }
+
+.path-legend { margin: 0; }
+
+@media (max-width: 599px) {
+  .path-grid { max-width: none; }
+  .path-art { width: 40px; height: 40px; }
+}
+
+/* The lines a discipline cannot carry, under the ones it can. */
+.mastery-shut-head {
+  margin: var(--sp-4) var(--card-pad) 0;
+  opacity: .7;
+}
+
+/* A mastery row builds its parts as spans (the row is a button), so they are told to
+   stack rather than running "SwordExpert" together on one line. */
+.list-row[data-line] .lr-main > * { display: block; }
 
 /* The one line a kill is teaching right now. */
 .list-row[data-line].is-learning .lr-title::after {
@@ -2447,18 +2541,10 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
 
 /* ================= A COMMANDER, LOOKED AT (pages/player.js) ================= */
 
-.pp-head { align-items: center; }
-.pp-bust { width: 88px; flex: none; border-radius: var(--r-md); background: var(--surface-2); }
-.pp-name { margin-bottom: 6px; }
-.pp-tags { gap: var(--sp-2); }
-
-.pp-slots { margin-top: var(--sp-3); }
-.pp-stats { margin-top: var(--sp-3); }
+/* A commander's page wears the Character page's own banner and the Satchel's own
+   paperdoll, so there is nothing here but the gap between the banner and the tabs. */
+.pp-head { margin-bottom: var(--sp-4); }
 .mt-4 { margin-top: var(--sp-4); }
-
-@media (max-width: 599px) {
-  .pp-bust { width: 64px; }
-}
 
 /* A board row is a row of people: a face, then a name that opens their page. */
 .hs-face {
@@ -2475,5 +2561,6 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
   text-decoration: none;
   border-radius: var(--r-sm, 6px);
 }
-.hs-link:hover .truncate { text-decoration: underline; }
+.hs-link:hover .truncate,
+.member-name .hs-link:hover { text-decoration: underline; }
 .hs-link:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }

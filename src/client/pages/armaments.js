@@ -54,8 +54,8 @@ function commanderName(ctx) {
    the piece's name is one press away in its own sheet (and on the button's label
    for anyone reading it aloud). An empty slot says what it is instead, because
    there the name is the only thing worth saying. */
-function dollSlot(state, slot) {
-  const key = state.equipment[slot];
+function dollSlot(eq, slot) {
+  const key = eq[slot];
   const label = SLOT_LABELS[slot];
   const d = key ? itemDef(key) : null;
   if (!d) {
@@ -73,6 +73,19 @@ function dollSlot(state, slot) {
     title: itemName(key),
   },
     h("span.doll-slot-art", iconEl(d.icon)));
+}
+
+/* Both columns of a paperdoll, filled from any equipment object -- your own save's, or a
+   stranger's off player_profile(). A two-handed weapon takes the offhand's place as well.
+   Exported because the commander page wears the same doll. */
+export function paintDoll(left, right, eq) {
+  const weapon = eq.weapon ? itemDef(eq.weapon) : null;
+  const twoHands = !!(weapon && weapon.twoHanded);
+  const shown = (slots) => slots.filter((s) => !(s === "offhand" && twoHands));
+  left.replaceChildren(...shown(LEFT).map((s) => dollSlot(eq, s)));
+  right.replaceChildren(...shown(RIGHT).map((s) => dollSlot(eq, s)));
+  toggleClass(left, "has-span", twoHands && LEFT.includes("weapon"));
+  toggleClass(right, "has-span", twoHands && RIGHT.includes("weapon"));
 }
 
 /* `link` puts a small quiet link in the card head ({ href, label }). The Satchel
@@ -114,14 +127,7 @@ export function dollCard(ctx, { link = null } = {}) {
       const next = DOLL_ORDER.map((s) => eq[s] || "-").join(",");
       if (next !== sig) {
         sig = next;
-        const weapon = eq.weapon ? itemDef(eq.weapon) : null;
-        const twoHands = !!(weapon && weapon.twoHanded);
-        // A two-handed weapon takes the offhand's place as well.
-        const shown = (slots) => slots.filter((s) => !(s === "offhand" && twoHands));
-        left.replaceChildren(...shown(LEFT).map((s) => dollSlot(state, s)));
-        right.replaceChildren(...shown(RIGHT).map((s) => dollSlot(state, s)));
-        toggleClass(left, "has-span", twoHands && LEFT.includes("weapon"));
-        toggleClass(right, "has-span", twoHands && RIGHT.includes("weapon"));
+        paintDoll(left, right, eq);
       }
 
       node.querySelectorAll("button.doll-slot[data-key]").forEach((b) => {
@@ -153,9 +159,9 @@ function standingRows(state) {
     ["Attack", fmtStat(s.attack), "gold"],
     // A flat number, never the share it stops: the mitigation curve is the engine's business.
     ["Defence", fmtStat(s.defence)],
-    ["Swing", `${(s.speed / 1000).toFixed(1)}s`],
-    ["Crit chance", pct(s.crit)],
-    ["Crit damage", pct(s.critDmg)],
+    ["Attack speed", `${(s.speed / 1000).toFixed(1)}s`],
+    ["Crit Chance", pct(s.crit)],
+    ["Crit Damage", pct(s.critDmg)],
     ["Penetration", pct(s.pen)],
     k && ["Veil", s.absorb ? `+${fmtStat(s.absorb)} a second` : `+${fmtStat(s.veilGain)} a blow`],
     ["Hunt", `Lv ${skillLevel(state, "warfare")}`, "good"],
