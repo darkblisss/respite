@@ -14,7 +14,7 @@ import { CONFIG } from "./config.js";
 import {
   GameData, getRegion, getMaterial, getClass, monsterOfTier, matId, agentRarityDef,
 } from "./registry.js";
-import { itemDef, itemName, parseKey, validKey, agentRarityFromRoll, remedyTooWeak, tierForLevel } from "./items.js";
+import { itemDef, itemName, parseKey, validKey, agentRarityFromRoll, remedyTooWeak, tierForLevel, makeKey, prefixFromRoll } from "./items.js";
 import {
   ORDER, canHold, isPool, poolName, qtyIn, haveQty, placeFor, orderedKeys, transact,
 } from "./storage.js";
@@ -497,17 +497,31 @@ export function salvage(state, { key, from } = {}, env) {
 }
 
 // Debug/testing only: stashes any valid item key at will, bypassing normal
-// acquisition. Never wire this to the UI or ship it reachable by a live client.
-export function debugGive(state, { key, qty = 1 } = {}, env) {
-  const d = itemDef(key);
+// acquisition. A bare gear/tool base (e.g. "slag_sword") always resolves to
+// common on its own; pass `rarity` and this rolls a uid for it, and a prefix
+// too when rarity is "relic", so you get a real relic/legendary/etc. item
+// without hand-building a "base|rarity|uid|prefix" key yourself.
+// Never wire this to the UI or ship it reachable by a live client.
+export function debugGive(state, { key, qty = 1, rarity } = {}, env) {
+  let k = key;
+  const box = { s: state.rng.world };
+  const rng = makeRng(box, "s");
+  if (rarity && rarity !== "common" && typeof k === "string" && k.indexOf("|") < 0) {
+    const uid = `dbg${Math.floor(rng() * 1e9).toString(36)}`;
+    const prefix = rarity === "relic" ? prefixFromRoll(k, rng()) : null;
+    k = makeKey(k, rarity, uid, prefix);
+  }
+
+  const d = itemDef(k);
   if (!d) return refuse("No such item.");
   const n = Number.isInteger(qty) && qty > 0 ? qty : 1;
 
   const res = transact(state, (tx) => {
-    tx.stash(key, n);
+    tx.stash(k, n);
+    tx.set(state.rng, "world", box.s);
   });
   if (!res.ok) return res;
-  emit(state, env, "item:debugGiven", { key, qty: n });
+  emit(state, env, "item:debugGiven", { key: k, qty: n });
   return OK();
 }
 
