@@ -22,10 +22,11 @@ import { windowIndex, nextDayAt } from "./weather.js";
 import { activeCompanion, bondStep, nextBondIn, buyCompanion, setCompanion } from "./companions.js";
 import { startSkill, stopSkill, nextSkillDue, resolveSkilling } from "./skills.js";
 import { startHunt, pullBack, setHide, huntStep } from "./combat.js";
+import { walkPath, resetPath } from "./path.js";
 import {
   refreshBounty, resolveRequisitions, claimBounty, hireAgent, deployAgent, buyRemedy, buySmuggler,
   travel, equip, unequip, unequipTool, moveItem, sellItem, useChest, useRemedy, salvage, reorder, pickClass,
-  debugGive,
+  setSex, enchant, debugGive,
 } from "./world.js";
 
 const WINDOW_MS = CONFIG.time.windowMs;
@@ -110,6 +111,9 @@ export const COMMANDS = Object.freeze({
   pullBack:     { run: pullBack, predict: true },
   setHide:      { run: setHide, predict: true },
   pickClass:    { run: pickClass, predict: true },
+  setSex:       { run: setSex, predict: true },
+  walkPath:     { run: walkPath, predict: true },
+  resetPath:    { run: resetPath, predict: true },
   debugGive:    { run: debugGive, predict: true },
   equip:        { run: equip, predict: true },
   unequip:      { run: unequip, predict: true },
@@ -117,6 +121,7 @@ export const COMMANDS = Object.freeze({
   moveItem:     { run: moveItem, predict: true },
   sellItem:     { run: sellItem, predict: true },
   salvage:      { run: salvage, predict: true },
+  enchant:      { run: enchant, predict: true },
   useChest:     { run: useChest, predict: true },
   useRemedy:    { run: useRemedy, predict: true },
   reorder:      { run: reorder, predict: true },

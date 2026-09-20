@@ -2321,3 +2321,86 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
    .empty .btn carries a top margin meant for a lone button; here the row already has it. */
 .empty-form { justify-content: center; }
 .empty-form > .btn { margin-top: 0; }
+
+/* ================= WEAPON MASTERY (pages/discipline.js) ================= */
+/* The list reuses .list-row wholesale; these only add what a pressable row and a
+   line you cannot hold need on top of it. */
+
+.list-row[data-line] {
+  appearance: none;
+  font: inherit;
+  color: inherit;
+  border-top: 1px solid transparent;
+  border-bottom: 0;
+  transition: background var(--dur-1) var(--ease);
+}
+.list-row[data-line]:hover { background: var(--surface-2); }
+.list-row[data-line][aria-pressed="true"] {
+  background: var(--surface-2);
+  box-shadow: inset 3px 0 0 var(--violet);
+}
+.list-row[data-line] .lr-end b {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--bone);
+}
+
+/* A line your discipline will not hold: the row stays, the number becomes a dash. */
+.list-row[data-line].is-locked { opacity: .45; }
+.list-row[data-line].is-locked .lr-end b { color: var(--bone-faint); font-weight: 500; }
+
+.list-row[data-line] .bar { margin-top: 8px; }
+
+.mastery-detail { margin-top: var(--sp-4); }
+.mastery-detail .chip-row { margin-top: var(--sp-2); }
+.mastery-detail .small { margin-top: var(--sp-3); }
+
+/* First in the realm on a line is not a grade, it is a title. */
+.tag.is-saint {
+  border-color: color-mix(in oklab, var(--gold) 55%, transparent);
+  background: color-mix(in oklab, var(--gold) 16%, transparent);
+  color: var(--gold);
+  letter-spacing: .10em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+/* ================= THE PATH (pages/discipline.js) ================= */
+
+.path-pips { gap: 4px; }
+
+.path-pip {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: transparent;
+  transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+.path-pip.is-on { background: var(--violet); border-color: var(--violet); }
+
+.path-node { display: flex; flex-direction: column; gap: var(--sp-2); }
+.path-node .card-foot { margin-top: auto; }
+
+/* A band whose gate has not been passed, and the nodes inside it: still legible,
+   plainly not yours yet. */
+.path-node.is-shut,
+.is-shut > .section-head { opacity: .5; }
+
+.path-node.is-maxed { border-color: color-mix(in oklab, var(--violet) 45%, var(--line)); }
+.path-node.is-maxed .card-title::after {
+  content: "\2713";
+  margin-left: 6px;
+  color: var(--violet);
+}
+
+/* The two at the end of a path are a different kind of thing, and look it. */
+.path-node.is-keystone {
+  border-color: color-mix(in oklab, var(--gold) 35%, var(--line));
+  background:
+    radial-gradient(120% 90% at 50% 0%, color-mix(in oklab, var(--gold) 7%, transparent), transparent 70%),
+    var(--surface-1);
+}
+.path-node.is-keystone.is-maxed { border-color: color-mix(in oklab, var(--gold) 70%, transparent); }
+.path-node.is-keystone.is-maxed .card-title::after { color: var(--gold); }

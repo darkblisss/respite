@@ -26,11 +26,12 @@ import { iconEl } from "../ui/icons.js";
 import { fmt, fmtWhole, fmtGold, fmtTime, fmtStat, titleCase } from "../ui/format.js";
 import { chipNode } from "../ui/popups/action.js";
 import { monsterArt, foeKills, foeFalls } from "../ui/popups/foe.js";
-import { openPopup } from "../ui/widgets.js";
+import { hasPopup, openPopup } from "../ui/widgets.js";
+import { portraitImg } from "../ui/popups/likeness.js";
 import { dollCard, standingCard } from "./armaments.js";
 import { CONFIG } from "../../shared/config.js";
 import {
-  ARTISAN_ORDER, GameData, SKILL_ORDER, TRADE_ORDER, getSkill, getClass, foesOf, sovereignOf, regionOfTier, tierLabel } from "../../shared/registry.js";
+  ARTISAN_ORDER, GameData, SKILL_ORDER, TRADE_ORDER, getSkill, getClass, getSex, foesOf, sovereignOf, regionOfTier, tierLabel } from "../../shared/registry.js";
 import { totalLevel, xpProgress } from "../../shared/stats.js";
 import { skillPlan } from "../../shared/skills.js";
 import { combatPlan } from "../../shared/combat.js";
@@ -57,11 +58,13 @@ function heroView() {
   const name = h("h1.char-name");
   const tags = h("div.chip-row.char-tags");
   const total = h("span.char-total-v");
+  const bust = h("div.portrait.portrait-bust.char-portrait", portraitImg(null));
   const node = h("section.char-hero",
-    h("div.portrait.portrait-bust.char-portrait", h("img", { src: "assets/commander-default.webp", alt: "" })),
+    bust,
     h("div", eyebrow, name, tags),
     h("div.char-total", total, h("span.eyebrow", "Total level")));
   let tagSig = null;
+  let sexSig = null;
 
   return {
     node,
@@ -70,16 +73,24 @@ function heroView() {
       setText(name, commanderName(ctx));
       setText(total, fmtWhole(totalLevel(state)));
 
+      // The face on the roll follows the likeness, and falls back on its own if the art is missing.
+      if (state.player.sex !== sexSig) {
+        sexSig = state.player.sex;
+        bust.replaceChildren(portraitImg(sexSig));
+      }
+
       // The discipline tag waits for a discipline; the bounty chip for a posting still open.
       const klass = state.player.klass ? getClass(state.player.klass) : null;
       const comp = activeCompanion(state);
       const b = state.bounty && !state.bounty.claimed ? state.bounty : null;
       const bountyText = b ? `Bounty ${fmtWhole(Math.min(b.progress, b.amount))} of ${fmtWhole(b.amount)}` : null;
-      const sig = [klass ? klass.id : "-", comp ? comp.id : "-", bountyText || "-"].join("|");
+      const sex = state.player.sex ? getSex(state.player.sex) : null;
+      const sig = [sex ? sex.id : "-", klass ? klass.id : "-", comp ? comp.id : "-", bountyText || "-"].join("|");
       if (sig === tagSig) return;
       tagSig = sig;
       // replaceChildren would write a null out as text, so the absent ones are filtered first.
       tags.replaceChildren(...[
+        sex ? h("span.tag", sex.name) : null,
         klass ? h("span.tag.tag-violet", klass.name) : null,
         comp ? chipNode({ text: comp.name, icon: "paw" }) : null,
         bountyText ? chipNode({ text: bountyText, tone: "gold", icon: "scroll" }) : null,
@@ -593,12 +604,21 @@ export default {
 
     view.appendChild(h("div.page", hero.node, ...tabs.nodes));
 
+    /* A camp with no likeness on the roll has never been asked, so it is asked
+       here: this is the page every camp opens on. One ask per mount -- the popup
+       itself refuses to stack, and closes the moment the answer lands. */
+    let asked = false;
+
     const handle = {
       update(next) {
         const c = next || ctx;
         const state = c.state;
         hero.update(c, state);
         tabs.update(c, state);
+        if (!asked && !state.player.sex && hasPopup("likeness")) {
+          asked = true;
+          openPopup("likeness", c);
+        }
       },
       unmount() { tabs.destroy(); },
     };

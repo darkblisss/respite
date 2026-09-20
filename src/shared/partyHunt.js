@@ -38,13 +38,21 @@
    One bigger thing, shared, instead of four small ones.
 
    WHAT A KILL PAYS
-   Contribution is 70% of the damage you dealt and 30% of the damage
-   you took, so holding the line counts for something without paying
-   better than swinging. XP follows contribution. Gold is equal --
-   everyone who was there did the encounter. Drops are rolled for each
-   hunter separately, so nobody races for a last hit. And the kill
-   itself is credited to everyone who actually hurt it: one shared
-   encounter, not four independent corpses.
+   An encounter's XP pool rides the same scale its foes do, so a fair
+   split of a foe built for four pays each of the four what a foe built
+   for one pays a lone hunter. Partying is then worth a small bonus on
+   top, and nothing more.
+
+   A share of that pool is 70% of the damage you dealt and 30% of the
+   damage you took, so holding the line counts for something without
+   paying better than swinging -- and the taken half is capped against
+   your damage share, so nobody farms a share by becoming unkillable and
+   never striking. Shares are normalised, so the pool is paid out once.
+
+   Gold is equal -- everyone who was there did the encounter. Drops are
+   rolled for each hunter separately, so nobody races for a last hit.
+   And the kill itself is credited to everyone who actually hurt it: one
+   shared encounter, not four independent corpses.
    ============================================================ */
 
 import { CONFIG } from "./config.js";
@@ -81,7 +89,7 @@ export function makeHunter(userId, stats, { hp = null, heals = [] } = {}) {
     dmg: 0,
     // What they have absorbed. Thirty percent of a share is this.
     taken: 0,
-    owed: { xp: 0, gold: 0, kills: 0, slain: [], drops: [], died: null, remedies: 0 },
+    owed: { xp: 0, gold: 0, mastery: 0, kills: 0, slain: [], drops: [], died: null, remedies: 0 },
   };
 }
 
@@ -330,6 +338,10 @@ function hunterSwing(ctx, u) {
     }
   }
 
+  /* What the path has made of a full Veil. 1 for anyone who has not walked that
+     far, so a hunter with no tree swings exactly as they always did. */
+  if (technique && s.tech > 1) mult *= s.tech;
+
   let dmg = playerBlow(s, mob, e.tier, mult, crit, pen, rng);
   if (s.echoing && !technique && rng() < 0.12) dmg += playerBlow(s, mob, e.tier, 1, rng() < s.crit, pen, rng);
   if (s.furious) {
@@ -458,16 +470,28 @@ function killFoe(ctx, f) {
   ctx.fx(f.uid, "kill", 0);
 
   const gold = n.gold[0] + Math.floor(ctx.rng() * (n.gold[1] - n.gold[0] + 1));
-  const xp = n.xp * z.xp;
+  /* The pool, not one hunter's worth. This foe was built for the warband: its health
+     and its attack both rode f.scale, so its XP does too. A fair split of a foe made
+     for four therefore pays each of the four what a foe made for one pays a lone
+     hunter -- which is the whole point of one bigger thing instead of four small
+     ones. The party bonus rides on top, and is small on purpose. */
+  const xp = n.xp * z.xp * (f.scale || 1) * partyXpBonus(f.scale || 1);
   const hurtIt = e.hunters.filter((u) => (f.by[u.userId] || 0) > 0);
 
+  // Worked out once for the whole roster: the shares are normalised against each other.
+  const shares = contributionMap(e);
   e.hunters.forEach((u) => {
-    const share = contributionOf(e, u);
+    const share = shares[u.userId] || 0;
     if (share > 0) u.owed.xp += xp * share;
   });
 
   hurtIt.forEach((u) => {
     u.owed.gold += gold;
+    /* A weapon's mastery is the hours it was carried, not the share it earned: a
+       kill your party made with you in it is a kill you carried that weapon through,
+       so it pays the same points a lone kill of the same foe pays. Unsplit, and
+       unscaled -- the foe's size is the party's problem, not the weapon's. */
+    u.owed.mastery += n.xp * z.xp;
     u.owed.kills++;
     u.owed.slain.push({ id: mob.id, elite: !!f.elite });
     u.owed.drops.push({ id: mob.id, elite: !!f.elite });
@@ -476,16 +500,55 @@ function killFoe(ctx, f) {
   if (!e.foes.length) e.over = "cleared";
 }
 
-/* A hunter's share of the encounter so far. With nothing taken by anyone the whole
-   of it rides on damage dealt, rather than handing out the 30% for standing still. */
-export function contributionOf(e, u) {
+/* How much a party of this size multiplies an encounter's XP pool by, over and above
+   the scale its foes were built at. Small on purpose: see CONFIG.party. */
+export function partyXpBonus(scale) {
+  const P = CONFIG.party;
+  const others = Math.max(0, (Number.isFinite(scale) ? scale : 1) - 1);
+  return 1 + Math.min(P.huntBonusCap, P.huntBonusPerMember * others);
+}
+
+/* Every hunter's share of the encounter so far, by user id, summing to 1.
+
+   The raw share is 70% of the damage you dealt and 30% of the damage you took. Left
+   there, a hunter who made themselves unkillable and never swung would bank the
+   whole 30% for standing still, so the taken half is guarded: what is counted for
+   you is capped at takenPerDealt times your damage share, and at takenCap of the
+   encounter outright. Absorbing is paid for beside swinging, never instead of it.
+
+   Anyone who actually hurt it is then floored at contribFloor, and the lot is
+   normalised, so a cap or a floor moves XP between hunters rather than minting or
+   burning any: the encounter pays out exactly its pool, whatever shape the party is.
+
+   With nothing taken by anyone the whole of it rides on damage dealt. */
+export function contributionMap(e) {
   const P = CONFIG.party;
   const totalDmg = e.hunters.reduce((n, x) => n + x.dmg, 0);
   const totalTaken = e.hunters.reduce((n, x) => n + x.taken, 0);
-  if (!(totalDmg > 0)) return 0;
-  const dealt = u.dmg / totalDmg;
-  if (!(totalTaken > 0)) return dealt;
-  return P.contribDealt * dealt + P.contribTaken * (u.taken / totalTaken);
+  const out = {};
+  if (!(totalDmg > 0)) return out;
+
+  let sum = 0;
+  e.hunters.forEach((u) => {
+    const dealt = u.dmg / totalDmg;
+    let share = dealt;
+    if (totalTaken > 0) {
+      const taken = Math.min(u.taken / totalTaken, P.takenCap, P.takenPerDealt * dealt);
+      share = P.contribDealt * dealt + P.contribTaken * taken;
+    }
+    if (u.dmg > 0) share = Math.max(share, P.contribFloor);
+    out[u.userId] = Math.max(0, share);
+    sum += out[u.userId];
+  });
+  if (!(sum > 0)) return {};
+  Object.keys(out).forEach((id) => { out[id] /= sum; });
+  return out;
+}
+
+// One hunter's share. Reading the whole roster at once is contributionMap.
+export function contributionOf(e, u) {
+  const share = contributionMap(e)[u.userId];
+  return share === undefined ? 0 : share;
 }
 
 /* ================= 5. READING ONE ================= */
@@ -500,12 +563,15 @@ export function encounterView(e) {
       uid: f.uid, id: f.id, elite: f.elite,
       hp: Math.max(0, Math.ceil(f.hp)), max: f.max,
     })),
-    hunters: e.hunters.map((u) => ({
-      userId: u.userId, down: u.down,
-      hp: Math.max(0, Math.ceil(u.hp)), max: u.stats.maxHp,
-      dmg: Math.round(u.dmg), taken: Math.round(u.taken),
-      share: Math.round(contributionOf(e, u) * 100),
-    })),
+    hunters: (() => {
+      const shares = contributionMap(e);
+      return e.hunters.map((u) => ({
+        userId: u.userId, down: u.down,
+        hp: Math.max(0, Math.ceil(u.hp)), max: u.stats.maxHp,
+        dmg: Math.round(u.dmg), taken: Math.round(u.taken),
+        share: Math.round((shares[u.userId] || 0) * 100),
+      }));
+    })(),
   };
 }
 
@@ -641,7 +707,7 @@ export function owedFor(s, userId) {
 export function clearOwed(s, userId) {
   const u = s.hunters.find((x) => x.userId === String(userId));
   if (!u) return;
-  u.owed = { xp: 0, gold: 0, kills: 0, slain: [], drops: [], died: null, remedies: 0 };
+  u.owed = { xp: 0, gold: 0, mastery: 0, kills: 0, slain: [], drops: [], died: null, remedies: 0 };
 }
 
 // What a watcher sees of the whole session.

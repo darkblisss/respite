@@ -208,6 +208,123 @@ const party = {
      not split by this: everyone who was there gets the same. */
   contribDealt: 0.70,
   contribTaken: 0.30,
+
+  /* The guard on the taken half, so nobody farms a share by becoming unkillable and
+     never striking. Two ceilings and a floor, and the lot is normalised afterwards so
+     the encounter still pays out exactly once however the shares fall:
+
+       takenPerDealt  the counted taken share is at most this many times your damage
+                      share. Stand in the way and never swing and it is worth nothing;
+                      a real tank swinging for a sixth of the party can still be paid
+                      for half the blows it ate.
+       takenCap       and never more than this much of the encounter's damage taken,
+                      whatever the damage share says. One body is one body.
+       contribFloor   anyone who actually hurt it is never paid nothing.  */
+  takenPerDealt: 3,
+  takenCap: 0.5,
+  contribFloor: 0.05,
+
+  /* An encounter's XP pool rides the same scale its foes do, so a fair four-way split
+     of a foe built for four pays each of them what one built for one would have. The
+     party bonus above is then laid on top: partying is worth a little, never a lot. */
+};
+
+/* ================= 9b. ENCHANTING ================= */
+
+/* Working the Veil into a piece of gear. The stone is Veil Essence of the piece's
+   own band -- Lesser for tiers 1 to 3, Veiled for 4 to 6, Sovereign for 7 to 9 --
+   which is the only thing in the camp Essence has ever been for.
+
+   One to three stones an attempt. More stones is a better chance, and the table
+   is the whole of it:
+
+       level    1 stone   2 stones   3 stones
+       +0 -> +1   80%       95%       100%
+       +7 -> +8   45%       60%        75%
+       +14 -> +15 10%       25%        40%
+
+   which is chance = 0.80 + 0.15 x (stones - 1) - 0.05 x level, held at 100%.
+
+   A failure takes the stones and nothing else: the piece is unharmed and the
+   level is where it was. So one stone is the thrifty road and three is the quick
+   one, and at the very top three is both -- which is the decision the system is
+   for. Nothing is ever destroyed, and no level is ever lost.
+
+   Each level multiplies every stat the piece carries by gainPerLevel again, so
+   +15 is a little over half as much piece again -- earned with, in expectation,
+   about forty-five Essence, which for the deep bands is forty-five Sovereigns. */
+
+const enchant = {
+  max: 15,
+  maxStones: 3,
+  baseChance: 0.80,       // one stone at +0
+  perStone: 0.15,         // each stone past the first
+  perLevel: 0.05,         // taken off for every level already on the piece
+  gainPerLevel: 0.035,    // +3.5% of the whole stat line a level: +52.5% at +15
+  valuePerLevel: 0.15,    // what a worked piece is worth over a bare one, a level
+};
+
+/* ================= 10a. THE PATH ================= */
+
+/* A discipline's own tree, walked one point at a time. Ten nodes, in three
+   bands: four open from the moment the oath is taken, four more once six points
+   are down, and two keystones that cost three apiece and want sixteen. The
+   nodes themselves live in registry.js (PATHS); this is only the shape.
+
+   Points come with Hunt levels, one every pathPer from the level the oath is
+   taken at, so a full tree is never quite affordable: thirty-eight points fill
+   one and Hunt 99 pays thirty-two. What you leave out is the choice.
+
+   The oath cannot be unsworn, but the path can: a reset hands every point back
+   for respecGold apiece, which is a gold sink rather than a punishment. */
+
+const path = {
+  pathPer: 3,             // a point every three Hunt levels, from classPickLevel
+  minorRanks: 4,          // how far a lesser node goes
+  keystoneCost: 3,        // what the two at the end cost, at one rank each
+  bandGates: [0, 6, 16],  // points already spent before a band opens
+  respecGold: 250,        // a point, to take them all back
+};
+
+/* ================= 10b. WEAPON MASTERY ================= */
+
+/* What a weapon owes you for the hours. Every kill credits the line in your hands
+   (and the line in your off-hand, if there is one) with the same points the kill
+   paid Warfare before any multiplier, so mastery is earned by hunting and by
+   nothing else -- not bought, not crafted, not traded.
+
+   The track runs 0 to 100. A band widens with the square of the level, so the
+   first ten come in an evening and the last ten are the work of weeks: reaching
+   100 on one line costs about what Warfare 70 costs, which is a commitment to one
+   weapon rather than a box ticked.
+
+   The pay-off is flat and readable: perLevel on the line's own stat, so a maxed
+   Bow is +15% Bow damage and a maxed Shield is +15% Defence while it is held. It
+   applies only while that piece is worn, which is the whole point of a mastery. */
+
+const mastery = {
+  max: 100,
+  /* A quarter of the points the kill paid Warfare. Warfare's own curve is what
+     carries you between tiers, so tying mastery to it keeps a weapon's hours
+     meaningful at every depth; the quarter is what stops the deepest ground
+     mastering a line in an evening. At the Core of tier 9 the last level before
+     100 is a couple of hundred kills, which is what a Grandmaster should cost. */
+  perKill: 0.25,
+  perLevel: 0.0015,           // +0.15% of the line's stat a level: +15% at 100
+  // Where the five named milestones sit on the track. Names are per line, in registry.js.
+  rankLevels: [10, 30, 50, 75, 100],
+  /* The grade a level reads as, on the sheet and in the hiscores. Highest one
+     reached wins. The band above them all is not a grade at all: it is Saint, and
+     it belongs to whoever stands first in the realm on that line. */
+  grades: [
+    { at: 0, name: "Untried" },
+    { at: 1, name: "Novice" },
+    { at: 20, name: "Journeyman" },
+    { at: 40, name: "Expert" },
+    { at: 60, name: "Master" },
+    { at: 80, name: "Grandmaster" },
+  ],
+  saint: "Saint",
 };
 
 /* ================= 11. FORMULAS ================= */
@@ -261,8 +378,17 @@ const bondXpFor = (level) => 15 * (level - 1) * level;
 const compTime = (t) => (45 + 75 * t) * 1000;
 const gearTime = (t) => (90 + 150 * t) * 1000;
 
+/* Mastery needed to reach a level on a weapon's track, 0 at 0. The band between
+   two levels is 40 + L squared, so the whole 100 comes to about 332,000 -- near
+   enough what Warfare 70 costs, earned a kill at a time. */
+const masteryTable = (() => {
+  const t = [0];
+  for (let L = 1; L <= mastery.max; L++) t[L] = t[L - 1] + 40 + (L - 1) * (L - 1);
+  return t;
+})();
+
 export const CONFIG = deepFreeze({
-  schema: 9,
+  schema: 10,
   time,
   storage,
   progression,
@@ -272,8 +398,12 @@ export const CONFIG = deepFreeze({
   agents,
   weather,
   bench,
+  enchant,
   party,
+  path,
+  mastery,
   xpTable,
+  masteryTable,
   valBase,
   defenceK,
   gearStat,

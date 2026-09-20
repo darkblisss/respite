@@ -16,6 +16,7 @@ import { fmt, fmtGold, fmtTime, fmtClock } from "../ui/format.js";
 import { GameData, getRegion, matId } from "../../shared/registry.js";
 import { itemName } from "../../shared/items.js";
 import { windowEndsIn } from "../../shared/weather.js";
+import { bountyOwed } from "../../shared/world.js";
 
 const HOUR = 60 * 60 * 1000;
 
@@ -59,7 +60,7 @@ export default {
       } else {
         const trade = tradeFor(b);
         kind = h("span.chip.chip-violet", iconEl(trade ? trade.icon : "hammer"), trade ? trade.name : "Gathering");
-        hint = `Every ${itemName(b.targetId)} your crews bring in counts.`;
+        hint = `Paid on delivery: the ${itemName(b.targetId)} are handed over with the claim.`;
       }
       const R = { count: h("b"), fill: h("i"), claim: h("button.btn.btn-gold", { type: "button", onClick: () => ctx.dispatch("claimBounty") }) };
       R.bar = h("div.bar.bar-gold.bar-lg", { role: "progressbar", "aria-label": "Bounty progress", "aria-valuemin": "0", "aria-valuemax": "100" }, R.fill);
@@ -127,8 +128,18 @@ export default {
         setText(post.R.count, `${fmt(done)} of ${fmt(b.amount)}`);
         setWidth(post.R.fill, pct);
         setAttr(post.R.bar, "aria-valuenow", String(Math.round(pct)));
-        setText(post.R.claim, b.claimed ? "Paid out" : finished ? `Claim ${fmtGold(b.gold)}` : `${fmt(b.amount - b.progress)} more to go`);
-        post.R.claim.disabled = b.claimed || !finished;
+        /* A gather posting is paid on delivery, so the button asks for the goods
+           back if they were spent between the gathering and the claim. */
+        const short = bountyOwed(state);
+        const label = b.claimed
+          ? "Paid out"
+          : !finished
+            ? `${fmt(b.amount - b.progress)} more to go`
+            : short > 0
+              ? `${fmt(short)} short to hand over`
+              : `Claim ${fmtGold(b.gold)}`;
+        setText(post.R.claim, label);
+        post.R.claim.disabled = b.claimed || !finished || short > 0;
       } else {
         setText(post.R.text, `A new posting goes up in ${fmtTime(ends)}.`);
       }

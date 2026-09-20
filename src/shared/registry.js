@@ -697,6 +697,127 @@ function buildRegistry() {
   const BRUTE_FORCE = { id: null, name: "Brute Force", health: 1, attack: 1, defence: 1,
     speed: H.playerSwingMs, ...BASE_COMBAT };
 
+  /* ================= 11a. THE PATHS =================
+     Ten nodes a discipline, in three bands. `band` is 1, 2 or 3 and decides what
+     has to be spent before a node opens (CONFIG.path.bandGates); band 3 is the
+     two keystones, one rank apiece at keystoneCost each, and they are meant to
+     change how the discipline is played rather than add another few percent.
+
+     Every number in `per` is PER RANK, and every one of them is something
+     combatStats already reads, so a point spent here lands on the same sheet
+     gear does and nothing in the fight has to be told about the tree:
+
+       attackPct defencePct healthPct   shares of the finished stat
+       speedPct                         taken OFF the swing: faster
+       critFlat critDmgFlat penFlat     added outright
+       veilFlat                         Veil built a blow (Warrior, Rogue)
+       absorbFlat                       Veil drunk a second (Mage)
+       techPct                          what a full Veil does, when it goes off
+
+     The three trees are deliberately not the same shape. A Warrior's is bulk and
+     the weight of one blow; a Rogue's is speed and the edge; a Mage's is the Veil
+     itself. Each ends on a choice between leaning further into the discipline or
+     covering what it is worst at. */
+  const MINOR = CONFIG.path.minorRanks;
+  const KEY = CONFIG.path.keystoneCost;
+  const minor = (id, name, band, note, per) => ({ id, name, band, ranks: MINOR, cost: 1, keystone: false, note, per });
+  const keystone = (id, name, note, per) => ({ id, name, band: 3, ranks: 1, cost: KEY, keystone: true, note, per });
+
+  const PATHS = {
+    warrior: [
+      minor("wr_ironhide", "Ironhide", 1, "The armour sits where it should.", { defencePct: 0.03 }),
+      minor("wr_lungs", "Deep Lungs", 1, "You last longer than the thing opposite.", { healthPct: 0.03 }),
+      minor("wr_hammerhand", "Hammerhand", 1, "Every blow carries more of you in it.", { attackPct: 0.025 }),
+      minor("wr_braced", "Braced", 1, "The Veil gathers faster in a stance held.", { veilFlat: 2 }),
+      minor("wr_sunder", "Sunder", 2, "Armour is a suggestion.", { penFlat: 0.02 }),
+      minor("wr_stonewall", "Stonewall", 2, "Heavier, and harder to move.", { healthPct: 0.015, defencePct: 0.015 }),
+      minor("wr_weight", "Weight of the Blow", 2, "A full Veil lands heavier.", { techPct: 0.04 }),
+      minor("wr_grimpace", "Grim Pace", 2, "Slow is not the same as late.", { speedPct: 0.015 }),
+      keystone("wr_devastation", "Devastation", "The strike a full Veil buys stops being a blow and becomes a verdict.", { techPct: 0.35 }),
+      keystone("wr_vanguard", "Bulwark of the Vanguard", "You are the ground the party stands on.", { defencePct: 0.12, healthPct: 0.08 }),
+    ],
+    rogue: [
+      minor("rg_quickhands", "Quick Hands", 1, "Two where there was one.", { speedPct: 0.02 }),
+      minor("rg_keenedge", "Keen Edge", 1, "You find the seam more often.", { critFlat: 0.01 }),
+      minor("rg_sinew", "Sinew", 1, "Thin is not the same as weak.", { attackPct: 0.025 }),
+      minor("rg_lightfoot", "Lightfoot", 1, "Harder to catch, and harder to keep hold of.", { healthPct: 0.025 }),
+      minor("rg_killerseye", "Killer's Eye", 2, "When it lands, it ends things.", { critDmgFlat: 0.04 }),
+      minor("rg_findthegap", "Find the Gap", 2, "Plate has hinges.", { penFlat: 0.02 }),
+      minor("rg_coiled", "Coiled", 2, "The Veil winds tighter with every strike.", { veilFlat: 2 }),
+      minor("rg_openvein", "Open the Vein", 2, "An Ambush cuts deeper.", { techPct: 0.04 }),
+      keystone("rg_perfect", "Perfect Ambush", "Nothing you walk in on gets to be surprised twice.", { techPct: 0.40 }),
+      keystone("rg_shadowstep", "Shadowstep", "You are already somewhere else.", { critFlat: 0.08, speedPct: 0.06 }),
+    ],
+    mage: [
+      minor("mg_kindling", "Kindling", 1, "The cast takes less coaxing.", { attackPct: 0.03 }),
+      minor("mg_warded", "Warded Skin", 1, "Thin, but no longer paper.", { healthPct: 0.03 }),
+      minor("mg_breath", "Drawn Breath", 1, "The air gives it up more readily.", { absorbFlat: 0.3 }),
+      minor("mg_focus", "Focus", 1, "You see where it is thinnest.", { critFlat: 0.01 }),
+      minor("mg_pierce", "Pierce the Veil", 2, "Nothing between the cast and the thing.", { penFlat: 0.025 }),
+      minor("mg_deepwell", "Deep Well", 2, "It comes in faster than you spend it.", { absorbFlat: 0.4 }),
+      minor("mg_cadence", "Cadence", 2, "One after another, without the pause.", { speedPct: 0.015 }),
+      minor("mg_overchannel", "Overchannel", 2, "An empowered cast, and then some.", { techPct: 0.04 }),
+      keystone("mg_elemental", "Elemental Mastery", "The Veil stops being borrowed and starts being yours.", { techPct: 0.40 }),
+      keystone("mg_arcanebulwark", "Arcane Bulwark", "The fragile part was never the point.", { defencePct: 0.10, healthPct: 0.10 }),
+    ],
+  };
+  /* Ids only. The node objects live in PATHS and nowhere else: GameData holds no
+     object in two places, so nothing can be reached (or frozen) twice. */
+  const PATH_NODE_IDS = Object.values(PATHS).flat().map((n) => n.id);
+
+  /* ================= 11b. WEAPONS, MASTERY AND WHO MAY HOLD THEM =================
+     Every armed line a hunter can carry, in the order the Mastery page lists
+     them. `stat` is what the hours spent carrying it are worth: a weapon pays in
+     damage, a shield in Defence. `ranks` are the five milestones on the way to
+     100, named for the weapon rather than shared, because "Marksman" means
+     nothing about a hammer. Mastery levels and the curve live in CONFIG.mastery;
+     the track itself is mastery.js. */
+  const WEAPON_LINES = [
+    { line: "sword", name: "Sword", icon: "blade", slot: "weapon", stat: "attack",
+      ranks: ["Swordhand", "Swordsman", "Blademaster", "Duellist", "Swordmaster"] },
+    { line: "shield", name: "Shield", icon: "ward", slot: "offhand", stat: "defence",
+      ranks: ["Shieldbearer", "Warder", "Bulwark", "Aegis", "Shieldmaster"] },
+    { line: "dagger", name: "Dagger", icon: "knife", slot: "weapon", stat: "attack",
+      ranks: ["Cutpurse", "Knifehand", "Shadeblade", "Assassin", "Daggermaster"] },
+    { line: "bow", name: "Bow", icon: "stave", slot: "weapon", stat: "attack",
+      ranks: ["Bowhand", "Archer", "Marksman", "Deadeye", "Bowmaster"] },
+    { line: "staff", name: "Staff", icon: "stave", slot: "weapon", stat: "attack",
+      ranks: ["Channeller", "Adept", "Conduit", "Archmage", "Staffmaster"] },
+    { line: "greatsword", name: "Greatsword", icon: "greatblade", slot: "weapon", stat: "attack",
+      ranks: ["Hewer", "Cleaver", "Reaver", "Headsman", "Greatmaster"] },
+    { line: "grimoire", name: "Grimoire", icon: "book", slot: "offhand", stat: "attack",
+      ranks: ["Reader", "Scribe", "Lorekeeper", "Archivist", "Grimoiremaster"] },
+  ];
+  const WEAPON_LINE_IDS = WEAPON_LINES.map((w) => w.line);
+
+  /* What each discipline is allowed to hold. Undisciplined, you carry anything:
+     nothing has narrowed yet, and that openness is most of what the first five
+     levels are for. Take a discipline and it narrows for good, which is what
+     makes the choice a choice.
+
+       Warrior     sword and shield, or the greatsword in both hands
+       Rogue       dagger or bow, and nothing to hide behind
+       Mage        the staff, or a sword and a shield, or a grimoire off-hand
+
+     Armour is never restricted: heavy, medium and light already trade Defence
+     against health against crit, and that trade is the player's to make.
+
+     null is the undisciplined key, and getClass(null) is already null, so the
+     lookup in classWeapons() reads the same for every caller. */
+  const CLASS_WEAPONS = {
+    warrior: ["sword", "shield", "greatsword"],
+    rogue: ["dagger", "bow"],
+    mage: ["staff", "sword", "shield", "grimoire"],
+  };
+
+  /* Your own likeness, chosen when the camp is founded. It changes nothing a
+     fight can read -- no stat, no roll, no drop -- because it is who you are
+     rather than what you can do. Set once, and kept. */
+  const SEXES = [
+    { id: "male", name: "Man", they: "he", them: "him", their: "his" },
+    { id: "female", name: "Woman", they: "she", them: "her", their: "her" },
+  ];
+
   const CLASSES = [
     { id: "warrior", name: "Warrior", icon: "plate",
       blurb: "Forces the Veil through the body. Slow, heavy and hard to put down.",
@@ -838,7 +959,8 @@ function buildRegistry() {
     REGIONS, ZONES, ARCHETYPES, ARCHETYPE_ORDER, ELITE, SOVEREIGN, REGION_FOES, FOE_DROPS, MONSTERS,
     FRAG_PER_ESSENCE, VEIL_BANDS,
     BENCH_TABS, WEATHER_TYPES, WEATHER_SEVERITIES, WEEKDAY_NAMES, MASTERY_TRACK,
-    CLASSES, BRUTE_FORCE, BASE_COMBAT, TECHNIQUE, AGENT_RARITIES, AGENT_NAMES,
+    CLASSES, SEXES, PATHS, PATH_NODE_IDS, WEAPON_LINES, WEAPON_LINE_IDS, CLASS_WEAPONS,
+    BRUTE_FORCE, BASE_COMBAT, TECHNIQUE, AGENT_RARITIES, AGENT_NAMES,
     COMPANIONS, RANK_NUMERALS, RETIRED_PETS,
     SOURCES: { GATHERED_BY, MADE_BY, USED_IN, DROPPED_BY },
   };
@@ -934,6 +1056,31 @@ export const monsterOfTier = (tier) => foeOf(tier, "stalker");
 // Definitions
 
 export const getClass = (id) => GameData.CLASSES.find((c) => c.id === id) || null;
+export const getSex = (id) => GameData.SEXES.find((x) => x.id === id) || null;
+export const weaponLine = (line) => GameData.WEAPON_LINES.find((w) => w.line === line) || null;
+export const pathOf = (klass) => (klass && Object.hasOwn(GameData.PATHS, klass) ? GameData.PATHS[klass] : []);
+// A node by id, whichever discipline walks it. Node ids are unique across all three.
+export function pathNode(id) {
+  for (const klass of Object.keys(GameData.PATHS)) {
+    const hit = GameData.PATHS[klass].find((n) => n.id === id);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/* The lines a discipline may hold. Undisciplined (klass null, or one the tables no
+   longer know) is every line there is: nothing has narrowed yet. */
+export function classWeapons(klass) {
+  const list = klass && Object.hasOwn(GameData.CLASS_WEAPONS, klass) ? GameData.CLASS_WEAPONS[klass] : null;
+  return list || GameData.WEAPON_LINE_IDS;
+}
+
+/* Whether a discipline may hold a gear line. Anything that is not an armed line
+   (helms, robes, rings) is nobody's business but the wearer's. */
+export function classHolds(klass, line) {
+  if (!weaponLine(line)) return true;
+  return classWeapons(klass).includes(line);
+}
 export const getCompanion = (id) => GameData.COMPANIONS.find((c) => c.id === id) || null;
 export const rarityDef = (k) => GameData.RARITIES.find((r) => r.key === k) || GameData.RARITIES[0];
 export const prefixDef = (id) => GameData.ALL_PREFIXES.find((p) => p.id === id) || null;

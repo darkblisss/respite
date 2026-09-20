@@ -278,7 +278,7 @@ async function main() {
   const at = (obj, dotted) => dotted.split(".").reduce((o, k) => (o == null ? undefined : o[k]), obj);
   for (const [name, dotted] of CONSTANTS) same(`CONFIG.${dotted} = ${name}`, O[name], at(CONFIG, dotted));
   same("CONFIG.economy.remedies = REMEDY_SPEC numbers", O.REMEDY_SPEC.map(({ name, ...numbers }) => numbers), CONFIG.economy.remedies);
-  check("CONFIG.schema is 9 (v4 SCHEMA was 8)", CONFIG.schema === 9 && O.SCHEMA === 8);
+  check("CONFIG.schema is 10 (v4 SCHEMA was 8)", CONFIG.schema === 10 && O.SCHEMA === 8);
   check("CONFIG.storage.names.bank is Stockpile, and the Satchel is the fourth pool",
     JSON.stringify(CONFIG.storage.names) === '{"inv":"Belongings","bank":"Stockpile","vault":"Vault","satchel":"Satchel"}');
   check("CONFIG.storage.slots.satchel is a small loadout", CONFIG.storage.slots.satchel >= 2 && CONFIG.storage.slots.satchel < GameData.REMEDIES.length);

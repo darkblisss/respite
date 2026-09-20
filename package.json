@@ -10,7 +10,7 @@
     "test:sql": "node tests/sql/run.mjs",
     "test:server": "node tests/server/run.mjs",
     "test:client": "node tests/client/store.test.mjs",
-    "test:e2e": "node tests/e2e/harness.test.mjs && node tests/e2e/client-smoke.test.mjs"
+    "test:e2e": "node tests/e2e/harness.test.mjs && node tests/e2e/client-smoke.test.mjs && node tests/e2e/ui-new.test.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",

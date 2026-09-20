@@ -67,7 +67,7 @@ await run(async () => {
   {
     const raw = v4Save();
     const m = migrateSave(clone(raw), opts);
-    check("schema 9, clock at lastSeen, lastSeen gone", m.schema === 9 && m.clock === LEFT && !("lastSeen" in m.meta));
+    check("schema is current, clock at lastSeen, lastSeen gone", m.schema === CONFIG.schema && m.clock === LEFT && !("lastSeen" in m.meta));
     check("new streams from the seed, no counters, serial 1, no note from a last hunt", m.rng.seed === SEED && m.rng.world === hashString(`${SEED}:world`) && m.rng.hunt === hashString(`${SEED}:hunt`) &&
       JSON.stringify(m.rolls) === "{}" && m.serial === 1 && m.lootLostAt === null && m.player.camp === null);
     check("the account and user come from the server", m.meta.userId === "u-1" && m.meta.account === "wren");
@@ -330,7 +330,7 @@ await run(async () => {
   {
     for (const junk of [null, undefined, 5, "save", [], true]) {
       const m = migrateSave(junk, opts);
-      check(`${JSON.stringify(junk) || "undefined"} gives a fresh save`, m.schema === 9 && m.clock === NOW && m.rng.seed === SEED && m.log[0].m === "You take command of a ruin." && m.meta.userId === "u-1");
+      check(`${JSON.stringify(junk) || "undefined"} gives a fresh save`, m.schema === CONFIG.schema && m.clock === NOW && m.rng.seed === SEED && m.log[0].m === "You take command of a ruin." && m.meta.userId === "u-1");
     }
     const hostile = JSON.parse(`{
       "schema": 9, "clock": "soon", "__proto__": { "polluted": true },

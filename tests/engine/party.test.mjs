@@ -134,6 +134,58 @@ await run(async () => {
       one.hunters.map((u) => u.owed.kills));
   }
 
+  section("A share is guarded against standing still");
+  {
+    // Shares are pure arithmetic on dmg/taken, so they are checked on made-up rosters.
+    const roster = (rows) => ({ hunters: rows.map(([userId, dmg, taken]) => ({ userId, dmg, taken })) });
+    const pct = (m) => Object.fromEntries(Object.entries(m).map(([k, v]) => [k, Math.round(v * 1000) / 10]));
+    const sumOf = (m) => Object.values(m).reduce((n, v) => n + v, 0);
+
+    const even = P.contributionMap(roster([["a", 25, 25], ["b", 25, 25], ["c", 25, 25], ["d", 25, 25]]));
+    same("an even four split it evenly", pct(even), { a: 25, b: 25, c: 25, d: 25 });
+
+    const band4 = P.contributionMap(roster([["tank", 15, 55], ["dps1", 40, 15], ["dps2", 30, 20], ["sup", 15, 10]]));
+    check("a tank is paid well above its damage share", band4.tank > 0.15 + 0.05, pct(band4));
+    check("and still under the hardest hitter", band4.tank < band4.dps1, pct(band4));
+
+    /* The exploit the guard exists for: unkillable, never swings. Without the cap on
+       the taken half this roster banks most of the 30% for doing nothing. */
+    const leech = P.contributionMap(roster([["leech", 1, 90], ["d1", 34, 4], ["d2", 33, 3], ["d3", 32, 3]]));
+    check("an immortal who never swings earns nearly nothing", leech.leech < 0.08, pct(leech));
+    check("and the three who fought take the rest", leech.d1 > 0.28 && leech.d3 > 0.28, pct(leech));
+
+    const afk = P.contributionMap(roster([["afk", 0, 40], ["d1", 34, 20], ["d2", 33, 20], ["d3", 33, 20]]));
+    check("dealing no damage at all is paid nothing", afk.afk === 0, pct(afk));
+
+    [even, band4, leech, afk].forEach((m, i) => {
+      check(`shares ${i} sum to exactly one encounter`, Math.abs(sumOf(m) - 1) < 1e-9, sumOf(m));
+    });
+    same("nobody has hurt it yet: nothing is owed", P.contributionMap(roster([["a", 0, 10], ["b", 0, 10]])), {});
+  }
+
+  section("A party's XP pool rides the party's size");
+  {
+    const CONFIG = (await shared("config.js")).CONFIG;
+    same("the bonus is the same one a hunt beside a party pays",
+      [1, 2, 3, 4].map((n) => Math.round(P.partyXpBonus(n) * 100)),
+      [1, 2, 3, 4].map((n) => Math.round((1 + Math.min(CONFIG.party.huntBonusCap, CONFIG.party.huntBonusPerMember * (n - 1))) * 100)));
+
+    /* The promise: a fair split of a foe built for four pays each of the four about
+       what a lone hunter is paid by a foe built for one, plus the party bonus. Same
+       ground, same level, same seed, so only the size of the band differs. */
+    const xpPerHead = (n) => {
+      const e = start(n, { seed: 31337, zone: "outer", tier: 2, level: 45 });
+      P.stepEncounter(e, 10 * 60 * 1000);
+      const kills = e.hunters.reduce((m, u) => Math.max(m, u.owed.kills), 0);
+      const xp = e.hunters.reduce((m, u) => m + u.owed.xp, 0);
+      return kills > 0 ? xp / e.hunters.length / kills : 0;
+    };
+    const solo = xpPerHead(1);
+    const four = xpPerHead(4);
+    check("a four earns about what a one does a kill, not a quarter of it",
+      solo > 0 && four / solo > 0.9 && four / solo < 1.35, { solo, four, ratio: four / solo });
+  }
+
   section("When one of them goes down");
   {
     // A weak pair on hard ground: somebody falls.

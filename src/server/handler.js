@@ -33,6 +33,7 @@ import { applyMail, applyPurchase, applyReturn, fillPool, marketFee, prepareList
 import {
   clearOwed, makeHunter, newSession, nextSessionDue, owedFor, sessionView, stepSession,
 } from "../shared/partyHunt.js";
+import { addMastery } from "../shared/mastery.js";
 
 /* ================= 1. LIMITS ================= */
 
@@ -1037,6 +1038,8 @@ function settleParty(ctx, row) {
     tier: row.tier, zone: row.zone, kills: owed.kills, xp: 0, gold: 0,
     drops: 0, remedies: owed.remedies, died: owed.died || null,
   };
+  // Carried through the same fight, so it pays the same as a lone kill's would.
+  if (owed.mastery > 0) addMastery(state, owed.mastery);
   // A member syncing every few seconds is owed nothing most times: that is not news.
   const nothing = !(owed.kills || owed.xp > 0 || owed.gold > 0 || owed.remedies || owed.died || drops.length);
 

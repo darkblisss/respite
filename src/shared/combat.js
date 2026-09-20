@@ -22,6 +22,7 @@ import {
 import { itemDef, validKey, remedyTooWeak } from "./items.js";
 import { ORDER, transact } from "./storage.js";
 import { statsOf, maxHp, mitigation, skillLevel } from "./stats.js";
+import { addMastery, masteryMods } from "./mastery.js";
 import { xpMult, partyMult, addXp } from "./progression.js";
 import { companionBonus, companionFinds } from "./companions.js";
 import { bountyProgress } from "./world.js";
@@ -516,6 +517,10 @@ function playerSwing(ctx) {
     }
   }
 
+  /* What the path has made of a full Veil. 1 for anyone who has not walked that
+     far, so a hunter with no tree swings exactly as they always did. */
+  if (technique && s.tech > 1) mult *= s.tech;
+
   let dmg = playerBlow(s, mob, c.tier, mult, crit, pen, rng);
   // Echoing relics sometimes land a second blow.
   if (s.echoing && !technique && rng() < 0.12) dmg += playerBlow(s, mob, c.tier, 1, rng() < s.crit, pen, rng);
@@ -627,7 +632,12 @@ function killFoe(ctx, f) {
   const n = foeNumbers(mob, f.elite, f.power);
   c.done++;
   ctx.fx(f.uid, "kill", 0);
-  ctx.gainXp(n.xp * zone.xp);
+  const base = n.xp * zone.xp;
+  ctx.gainXp(base);
+  /* The same points, unbent: weather, a bounty's buff and the companion at your
+     side all move Warfare XP and none of them move a weapon's mastery. An hour
+     with a bow is an hour with a bow whatever the sky is doing. */
+  if (ctx.gainMastery) ctx.gainMastery(base);
   ctx.gainGold(n.gold[0] + Math.floor(ctx.rng() * (n.gold[1] - n.gold[0] + 1)));
   ctx.killed(mob, f.elite);
 
@@ -749,6 +759,16 @@ function liveHunt(state, c, env, nowAt) {
       const gain = amount * xpMult(state, "warfare", at) * partyMult(env, c.tier, c.zone, at);
       c.xp += gain;
       if (addXp(state, "warfare", gain, env, at)) refresh();
+    },
+    /* Credited to whatever is in your hands, both of them, and to nothing else.
+       A new level changes the Attack the very next blow swings with, so the
+       snapshot is refreshed the way a Warfare level refreshes it. */
+    gainMastery: (amount) => {
+      const before = masteryMods(state.equipment, state.mastery);
+      if (addMastery(state, amount).length) {
+        const after = masteryMods(state.equipment, state.mastery);
+        if (after.attack !== before.attack || after.defence !== before.defence) refresh();
+      }
     },
     gainGold: (n) => {
       if (n > 0) transact(state, (tx) => tx.gold(Math.round(n * (1 + companionBonus(state, "gold"))), true));

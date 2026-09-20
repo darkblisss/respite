@@ -303,14 +303,14 @@ await section('a new player', async () => {
   same('a first visit has no news', res.body.events, []);
   same('ok, v, now and results', [res.body.ok, res.body.v, res.body.now, res.body.results], [true, ENGINE_VERSION, NOW, []]);
   const s = res.body.state;
-  same('a schema 9 save at the request clock', [s.schema, s.clock], [9, NOW]);
+  same('a current-schema save at the request clock', [s.schema, s.clock], [CONFIG.schema, NOW]);
   same('the save knows its owner', [s.meta.account, s.meta.userId], ['ash', ash.id]);
   check('its dice are not worked out from who and when', s.rng.seed !== hashString(`${ash.id}:${NOW}`) && s.rng.seed !== (hashString(`${ash.id}:${NOW}`) >>> 0), s.rng);
 
   const row = await saved(ash);
   same('saves row: rev 1, engine, clock and username', [row.rev, row.engine, row.clock, row.username], [1, ENGINE_VERSION, NOW, 'ash']);
   check('the response state equals the saved data', isDeepStrictEqual(row.data, s));
-  same('the saved data is schema 9', row.data.schema, 9);
+  same('the saved data carries the current schema', row.data.schema, CONFIG.schema);
 
   const p = await q1('select username, total_level, levels, skills, last_seen from public.profiles where user_id = $1', [ash.id]);
   const ones = Object.fromEntries(GameData.SKILLS.map((k) => [k.id, 1]));
@@ -416,7 +416,7 @@ await section('a v4 save migrates on its first request', async () => {
 
   const res = await play(old);
   const s = res.state;
-  same('schema 9, caught up to now', [s.schema, s.clock], [9, NOW]);
+  same('current schema, caught up to now', [s.schema, s.clock], [CONFIG.schema, NOW]);
   same('gold is kept', s.player.gold, 500);
   check('meta.lastSeen is gone', !('lastSeen' in s.meta));
   // 4,000 ms of progress plus two hours at 12 s an action: 600 more, 4,000 ms over.
@@ -1347,7 +1347,7 @@ await section('starting over', async () => {
   const r = await play(ruin, cmd('resetCamp'));
   const s = r.state;
   same('resetCamp on its own succeeds', r.results[0], { id: `c${serial - 1}`, ok: true });
-  same('a fresh camp at the request clock', [s.schema, s.clock, s.player.gold, s.skills.delving, haveQty(s, 'slag_delve'), s.tasks.combat, s.tasks.skilling], [9, NOW, 0, 0, 0, null, null]);
+  same('a fresh camp at the request clock', [s.schema, s.clock, s.player.gold, s.skills.delving, haveQty(s, 'slag_delve'), s.tasks.combat, s.tasks.skilling], [CONFIG.schema, NOW, 0, 0, 0, null, null]);
   same('the log starts over', s.log, [{ t: NOW, m: 'You start over from a ruin.' }]);
   same('the same owner', [s.meta.account, s.meta.userId], ['ruin', ruin.id]);
   same('the dice do not start over: seed, every stream, the counters and the serial carry on', [s.rng, s.rolls, s.serial],

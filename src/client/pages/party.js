@@ -529,7 +529,7 @@ function partyBody(ctx, page) {
           ? mine
             ? `You are out in ${ground(fight.tier, fight.zone)}. The Hunt page draws the fight.`
             : `Your party is out in ${ground(fight.tier, fight.zone)}. Join them and you come in on the walk, never into the middle of an encounter.`
-          : "Set out on one ground together. The foes come in numbers to match you, and every kill splits its XP and gold by the damage each of you dealt.");
+          : "Set out on one ground together. You face one roster of foes, each one built for the size of the band rather than one apiece. XP is split by what each of you did, damage dealt and damage taken; gold and drops come whole to everyone who fought.");
 
         const chip = fight ? `${fmtWhole(hunters)} out · ${fmtTime(fight.elapsed)}` : "";
         if (chip !== chipSig) {

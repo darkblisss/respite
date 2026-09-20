@@ -98,7 +98,7 @@ export function fillPool(rows, { qty, maxEach, gold = Infinity } = {}) {
 export function remintKey(key, listingId) {
   if (stacks(key)) return key;
   const p = parseKey(key);
-  return makeKey(p.base, p.rarity, `m${listingId}`, p.prefix);
+  return makeKey(p.base, p.rarity, `m${listingId}`, p.prefix, p.plus);
 }
 
 /* Takes the items out of the save for a new listing. The server writes the
