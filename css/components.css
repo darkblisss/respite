@@ -511,14 +511,6 @@ button.chip:disabled { opacity: .45; }
 
 .hpbar-foe > i { background: linear-gradient(180deg, #ec9469, var(--foe) 45%, var(--foe-deep)); }
 
-.hpbar::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), rgba(0, 0, 0, .35) calc(10% - 1px) 10%);
-}
-
 .hpbar > span {
   position: absolute;
   inset: 0;
