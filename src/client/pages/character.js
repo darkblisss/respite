@@ -478,8 +478,11 @@ function recordView() {
    Leaderboard uses. The row is a tablist with a roving tabindex, so one
    Tab reaches it and the arrows walk it. */
 
+/* The Character tab (paperdoll, Standing, and what the crews/hunt are up to) is
+   gone: it duplicated the topbar and Satchel, and went stale for a member out
+   with their party since combatPlan only ever knew about a solo hunt. Three
+   tabs left, and TABS[0] is what the page opens on. */
 const TABS = [
-  { id: "character", name: "Character", icon: "person", build: faceView },
   { id: "skills", name: "Skills", icon: "book", build: skillsView },
   { id: "collection", name: "Collection", icon: "skull", build: collectionView },
   { id: "record", name: "Record", icon: "hourglass", build: recordView },
