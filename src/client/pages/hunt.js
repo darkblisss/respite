@@ -150,7 +150,7 @@ export default {
     const company = h("div.card-actions");
     const huntHead = h("div.card-head", h("div", huntTitle, huntSub), company);
 
-    const youPortrait = h("div.portrait.arena-portrait", h("img", { src: "assets/commander-default.webp", alt: "" }));
+    const youPortrait = h("div.portrait.portrait-bust.arena-portrait", h("img", { src: "assets/commander-default.webp", alt: "" }));
     const youName = h("div.arena-name");
     const youFill = h("i");
     const youText = h("span");
@@ -642,7 +642,7 @@ export default {
           const isMe = sameId(u.userId, me);
           const label = isMe ? "You" : (names.get(String(u.userId).toLowerCase()) || "Someone");
           const node = h("div.band-mate", { class: { "is-down": u.down, "is-me": isMe } },
-            h("div.band-art", h("img", { src: "assets/commander-default.webp", alt: "" })),
+            h("div.band-art.portrait-bust", h("img", { src: "assets/commander-default.webp", alt: "" })),
             h("span.band-name", label),
             h("div.hpbar.hpbar-sm", fill, text));
           mates.set(String(u.userId).toLowerCase(), { fill, text });
