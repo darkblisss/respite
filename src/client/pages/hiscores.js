@@ -29,6 +29,8 @@ import { iconEl } from "../ui/icons.js";
 import { fmt, fmtWhole } from "../ui/format.js";
 import { openPopup } from "../ui/widgets.js";
 import { GameData, TRADE_ORDER, ARTISAN_ORDER, getSkill } from "../../shared/registry.js";
+import { CONFIG } from "../../shared/config.js";
+import { masteryLevel } from "../../shared/mastery.js";
 import { levelFromXp } from "../../shared/stats.js";
 
 const TOP = 50;
@@ -66,6 +68,19 @@ const huntBoard = (c) => ({
   unkept: "The realm does not sort its hunters by discipline yet, so nothing is ranked here.",
 });
 
+/* One board a weapon line, answered by mastery_board() (migration 008). It ranks on raw
+   points rather than the level they come to: two hunters at 100 are not equal, and the realm
+   should be able to say which of them kept going. The level beside a rank is worked out here
+   from the same points, by the one curve in CONFIG. Only lines that are out in the world are
+   listed -- a shelved line has no board because it has no players. */
+const masteryBoardOf = (w) => ({
+  id: `mastery_${w.line}`, name: w.name, title: `${w.name} mastery`, icon: w.icon, num: "Mastery",
+  ask: { how: "mastery", key: w.line },
+  note: `Earned a kill at a time by whoever was carrying one. First in the realm on a line is its ${CONFIG.mastery.saint}.`,
+  empty: `Nobody has carried a ${w.name.toLowerCase()} long enough to be counted. The first to do so tops it.`,
+  unkept: "The realm keeps no tally of weapon mastery yet, so nothing is ranked here.",
+});
+
 const TABS = [
   {
     id: "total", name: "Total", icon: "trophy",
@@ -90,6 +105,10 @@ const TABS = [
       empty: "Nobody has made anything yet.",
       unkept: "The realm keeps no tally of what players make yet, so nothing is ranked here.",
     }],
+  },
+  {
+    id: "mastery", name: "Mastery", icon: "swords", pick: "Weapon",
+    boards: GameData.WEAPON_LINES.filter((w) => w.released !== false).map(masteryBoardOf),
   },
   {
     id: "kills", name: "Monsters killed", icon: "skull",
@@ -304,6 +323,14 @@ function boardBody(ctx, page) {
     if (b.ask.how === "skill") {
       const res = await ctx.net.hiscores(b.ask.key, TOP);
       return { rows: res.rows, error: res.error, unkept: false };
+    }
+    if (b.ask.how === "mastery") {
+      if (typeof ctx.net.masteryBoard !== "function") return { rows: null, error: null, unkept: true };
+      const res = await ctx.net.masteryBoard(b.ask.key, TOP);
+      if (res.missing) return { rows: null, error: null, unkept: true };
+      // The board hands back points; the level they come to is this side's arithmetic.
+      const rows = res.rows.map((r) => Object.assign({}, r, { level: masteryLevel(Number(r.xp) || 0) }));
+      return { rows, error: res.error, unkept: false };
     }
     // An older net (the page stub, a realm from before) has no such call: that board is unkept.
     if (typeof ctx.net.leaderboard !== "function") return { rows: null, error: null, unkept: true };

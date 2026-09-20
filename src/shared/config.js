@@ -304,12 +304,16 @@ const path = {
 
 const mastery = {
   max: 100,
-  /* A quarter of the points the kill paid Warfare. Warfare's own curve is what
-     carries you between tiers, so tying mastery to it keeps a weapon's hours
-     meaningful at every depth; the quarter is what stops the deepest ground
-     mastering a line in an evening. At the Core of tier 9 the last level before
-     100 is a couple of hundred kills, which is what a Grandmaster should cost. */
-  perKill: 0.25,
+  /* A small share of the points the kill paid Warfare. Warfare's own curve is
+     what carries you between tiers, so tying mastery to it keeps a weapon's
+     hours meaningful at every depth.
+
+     The share is what sets the pace, and the pace is the point: at the Core of
+     tier 9 with gear to match, a hunter takes about 1,400 mastery an hour, so
+     the whole 332,350 is roughly 2,160 hours of hunting -- three months at a
+     full day each, six at half a day, a year at a few hours an evening. A line
+     at 100 is meant to be a thing somebody did, not a box they ticked. */
+  perKill: 0.027,
   perLevel: 0.0015,           // +0.15% of the line's stat a level: +15% at 100
   // Where the five named milestones sit on the track. Names are per line, in registry.js.
   rankLevels: [10, 30, 50, 75, 100],

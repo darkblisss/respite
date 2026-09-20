@@ -6,12 +6,27 @@
    running 0 to 100, earned a kill at a time and by nothing else.
 
    HOW IT IS EARNED
-   Every kill credits the line in your hands, and the line in your
-   off-hand if a piece is in it, with the same points the kill paid
-   Warfare before any multiplier. Weather, a bounty's buff and the
-   companion at your side all bend Warfare XP; none of them bend
-   this. An hour with a bow is an hour with a bow whatever the sky
-   is doing.
+   One kill, one line. Every kill credits a single line with the
+   same share of the points it paid Warfare, so no loadout earns
+   faster than another and none of them earn twice: a greatsword
+   and a bare sword and a sword behind a shield all advance one
+   track at one rate.
+
+   Which line is the one in your OFF-HAND, if there is anything in
+   it, and otherwise the one in your hands. A shield carried is a
+   shield being learned, and the sword behind it is only being
+   held -- so a sword-and-board hunter masters the shield, and has
+   to put it down to master the sword. That is a real choice about
+   what you are becoming, which is what a mastery is for.
+
+   Weather, a bounty's buff and the companion at your side all bend
+   Warfare XP; none of them bend this. An hour with a bow is an
+   hour with a bow whatever the sky is doing.
+
+   The BONUS is not the same rule: every worn piece pays out its
+   own line's mastery, so a shield at 60 is still worth its Defence
+   while a sword at 40 is worth its damage. You are paid for what
+   you have learned; you only go on learning one thing at a time.
 
    WHAT IT PAYS
    A flat CONFIG.mastery.perLevel on the line's own stat, while
@@ -128,23 +143,26 @@ export function lineOfKey(key) {
 
 /* ================= 3. EARNING IT ================= */
 
-/* One kill's worth, credited to whatever is in your hands. Both hands earn the
-   same: a shield held through a fight was carried through that fight too. A line
-   already at 100 keeps its points (the hiscores rank on them), it simply stops
-   levelling. Returns the lines that were credited, for a caller that wants to say so. */
+/* The one line a kill is learning: the off-hand when something is in it, the
+   weapon otherwise, and nothing at all with empty hands. See the header -- this
+   is what keeps every loadout earning at one rate. */
+export function masteryLineFor(equipment) {
+  if (!equipment) return null;
+  return lineOfKey(equipment.offhand) || lineOfKey(equipment.weapon) || null;
+}
+
+/* One kill's worth, into that one line. A line already at 100 keeps taking
+   points (the hiscores rank on them), it simply stops levelling. Returns the
+   lines credited -- one, or none -- for a caller that wants to say so. */
 export function addMastery(state, amount, equipment = state.equipment) {
   const raw = Number.isFinite(amount) && amount > 0 ? amount : 0;
   const gain = raw * M.perKill;
   if (!gain) return [];
+  const line = masteryLineFor(equipment);
+  if (!line) return [];
   if (!state.mastery || typeof state.mastery !== "object") state.mastery = {};
-  const hit = [];
-  ["weapon", "offhand"].forEach((slot) => {
-    const line = lineOfKey(equipment ? equipment[slot] : null);
-    if (!line || hit.includes(line)) return;
-    state.mastery[line] = (state.mastery[line] || 0) + gain;
-    hit.push(line);
-  });
-  return hit;
+  state.mastery[line] = (state.mastery[line] || 0) + gain;
+  return [line];
 }
 
 /* ================= 4. THE PAGE ================= */
@@ -154,9 +172,12 @@ export function addMastery(state, amount, equipment = state.equipment) {
    dash rather than a number -- because what you cannot hold is worth knowing. */
 export function masterySheet(state) {
   const allowed = classWeapons(state.player.klass);
-  return GameData.WEAPON_LINES.map((def) => {
+  const learning = masteryLineFor(state.equipment);
+  // A line not out in the world yet is not listed at all: see registry.js, `released`.
+  return GameData.WEAPON_LINES.filter((def) => def.released !== false).map((def) => {
     const row = masteryProgress(state, def.line);
     row.held = allowed.includes(def.line);
+    row.learning = def.line === learning;
     return row;
   });
 }

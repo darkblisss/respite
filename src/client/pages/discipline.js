@@ -199,6 +199,13 @@ function masteryView(ctx) {
   // The line last looked at, for the length of the session.
   let picked = null;
   const rows = new Map();     // line -> { node, level, grade, fill, bar }
+  /* Where this camp stands in the realm, line by line: { line -> { rank, total } }.
+     It is the realm's word, not this camp's, so it is asked for once on mount and
+     nothing is shown until it lands. A realm that has not run migration 008 has no
+     such call, and the page simply says nothing about rank rather than pretending
+     nobody has any. */
+  let ranks = new Map();
+  let alive = true;
 
   const list = h("div.list");
   const detail = h("div");
@@ -209,7 +216,7 @@ function masteryView(ctx) {
     h("div.card-head", { style: "padding: 0 var(--card-pad)" },
       h("div",
         h("h2.card-title", iconEl("swords"), "Weapon mastery"),
-        h("p.card-sub", `Earned a kill at a time, by the line in your hands and the line in your off-hand. Maxed, a line is worth ${pctText(M.max * M.perLevel)} on what it does. Nothing but hunting moves it.`))),
+        h("p.card-sub", `One kill teaches one line: your off-hand when there is anything in it, your weapon when there is not. Maxed, a line is worth ${pctText(M.max * M.perLevel)} on what it does, and only while the piece is worn. Nothing but hunting moves it.`))),
     list,
     detail);
 
@@ -232,10 +239,10 @@ function masteryView(ctx) {
     const R = {
       title: h("h3.card-title"), grade: h("span.tag.tag-violet"), rank: h("span.tag.tag-gold"),
       lvl: h("b"), xp: h("span"), fill: h("i"), bonus: h("p.card-sub"), stones: h("div.chip-row"),
-      note: h("p.small.muted"),
+      learning: h("p.small.muted"), note: h("p.small.muted"),
     };
     R.node = h("section.card.mastery-detail",
-      h("div.card-head", h("div", R.title, R.bonus), h("div.card-actions", R.grade, R.rank)),
+      h("div.card-head", h("div", R.title, R.bonus, R.learning), h("div.card-actions", R.grade, R.rank)),
       h("div.meter",
         h("div.meter-top", R.lvl, R.xp),
         h("div.bar.bar-gold", { "aria-hidden": "true" }, R.fill)),
@@ -258,9 +265,13 @@ function masteryView(ctx) {
        and nothing is shown until it does. First on a line is not a grade but a
        title -- Saint -- and it is marked as one. */
     const rank = row.rank || null;
-    setText(D.rank, rank === 1 ? M.saint : rank ? `Rank #${fmtWhole(rank)}` : "");
+    setText(D.rank, rank === 1 ? M.saint : rank ? `Rank #${fmtWhole(rank)} of ${fmtWhole(row.of)}` : "");
     toggleClass(D.rank, "is-saint", rank === 1);
     setAttr(D.rank, "hidden", !rank);
+    setText(D.learning, row.learning
+      ? "This is what your hands are learning."
+      : row.held ? "Carry it to learn it: a kill teaches your off-hand, or your weapon when the off-hand is empty." : "");
+    setAttr(D.learning, "hidden", !row.held);
 
     setText(D.lvl, row.held ? `Mastery ${row.level}` : "Not yours to hold");
     setText(D.xp, row.maxed ? "The whole of it" : row.held ? `${fmt(Math.floor(row.into))} / ${fmt(row.band)}` : "\u2014");
@@ -277,6 +288,11 @@ function masteryView(ctx) {
 
   function paint(next) {
     const sheet = masterySheet(next.state);
+    sheet.forEach((row) => {
+      const r = ranks.get(row.line);
+      row.rank = r ? r.rank : 0;
+      row.of = r ? r.total : 0;
+    });
     if (!picked) picked = (sheet.find((r) => r.held && r.points > 0) || sheet.find((r) => r.held) || sheet[0]).line;
 
     sheet.forEach((row) => {
@@ -292,10 +308,29 @@ function masteryView(ctx) {
       setWidth(R.fill, row.held ? row.pct : 0);
       setAttr(R.bar, "hidden", !row.held);
       toggleClass(R.node, "is-locked", !row.held);
+      toggleClass(R.node, "is-learning", !!row.learning);
       setAttr(R.node, "aria-pressed", row.line === picked ? "true" : "false");
     });
 
     paintDetail(sheet.find((r) => r.line === picked) || sheet[0]);
+  }
+
+  async function askRanks() {
+    const net = ctx.net;
+    if (!net || typeof net.masteryRanks !== "function" || ctx.account.mode === "guest") return;
+    let res;
+    try {
+      res = await net.masteryRanks();
+    } catch (err) {
+      return;
+    }
+    if (!alive || !res || res.missing || res.error) return;
+    const next = new Map();
+    res.rows.forEach((r) => {
+      if (r && typeof r.line === "string") next.set(r.line, { rank: Number(r.rank) || 0, total: Number(r.total) || 0 });
+    });
+    ranks = next;
+    paint(ctx);
   }
 
   const off = on(list, "click", "[data-line]", (e, t) => {
@@ -305,7 +340,8 @@ function masteryView(ctx) {
   });
 
   paint(ctx);
-  return { node, update: paint, destroy() { off(); } };
+  askRanks();
+  return { node, update: paint, destroy() { alive = false; off(); } };
 }
 
 const TABS = [

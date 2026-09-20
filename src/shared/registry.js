@@ -606,6 +606,95 @@ function buildRegistry() {
     MONSTERS.push(mk("sovereign", SOVEREIGN));
   });
 
+  /* ================= 6a. WEAPONS, MASTERY AND WHO MAY HOLD THEM =================
+     Every armed line a hunter can carry, in the order the Mastery page lists
+     them. `stat` is what the hours spent carrying it are worth: a weapon pays in
+     damage, a shield in Defence. `ranks` are the five milestones on the way to
+     100, named for the weapon rather than shared, because "Marksman" means
+     nothing about a hammer. Mastery levels and the curve live in CONFIG.mastery;
+     the track itself is mastery.js. */
+  const WEAPON_LINES = [
+    { line: "sword", name: "Sword", icon: "blade", slot: "weapon", stat: "attack",
+      ranks: ["Swordhand", "Swordsman", "Blademaster", "Duellist", "Swordmaster"] },
+    { line: "shield", name: "Shield", icon: "ward", slot: "offhand", stat: "defence",
+      ranks: ["Shieldbearer", "Warder", "Bulwark", "Aegis", "Shieldmaster"] },
+    { line: "dagger", name: "Dagger", icon: "knife", slot: "weapon", stat: "attack",
+      ranks: ["Cutpurse", "Knifehand", "Shadeblade", "Assassin", "Daggermaster"] },
+    { line: "bow", name: "Bow", icon: "stave", slot: "weapon", stat: "attack",
+      ranks: ["Bowhand", "Archer", "Marksman", "Deadeye", "Bowmaster"] },
+    { line: "staff", name: "Staff", icon: "stave", slot: "weapon", stat: "attack",
+      ranks: ["Channeller", "Adept", "Conduit", "Archmage", "Staffmaster"] },
+    /* `released: false` keeps a line out of the world entirely: its recipes are
+       pruned off the benches below, no discipline may hold it, and the Mastery
+       page does not list it. The gear itself stays in GEAR so a save that
+       somehow holds one still loads. Flip the flag to ship the line. */
+    { line: "greatsword", name: "Greatsword", icon: "greatblade", slot: "weapon", stat: "attack", released: false,
+      ranks: ["Hewer", "Cleaver", "Reaver", "Headsman", "Greatmaster"] },
+    { line: "grimoire", name: "Grimoire", icon: "book", slot: "offhand", stat: "attack", released: false,
+      ranks: ["Reader", "Scribe", "Lorekeeper", "Archivist", "Grimoiremaster"] },
+  ];
+  const WEAPON_LINE_IDS = WEAPON_LINES.map((w) => w.line);
+  const LIVE_LINES = WEAPON_LINES.filter((w) => w.released !== false).map((w) => w.line);
+
+  /* What each discipline is allowed to hold. Undisciplined, you carry anything:
+     nothing has narrowed yet, and that openness is most of what the first five
+     levels are for. Take a discipline and it narrows for good, which is what
+     makes the choice a choice.
+
+       Warrior     sword and shield, or the greatsword in both hands
+       Rogue       dagger or bow, and nothing to hide behind
+       Mage        the staff, or a sword and a shield, or a grimoire off-hand
+
+     Armour is never restricted: heavy, medium and light already trade Defence
+     against health against crit, and that trade is the player's to make.
+
+     null is the undisciplined key, and getClass(null) is already null, so the
+     lookup in classWeapons() reads the same for every caller.
+
+     A line marked `released: false` above is filtered out of all of these by
+     classWeapons(), so the tables below say what a discipline is FOR rather than
+     what happens to be shipped this week. */
+  const CLASS_WEAPONS = {
+    warrior: ["sword", "shield", "greatsword"],
+    rogue: ["dagger", "bow"],
+    mage: ["staff", "sword", "shield", "grimoire"],
+  };
+
+  /* ================= 6b. PRUNING WHAT IS NOT OUT YET =================
+     A gear line marked `released: false` leaves no recipe behind, and neither do
+     the components nothing else eats. Run to a fixpoint, so dropping the Great
+     Blade also drops whatever existed only to make one, and so on. Only
+     components are ever pruned: bars, planks and the rest feed everything.
+
+     The GEAR entries themselves stay. A save that holds an unreleased piece has
+     to keep loading, and itemDef has to keep answering about it. */
+  {
+    const shelved = new Set(WEAPON_LINES.filter((w) => w.released === false).map((w) => w.line));
+    const gearIds = new Set(Object.keys(GEAR).filter((id) => shelved.has(GEAR[id].line)));
+    const isComponent = (id) => !!MATERIALS[id] && MATERIALS[id].category === "Component";
+
+    for (let pass = 0; pass < 12; pass++) {
+      let cut = 0;
+      Object.keys(CRAFT_ACTIONS).forEach((prof) => {
+        CRAFT_ACTIONS[prof] = CRAFT_ACTIONS[prof].filter((a) => {
+          const makesShelved = a.craftGear && gearIds.has(a.craftGear);
+          const makesOrphan = !a.craftGear && a.out && Object.keys(a.out).every((id) => isComponent(id) && !wanted(id));
+          if (makesShelved || makesOrphan) {
+            cut++;
+            return false;
+          }
+          return true;
+        });
+      });
+      if (!cut) break;
+    }
+
+    // Whether anything still on a bench eats this material.
+    function wanted(id) {
+      return Object.values(CRAFT_ACTIONS).flat().some((a) => a.cost && Object.hasOwn(a.cost, id));
+    }
+  }
+
   /* ================= 7. ITEM SOURCES ================= */
   /* Built once from the tables above so the item popup can say where a thing
      comes from and who works with it. Keyed by base id. Lists hold ids, not
@@ -765,51 +854,6 @@ function buildRegistry() {
      object in two places, so nothing can be reached (or frozen) twice. */
   const PATH_NODE_IDS = Object.values(PATHS).flat().map((n) => n.id);
 
-  /* ================= 11b. WEAPONS, MASTERY AND WHO MAY HOLD THEM =================
-     Every armed line a hunter can carry, in the order the Mastery page lists
-     them. `stat` is what the hours spent carrying it are worth: a weapon pays in
-     damage, a shield in Defence. `ranks` are the five milestones on the way to
-     100, named for the weapon rather than shared, because "Marksman" means
-     nothing about a hammer. Mastery levels and the curve live in CONFIG.mastery;
-     the track itself is mastery.js. */
-  const WEAPON_LINES = [
-    { line: "sword", name: "Sword", icon: "blade", slot: "weapon", stat: "attack",
-      ranks: ["Swordhand", "Swordsman", "Blademaster", "Duellist", "Swordmaster"] },
-    { line: "shield", name: "Shield", icon: "ward", slot: "offhand", stat: "defence",
-      ranks: ["Shieldbearer", "Warder", "Bulwark", "Aegis", "Shieldmaster"] },
-    { line: "dagger", name: "Dagger", icon: "knife", slot: "weapon", stat: "attack",
-      ranks: ["Cutpurse", "Knifehand", "Shadeblade", "Assassin", "Daggermaster"] },
-    { line: "bow", name: "Bow", icon: "stave", slot: "weapon", stat: "attack",
-      ranks: ["Bowhand", "Archer", "Marksman", "Deadeye", "Bowmaster"] },
-    { line: "staff", name: "Staff", icon: "stave", slot: "weapon", stat: "attack",
-      ranks: ["Channeller", "Adept", "Conduit", "Archmage", "Staffmaster"] },
-    { line: "greatsword", name: "Greatsword", icon: "greatblade", slot: "weapon", stat: "attack",
-      ranks: ["Hewer", "Cleaver", "Reaver", "Headsman", "Greatmaster"] },
-    { line: "grimoire", name: "Grimoire", icon: "book", slot: "offhand", stat: "attack",
-      ranks: ["Reader", "Scribe", "Lorekeeper", "Archivist", "Grimoiremaster"] },
-  ];
-  const WEAPON_LINE_IDS = WEAPON_LINES.map((w) => w.line);
-
-  /* What each discipline is allowed to hold. Undisciplined, you carry anything:
-     nothing has narrowed yet, and that openness is most of what the first five
-     levels are for. Take a discipline and it narrows for good, which is what
-     makes the choice a choice.
-
-       Warrior     sword and shield, or the greatsword in both hands
-       Rogue       dagger or bow, and nothing to hide behind
-       Mage        the staff, or a sword and a shield, or a grimoire off-hand
-
-     Armour is never restricted: heavy, medium and light already trade Defence
-     against health against crit, and that trade is the player's to make.
-
-     null is the undisciplined key, and getClass(null) is already null, so the
-     lookup in classWeapons() reads the same for every caller. */
-  const CLASS_WEAPONS = {
-    warrior: ["sword", "shield", "greatsword"],
-    rogue: ["dagger", "bow"],
-    mage: ["staff", "sword", "shield", "grimoire"],
-  };
-
   /* Your own likeness, chosen when the camp is founded. It changes nothing a
      fight can read -- no stat, no roll, no drop -- because it is who you are
      rather than what you can do. Set once, and kept. */
@@ -959,7 +1003,7 @@ function buildRegistry() {
     REGIONS, ZONES, ARCHETYPES, ARCHETYPE_ORDER, ELITE, SOVEREIGN, REGION_FOES, FOE_DROPS, MONSTERS,
     FRAG_PER_ESSENCE, VEIL_BANDS,
     BENCH_TABS, WEATHER_TYPES, WEATHER_SEVERITIES, WEEKDAY_NAMES, MASTERY_TRACK,
-    CLASSES, SEXES, PATHS, PATH_NODE_IDS, WEAPON_LINES, WEAPON_LINE_IDS, CLASS_WEAPONS,
+    CLASSES, SEXES, PATHS, PATH_NODE_IDS, WEAPON_LINES, WEAPON_LINE_IDS, LIVE_LINES, CLASS_WEAPONS,
     BRUTE_FORCE, BASE_COMBAT, TECHNIQUE, AGENT_RARITIES, AGENT_NAMES,
     COMPANIONS, RANK_NUMERALS, RETIRED_PETS,
     SOURCES: { GATHERED_BY, MADE_BY, USED_IN, DROPPED_BY },
@@ -1072,7 +1116,13 @@ export function pathNode(id) {
    longer know) is every line there is: nothing has narrowed yet. */
 export function classWeapons(klass) {
   const list = klass && Object.hasOwn(GameData.CLASS_WEAPONS, klass) ? GameData.CLASS_WEAPONS[klass] : null;
-  return list || GameData.WEAPON_LINE_IDS;
+  return (list || GameData.WEAPON_LINE_IDS).filter((line) => GameData.LIVE_LINES.includes(line));
+}
+
+// Whether an armed line is in the world at all. Anything unarmed is always yes.
+export function lineLive(line) {
+  const def = weaponLine(line);
+  return !def || def.released !== false;
 }
 
 /* Whether a discipline may hold a gear line. Anything that is not an armed line

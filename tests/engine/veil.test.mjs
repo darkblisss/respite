@@ -30,37 +30,44 @@ await run(async () => {
 
   section("A discipline narrows the hands, and nothing else");
   {
-    same("undisciplined, every armed line is open", classWeapons(null), GameData.WEAPON_LINE_IDS);
-    same("the Warrior's three", classWeapons("warrior"), ["sword", "shield", "greatsword"]);
+    same("undisciplined, every line that is out is open", classWeapons(null), GameData.LIVE_LINES);
+    same("the Warrior's, of what is out", classWeapons("warrior"), ["sword", "shield"]);
     same("the Rogue's two", classWeapons("rogue"), ["dagger", "bow"]);
-    same("the Mage's four", classWeapons("mage"), ["staff", "sword", "shield", "grimoire"]);
+    same("the Mage's, of what is out", classWeapons("mage"), ["staff", "sword", "shield"]);
+    check("a line that is not released is nobody's, whatever the tables intend",
+      ["greatsword", "grimoire"].every((line) => !GameData.LIVE_LINES.includes(line) &&
+        ["warrior", "rogue", "mage", null].every((k) => !classWeapons(k).includes(line))));
+    check("but its gear is still known, so a save holding one loads",
+      !!GameData.GEAR.titan_greatsword && !!GameData.GEAR.void_grimoire);
+    check("and no bench will make one, nor the parts only it wanted",
+      !Object.values(GameData.CRAFT_ACTIONS).flat().some((a) => /greatsword|grimoire|gblade|ggrip|_book/.test(a.id)));
     check("armour is nobody's business but the wearer's",
       ["helm", "robe", "jacket", "ring", "amulet"].every((line) => ["warrior", "rogue", "mage", null].every((k) => classHolds(k, line))));
-    check("every armed line is somebody's", GameData.WEAPON_LINE_IDS.every((line) =>
+    check("every armed line that is out is somebody's", GameData.LIVE_LINES.every((line) =>
       ["warrior", "rogue", "mage"].some((k) => classHolds(k, line))));
   }
 
   section("The oath lays down what it cannot hold");
   {
     const s = atHunt(fresh(), 5);
-    put(s, "inv", "slag_greatsword|common", 1);
-    check("undisciplined, a greatsword goes on", cmd(s, "equip", { key: "slag_greatsword|common", from: "inv" }).ok && s.equipment.weapon === "slag_greatsword|common");
-    check("taking the Rogue lays it down rather than refusing", cmd(s, "pickClass", { id: "rogue" }).ok &&
-      s.equipment.weapon === null && s.inv.items["slag_greatsword|common"] === 1);
-    refused("it back on afterwards", s, "equip", { key: "slag_greatsword|common", from: "inv" },
-      "A Rogue does not hold a greatsword. Yours are Dagger and Bow.");
+    put(s, "inv", "bitter_bow|common", 1);
+    check("undisciplined, a bow goes on", cmd(s, "equip", { key: "bitter_bow|common", from: "inv" }).ok && s.equipment.weapon === "bitter_bow|common");
+    check("taking the Warrior lays it down rather than refusing", cmd(s, "pickClass", { id: "warrior" }).ok &&
+      s.equipment.weapon === null && s.inv.items["bitter_bow|common"] === 1);
+    refused("it back on afterwards", s, "equip", { key: "bitter_bow|common", from: "inv" },
+      "A Warrior does not hold a bow. Yours are Sword and Shield.");
 
     // Nowhere to put it: the oath waits rather than destroying anything.
     const tight = atHunt(fresh(6), 5);
-    put(tight, "inv", "slag_greatsword|common", 1);
-    cmd(tight, "equip", { key: "slag_greatsword|common", from: "inv" });
+    put(tight, "inv", "bitter_bow|common", 1);
+    cmd(tight, "equip", { key: "bitter_bow|common", from: "inv" });
     // Every slot in the camp taken, so there is nowhere for the greatsword to go.
     const mats = Object.keys(GameData.MATERIALS);
     ["inv", "bank", "vault"].forEach((w) => {
       for (let i = 0; tight[w].order.length < tight[w].slots && i < mats.length; i++) put(tight, w, mats[i], 1);
     });
     const was = clone(tight.equipment);
-    const res = cmd(tight, "pickClass", { id: "rogue" });
+    const res = cmd(tight, "pickClass", { id: "warrior" });
     check("with nowhere to lay it down the oath waits, and nothing is lost",
       !res.ok && tight.player.klass === null && JSON.stringify(tight.equipment) === JSON.stringify(was), res.error);
   }
@@ -78,6 +85,18 @@ await run(async () => {
     check("five milestones a line, all named", GameData.WEAPON_LINES.every((w) =>
       w.ranks.length === CONFIG.mastery.rankLevels.length && w.ranks.every((n) => typeof n === "string" && n.length > 2)));
 
+    /* One kill teaches one line, and the off-hand is the one being learned when
+       there is anything in it. A shield carried is a shield being learned; the
+       sword behind it is only being held. */
+    const key = (b) => `${b}|common`;
+    same("with a shield up, the shield is what is learned",
+      M.masteryLineFor({ weapon: key("slag_sword"), offhand: key("bitter_shield") }), "shield");
+    same("bare-handed on the weapon, the weapon is",
+      M.masteryLineFor({ weapon: key("slag_sword"), offhand: null }), "sword");
+    same("a two-hander has only itself to learn",
+      M.masteryLineFor({ weapon: key("bitter_bow"), offhand: null }), "bow");
+    same("empty hands learn nothing", M.masteryLineFor({ weapon: null, offhand: null }), null);
+
     const s = atHunt(fresh(11), 40);
     put(s, "inv", "slag_sword|common", 1);
     put(s, "inv", "bitter_shield|common", 1);
@@ -86,11 +105,33 @@ await run(async () => {
     const before = St.statsOf(s);
     cmd(s, "startHunt", { tier: 1, zone: "core" });
     advance(s, T0 + 60 * 60 * 1000);
-    check("hunting earns the line in each hand, equally", s.mastery.sword > 0 && s.mastery.sword === s.mastery.shield, s.mastery);
+    check("a hunt behind a shield banks shield and nothing else",
+      s.mastery.shield > 0 && !s.mastery.sword, s.mastery);
     check("and nothing it was not carrying", !s.mastery.bow && !s.mastery.staff && !s.mastery.dagger);
+
+    // The same hour, sword alone: the sword learns instead, at the same rate.
+    const solo = atHunt(fresh(11), 40);
+    put(solo, "inv", "slag_sword|common", 1);
+    cmd(solo, "equip", { key: "slag_sword|common", from: "inv" });
+    cmd(solo, "startHunt", { tier: 1, zone: "core" });
+    advance(solo, T0 + 60 * 60 * 1000);
+    check("put the shield down and the sword learns, at the very same rate",
+      solo.mastery.sword > 0 && !solo.mastery.shield &&
+      Math.abs(solo.mastery.sword / solo.stats.kills - s.mastery.shield / s.stats.kills) < 1e-9,
+      { sword: solo.mastery.sword, shield: s.mastery.shield });
+
+    /* The BONUS is a different rule from the earning: every worn piece pays out
+       its own line, so a shield you are learning and a sword you are only
+       carrying are both worth what they have learned. Set outright, because two
+       thousand hours of it is not a thing a test sits through. */
+    s.mastery.sword = CONFIG.masteryTable[100];
+    s.mastery.shield = CONFIG.masteryTable[100];
     const after = St.statsOf(s);
-    check("the sword's hours show up on the Attack", after.attack > before.attack, [before.attack, after.attack]);
-    check("the shield's on the Defence", after.defence > before.defence, [before.defence, after.defence]);
+    const want = 1 + CONFIG.mastery.max * CONFIG.mastery.perLevel;
+    check("a maxed sword is worth its whole share of the Attack",
+      Math.abs(after.attack / before.attack - want) < 0.005, [before.attack, after.attack, want]);
+    check("and a maxed shield its share of the Defence",
+      Math.abs(after.defence / before.defence - want) < 0.005, [before.defence, after.defence, want]);
 
     // A mastery is the piece, not the hunter.
     const bare = clone(s);
@@ -102,12 +143,15 @@ await run(async () => {
       Math.abs(St.statsOf(s).attack - after.attack) < 1e-9);
 
     const sheet = M.masterySheet(s);
-    same("the sheet lists every line in the page's order", sheet.map((r) => r.line), GameData.WEAPON_LINES.map((w) => w.line));
+    same("the sheet lists every line that is out, in the page's order",
+      sheet.map((r) => r.line), GameData.LIVE_LINES);
+    check("and never one that is not out yet", sheet.every((r) => r.def.released !== false));
     check("all of them are open to the undisciplined", sheet.every((r) => r.held));
+    check("the one being learned is marked", sheet.filter((r) => r.learning).map((r) => r.line).join(",") === "shield");
     cmd(s, "pickClass", { id: "mage" });
     const mage = M.masterySheet(s);
-    check("and a Mage's sheet shuts the four it cannot hold",
-      mage.filter((r) => r.held).map((r) => r.line).sort().join(",") === "grimoire,shield,staff,sword");
+    check("and a Mage's sheet shuts the lines it cannot hold",
+      mage.filter((r) => r.held).map((r) => r.line).sort().join(",") === "shield,staff,sword");
     check("a shut line still keeps the hours already in it", mage.find((r) => r.line === "bow").level === 100);
   }
 

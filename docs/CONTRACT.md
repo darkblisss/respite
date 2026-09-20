@@ -86,16 +86,27 @@ Three systems, all of them read off the save alone:
   reads turns on it. A save that has never carried one is asked for one the next
   time the Character page opens, and `setSex` refuses once it is set.
 - **Weapon mastery.** `mastery` holds points a gear line (`sword`, `shield`,
-  `dagger`, `bow`, `staff`, `greatsword`, `grimoire`). A kill credits the lines in
-  both hands with `CONFIG.mastery.perKill` of the Warfare XP it paid, before any
-  multiplier. The level (0..100) is worth `CONFIG.mastery.perLevel` on that line's
-  own stat -- damage for a weapon, Defence for a shield -- and only while the
-  piece is worn. What a discipline may hold at all is `GameData.CLASS_WEAPONS`.
+  `dagger`, `bow`, `staff`, and `greatsword`/`grimoire` once released). One kill
+  teaches exactly one line -- the off-hand when anything is in it, the weapon
+  otherwise -- with `CONFIG.mastery.perKill` of the Warfare XP the kill paid,
+  before any multiplier, so no loadout earns faster than another and none earns
+  twice. The bonus is a separate rule: every worn piece pays out its own line's
+  level at `CONFIG.mastery.perLevel` on that line's stat (damage for a weapon,
+  Defence for a shield), so a shield you are learning and a sword you are only
+  carrying are both worth what they have learned. What a discipline may hold at
+  all is `GameData.CLASS_WEAPONS`, filtered by `released`.
 - **The path.** `path` holds a rank a node, for the ten nodes of the save's own
   discipline. Points come one every `CONFIG.path.pathPer` Hunt levels from the
   oath's level; a full tree costs more than Hunt 99 pays. `resetPath` hands them
   all back for gold. A save that spent more than it earned, or that holds another
   discipline's nodes, has those handed back at migration.
+
+**Unreleased gear lines.** A `GameData.WEAPON_LINES` entry with
+`released: false` is out of the world: its recipes and the components only it
+wanted are pruned off the benches at registry build, `classWeapons()` filters it
+out of every discipline so nobody may equip it, and the Mastery page and its
+leaderboard do not list it. The `GameData.GEAR` entries stay, so a save holding
+one still loads. `greatsword` and `grimoire` are shelved at present.
 
 **Item keys** gained an optional enchantment on the end, `"+N"`, after the relic
 prefix when there is one: `slag_sword|rare|c17.42|+7`. A piece carrying one is
