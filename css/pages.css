@@ -32,7 +32,9 @@
 
 .char-portrait img {
   object-fit: cover;
-  object-position: center 12%;
+  object-position: center top;
+  transform: scale(1.6);
+  transform-origin: center top;
 }
 
 .char-name {
@@ -750,7 +752,9 @@ button.doll-slot { cursor: pointer; }
 
 .arena-portrait img {
   object-fit: cover;
-  object-position: center 12%;
+  object-position: center top;
+  transform: scale(1.6);
+  transform-origin: center top;
 }
 
 .arena-name {
