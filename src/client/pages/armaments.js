@@ -23,7 +23,7 @@
 import { h, on, setText, setAttr, toggleClass } from "../ui/dom.js";
 import { iconEl } from "../ui/icons.js";
 import { fmtWhole, fmtStat } from "../ui/format.js";
-import { openPopup } from "../ui/widgets.js";
+import { openPopup, portraitImg, paintPortrait } from "../ui/widgets.js";
 import { storageCard } from "./stockpile.js";
 import { CONFIG } from "../../shared/config.js";
 import { itemDef, itemName } from "../../shared/items.js";
@@ -84,12 +84,15 @@ export function dollCard(ctx, { link = null } = {}) {
   const right = h("div.doll-col");
   const nameNode = h("div.doll-name");
   const subNode = h("div.doll-sub");
+  // The figure wearing the gear is you, so it follows the likeness on the save.
+  const dollBust = h("div.portrait", portraitImg(null));
+  let dollSexSig = null;
   const node = h("section.card",
     h("div.card-head", h("div", h("h2.card-title", "Worn")), chips),
     h("div.doll",
       left,
       h("div.doll-figure",
-        h("div.portrait", h("img", { src: "assets/commander-default.webp", alt: "" })),
+        dollBust,
         nameNode,
         subNode),
       right));
@@ -132,6 +135,7 @@ export function dollCard(ctx, { link = null } = {}) {
         classSig = nextClass;
         chips.replaceChildren(...[k ? h("span.chip.chip-violet", k.name) : null, linkNode].filter(Boolean));
       }
+      dollSexSig = paintPortrait(dollBust, ctx.state.player.sex, dollSexSig);
       setText(nameNode, commanderName(ctx));
       setText(subNode, [k && k.name, region.name].filter(Boolean).join(" · "));
     },

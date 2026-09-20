@@ -24,7 +24,7 @@
 import { h, on, setAttr, setText, setWidth, toggleClass } from "../ui/dom.js";
 import { iconEl } from "../ui/icons.js";
 import { fmt, fmtStat, fmtWhole, fmtTime } from "../ui/format.js";
-import { openPopup } from "../ui/widgets.js";
+import { openPopup, portraitImg, paintPortrait } from "../ui/widgets.js";
 import { monsterArt } from "../ui/popups/foe.js";
 import { huntChips, chipNode, partyHere, ZONE_ICONS } from "../ui/popups/zone.js";
 import { CONFIG } from "../../shared/config.js";
@@ -150,7 +150,9 @@ export default {
     const company = h("div.card-actions");
     const huntHead = h("div.card-head", h("div", huntTitle, huntSub), company);
 
-    const youPortrait = h("div.portrait.portrait-bust.arena-portrait", h("img", { src: "assets/commander-default.webp", alt: "" }));
+    const youPortrait = h("div.portrait.portrait-bust.arena-portrait", portraitImg(ctx.state.player.sex));
+    // The face in the arena is yours, so it follows the likeness on the save.
+    let youSexSig = ctx.state.player.sex;
     const youName = h("div.arena-name");
     const youFill = h("i");
     const youText = h("span");
@@ -436,6 +438,7 @@ export default {
       const rest = c ? null : campPlan(state, ctx.now);
       const hp = Math.max(0, Math.min(s.maxHp, Math.ceil(rest ? rest.hp : state.player.hp)));
       setText(youName, commanderName(ctx));
+      youSexSig = paintPortrait(youPortrait, ctx.state.player.sex, youSexSig);
       setWidth(youFill, (hp / s.maxHp) * 100);
       setText(youText, `${fmt(hp)} / ${fmt(s.maxHp)}`);
       toggleClass(you, "is-down", down);
@@ -641,8 +644,11 @@ export default {
           const text = h("span");
           const isMe = sameId(u.userId, me);
           const label = isMe ? "You" : (names.get(String(u.userId).toLowerCase()) || "Someone");
+          /* Your own face in the band is yours. A party mate's likeness is theirs
+             and this camp is never told it, so they keep the default bust until
+             the realm publishes one. */
           const node = h("div.band-mate", { class: { "is-down": u.down, "is-me": isMe } },
-            h("div.band-art.portrait-bust", h("img", { src: "assets/commander-default.webp", alt: "" })),
+            h("div.band-art.portrait-bust", portraitImg(isMe ? ctx.state.player.sex : null)),
             h("span.band-name", label),
             h("div.hpbar.hpbar-sm", fill, text));
           mates.set(String(u.userId).toLowerCase(), { fill, text });

@@ -22,23 +22,6 @@ import { GameData } from "../../../shared/registry.js";
 // The picker on screen, so a second call (a page mount and a click) never stacks another.
 let current = null;
 
-export const DEFAULT_PORTRAIT = "assets/commander-default.webp";
-
-/* Art for a likeness, by convention: assets/commander-<id>.webp, falling back to
-   the default bust the moment one is missing. Dropping the two files in is all it
-   takes to give the roll real faces. */
-export const portraitFor = (sex) => (sex ? `assets/commander-${sex}.webp` : DEFAULT_PORTRAIT);
-
-// One <img> that quietly falls back rather than showing a broken frame.
-export function portraitImg(sex, extra = {}) {
-  const img = h("img", Object.assign({ src: portraitFor(sex), alt: "" }, extra));
-  img.addEventListener("error", () => {
-    if (img.getAttribute("src") === DEFAULT_PORTRAIT) return;
-    img.setAttribute("src", DEFAULT_PORTRAIT);
-  });
-  return img;
-}
-
 function cardInner(def) {
   return [
     h("span.hstack.gap-3",

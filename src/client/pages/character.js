@@ -26,8 +26,7 @@ import { iconEl } from "../ui/icons.js";
 import { fmt, fmtWhole, fmtGold, fmtTime, fmtStat, titleCase } from "../ui/format.js";
 import { chipNode } from "../ui/popups/action.js";
 import { monsterArt, foeKills, foeFalls } from "../ui/popups/foe.js";
-import { hasPopup, openPopup } from "../ui/widgets.js";
-import { portraitImg } from "../ui/popups/likeness.js";
+import { hasPopup, openPopup, portraitImg, paintPortrait } from "../ui/widgets.js";
 import { dollCard, standingCard } from "./armaments.js";
 import { CONFIG } from "../../shared/config.js";
 import {
@@ -74,10 +73,7 @@ function heroView() {
       setText(total, fmtWhole(totalLevel(state)));
 
       // The face on the roll follows the likeness, and falls back on its own if the art is missing.
-      if (state.player.sex !== sexSig) {
-        sexSig = state.player.sex;
-        bust.replaceChildren(portraitImg(sexSig));
-      }
+      sexSig = paintPortrait(bust, state.player.sex, sexSig);
 
       // The discipline tag waits for a discipline; the bounty chip for a posting still open.
       const klass = state.player.klass ? getClass(state.player.klass) : null;

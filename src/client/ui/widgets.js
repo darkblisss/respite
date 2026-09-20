@@ -11,6 +11,36 @@ import { iconEl } from "./icons.js";
 import { confirm, toast } from "./overlay.js";
 import { fmtWhole } from "./format.js";
 
+/* ================= 0. THE COMMANDER'S FACE ================= */
+
+/* Wherever a commander is drawn -- the Character hero, the paperdoll, the arena,
+   your square in a party band -- it is the same face, and it follows the likeness
+   on the save. By convention that is assets/commander-<sex>.webp; a save with no
+   likeness yet, or a likeness whose art is missing, falls back to the default
+   bust rather than showing a broken frame.
+
+   The crop is CSS (.portrait, .portrait-bust in components.css) and never
+   redeclared per page, so one rule decides framing everywhere. */
+
+export const DEFAULT_PORTRAIT = "assets/commander-default.webp";
+export const portraitFor = (sex) => (sex ? `assets/commander-${sex}.webp` : DEFAULT_PORTRAIT);
+
+export function portraitImg(sex, extra = {}) {
+  const img = h("img", Object.assign({ src: portraitFor(sex), alt: "" }, extra));
+  img.addEventListener("error", () => {
+    if (img.getAttribute("src") === DEFAULT_PORTRAIT) return;
+    img.setAttribute("src", DEFAULT_PORTRAIT);
+  });
+  return img;
+}
+
+// Swaps the face inside `box` when the likeness changes, and not otherwise.
+export function paintPortrait(box, sex, was) {
+  if (sex === was) return was;
+  box.replaceChildren(portraitImg(sex));
+  return sex;
+}
+
 /* ================= 1. QUANTITY PICKER ================= */
 /* UI-KIT.md 7.11. Unlimited is an empty box with a "No limit" placeholder and a
    pressed "No limit" chip, never a symbol. */

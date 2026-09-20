@@ -1,6 +1,7 @@
-/* The three rooms this batch added, opened in a real browser: the Discipline
-   page's two tabs, the Veilsmith's dialog off an item, and the likeness picker
-   a fresh camp is asked for.
+/* What this batch added, opened in a real browser: the likeness picker a fresh
+   camp is asked for and the face it puts on every page, the Discipline page's
+   two tabs, a path spending a point, weapon mastery ranked by the realm, and
+   the Veilsmith's dialog off an item.
 
      node tests/e2e/ui-new.test.mjs */
 
@@ -37,6 +38,28 @@ await run(async () => {
     check("and the picker closes", gone);
   }
 
+  section("the same face, everywhere a commander is drawn");
+  {
+    const src = (sel) => live(app, (q) => {
+      const img = document.querySelector(q);
+      return img ? (img.getAttribute("src") || "") : null;
+    }, sel);
+
+    await go("#/character");
+    const hero = await src(".char-portrait img");
+    check("the Character hero wears the likeness that was chosen", /commander-female\.webp$/.test(hero || ""), hero);
+
+    await go("#/armaments");
+    await app.page.waitForTimeout(400);
+    const doll = await src(".doll-figure .portrait img");
+    same("and so does the figure wearing the gear", doll, hero);
+
+    await go("#/skill/warfare");
+    await app.page.waitForTimeout(400);
+    const arena = await src(".arena-portrait img");
+    same("and so does the one in the arena", arena, hero);
+  }
+
   section("the Discipline page");
   {
     await go("#/discipline");
@@ -45,7 +68,8 @@ await run(async () => {
     await live(app, () => [...document.querySelectorAll("[role=tab]")].find((t) => /Mastery/.test(t.textContent)).click());
     await app.page.waitForTimeout(300);
     const rows = await live(app, () => [...document.querySelectorAll("[data-line]")].map((r) => r.dataset.line));
-    same("seven weapon rows, in the page's order", rows, ["sword", "shield", "dagger", "bow", "staff", "greatsword", "grimoire"]);
+    same("a row for every line that is out, in the page's order", rows, ["sword", "shield", "dagger", "bow", "staff"]);
+    check("and none for a line that is shelved", !rows.includes("greatsword") && !rows.includes("grimoire"), rows);
     const detail = await live(app, () => document.querySelector(".mastery-detail").textContent);
     check("and one of them is read out below", /Mastery 0/.test(detail) && /Untried/.test(detail), detail.slice(0, 160));
     await live(app, () => document.querySelector('[data-line="bow"]').click());
@@ -84,6 +108,47 @@ await run(async () => {
     await app.page.waitForTimeout(700);
     const after = await live(app, () => window.__respite.store.state.path || {});
     check("pressing one spends a point", (after.wr_ironhide || 0) > (before.wr_ironhide || 0), { before, after });
+  }
+
+  section("weapon mastery, ranked by the realm");
+  {
+    // A sword behind a shield is a shield being learned. Points set outright.
+    await editSave(stack, "uinew_a", (s2) => {
+      s2.mastery = { sword: 40000, shield: 900 };
+      s2.equipment.weapon = "slag_sword|common";
+      s2.equipment.offhand = "bitter_shield|common";
+    });
+    await live(app, () => window.__respite.store.sync());
+    await app.page.waitForTimeout(1500);
+
+    await go("#/discipline");
+    await live(app, () => [...document.querySelectorAll("[role=tab]")].find((t) => /Mastery/.test(t.textContent)).click());
+    await app.page.waitForTimeout(1500);
+
+    const marked = await live(app, () => [...document.querySelectorAll("[data-line].is-learning")].map((r) => r.dataset.line));
+    same("the shield is what the hands are learning, not the sword", marked, ["shield"]);
+
+    await live(app, () => document.querySelector('[data-line="sword"]').click());
+    await app.page.waitForTimeout(600);
+    const detail = await live(app, () => {
+      const d = document.querySelector(".mastery-detail");
+      const rank = d.querySelector(".tag-gold");
+      return { text: d.textContent, rank: rank && !rank.hidden ? rank.textContent : null, saint: !!d.querySelector(".is-saint") };
+    });
+    check("the sword reads its level and grade", /Mastery \d/.test(detail.text) && /Swordhand/.test(detail.text), detail.text.slice(0, 140));
+    check("the realm ranks it, and this camp is first on it", detail.saint && /Saint/i.test(detail.rank || ""), detail);
+    check("and it says how a line is learned at all", /a kill teaches your off-hand/.test(detail.text), detail.text.slice(0, 160));
+
+    await go("#/hiscores");
+    await app.page.waitForTimeout(600);
+    await live(app, () => [...document.querySelectorAll("[role=tab]")].find((t) => /Mastery/.test(t.textContent)).click());
+    await app.page.waitForTimeout(2000);
+    const board = await live(app, () => {
+      const t = document.querySelector("table");
+      return t ? t.textContent.replace(/\s+/g, " ").trim() : (document.querySelector(".page") || {}).textContent;
+    });
+    check("the Mastery board lists this camp with a level off its points",
+      /uinew_a/i.test(board) && !/not kept yet/i.test(board), board.slice(0, 200));
   }
 
   section("the Veilsmith");
