@@ -694,8 +694,7 @@ function partyBody(ctx, page) {
         h("div",
           h("div.member-name",
             h("span", display(m.username)),
-            isLeader ? h("span", { "data-tip": "Party leader", role: "img", "aria-label": "Leader" }, iconEl("crown")) : null,
-            mine ? h("span.tag.tag-violet", "You") : null),
+            isLeader ? h("span", { "data-tip": "Party leader", role: "img", "aria-label": "Leader" }, iconEl("crown")) : null),
           level),
         status,
         foot);
