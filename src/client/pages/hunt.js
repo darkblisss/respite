@@ -156,7 +156,12 @@ export default {
     const youText = h("span");
     // The rest of the warband, only while the party is out: name and health, one row each.
     const band = h("div.arena-band", { hidden: true });
-    const you = h("div.arena-you", youPortrait, youName, h("div.hpbar", youFill, youText), band);
+    const youHp = h("div.hpbar", youFill, youText);
+    // band lives inside arena-you on purpose (the mobile grid places it beside the
+    // portrait column): a party fight hides your own portrait/name/hp, not the whole
+    // node, or the band hiding right along with its parent is exactly how nobody's
+    // square ever showed up.
+    const you = h("div.arena-you", youPortrait, youName, youHp, band);
     let veil = null;   // { bar, fill, note }, only once a discipline is held
 
     const status = h("div.arena-status");
@@ -519,6 +524,9 @@ export default {
       setAttr(band, "hidden", true);
       // Back to your own card when the party's fight is not what is on screen.
       setAttr(you, "hidden", false);
+      setAttr(youPortrait, "hidden", false);
+      setAttr(youName, "hidden", false);
+      setAttr(youHp, "hidden", false);
       toggleClass(arena, "is-party", false);
     }
 
@@ -547,8 +555,12 @@ export default {
       }
       setAttr(company, "hidden", false);
 
-      // Your own card gives way: in a party you are one square among the others.
-      setAttr(you, "hidden", true);
+      // Your own solo portrait gives way to the warband -- but not the node it lives
+      // in, since that is what the band grid is nested inside.
+      setAttr(you, "hidden", false);
+      setAttr(youPortrait, "hidden", true);
+      setAttr(youName, "hidden", true);
+      setAttr(youHp, "hidden", true);
       setVeil(false);
 
       /* Whoever joined after an encounter had begun is in the session but not in that fight:
