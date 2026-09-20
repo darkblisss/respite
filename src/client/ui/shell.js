@@ -157,12 +157,18 @@ export function createShell(app) {
     app.dispatch("stopSkill");
     app.dispatch("startSkill", args);
   });
+  /* Leaving, not restarting: there is no sense in which a hunt "starts over," so the
+     button on the bar just steps out of it -- the party's fight with its own server-only
+     command, your own hunt with the usual pull-back. */
   $.huntRestart.addEventListener("click", () => {
+    if (outWithParty) {
+      $.huntRestart.disabled = true;
+      Promise.resolve(app.dispatch("partyHuntLeave")).finally(() => { $.huntRestart.disabled = false; });
+      return;
+    }
     const c = app.store && app.store.state ? app.store.state.tasks.combat : null;
-    if (!c || outWithParty) return;
-    const args = { tier: c.tier, zone: c.zone, limit: c.limit == null ? null : c.limit };
+    if (!c) return;
     app.dispatch("pullBack");
-    app.dispatch("startHunt", args);
   });
   $.conn.addEventListener("click", () => app.openSettings());
   $.settings.addEventListener("click", () => app.openSettings());
@@ -273,8 +279,10 @@ export function createShell(app) {
     setText($.huntName, look.name);
     setText($.huntShort, look.short);
     setText($.huntMeta, look.meta);
-    // Nothing to start over when nothing is out, and the party's fight is not yours to restart.
-    setAttr($.huntRestart, "hidden", look.state === "idle" || outWithParty);
+    // Nothing to leave when nothing is out. Otherwise always here, party fight included --
+    // stepping out of it is always allowed, only restarting it never made sense.
+    setAttr($.huntRestart, "hidden", look.state === "idle");
+    setAttr($.huntRestart, "aria-label", look.stop || "Leave combat");
     toggleClass($.huntBar, "nojump", look.state === "idle" || look.pct < 6);
     setWidth($.huntBar, look.pct);
   }
