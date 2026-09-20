@@ -133,6 +133,8 @@ function blankHunt(tier, zone, limit) {
     // xp and dmg run the whole hunt; marks sample both so XP/hr and DPS can be read
     // off a rolling window at any instant. See huntRates.
     xp: 0, dmg: 0, marks: [[0, 0, 0]], nextMark: H.rateMarkMs,
+    // What this run has turned up so far, key -> qty. See dropLoot.
+    drops: {},
   };
 }
 
@@ -188,6 +190,7 @@ export function startHunt(state, { tier, zone, limit } = {}, env) {
     c.marks = [[0, 0, 0]];
     c.xp = 0;
     c.dmg = 0;
+    c.drops = {};
     c.startedAt = state.clock;
   } else {
     const hunt = newHunt(state, tier, zone, limit);
@@ -974,13 +977,17 @@ export function dropLoot(state, mob, elite, kN, env, at) {
   const qtyMult = elite ? GameData.ELITE.drops : 1;
   const mKey = `m:${mob.id}`;
   const mN = state.rolls[mKey] || 0;
+  const c = state.tasks.combat;
+  // What this hunt has turned up, for the little stack the arena shows.
+  const tally = (key, n) => { if (c && c.drops) c.drops[key] = (c.drops[key] || 0) + n; };
   mob.drops.forEach(([k, qty, chance], j) => {
     if (!(roll(seed, mKey, mN, SALT.drop + j) < chance * bonus)) return;
     // "@reagent": whichever of the five this one was carrying, on the same stream.
     const key = k === "@reagent"
       ? GameData.REAGENTS[Math.floor(roll(seed, mKey, mN, SALT.drop + 50 + j) * GameData.REAGENTS.length)].id
       : k;
-    stashLoot(state, key, qty * qtyMult, env, at);
+    const n = qty * qtyMult;
+    if (stashLoot(state, key, n, env, at)) tally(key, n);
   });
 
   /* Companions with a nose for it turn something up now and then. It is a Veil
@@ -990,7 +997,9 @@ export function dropLoot(state, mob, elite, kN, env, at) {
   const kKey = `k:${mob.tier}`;
   if (rare && roll(seed, kKey, kN, SALT.rare) < rare) {
     const key = fragmentOfTier(mob.tier);
-    if (stashLoot(state, key, 1, env, at)) emit(state, env, "loot:found", { key, at });
+    if (stashLoot(state, key, 1, env, at)) {
+      tally(key, 1);
+      emit(state, env, "loot:found", { key, at });
+    }
   }
 }
-
