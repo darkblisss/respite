@@ -25,6 +25,7 @@ import { startHunt, pullBack, setHide, huntStep } from "./combat.js";
 import {
   refreshBounty, resolveRequisitions, claimBounty, hireAgent, deployAgent, buyRemedy, buySmuggler,
   travel, equip, unequip, unequipTool, moveItem, sellItem, useChest, useRemedy, salvage, reorder, pickClass,
+  debugGive,
 } from "./world.js";
 
 const WINDOW_MS = CONFIG.time.windowMs;
@@ -109,6 +110,7 @@ export const COMMANDS = Object.freeze({
   pullBack:     { run: pullBack, predict: true },
   setHide:      { run: setHide, predict: true },
   pickClass:    { run: pickClass, predict: true },
+  debugGive:    { run: debugGive, predict: true },
   equip:        { run: equip, predict: true },
   unequip:      { run: unequip, predict: true },
   unequipTool:  { run: unequipTool, predict: true },
