@@ -14,19 +14,19 @@ import { fmtWhole } from "./format.js";
 /* ================= 0. THE COMMANDER'S FACE ================= */
 
 /* Wherever a commander is drawn -- the Character hero, the paperdoll, the arena,
-   your square in a party band -- it is the same face, and it follows the likeness
-   on the save. By convention that is assets/commander-<sex>.webp; a save with no
-   likeness yet, or a likeness whose art is missing, falls back to the default
-   bust rather than showing a broken frame.
+   your square in a party band, your row on a board, a profile anyone opens -- it
+   is the same face, and it is the skin on the save. By convention that is
+   assets/skin-<id>.webp; a camp that has not picked one yet, or a skin whose art
+   is missing, falls back to the default bust rather than a broken frame.
 
    The crop is CSS (.portrait, .portrait-bust in components.css) and never
    redeclared per page, so one rule decides framing everywhere. */
 
 export const DEFAULT_PORTRAIT = "assets/commander-default.webp";
-export const portraitFor = (sex) => (sex ? `assets/commander-${sex}.webp` : DEFAULT_PORTRAIT);
+export const portraitFor = (skin) => (skin ? `assets/skin-${skin}.webp` : DEFAULT_PORTRAIT);
 
-export function portraitImg(sex, extra = {}) {
-  const img = h("img", Object.assign({ src: portraitFor(sex), alt: "" }, extra));
+export function portraitImg(skin, extra = {}) {
+  const img = h("img", Object.assign({ src: portraitFor(skin), alt: "" }, extra));
   img.addEventListener("error", () => {
     if (img.getAttribute("src") === DEFAULT_PORTRAIT) return;
     img.setAttribute("src", DEFAULT_PORTRAIT);
@@ -34,11 +34,11 @@ export function portraitImg(sex, extra = {}) {
   return img;
 }
 
-// Swaps the face inside `box` when the likeness changes, and not otherwise.
-export function paintPortrait(box, sex, was) {
-  if (sex === was) return was;
-  box.replaceChildren(portraitImg(sex));
-  return sex;
+// Swaps the face inside `box` when the skin changes, and not otherwise.
+export function paintPortrait(box, skin, was) {
+  if (skin === was) return was;
+  box.replaceChildren(portraitImg(skin));
+  return skin;
 }
 
 /* ================= 1. QUANTITY PICKER ================= */

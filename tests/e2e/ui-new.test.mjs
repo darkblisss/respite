@@ -23,17 +23,22 @@ await run(async () => {
   const text = () => live(app, () => document.getElementById("view").textContent);
   const errs = () => app.errors.filter((e) => PAGE_CODE.test(String(e.stack || e.message || e)));
 
-  section("a fresh camp is asked who it is");
+  section("a fresh camp picks a skin");
   {
     await go("#/character");
-    const asked = await live(app, () => !!document.querySelector(".modal-title") && /Who are you/.test(document.querySelector(".modal-title").textContent));
-    check("the likeness picker opens on the Character page", asked);
+    const asked = await live(app, () => !!document.querySelector(".modal-title") && /Pick your skin/.test(document.querySelector(".modal-title").textContent));
+    check("the skin picker opens on the Character page", asked);
     const names = await live(app, () => [...document.querySelectorAll(".modal .class-name")].map((n) => n.textContent));
-    same("and offers both", names, ["Man", "Woman"]);
-    await live(app, () => [...document.querySelectorAll(".modal .class-card")][1].click());
+    same("and offers both, by name", names, ["The Drifter", "The Outrider"]);
+    check("and shows each one's face on its card",
+      await live(app, () => [...document.querySelectorAll(".skin-card img")].map((i) => i.getAttribute("src")))
+        .then((a) => a.length === 2 && a.every((x) => /skin-(drifter|outrider)\.webp$/.test(x))));
+    check("and says nothing about a man or a woman",
+      !/\b(man|woman|male|female|sex)\b/i.test(await live(app, () => document.querySelector(".modal").textContent)));
+    await live(app, () => [...document.querySelectorAll(".modal .class-card")][0].click());
     await app.page.waitForTimeout(500);
-    const sex = await live(app, () => window.__respite.store.state.player.sex);
-    same("choosing one sets it on the save", sex, "female");
+    const skin = await live(app, () => window.__respite.store.state.player.skin);
+    same("choosing one sets it on the save", skin, "drifter");
     const gone = await live(app, () => !document.querySelector(".modal-title"));
     check("and the picker closes", gone);
   }
@@ -47,7 +52,7 @@ await run(async () => {
 
     await go("#/character");
     const hero = await src(".char-portrait img");
-    check("the Character hero wears the likeness that was chosen", /commander-female\.webp$/.test(hero || ""), hero);
+    check("the Character hero wears the skin that was chosen", /skin-drifter\.webp$/.test(hero || ""), hero);
 
     await go("#/armaments");
     await app.page.waitForTimeout(400);

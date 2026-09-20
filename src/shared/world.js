@@ -12,7 +12,7 @@
 
 import { CONFIG } from "./config.js";
 import {
-  GameData, getRegion, getMaterial, getClass, getSex, classWeapons, weaponLine, essenceOfTier,
+  GameData, getRegion, getMaterial, getClass, getSkin, classWeapons, weaponLine, essenceOfTier,
   monsterOfTier, matId, agentRarityDef,
 } from "./registry.js";
 import { itemDef, itemName, parseKey, validKey, agentRarityFromRoll, remedyTooWeak, tierForLevel, makeKey, prefixFromRoll } from "./items.js";
@@ -237,16 +237,16 @@ export function enchant(state, { key, from, stones = 1 } = {}, env) {
   return { ok: true, data: { won, key: won ? next : key, level: won ? p.plus + 1 : p.plus, stones } };
 }
 
-/* ================= LIKENESS ================= */
+/* ================= THE SKIN ================= */
 
 /* Chosen when the camp is founded, and kept. Nothing a fight reads depends on
    it, so it is refused once set rather than sold back: a camp has one commander. */
-export function setSex(state, { sex } = {}, env) {
-  const def = typeof sex === "string" ? getSex(sex) : null;
-  if (!def) return refuse("No such likeness.");
-  if (state.player.sex) return refuse("Your likeness is already set.");
-  state.player.sex = def.id;
-  emit(state, env, "sex:picked", { sex: def.id });
+export function setSkin(state, { skin } = {}, env) {
+  const def = typeof skin === "string" ? getSkin(skin) : null;
+  if (!def) return refuse("No such skin.");
+  if (state.player.skin) return refuse("Your skin is already chosen.");
+  state.player.skin = def.id;
+  emit(state, env, "skin:picked", { skin: def.id });
   return OK();
 }
 

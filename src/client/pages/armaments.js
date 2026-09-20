@@ -84,9 +84,9 @@ export function dollCard(ctx, { link = null } = {}) {
   const right = h("div.doll-col");
   const nameNode = h("div.doll-name");
   const subNode = h("div.doll-sub");
-  // The figure wearing the gear is you, so it follows the likeness on the save.
+  // The figure wearing the gear is you, so it wears your skin.
   const dollBust = h("div.portrait", portraitImg(null));
-  let dollSexSig = null;
+  let dollSkinSig = null;
   const node = h("section.card",
     h("div.card-head", h("div", h("h2.card-title", "Worn")), chips),
     h("div.doll",
@@ -135,7 +135,7 @@ export function dollCard(ctx, { link = null } = {}) {
         classSig = nextClass;
         chips.replaceChildren(...[k ? h("span.chip.chip-violet", k.name) : null, linkNode].filter(Boolean));
       }
-      dollSexSig = paintPortrait(dollBust, ctx.state.player.sex, dollSexSig);
+      dollSkinSig = paintPortrait(dollBust, ctx.state.player.skin, dollSkinSig);
       setText(nameNode, commanderName(ctx));
       setText(subNode, [k && k.name, region.name].filter(Boolean).join(" · "));
     },

@@ -20,7 +20,7 @@
    ============================================================ */
 
 import { CONFIG } from "./config.js";
-import { GameData, findAction, getSkill, getMonster, getCompanion, getClass, getSex, getTool, pathOf, regionOfTier } from "./registry.js";
+import { GameData, findAction, getSkill, getMonster, getCompanion, getClass, getSkin, getTool, pathOf, regionOfTier } from "./registry.js";
 import { itemDef, parseKey, stacks, validKey } from "./items.js";
 import { canHold, unstacked } from "./storage.js";
 import { combatStats, levelFromXp, skillLevel, maxHp } from "./stats.js";
@@ -97,7 +97,7 @@ function blankState(clock, seed) {
     schema: CONFIG.schema,
     clock,
     meta: { createdAt: clock, playtimeMs: 0, account: null, userId: null },
-    player: { gold: 0, hp: 1, recoveryLeft: 0, klass: null, sex: null, camp: null },
+    player: { gold: 0, hp: 1, recoveryLeft: 0, klass: null, skin: null, camp: null },
     skills,
     inv:   { slots: S.slots.inv,   items: {}, order: [] },
     bank:  { slots: S.slots.bank,  items: {}, order: [] },
@@ -540,8 +540,10 @@ function normalise(src, opts) {
   // A death bars nothing now; the field stays at zero so old saves load clean.
   s.player.recoveryLeft = 0;
   s.player.klass = typeof player.klass === "string" && getClass(player.klass) ? player.klass : null;
-  // A likeness a save has never carried stays null, and the camp asks for one.
-  s.player.sex = typeof player.sex === "string" && getSex(player.sex) ? player.sex : null;
+  /* A skin a save has never carried stays null, and the camp asks for one. A save
+     from schema 10 carried a `sex` instead; it is not read across, so every camp
+     picks again from the two skins -- which is the point of them being skins. */
+  s.player.skin = typeof player.skin === "string" && getSkin(player.skin) ? player.skin : null;
 
   /* Weapon mastery: one non-negative number a known line, and nothing else. A save
      from before the track existed simply has none, which reads as Untried. */

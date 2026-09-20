@@ -57,7 +57,7 @@ await run(async () => {
       [{ ok: false, error: "Unknown command." }, { ok: false, error: "Unknown command." }, { ok: false, error: "Unknown command." }, { ok: false, error: "Unknown command." }, { ok: false, error: "Unknown command." }, before]);
     same("server-only commands", E.SERVER_ONLY.map((t) => cmd(s, t, { key: "coal" })), E.SERVER_ONLY.map(() => ({ ok: false, error: "That needs the server." })));
     same("COMMANDS: the predictable ones and the server's", Object.keys(E.COMMANDS).filter((t) => E.COMMANDS[t].predict).sort(),
-      ["startSkill", "stopSkill", "startHunt", "pullBack", "setHide", "pickClass", "setSex", "equip", "unequip", "unequipTool", "moveItem", "sellItem", "salvage", "useChest", "repair", "reorder", "buyRemedy", "buySmuggler", "travel", "claimBounty", "hireAgent", "deployAgent", "buyCompanion", "setCompanion"].sort());
+      ["startSkill", "stopSkill", "startHunt", "pullBack", "setHide", "pickClass", "setSkin", "equip", "unequip", "unequipTool", "moveItem", "sellItem", "salvage", "useChest", "repair", "reorder", "buyRemedy", "buySmuggler", "travel", "claimBounty", "hireAgent", "deployAgent", "buyCompanion", "setCompanion"].sort());
     check("SERVER_ONLY is the market and the party's fight", E.SERVER_ONLY.join(",") === "marketList,marketBuy,marketBuyPool,marketCancel,partyHuntStart,partyHuntJoin,partyHuntLeave" && E.SERVER_ONLY.every((t) => E.COMMANDS[t] && !E.COMMANDS[t].predict));
     check("args that aren't an object count as none", cmd(s, "stopSkill", "junk").ok && cmd(s, "stopSkill", [1, 2]).ok && cmd(s, "setHide", null).error === "Hiding is on or off.");
   }
@@ -188,7 +188,7 @@ await run(async () => {
     refused("qty 0", s, "sellItem", { key: "resin", from: "inv", qty: 0 }, "Pick an amount to sell.");
 
     put(s, "vault", "slag_helm|epic|s1.0", 1);
-    check("salvage", cmd(s, "salvage", { key: "slag_helm|epic|s1.0", from: "vault" }).ok && s.bank.items.slag_bar === 8 && !s.vault.items["slag_helm|epic|s1.0"] && s.log.some((l) => l.m === "Broke down Epic Slag Helm for 8 Slag Bar."));
+    check("salvage", cmd(s, "salvage", { key: "slag_helm|epic|s1.0", from: "vault" }).ok && s.bank.items.slag_bar === 8 && !s.vault.items["slag_helm|epic|s1.0"] && s.log.some((l) => l.m === "Broke down Slag Helm for 8 Slag Bar."));
     refused("a material", s, "salvage", { key: "resin", from: "inv" }, "That can't be broken down.");
     const cramped = fresh();
     put(cramped, "inv", "slag_helm|common", 2);
@@ -386,7 +386,7 @@ await run(async () => {
   {
     const JUNK = [undefined, null, 0, -1, 1.5, NaN, Infinity, "", "x".repeat(500), {}, [], true, "__proto__", "constructor", "inv", "coal", { toString: 1 }];
     const FIELDS = {
-      startSkill: ["skillId", "actionId", "limit"], startHunt: ["tier", "zone", "limit"], setHide: ["on"], pickClass: ["id"], setSex: ["sex"],
+      startSkill: ["skillId", "actionId", "limit"], startHunt: ["tier", "zone", "limit"], setHide: ["on"], pickClass: ["id"], setSkin: ["skin"],
       equip: ["key", "from"], unequip: ["slot"], unequipTool: ["skillId"], moveItem: ["key", "from", "to", "qty"],
       sellItem: ["key", "from", "qty"], salvage: ["key", "from"], useChest: ["key", "from"], repair: ["key"],
       reorder: ["pool", "key", "before"], buyRemedy: ["key", "qty"], buySmuggler: ["slot"], travel: ["regionId"],
@@ -395,7 +395,7 @@ await run(async () => {
     };
     const GOOD = {
       startSkill: { skillId: "delving", actionId: "delving_t1_raw", limit: 5 }, startHunt: { tier: 1, zone: "outer", limit: 5 },
-      setHide: { on: true }, pickClass: { id: "rogue" }, setSex: { sex: "female" }, equip: { key: "slag_sword|rare|c1.1", from: "inv" }, unequip: { slot: "head" },
+      setHide: { on: true }, pickClass: { id: "rogue" }, setSkin: { skin: "drifter" }, equip: { key: "slag_sword|rare|c1.1", from: "inv" }, unequip: { slot: "head" },
       unequipTool: { skillId: "felling" }, moveItem: { key: "coal", from: "bank", to: "vault", qty: 1 }, sellItem: { key: "coal", from: "bank", qty: 1 },
       salvage: { key: "slag_helm|common", from: "inv" }, useChest: { key: "vault_chest", from: "vault" }, repair: { key: "slag_helm|epic|s1.0" },
       reorder: { pool: "bank", key: "coal", before: null }, buyRemedy: { key: "provision_t1", qty: 1 }, buySmuggler: { slot: 0 },
@@ -517,7 +517,7 @@ await run(async () => {
     same("prepareListing takes the items out and describes them", [listed, s.bank.items.coal, w.of("market:listed").length],
       [{ ok: true, data: { key: "coal", base: "coal", name: "Coal", kind: "material", tier: 1, rarity: null, qty: 15, priceEach: 3 } }, 5, 1]);
     same("a unique piece", M.prepareListing(s, { key: "slag_sword|legendary|c3.4", from: "inv", qty: 1, price: 900 }, w.env).data,
-      { key: "slag_sword|legendary|c3.4", base: "slag_sword", name: "Legendary Slag Sword", kind: "gear", tier: 1, rarity: "legendary", qty: 1, priceEach: 900 });
+      { key: "slag_sword|legendary|c3.4", base: "slag_sword", name: "Slag Sword", kind: "gear", tier: 1, rarity: "legendary", qty: 1, priceEach: 900 });
     const before = clone(s);
     const refusals = [
       [{ key: "coal", from: "bank", qty: 6, price: 3 }, "You can list 1 to 5."],
