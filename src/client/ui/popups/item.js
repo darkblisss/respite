@@ -169,7 +169,7 @@ function statRows(state, key, d, from, qty) {
       if (d[own] || delta) add(label, d[own] ? `+${fmtStat(d[own])}` : "0", { delta });
     });
     const crit = deltaOf(diff("crit") * 100, critText);
-    if (d.crit || crit) add("Crit chance", d.crit ? `+${critText(d.crit * 100)}` : "0", { delta: crit });
+    if (d.crit || crit) add("Crit Chance", d.crit ? `+${critText(d.crit * 100)}` : "0", { delta: crit });
     if (state.player.klass) {
       const was = cmp && cmp.after ? cmp.displaced.reduce((n, k) => n + ((itemDef(k) || {}).veil || 0), 0) : d.veil;
       const veil = cmp && cmp.after ? deltaOf(d.veil - was, fmtStat) : null;

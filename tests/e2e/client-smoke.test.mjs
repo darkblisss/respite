@@ -101,10 +101,10 @@ await run(async () => {
     await accountMode(A, "smoke_a").then(() => check("the store switches to account mode as smoke_a", true))
       .catch(async () => check("the store switches to account mode as smoke_a", false, await storeStatus(A.page)));
     await waitForSync(A.page);
-    check("and syncs: online, nothing pending, a current-schema save from the server", await live(A, () => {
+    check("and syncs: online, nothing pending, a current-schema save from the server", await live(A, (schema) => {
       const s = window.__respite.store;
-      return s.status.conn === "online" && s.status.pending === 0 && s.state.schema === ENGINE_SCHEMA && s.state.meta.account === "smoke_a" && s.status.lastSyncAt > 0;
-    }));
+      return s.status.conn === "online" && s.status.pending === 0 && s.state.schema === schema && s.state.meta.account === "smoke_a" && s.status.lastSyncAt > 0;
+    }, ENGINE_SCHEMA));
     const firstSave = await serverSave(stack, "smoke_a");
     check("the server holds smoke_a's save", !!firstSave && firstSave.rev >= 1, firstSave && firstSave.rev);
     same("net.session() names the player", await live(A, async () => {

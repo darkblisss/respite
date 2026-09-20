@@ -434,7 +434,7 @@ export default {
       setAttr(huntHead, "hidden", !c);
       if (c) {
         setText(huntTitle, `The ${zone.name} of ${regionOfTier(c.tier).name}`);
-        setText(huntSub, `${atOnce(zone)} at once · ×${zone.xp} XP a kill`);
+        setText(huntSub, `${atOnce(zone)} at once · ×${zone.xp} XP per kill`);
         const line = companyLine(partyHere(ctx, c.tier, c.zone).names);
         if (line !== sigs.company) {
           sigs.company = line;

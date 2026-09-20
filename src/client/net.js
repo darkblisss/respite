@@ -363,6 +363,29 @@ export function createNet({
         p_offset: Math.max(0, Math.floor(Number(offset) || 0)),
       });
     },
+    /* Gear and tools, one row a base: how many lots stand behind the name, how many pieces,
+       the cheapest ask, and the rarity breakdown. Nothing here is buyable -- it is the shelf,
+       and `baseListings` is what is actually on it. `rarity` is a floor ("uncommon" means
+       uncommon and up) and reads on both, so the cheapest price shown is the cheapest price
+       that passes the filter. */
+    bases({ q = "", kind = null, tier = null, rarity = null, sort = "price", limit = 50 } = {}) {
+      return rpcRows("market_bases", {
+        p_q: String(q || "").trim(),
+        p_kind: kind || null,
+        p_tier: tier == null || tier === "" ? null : Number(tier),
+        p_rarity: rarity || null,
+        p_sort: sort === "newest" ? "newest" : "price",
+        p_limit: clampRows(limit, 50),
+      });
+    },
+    // Every open lot of one base, itemised in the same shape browse() answers. Cheapest first.
+    baseListings({ base = "", rarity = null, limit = 50 } = {}) {
+      return rpcRows("market_base_listings", {
+        p_base: String(base || "").trim(),
+        p_rarity: rarity || null,
+        p_limit: clampRows(limit, 50),
+      });
+    },
     /* Materials, as pools: one row an item key, with how many are to be had, the cheapest price
        and the price bands behind it. Your own listings are not counted, because you cannot buy
        them. */

@@ -676,9 +676,13 @@ function normalise(src, opts) {
     s.log.push({ t: clock, m: `Remedies are carried in the Satchel now. ${fmtWhole(n)} ${n === 1 ? "stack was" : "stacks were"} moved.` });
   }
 
+  /* The roll map holds the deterministic counters (a: action, k: kill, s: sovereign) and
+     two records that are not rolls at all but live by the same rule -- m: a monster felled,
+     i: an item base that has ever been in this camp's hands. The Collection reads both, and
+     a key nobody recognises is dropped rather than guessed at. */
   const rolls = obj(src.rolls);
   keysOf(rolls).forEach((k) => {
-    if (/^[amks]:[a-z0-9_]{1,40}$/.test(k) && finite(rolls[k])) s.rolls[k] = intIn(rolls[k], 0, BIG, 0);
+    if (/^[amksi]:[a-z0-9_]{1,40}$/.test(k) && finite(rolls[k])) s.rolls[k] = intIn(rolls[k], 0, BIG, 0);
   });
   s.serial = intIn(src.serial, 1, BIG, 1);
   s.lootLostAt = finite(src.lootLostAt) ? Math.floor(src.lootLostAt) : null;

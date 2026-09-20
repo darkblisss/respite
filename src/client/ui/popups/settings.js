@@ -139,15 +139,10 @@ registerPopup("settings", (ctx) => {
         h("div.set-head", h("h3.set-title", "Connection")),
         connection),
       h("section.set-section",
-        h("div.set-head", h("h3.set-title", "How saving works")),
-        h("p.set-copy", guest
-          ? "A guest camp lives in this tab and nowhere else. Signed in, the server keeps your camp, and it carries on there while you are away."
-          : "The server keeps your camp. What you do here reaches it within a second or two, and the camp carries on there while you are away.")),
-      h("section.set-section",
         h("div.danger-zone.vstack.gap-2",
           h("h3.set-title", "Start over"),
           h("p.set-copy", "Wipes this character back to a ruin. Skills, gear, gold and companions are all lost, for good."),
-          h("div", reset))),
+          h("div.set-foot", reset))),
     ],
     onClose: () => offs.splice(0).forEach((off) => off()),
   });

@@ -240,7 +240,7 @@ async function seedSave(user, seed, edit) {
 
 await section('the schema', async () => {
   const NEEDED = ['002_server.sql', '003_profiles_from_saves.sql', '004_leaderboard_boards.sql',
-    '005_wealth_board.sql', '006_party_hunts.sql', '007_market_pools.sql'];
+    '005_wealth_board.sql', '006_party_hunts.sql', '007_market_pools.sql', '010_market_bases.sql'];
   check('every migration this suite leans on ran (twice)', NEEDED.every((f) => migrationFiles.includes(f)), migrationFiles);
   same('and they ran in order, numbered, nothing else', migrationFiles, migrationFiles.slice().sort());
   check('the folder is all numbered .sql files', migrationFiles.every((f) => /^\d{3}_[a-z0-9_]+\.sql$/.test(f)), migrationFiles);
@@ -817,6 +817,109 @@ await section('the market: nobody learns a name', async () => {
   same('a third party reads no sale at all', stranger.rows[0].n, 0);
   const strangerPool = await asPlayer(outsider.id, 'select qty_left from public.market_pools($1, null, 50, 8)', ['Slag']);
   check('though the pool itself is open to them', strangerPool.rows.length === 1, strangerPool);
+
+  /* The shelf (migration 010). One row a base however many pieces stand on it, and opening it
+     hands back the same rows market_browse answers with, so the buy is unchanged. */
+  await editSave(hidden, (s2) => { put(s2, 'inv', 'slag_sword|common', 2); put(s2, 'inv', 'slag_sword|rare|c9.2', 1); });
+  NOW += 1000;
+  await play(hidden, cmd('marketList', { key: 'slag_sword|common', from: 'inv', qty: 2, price: 120 }));
+  NOW += 1000;
+  await play(hidden, cmd('marketList', { key: 'slag_sword|rare|c9.2', from: 'inv', qty: 1, price: 210 }));
+
+  const shelves = await asPlayer(nosy.id, 'select * from public.market_bases($1, null, null, null, $2, 50)', ['', 'price']);
+  const sword = shelves.rows && shelves.rows.find((r) => r.item_base === 'slag_sword');
+  check('market_bases shows one row a base, whatever stands on it',
+    !!sword && Number(sword.lots) === 3 && Number(sword.qty_left) === 4, sword || shelves);
+  same('and the cheapest ask on it is the shelf price', sword && Number(sword.price_min), 120);
+  same('with the rarities broken out, least first',
+    sword && sword.rarities.map((r) => [r.rarity, Number(r.lots), Number(r.qty)]),
+    [['common', 1, 2], ['rare', 1, 1], ['epic', 1, 1]]);
+  check('and no name of anybody on it', !!sword && !/seller|user_id/i.test(Object.keys(sword).join(',')), sword && Object.keys(sword));
+  same('the plainest name on the shelf is the one it wears', sword && sword.item_name, 'Slag Sword');
+  same('a stranger is told none of the lots are theirs', sword && Number(sword.mine_lots), 0);
+  const ownShelf = await asPlayer(hidden.id, 'select mine_lots::int as mine from public.market_bases($1, null, null, null, $2, 50)', ['Slag Sword', 'price']);
+  same('and a seller is told all three are', ownShelf.rows.map((r) => r.mine), [3]);
+
+  const floored = await asPlayer(nosy.id, 'select item_base, price_min::int as p from public.market_bases($1, null, null, $2, $3, 50)', ['', 'rare', 'price']);
+  const rareSword = floored.rows.find((r) => r.item_base === 'slag_sword');
+  same('a rarity floor lifts the shelf price to the cheapest that passes it', rareSword && rareSword.p, 210);
+  const epicOnly = await asPlayer(nosy.id, 'select count(*)::int as n from public.market_bases($1, null, null, $2, $3, 50)', ['', 'legendary', 'price']);
+  same('and a floor nothing reaches empties the page', epicOnly.rows[0].n, 0);
+  const noPooled = await asPlayer(nosy.id, 'select count(*)::int as n from public.market_bases($1, $2, null, null, $3, 50)', ['', 'material', 'price']);
+  same('a shelf is never a material', noPooled.rows[0].n, 0);
+
+  const lots = await asPlayer(nosy.id, 'select * from public.market_base_listings($1, null, 50)', ['slag_sword']);
+  same('opening the shelf lists every lot, cheapest first',
+    lots.rows.map((r) => Number(r.price_each)), [120, 210, 300]);
+  check('each carrying its own rarity and no seller',
+    lots.rows.every((r) => !!r.rarity && r.mine === false && !/seller|user_id/i.test(Object.keys(r).join(','))), lots.rows[0]);
+  const ownLots = await asPlayer(hidden.id, 'select mine from public.market_base_listings($1, null, 50)', ['slag_sword']);
+  same('and marking a seller their own', ownLots.rows.map((r) => r.mine), [true, true, true]);
+  const rareLots = await asPlayer(nosy.id, 'select price_each::int as p from public.market_base_listings($1, $2, 50)', ['slag_sword', 'epic']);
+  same('the floor reads on the sheet too', rareLots.rows.map((r) => r.p), [300]);
+  const nothing = await asPlayer(nosy.id, 'select count(*)::int as n from public.market_base_listings($1, null, 50)', ['']);
+  same('and an empty base asks for nothing', nothing.rows[0].n, 0);
+});
+
+await section('a commander, published', async () => {
+  NOW += MINUTE;
+  const looker = newUser('looker');
+  const looked = newUser('looked');
+  await play(looker);
+  await play(looked);
+
+  const asPlayer = async (userId, sql, params = []) => {
+    try {
+      await db.exec('set role authenticated');
+      await db.query('select set_config(\'request.jwt.claim.sub\', $1, false)', [userId]);
+      return { rows: (await db.query(sql, params)).rows, error: null };
+    } catch (e) {
+      return { rows: null, error: e.message };
+    } finally {
+      await db.exec('reset role');
+      await db.query('select set_config(\'request.jwt.claim.sub\', \'\', false)');
+    }
+  };
+
+  /* The Collection is kept in the save's roll map: m: a foe felled, i: an item that has
+     been in these hands (src/shared/storage.js). Migration 011 lifts both out on every
+     save write and the profile hands them over. */
+  await editSave(looked, (st) => {
+    st.rolls['m:mire_rat'] = 12;
+    st.rolls['m:fen_stalker'] = 0;         // met and never put down: not felled
+    st.rolls['i:slag_delve'] = 4;
+    st.rolls['i:slag_sword'] = 1;
+    st.rolls['a:delving_slag'] = 900;      // a real roll counter, and nobody's business
+    st.rolls['k:mire_rat'] = 12;
+  });
+  NOW += 1000;
+  await play(looked);                      // a save write is what moves the profile
+
+  const prof = await asPlayer(looker.id, 'select * from public.player_profile($1)', ['LOOKED']);
+  const row = prof.rows && prof.rows[0];
+  check('a commander is found whatever case the name is typed in', !!row && row.username === 'looked', prof);
+  same('their bestiary is published, felled only, with the count',
+    row && row.collection.felled, { mire_rat: 12 });
+  same('and the things they have held, as bare names',
+    row && row.collection.found, ['slag_delve', 'slag_sword']);
+  check('and no roll counter of theirs leaves with it',
+    !!row && !JSON.stringify(row.collection).includes('delving_slag') && !JSON.stringify(row.collection).includes('"k:'),
+    row && row.collection);
+  check('nothing on a profile names a user', !!row && !/user_id|email/i.test(Object.keys(row).join(',')), row && Object.keys(row));
+
+  const empty = await asPlayer(looker.id, 'select collection from public.player_profile($1)', ['looker']);
+  same('a camp that has collected nothing publishes an empty one',
+    empty.rows[0].collection, { felled: {}, found: [] });
+
+  const gone = await asPlayer(looker.id, 'select count(*)::int as n from public.player_profile($1)', ['nobodyatall']);
+  same('a name nobody answers to is no rows, not an error', gone.rows[0].n, 0);
+  let shut = '';
+  try {
+    await db.query('select * from public.player_profile($1)', ['looked']);
+  } catch (e) {
+    shut = e.message;
+  }
+  check('and the door is shut to anyone not signed in', /Not signed in/.test(shut), shut);
 });
 
 await section('the market: refusals', async () => {

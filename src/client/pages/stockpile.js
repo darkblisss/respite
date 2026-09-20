@@ -457,14 +457,13 @@ function toolRack(ctx) {
 
 /* ================= 3. THE LEDGER ================= */
 
+/* What the CAMP has done. Kills, falls and Sovereigns are the vanguard's own record,
+   not the camp's, and they are on the Character page where they belong. */
 const LEDGER = [
   ["Gold on hand", (s) => fmtGold(s.player.gold), "gold"],
   ["Gold earned", (s) => fmtGold(s.stats.goldEarned)],
   ["Crafted", (s) => fmtWhole(s.stats.crafted)],
   ["Actions worked", (s) => fmtWhole(s.stats.actions)],
-  ["Kills", (s) => fmtWhole(s.stats.kills)],
-  ["Deaths", (s) => fmtWhole(s.stats.deaths)],
-  ["Sovereigns felled", (s) => fmtWhole(s.stats.bosses)],
 ];
 
 function campLedger() {

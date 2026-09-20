@@ -104,3 +104,19 @@
 @media (max-width: 599px) {
   .char-stack .standing { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* ================= 5. THE COLLECTION'S OWN TABS AND ITEM TILES ================= */
+/* The four views (monsters, gear, components, everything) sit under the section
+   head, not in the page's tab row: they are a filter on one panel. */
+
+.coll-tabs { margin: var(--sp-3) 0 var(--sp-4); }
+
+/* An item's tile is a foe's tile without the monster's den behind the art: the
+   registry's own glyph on the surface the rest of the kit uses. */
+.coll-art {
+  background: var(--wash);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+  color: var(--bone-dim);
+}
+.coll-art .ico { width: 26px; height: 26px; }
+button.coll-tile:hover .coll-art { box-shadow: inset 0 0 0 1px var(--line-strong); }

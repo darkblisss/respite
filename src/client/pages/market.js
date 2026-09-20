@@ -14,10 +14,20 @@
    how many are to be had, the cheapest price, and the price
    bands behind it. A buy names the item, a quantity and the most
    it will pay each, and the realm fills it cheapest first across
-   whoever is selling. Gear and tools are not fungible, so they
-   stay one row a piece. Nobody's name is on either: the market
-   is anonymous both ways, and the only listings this page can
-   tell you about are your own.
+   whoever is selling.
+
+   Gear and tools are not fungible -- one Slag Sword is Rare and
+   worked to +7, the next is a plain Common -- so they cannot
+   pool. They are shelved instead: one row a base, at the
+   cheapest it can be had for, and opening it shows every piece
+   actually on the shelf with its own rarity, price and time
+   left. The buy still runs against one listing, as it always
+   did. A rarity floor on the bar reads on both, so the cheapest
+   price on a shelf is the cheapest price that passes it.
+
+   Nobody's name is on any of it: the market is anonymous both
+   ways, and the only listings this page can tell you about are
+   your own.
 
    Rows are rebuilt only when what the realm said changes; time
    left and pending buttons repaint in place. Guests get a
@@ -42,15 +52,28 @@ const SEARCH_MS = 300;
 const ASK_MS = 15 * 1000;
 const SHOWN = 50;
 const BANDS_SHOWN = 3;    // price bands in a pool's row; the buy sheet lists the rest
+const RARS_SHOWN = 3;     // rarities named in a shelf's row; the sheet lists them all
+const SHELF_ROWS = 50;    // lots a shelf sheet draws
 const INTO = { inv: "into Belongings", bank: "into the Stockpile", vault: "into the Vault" };
 
+/* The rarity floor, as the bar offers it: "Rare and up" is every piece that is Rare or
+   better. Materials have no rarity at all, so any floor but Any hides them -- which is
+   what a player asking for Epic gear meant. */
+const FLOORS = [
+  { id: "", label: "Any rarity" },
+  { id: "uncommon", label: "Uncommon and up" },
+  { id: "rare", label: "Rare and up" },
+  { id: "epic", label: "Epic and up" },
+  { id: "legendary", label: "Legendary and up" },
+];
+
 /* Remedies are materials to the realm, so that split is made here. `pool` asks for the
-   aggregated material pools, `kind` for itemised listings of that kind; All wants both. */
+   aggregated material pools, `shelf` for gear and tools grouped by base; All wants both. */
 const KINDS = [
-  { id: "all", label: "All", kind: null, pool: true },
+  { id: "all", label: "All", kind: null, pool: true, shelf: true },
   { id: "material", label: "Materials", pool: true, keep: (r) => !isRemedy(r.item_key) },
-  { id: "gear", label: "Gear", kind: "gear" },
-  { id: "tool", label: "Tools", kind: "tool" },
+  { id: "gear", label: "Gear", kind: "gear", shelf: true },
+  { id: "tool", label: "Tools", kind: "tool", shelf: true },
   { id: "remedy", label: "Remedies", pool: true, keep: (r) => isRemedy(r.item_key) },
 ];
 
@@ -93,8 +116,37 @@ function bandText(bands, shown = BANDS_SHOWN) {
 // The pool as this camp can actually buy it: only the bands the realm priced.
 const poolDepth = (bands) => bands.reduce((n, b) => n + b.qty, 0);
 
+// A shelf's rarity breakdown as the realm sent it: least rarity first, only what it counted.
+function rarsOf(row) {
+  const raw = Array.isArray(row && row.rarities) ? row.rarities : [];
+  return raw
+    .map((r) => ({
+      rarity: String((r && r.rarity) || "common"),
+      lots: Math.floor(num(r && r.lots)),
+      qty: Math.floor(num(r && r.qty)),
+      min: Math.floor(num(r && r.min)),
+    }))
+    .filter((r) => r.lots > 0);
+}
+
+// "4 Common, 2 Rare", and what is past the count is said as a number rather than named.
+function rarText(rars, shown = RARS_SHOWN) {
+  const said = rars.slice(0, shown).map((r) => `${fmtWhole(r.qty)} ${rarityDef(r.rarity).name}`);
+  const rest = rars.length - said.length;
+  if (rest > 0) said.push(`${fmtWhole(rest)} more`);
+  return said.join(" · ");
+}
+
+// The dearest rarity on a shelf, which is the one the row's art is tinted with.
+function topRarity(rars) {
+  return rars.length ? rars[rars.length - 1].rarity : "common";
+}
+
+// A row from the realm names either one piece (item_key) or a whole shelf (item_base).
+const keyOf = (row) => String((row && (row.item_key || row.item_base)) || "");
+
 function rarityOf(row) {
-  const d = itemDef(row.item_key);
+  const d = itemDef(keyOf(row));
   if (row.rarity) return row.rarity;
   return d && d.kind !== "material" && d.rarity ? d.rarity : "common";
 }
@@ -104,14 +156,14 @@ function itemArt(key, rarity, cls = "art-sm") {
   return h("div.art", { class: cls, "data-rarity": rarity || "common", "aria-hidden": "true" }, iconEl(d ? d.icon : "unknown"));
 }
 
-// "Rare weapon · Lv10", "Bars · Lv10", "Reagent", "Tool · Delving · Lv10".
+// "Weapon · Lv10", "Bars · Lv10", "Reagent", "Tool · Delving · Lv10".
 function kindLine(row) {
-  const d = itemDef(row.item_key);
+  const d = itemDef(keyOf(row));
   const tier = row.item_tier != null ? row.item_tier : d && d.tier;
   const tierText = tier ? tierLabel(tier) : null;
   let parts;
   if (!d) parts = ["Goods", tierText];
-  else if (d.kind === "gear") parts = [`${rarityDef(d.rarity).name} ${String(GameData.SLOT_LABELS[d.slot] || "gear").toLowerCase()}`, tierText];
+  else if (d.kind === "gear") parts = [String(GameData.SLOT_LABELS[d.slot] || "Gear"), tierText];
   else if (d.kind === "tool") parts = ["Tool", skillName(d.forSkill), tierText];
   else if (d.heal > 0) parts = [`Remedy · Restores ${fmtWhole(d.heal)} HP`];
   else if (d.reagent) parts = ["Reagent"];
@@ -232,7 +284,7 @@ export default {
 
 function marketBody(ctx, page, actions) {
   let alive = true;
-  const filt = { q: "", kind: "all", tier: 0, sort: "price" };
+  const filt = { q: "", kind: "all", tier: 0, rarity: "", sort: "price" };
   const board = { rows: null, pools: null, error: null, stale: false, token: 0, at: 0, sig: "" };
   const mine = { rows: null, error: null, token: 0, sig: "" };
   const trades = { rows: null, error: null, token: 0, sig: "" };
@@ -246,7 +298,7 @@ function marketBody(ctx, page, actions) {
   // The realm tells a player about their own listings and nobody else's; `mine` is all there is.
   const isMine = (row) => row.mine === true;
   const kindDef = () => KINDS.find((k) => k.id === filt.kind) || KINDS[0];
-  const filtered = () => !!(filt.q.trim() || filt.kind !== "all" || filt.tier);
+  const filtered = () => !!(filt.q.trim() || filt.kind !== "all" || filt.tier || filt.rarity);
 
   /* ---------- the listings card ---------- */
 
@@ -256,6 +308,8 @@ function marketBody(ctx, page, actions) {
   const tierSel = h("select.select.select-sm", { "aria-label": "Tier" },
     h("option", { value: "0" }, "All tiers"),
     GameData.TIERS.map((t) => h("option", { value: String(t.i) }, tierLabel(t.i))));
+  const rarSel = h("select.select.select-sm", { "aria-label": "Rarity" },
+    FLOORS.map((f) => h("option", { value: f.id }, f.label)));
   const sortSel = h("select.select.select-sm", { "aria-label": "Sort" },
     h("option", { value: "price" }, "Cheapest"),
     h("option", { value: "newest" }, "Newest"));
@@ -266,15 +320,19 @@ function marketBody(ctx, page, actions) {
   const listSub = h("p.card-sub", "Asking the realm");
   const listBox = h("div.listings", { role: "table", "aria-label": "Listings", "aria-busy": "true" });
   const listCard = h("section.card.card-flush",
-    h("div.card-head",
-      h("div", h("h2.card-title", "Listings"), listSub),
-      h("div.market-bar.grow", h("div.input-wrap.market-search", iconEl("search"), search), seg, tierSel, sortSel)),
+    h("div.card-head", h("div", h("h2.card-title", "Listings"), listSub)),
+    h("div.market-bar",
+      h("div.input-wrap.market-search", iconEl("search"), search),
+      seg,
+      // The three narrowing controls travel together, so they drop to a second line as a set
+      // rather than one of them trailing off on its own.
+      h("div.market-filters", tierSel, rarSel, sortSel)),
     listBox);
 
   /* ---------- my listings and recent sales ---------- */
 
   const mineChip = h("span.chip", "0 open");
-  const mineHead = cardHead("My listings", { sub: `Up to ${E.marketMaxListings} at once. Unsold goods come back by post after ${E.marketListingDays} days.`, actions: mineChip });
+  const mineHead = cardHead("My listings", { sub: `Up to ${E.marketMaxListings}. Unsold goods come back by post after ${E.marketListingDays} days.`, actions: mineChip });
   const mineBox = h("div");
   const tradesHead = cardHead("Recent sales", { sub: `What you sold and what you bought. Sales pay by post, less the market's ${FEE_PCT}%; buying pays the same ${FEE_PCT}% on top.` });
   const tradesBox = h("div");
@@ -303,13 +361,14 @@ function marketBody(ctx, page, actions) {
     }
   }
 
-  /* Two asks, because the realm keeps two books: the material pools and the itemised
-     listings. A tab that wants only one makes only one. */
+  /* Two asks, because the realm keeps two books: the material pools and the gear shelves.
+     A tab that wants only one makes only one, and a rarity floor closes the pools
+     altogether -- a material has no rarity, so none of them passes one. */
   async function loadListings({ quiet = false } = {}) {
     const token = ++board.token;
     const k = kindDef();
-    const wantPools = !!k.pool;
-    const wantRows = k.id === "all" || !!k.kind;
+    const wantPools = !!k.pool && !filt.rarity;
+    const wantRows = !!k.shelf;
     if (!quiet || (!board.rows && !board.pools)) {
       board.rows = null;
       board.pools = null;
@@ -322,7 +381,7 @@ function marketBody(ctx, page, actions) {
         ? ask(() => ctx.net.market.pools({ q: filt.q.trim(), tier: filt.tier || null, limit: k.keep ? SHOWN * 2 : SHOWN }))
         : { rows: [], error: null },
       wantRows
-        ? ask(() => ctx.net.market.browse({ q: filt.q.trim(), kind: k.kind, tier: filt.tier || null, sort: filt.sort, limit: SHOWN, offset: 0 }))
+        ? ask(() => ctx.net.market.bases({ q: filt.q.trim(), kind: k.kind, tier: filt.tier || null, rarity: filt.rarity || null, sort: filt.sort, limit: SHOWN }))
         : { rows: [], error: null },
     ]);
     if (!alive || token !== board.token) return;
@@ -395,10 +454,10 @@ function marketBody(ctx, page, actions) {
     const pools = board.pools;
     const rows = board.rows;
     const n = pools.length + rows.length;
-    // A pool is a whole book, not a listing, so it is counted as one and named as what it is.
+    // Neither a pool nor a shelf is a listing, so both are counted as one and named as what they are.
     const said = [];
     if (pools.length) said.push(`${fmtWhole(pools.length)} ${pools.length === 1 ? "pool" : "pools"}`);
-    if (rows.length) said.push(`${fmtWhole(rows.length)} ${rows.length === 1 ? "listing" : "listings"}`);
+    if (rows.length) said.push(`${fmtWhole(rows.length)} ${rows.length === 1 ? "shelf" : "shelves"}`);
     let count;
     if (!n) count = filtered() ? "Nothing matches" : "Nothing for sale";
     else if (n >= SHOWN) count = `The ${SHOWN} ${filt.sort === "newest" ? "newest" : "cheapest"}`;
@@ -408,7 +467,7 @@ function marketBody(ctx, page, actions) {
 
     const acc = me();
     const sig = `${acc.userId}|${pools.map((p) => `${p.item_key}:${p.qty_left}:${p.price_min}:${bandsOf(p).length}`).join(",")}`
-      + `|${rows.map((r) => `${r.id}:${r.qty_left}:${r.price_each}:${r.expires_at}`).join(",")}`;
+      + `|${rows.map((r) => `${r.item_base}:${r.lots}:${r.qty_left}:${r.price_min}:${rarsOf(r).length}`).join(",")}`;
     if (sig === board.sig) return;
     board.sig = sig;
 
@@ -433,13 +492,13 @@ function marketBody(ctx, page, actions) {
     }
 
     // The pools first: a commodity book is what most of a market is.
-    shown = [...board.pools.map(poolRow), ...board.rows.map(listingRow)];
+    shown = [...board.pools.map(poolRow), ...board.rows.map(shelfRow)];
     listBox.replaceChildren(
       h("div.listing-head", { role: "row" },
         h("span", { role: "columnheader" }, "Item"),
         h("span.num", { role: "columnheader" }, "Available"),
         h("span.num", { role: "columnheader" }, "Cheapest"),
-        h("span", { role: "columnheader" }, "Price bands"),
+        h("span", { role: "columnheader" }, "What's there"),
         h("span", { role: "columnheader" }, h("span.sr-only", "Buy"))),
       ...shown.map((s) => s.node));
     paintClock(true);
@@ -469,29 +528,34 @@ function marketBody(ctx, page, actions) {
     return { row, node, buy, time: null, pool: true, bands, id: `pool:${row.item_key}` };
   }
 
-  function listingRow(row) {
-    const rarity = rarityOf(row);
-    const own = isMine(row);
-    const name = String(row.item_name || "Goods");
-    const time = h("span");
-    const buy = own
-      ? h("button.btn.btn-quiet.btn-sm", { type: "button", "data-act": "cancel", "aria-label": `Take ${name} off the market` }, "Remove")
-      : h("button.btn.btn-gold.btn-soft.btn-sm", { type: "button", "data-act": "buy", "aria-label": `Buy ${name}` }, "Buy");
-    const node = h("div.listing", { role: "row", class: { "is-mine": own }, dataset: { id: String(row.id) } },
+  /* One row a base, not one a piece: the sword once, at the cheapest it can be had for, with
+     what is actually on the shelf underneath. The art carries the dearest rarity standing
+     there, so a shelf with one Legendary on it looks like one from across the page. Opening it
+     is the only way to buy: every piece has its own price and its own listing. */
+  function shelfRow(row) {
+    const base = String(row.item_base || "");
+    const rars = rarsOf(row);
+    const d = itemDef(base);
+    const name = d ? d.name : String(row.item_name || "Goods");
+    const lots = Math.max(1, Math.floor(num(row.lots)));
+    const top = topRarity(rars);
+    const own = Math.floor(num(row.mine_lots)) > 0;
+    const view = h("button.btn.btn-gold.btn-soft.btn-sm", { type: "button", "data-act": "shelf", "aria-label": `What is on the ${name} shelf` }, lots === 1 ? "View" : `View ${fmtWhole(lots)}`);
+    const node = h("div.listing", { role: "row", class: { "is-mine": own }, dataset: { base } },
       h("div.listing-item", { role: "cell" },
-        itemArt(row.item_key, rarity),
+        itemArt(base, top),
         h("div.lr-main",
-          h("button.lr-title.listing-name", { type: "button", class: rarity !== "common" && `rar-${rarity}`, "data-act": "item", "aria-label": `${name}: details` }, name),
-          h("div.lr-sub", `${kindLine(row)} · `, time))),
+          h("button.lr-title.listing-name", { type: "button", class: top !== "common" && `rar-${top}`, "data-act": "shelf", "aria-label": `${name}: what is on the shelf` }, name),
+          h("div.lr-sub", kindLine(row)))),
       h("div.listing-qty", { role: "cell" }, h("span.listing-l", "Available"), fmtWhole(num(row.qty_left))),
-      h("div.listing-price", { role: "cell" }, h("span.listing-l", "Each"), fmtGold(num(row.price_each))),
+      h("div.listing-price", { role: "cell" }, h("span.listing-l", "Cheapest"), fmtGold(num(row.price_min))),
       // No "Yours" badge: a pill that isn't a button reads as one. The row's own
       // tint and left accent (.listing.is-mine) carry it instead.
       h("div.listing-depth", { role: "cell" },
-        h("span.listing-l", "Bands"),
-        h("span.truncate", own ? "Yours, one lot" : "One lot")),
-      h("div.listing-buy", { role: "cell" }, buy));
-    return { row, node, buy, time, own, id: String(row.id) };
+        h("span.listing-l", "On the shelf"),
+        h("span.truncate", rarText(rars))),
+      h("div.listing-buy", { role: "cell" }, view));
+    return { row, node, buy: view, time: null, shelf: true, own, rars, base, id: `base:${base}` };
   }
 
   // Time left and pending buttons, once a second (and right after a rebuild).
@@ -501,8 +565,8 @@ function marketBody(ctx, page, actions) {
     lastSecond = second;
     const now = ctx.now;
     shown.forEach((s) => {
-      // A pool has no one expiry: the listings under it come and go on their own.
-      const left = s.pool ? 1 : when(s.row.expires_at) - now;
+      // A pool and a shelf have no one expiry: the listings under them come and go on their own.
+      const left = s.pool || s.shelf ? 1 : when(s.row.expires_at) - now;
       if (s.time) setText(s.time, left > 0 ? `${fmtTime(left)} left` : "Expired");
       const wait = pending.has(s.id);
       toggleClass(s.buy, "is-loading", wait);
@@ -864,6 +928,95 @@ function marketBody(ctx, page, actions) {
     paintPlan();
   }
 
+  /* ---------- what is on a shelf ---------- */
+
+  /* The sheet behind a shelf row: every open lot of that base, cheapest first, each with its
+     own rarity, what the Veil has been worked into it, its price and its time left. This is
+     where a buy happens -- a shelf is a way of reading the market, not a thing to buy -- so
+     each row carries the same Buy this page has always had, and Remove on your own. It asks
+     the realm again every time it opens, because a shelf drawn thirty seconds ago is a
+     promise nobody made. */
+  async function openShelf(entry) {
+    const base = entry.base;
+    const d = itemDef(base);
+    const name = d ? d.name : String(entry.row.item_name || "Goods");
+    const floor = FLOORS.find((f) => f.id === filt.rarity);
+    const box = h("div");
+    let m = null;
+    let lots = [];
+
+    function draw() {
+      if (!lots.length) {
+        box.replaceChildren(emptyState({
+          icon: "market",
+          title: "Nothing left on it",
+          text: "Every piece here has been bought or taken back. The shelf will fill again.",
+        }));
+        return;
+      }
+      const now = ctx.now;
+      box.replaceChildren(h("div.list", lots.map((row) => {
+        const rarity = rarityOf(row);
+        const own = isMine(row);
+        const label = String(row.item_name || name);
+        const left = when(row.expires_at) - now;
+        const qty = Math.max(1, Math.floor(num(row.qty_left)));
+        const each = num(row.price_each);
+        const act = own
+          ? h("button.btn.btn-quiet.btn-sm", { type: "button", "data-act": "cancel", "aria-label": `Take ${label} off the market` }, "Remove")
+          : h("button.btn.btn-gold.btn-soft.btn-sm", { type: "button", "data-act": "buy", "aria-label": `Buy ${label}` }, "Buy");
+        act.disabled = pending.has(String(row.id)) || left <= 0;
+        return h("div.list-row", { class: { "is-mine": own }, dataset: { id: String(row.id) } },
+          itemArt(row.item_key, rarity),
+          h("div.lr-main",
+            h("button.lr-title", { type: "button", class: rarity !== "common" && `rar-${rarity}`, "data-act": "item" }, label),
+            h("div.lr-sub", [
+              `${rarityDef(rarity).name}${qty > 1 ? ` · ${fmtWhole(qty)} of them` : ""}`,
+              left > 0 ? `${fmtTime(left)} left` : "Expired",
+            ].join(" · "))),
+          h("div.lr-end", h("span.price", `${fmtGold(each)} each`), act));
+      })));
+    }
+
+    async function pull() {
+      const res = await ask(() => ctx.net.market.baseListings({ base, rarity: filt.rarity || null, limit: SHELF_ROWS }));
+      if (!m || m.closed) return;
+      if (res.error) {
+        box.replaceChildren(failState(res.error, () => { box.replaceChildren(skeletonList(3)); pull(); }));
+        return;
+      }
+      lots = Array.isArray(res.rows) ? res.rows : [];
+      draw();
+    }
+
+    const off = on(box, "click", "[data-act]", async (e, btn) => {
+      const node = btn.closest(".list-row");
+      const row = node && lots.find((r) => String(r.id) === node.dataset.id);
+      if (!row) return;
+      if (btn.dataset.act === "item") { openPopup("item", ctx, row.item_key, { from: null, readOnly: true }); return; }
+      if (btn.dataset.act === "buy") await buyListing(row);
+      else if (btn.dataset.act === "cancel") await takeBack(row);
+      if (m && !m.closed) pull();
+    });
+
+    m = openModal({
+      title: name,
+      sub: [
+        `${fmtWhole(Math.floor(num(entry.row.lots)))} on the market · from ${fmtGold(num(entry.row.price_min))} each`,
+        floor && floor.id ? floor.label.toLowerCase() : null,
+      ].filter(Boolean).join(" · "),
+      art: d ? d.icon : "market",
+      artRarity: topRarity(entry.rars) !== "common" ? topRarity(entry.rars) : null,
+      artTone: "gold",
+      size: "lg",
+      body: box,
+      actions: [{ label: "Close", kind: "quiet" }],
+      onClose: () => off(),
+    });
+    box.replaceChildren(skeletonList(Math.min(4, Math.max(1, Math.floor(num(entry.row.lots))))));
+    pull();
+  }
+
   /* ---------- taking a listing back ---------- */
 
   async function takeBack(row) {
@@ -903,7 +1056,8 @@ function marketBody(ctx, page, actions) {
     // A pool is always cheapest first: there is no newest in a price band, so on the tabs that
     // are only pools the sort would decide nothing and is not shown.
     const k = kindDef();
-    sortSel.hidden = !(k.id === "all" || k.kind);
+    sortSel.hidden = !k.shelf;
+    rarSel.hidden = !k.shelf;
   }
 
   function clearFilters() {
@@ -911,8 +1065,10 @@ function marketBody(ctx, page, actions) {
     filt.q = "";
     filt.kind = "all";
     filt.tier = 0;
+    filt.rarity = "";
     search.value = "";
     tierSel.value = "0";
+    rarSel.value = "";
     paintSeg();
     loadListings();
   }
@@ -920,10 +1076,14 @@ function marketBody(ctx, page, actions) {
   const offs = [
     on(listBox, "click", "[data-act]", (e, btn) => {
       const node = btn.closest(".listing");
-      const id = node && (node.dataset.key ? `pool:${node.dataset.key}` : node.dataset.id);
+      let id = null;
+      if (node && node.dataset.key) id = `pool:${node.dataset.key}`;
+      else if (node && node.dataset.base) id = `base:${node.dataset.base}`;
+      else if (node) id = node.dataset.id;
       const s = id && shown.find((x) => x.id === id);
       if (!s) return;
-      if (btn.dataset.act === "item") openPopup("item", ctx, s.row.item_key, { from: null, readOnly: true });
+      if (btn.dataset.act === "shelf") openShelf(s);
+      else if (btn.dataset.act === "item") openPopup("item", ctx, s.row.item_key, { from: null, readOnly: true });
       else if (btn.dataset.act === "buy") (s.pool ? buyPool(s) : buyListing(s.row));
       else if (btn.dataset.act === "cancel") takeBack(s.row);
     }),
@@ -966,6 +1126,11 @@ function marketBody(ctx, page, actions) {
     loadListings();
   });
   tierSel.addEventListener("change", () => { filt.tier = Number(tierSel.value) || 0; loadListings(); });
+  // A rarity floor is a gear question, so the tabs that are only pools lose the control with it.
+  rarSel.addEventListener("change", () => {
+    filt.rarity = FLOORS.some((f) => f.id === rarSel.value) ? rarSel.value : "";
+    loadListings();
+  });
   sortSel.addEventListener("change", () => { filt.sort = sortSel.value === "newest" ? "newest" : "price"; loadListings(); });
   // Only a refresh the player asked for spins; the quiet ones every half minute don't.
   refreshBtn.addEventListener("click", () => {

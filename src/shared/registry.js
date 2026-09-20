@@ -809,45 +809,47 @@ function buildRegistry() {
      covering what it is worst at. */
   const MINOR = CONFIG.path.minorRanks;
   const KEY = CONFIG.path.keystoneCost;
-  const minor = (id, name, band, note, per) => ({ id, name, band, ranks: MINOR, cost: 1, keystone: false, note, per });
-  const keystone = (id, name, note, per) => ({ id, name, band: 3, ranks: 1, cost: KEY, keystone: true, note, per });
+  /* `icon` is the node's face on the Path grid, which is icons and nothing else: the name
+     and the note are the tooltip's business. Any name from src/client/ui/icons.js does. */
+  const minor = (id, name, band, note, per, icon) => ({ id, name, band, ranks: MINOR, cost: 1, keystone: false, note, per, icon });
+  const keystone = (id, name, note, per, icon) => ({ id, name, band: 3, ranks: 1, cost: KEY, keystone: true, note, per, icon });
 
   const PATHS = {
     warrior: [
-      minor("wr_ironhide", "Ironhide", 1, "The armour sits where it should.", { defencePct: 0.03 }),
-      minor("wr_lungs", "Deep Lungs", 1, "You last longer than the thing opposite.", { healthPct: 0.03 }),
-      minor("wr_hammerhand", "Hammerhand", 1, "Every blow carries more of you in it.", { attackPct: 0.025 }),
-      minor("wr_braced", "Braced", 1, "The Veil gathers faster in a stance held.", { veilFlat: 2 }),
-      minor("wr_sunder", "Sunder", 2, "Armour is a suggestion.", { penFlat: 0.02 }),
-      minor("wr_stonewall", "Stonewall", 2, "Heavier, and harder to move.", { healthPct: 0.015, defencePct: 0.015 }),
-      minor("wr_weight", "Weight of the Blow", 2, "A full Veil lands heavier.", { techPct: 0.04 }),
-      minor("wr_grimpace", "Grim Pace", 2, "Slow is not the same as late.", { speedPct: 0.015 }),
-      keystone("wr_devastation", "Devastation", "The strike a full Veil buys stops being a blow and becomes a verdict.", { techPct: 0.35 }),
-      keystone("wr_vanguard", "Bulwark of the Vanguard", "You are the ground the party stands on.", { defencePct: 0.12, healthPct: 0.08 }),
+      minor("wr_ironhide", "Ironhide", 1, "The armour sits where it should.", { defencePct: 0.03 }, "plate"),
+      minor("wr_lungs", "Deep Lungs", 1, "You last longer than the thing opposite.", { healthPct: 0.03 }, "heart"),
+      minor("wr_hammerhand", "Hammerhand", 1, "Every blow carries more of you in it.", { attackPct: 0.025 }, "hammer"),
+      minor("wr_braced", "Braced", 1, "The Veil gathers faster in a stance held.", { veilFlat: 2 }, "ward"),
+      minor("wr_sunder", "Sunder", 2, "Armour is a suggestion.", { penFlat: 0.02 }, "axe"),
+      minor("wr_stonewall", "Stonewall", 2, "Heavier, and harder to move.", { healthPct: 0.015, defencePct: 0.015 }, "shield"),
+      minor("wr_weight", "Weight of the Blow", 2, "A full Veil lands heavier.", { techPct: 0.04 }, "swords"),
+      minor("wr_grimpace", "Grim Pace", 2, "Slow is not the same as late.", { speedPct: 0.015 }, "treads"),
+      keystone("wr_devastation", "Devastation", "The strike a full Veil buys stops being a blow and becomes a verdict.", { techPct: 0.35 }, "greatblade"),
+      keystone("wr_vanguard", "Bulwark of the Vanguard", "You are the ground the party stands on.", { defencePct: 0.12, healthPct: 0.08 }, "crown"),
     ],
     rogue: [
-      minor("rg_quickhands", "Quick Hands", 1, "Two where there was one.", { speedPct: 0.02 }),
-      minor("rg_keenedge", "Keen Edge", 1, "You find the seam more often.", { critFlat: 0.01 }),
-      minor("rg_sinew", "Sinew", 1, "Thin is not the same as weak.", { attackPct: 0.025 }),
-      minor("rg_lightfoot", "Lightfoot", 1, "Harder to catch, and harder to keep hold of.", { healthPct: 0.025 }),
-      minor("rg_killerseye", "Killer's Eye", 2, "When it lands, it ends things.", { critDmgFlat: 0.04 }),
-      minor("rg_findthegap", "Find the Gap", 2, "Plate has hinges.", { penFlat: 0.02 }),
-      minor("rg_coiled", "Coiled", 2, "The Veil winds tighter with every strike.", { veilFlat: 2 }),
-      minor("rg_openvein", "Open the Vein", 2, "An Ambush cuts deeper.", { techPct: 0.04 }),
-      keystone("rg_perfect", "Perfect Ambush", "Nothing you walk in on gets to be surprised twice.", { techPct: 0.40 }),
-      keystone("rg_shadowstep", "Shadowstep", "You are already somewhere else.", { critFlat: 0.08, speedPct: 0.06 }),
+      minor("rg_quickhands", "Quick Hands", 1, "Two where there was one.", { speedPct: 0.02 }, "gauntlets"),
+      minor("rg_keenedge", "Keen Edge", 1, "You find the seam more often.", { critFlat: 0.01 }, "knife"),
+      minor("rg_sinew", "Sinew", 1, "Thin is not the same as weak.", { attackPct: 0.025 }, "blade"),
+      minor("rg_lightfoot", "Lightfoot", 1, "Harder to catch, and harder to keep hold of.", { healthPct: 0.025 }, "treads"),
+      minor("rg_killerseye", "Killer's Eye", 2, "When it lands, it ends things.", { critDmgFlat: 0.04 }, "eye"),
+      minor("rg_findthegap", "Find the Gap", 2, "Plate has hinges.", { penFlat: 0.02 }, "sickle"),
+      minor("rg_coiled", "Coiled", 2, "The Veil winds tighter with every strike.", { veilFlat: 2 }, "sparkle"),
+      minor("rg_openvein", "Open the Vein", 2, "An Ambush cuts deeper.", { techPct: 0.04 }, "skull"),
+      keystone("rg_perfect", "Perfect Ambush", "Nothing you walk in on gets to be surprised twice.", { techPct: 0.40 }, "cowl"),
+      keystone("rg_shadowstep", "Shadowstep", "You are already somewhere else.", { critFlat: 0.08, speedPct: 0.06 }, "shroud"),
     ],
     mage: [
-      minor("mg_kindling", "Kindling", 1, "The cast takes less coaxing.", { attackPct: 0.03 }),
-      minor("mg_warded", "Warded Skin", 1, "Thin, but no longer paper.", { healthPct: 0.03 }),
-      minor("mg_breath", "Drawn Breath", 1, "The air gives it up more readily.", { absorbFlat: 0.3 }),
-      minor("mg_focus", "Focus", 1, "You see where it is thinnest.", { critFlat: 0.01 }),
-      minor("mg_pierce", "Pierce the Veil", 2, "Nothing between the cast and the thing.", { penFlat: 0.025 }),
-      minor("mg_deepwell", "Deep Well", 2, "It comes in faster than you spend it.", { absorbFlat: 0.4 }),
-      minor("mg_cadence", "Cadence", 2, "One after another, without the pause.", { speedPct: 0.015 }),
-      minor("mg_overchannel", "Overchannel", 2, "An empowered cast, and then some.", { techPct: 0.04 }),
-      keystone("mg_elemental", "Elemental Mastery", "The Veil stops being borrowed and starts being yours.", { techPct: 0.40 }),
-      keystone("mg_arcanebulwark", "Arcane Bulwark", "The fragile part was never the point.", { defencePct: 0.10, healthPct: 0.10 }),
+      minor("mg_kindling", "Kindling", 1, "The cast takes less coaxing.", { attackPct: 0.03 }, "sun"),
+      minor("mg_warded", "Warded Skin", 1, "Thin, but no longer paper.", { healthPct: 0.03 }, "hide"),
+      minor("mg_breath", "Drawn Breath", 1, "The air gives it up more readily.", { absorbFlat: 0.3 }, "wind"),
+      minor("mg_focus", "Focus", 1, "You see where it is thinnest.", { critFlat: 0.01 }, "eye"),
+      minor("mg_pierce", "Pierce the Veil", 2, "Nothing between the cast and the thing.", { penFlat: 0.025 }, "stave"),
+      minor("mg_deepwell", "Deep Well", 2, "It comes in faster than you spend it.", { absorbFlat: 0.4 }, "gem"),
+      minor("mg_cadence", "Cadence", 2, "One after another, without the pause.", { speedPct: 0.015 }, "hourglass"),
+      minor("mg_overchannel", "Overchannel", 2, "An empowered cast, and then some.", { techPct: 0.04 }, "sparkle"),
+      keystone("mg_elemental", "Elemental Mastery", "The Veil stops being borrowed and starts being yours.", { techPct: 0.40 }, "crown"),
+      keystone("mg_arcanebulwark", "Arcane Bulwark", "The fragile part was never the point.", { defencePct: 0.10, healthPct: 0.10 }, "ward"),
     ],
   };
   /* Ids only. The node objects live in PATHS and nowhere else: GameData holds no

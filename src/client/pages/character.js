@@ -7,8 +7,9 @@
    Character  what you wear beside what it makes of you, and what
               the crews and the hunt are doing right now
    Skills     every skill at a glance
-   Collection the bestiary: one entry a foe, a name until you have
-              put one down
+   Collection the bestiary and the ledger of things: monsters,
+              gear, components, and all of it at once. An entry
+              stays a name until you have met it
    Record     what the camp has done since it was founded
 
    The paperdoll and the Standing panel are the Satchel's own
@@ -23,14 +24,15 @@
 
 import { h, on, setText, setWidth, setAttr, toggleClass } from "../ui/dom.js";
 import { iconEl } from "../ui/icons.js";
-import { fmt, fmtWhole, fmtGold, fmtTime, fmtStat, titleCase } from "../ui/format.js";
+import { fmt, fmtWhole, fmtGold, fmtTime, titleCase } from "../ui/format.js";
 import { chipNode } from "../ui/popups/action.js";
-import { monsterArt, foeKills, foeFalls } from "../ui/popups/foe.js";
+import { foeFalls } from "../ui/popups/foe.js";
+import { collectionPanel, bestiaryFound, BESTIARY_COUNT } from "../ui/collection.js";
 import { hasPopup, openPopup, portraitImg, paintPortrait } from "../ui/widgets.js";
 import { dollCard, standingCard } from "./armaments.js";
 import { CONFIG } from "../../shared/config.js";
 import {
-  ARTISAN_ORDER, GameData, SKILL_ORDER, TRADE_ORDER, getSkill, getClass, getSkin, foesOf, sovereignOf, regionOfTier, tierLabel } from "../../shared/registry.js";
+  ARTISAN_ORDER, GameData, SKILL_ORDER, TRADE_ORDER, getSkill, getClass, getSkin } from "../../shared/registry.js";
 import { totalLevel, xpProgress } from "../../shared/stats.js";
 import { skillPlan } from "../../shared/skills.js";
 import { combatPlan } from "../../shared/combat.js";
@@ -294,102 +296,20 @@ function numberWord(n) {
 }
 
 /* ================= 5. TAB: COLLECTION ================= */
-/* Every foe in the world, by region, three of a kind and the Sovereign
-   under them as the quarry lists them. One you have never felled is a
-   name and a lock: no drawing, no numbers, nothing to open. */
-
-// Every monster, region by region, the Sovereign last.
-const BESTIARY = GameData.REGIONS.map((region) => ({
-  region,
-  mobs: foesOf(region.tier).filter(Boolean).concat([sovereignOf(region.tier)]).filter(Boolean),
-}));
-const BESTIARY_COUNT = BESTIARY.reduce((n, r) => n + r.mobs.length, 0);
-
-// What a foe you have met reads under its name.
-function foeLine(state, mob) {
-  const kind = mob.archetype === "sovereign" ? "Sovereign" : GameData.ARCHETYPES[mob.archetype].name;
-  const falls = foeFalls(state, mob.id);
-  const words = [kind, `${fmt(foeKills(state, mob.id))} felled`];
-  if (falls) words.push(`${fmt(falls)} of yours`);
-  return words.join(" · ");
-}
-
-function foundTile(mob) {
-  const sov = mob.archetype === "sovereign";
-  const sub = h("span.foe-tile-sub");
-  const node = h("button.foe-tile", { type: "button", class: { "is-sovereign": sov }, dataset: { monster: mob.id } },
-    h("span.foe-art", { html: monsterArt(mob) }),
-    h("span.foe-tile-main", h("span.foe-tile-name", mob.name), sub),
-    sov ? h("span.tag.tag-sovereign", "Sovereign") : null);
-  return { mob, node, sub, kills: null, falls: null };
-}
-
-function lockedTile(mob) {
-  const sov = mob.archetype === "sovereign";
-  const node = h("div.foe-tile.is-locked", { class: { "is-sovereign": sov } },
-    h("span.foe-art", { "aria-hidden": "true" }, iconEl("lock")),
-    h("span.foe-tile-main",
-      h("span.foe-tile-name", mob.name),
-      // Greying alone says nothing to a reader who cannot see it.
-      h("span.sr-only", "Not felled yet")),
-    sov ? h("span.tag.tag-sovereign", "Sovereign") : null);
-  return { mob, node, sub: null };
-}
+/* The panel itself is ui/collection.js, because a commander page draws the
+   same one off what the realm publishes. All this tab does is hand it the
+   camp's own roll map and open the popups a click asks for. */
 
 function collectionView(ctx) {
-  const foundChip = h("span.chip");
-  const groups = h("div.char-bestiary");
-  const node = h("section.section",
-    h("div.section-head",
-      h("div",
-        h("h2.section-title", "Collection"),
-        h("p.section-sub", "Everything that lives out there. One you have felled opens; one you have not stays a name.")),
-      h("div.card-actions", foundChip)),
-    groups);
-
-  let sig = null;
-  let refs = [];
-
-  // A foe you have met is worth opening, so the record inside the popup has something in it.
-  const offClick = on(groups, "click", ".foe-tile[data-monster]", (e, b) => {
-    openPopup("foe", ctx, b.dataset.monster);
+  const panel = collectionPanel({
+    onFoe: (id) => openPopup("foe", ctx, id),
+    onItem: (id) => openPopup("item", ctx, id, { from: null, readOnly: true }),
+    falls: (id) => foeFalls(ctx.state, id),
   });
-
   return {
-    node,
-    destroy() { offClick(); },
-    update(next, state) {
-      // The shape changes only when something is felled for the first time.
-      const nextSig = BESTIARY.map((r) => r.mobs.map((m) => (foeKills(state, m.id) ? "1" : "0")).join("")).join("");
-      if (nextSig !== sig) {
-        sig = nextSig;
-        refs = [];
-        let found = 0;
-        groups.replaceChildren(...BESTIARY.map(({ region, mobs }) => {
-          const tiles = mobs.map((mob) => {
-            const met = foeKills(state, mob.id) > 0;
-            if (met) found++;
-            const ref = met ? foundTile(mob) : lockedTile(mob);
-            refs.push(ref);
-            return ref.node;
-          });
-          return h("div.skills-group",
-            h("div.eyebrow", `${region.name} · ${tierLabel(region.tier)}`),
-            h("div.grid-cards", tiles));
-        }));
-        setText(foundChip, `${fmtWhole(found)} of ${fmtWhole(BESTIARY_COUNT)} felled`);
-      }
-      // Counts move with every kill, so they are written in place, and only the ones that moved.
-      refs.forEach((r) => {
-        if (!r.sub) return;
-        const kills = foeKills(state, r.mob.id);
-        const falls = foeFalls(state, r.mob.id);
-        if (kills === r.kills && falls === r.falls) return;
-        r.kills = kills;
-        r.falls = falls;
-        setText(r.sub, foeLine(state, r.mob));
-      });
-    },
+    node: panel.node,
+    destroy() { panel.destroy(); },
+    update(next, state) { panel.paint(state.rolls); },
   };
 }
 
@@ -423,7 +343,7 @@ function bigRows(state) {
 function detailRows(state, now) {
   const st = state.stats;
   const meta = state.meta;
-  const found = BESTIARY.reduce((n, r) => n + r.mobs.filter((m) => foeKills(state, m.id)).length, 0);
+  const found = bestiaryFound(state.rolls);
   const region = currentRegion(state);
   return [
     ["Founded", fmtDay(meta.createdAt)],
