@@ -112,7 +112,8 @@ export default {
 
     /* ---------- the Smuggler ---------- */
 
-    const lotList = h("div.list");
+    // Always exactly three lots (smugglerStock), so this is a single row of three.
+    const lotList = h("div.grid-cards.shop-grid");
     let lotSig = "";
     let lots = [];
 
@@ -176,7 +177,7 @@ export default {
           h("span.clock", { "data-tip": "World clock. Bounties and the Smuggler run on this." }, iconEl("clock"), clockText))),
       h("section.card",
         cardHead("The Bonesetter", "bonesetter", `Always open. Remedies land in Belongings; pack the Satchel to take them out. Between encounters one is drunk at or below ${Math.round(CONFIG.hunt.remedyAt * 100)}% health.`),
-        h("div.list", remedies.map((r) => r.node))),
+        h("div.grid-cards.shop-grid", remedies.map((r) => r.node))),
       h("section.card",
         cardHead("The Smuggler", "hourglass", "Turns up twice a day on the world clock with whatever fell off the back of something. Each lot goes once.",
           h("span.chip.chip-gold", iconEl("clock"), movesOn)),
