@@ -2895,13 +2895,22 @@ button.chip:disabled { opacity: .45; }
   object-position: center bottom;
 }
 
+/* The one cropped-face treatment: everywhere a commander image is shown as a
+   bust rather than a full standing figure -- the Character hero, the hunt
+   arena, a party square -- carries this class and nothing redeclares its own
+   crop. One place to change it is what keeps a new addition from drifting
+   back to the old framing by accident. */
 .portrait-bust {
   aspect-ratio: 1 / 1;
 }
 
 .portrait-bust img {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
-  object-position: center 12%;
+  object-position: center top;
+  transform: scale(1.6);
+  transform-origin: center top;
 }
 
 /* The inline picker: Min and Max sit inside the stepper, so the row reads
