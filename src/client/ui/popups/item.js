@@ -509,16 +509,16 @@ function openItem(ctx, key, opts, extra) {
       }
       return false;
     }
-    const presets = [1, 10, 100].filter((x) => x < qty).join(",");
     const typing = P.picker && document.activeElement === P.picker.input;
-    if (!P.picker || (presets !== P.presets && !typing)) {
+    if (!P.picker) {
       // It starts at the whole stack (moving everything is the usual ask) and keeps a smaller choice.
       const value = !P.picker || P.picker.pick.n >= P.max ? qty : Math.min(P.picker.pick.n, qty);
+      // Same Min - value + Max stepper as a skill action's amount box, not a separate
+      // row of numbered chips -- one control for "how many" everywhere it is asked.
       P.picker = qtyPicker({
-        value, max: qty, allowUnlimited: false, presets: presets ? presets.split(",").map(Number) : [],
+        value, max: qty, allowUnlimited: false, presets: [], showMin: true,
         onChange: () => paintActions(ctx.state),
       });
-      P.presets = presets;
       pickerHolder.replaceChildren(P.picker.node);
     } else if (qty !== P.max) {
       // The whole stack stays the whole stack as it grows or shrinks.
