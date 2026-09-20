@@ -390,12 +390,13 @@ export function createShell(app) {
     // replaceChildren writes a skipped part as the text "null": filter them out first.
     $.weather.replaceChildren(...[
       h("div.weather-top", iconEl(w.icon), h("span.weather-name", w.label)),
-      h("div.weather-mods",
+      // Bountiful Weekend is a flat bonus that stands alone: the day's favoured/hindered
+      // roll doesn't also apply on top of it, so it isn't shown as if it did.
+      w.bountiful ? null : h("div.weather-mods",
         h("span.up", `${signedPct(w.mods[w.favoured])} ${skillName(w.favoured)}`),
         h("span.down", `${signedPct(w.mods[w.hindered])} ${skillName(w.hindered)}`)),
       w.bountiful ? h("div.weather-bonus", `Bountiful Weekend · ${signedPct(Math.round(CONFIG.weather.bountifulXp * 100))} XP to every trade`) : null,
       revealed ? h("div.weather-next", `Tomorrow: ${weatherForDay(day + 1).label}`) : null,
-      h("div.weather-open", "The week ahead"),
     ].filter(Boolean));
     $.weather.hidden = false;
   }
