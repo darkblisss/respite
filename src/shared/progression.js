@@ -24,10 +24,13 @@ const weatherPctFor = (w, skillId) => (Object.hasOwn(w.mods, skillId) ? w.mods[s
 // companion the added share, buff the multiplier (1 when none).
 export function xpBreakdown(state, skillId, at) {
   const w = weatherAt(at);
+  const bountiful = !!w.bountiful && isTrade(skillId);
+  // Bountiful Weekend stands alone: Mon-Fri roll for the favoured/hindered
+  // change, Sat-Sun a flat bonus instead -- never both on the same day.
   return {
     weather: w,
-    weatherPct: weatherPctFor(w, skillId),
-    bountiful: !!w.bountiful && isTrade(skillId),
+    weatherPct: bountiful ? 0 : weatherPctFor(w, skillId),
+    bountiful,
     companion: companionBonus(state, "xp", skillId),
     buff: state.buff && state.buff.until > at ? state.buff.mult : 1,
     mult: xpMult(state, skillId, at),
@@ -38,10 +41,11 @@ export function xpMult(state, skillId, at) {
   let m = 1;
   if (skillId) {
     const w = weatherAt(at);
-    const pct = weatherPctFor(w, skillId);
-    const weather = pct ? 1 + pct / 100 : 1;
-    const bountiful = w.bountiful && isTrade(skillId) ? 1 + CONFIG.weather.bountifulXp : 1;
-    m = weather * bountiful * (1 + companionBonus(state, "xp", skillId));
+    const bountiful = w.bountiful && isTrade(skillId);
+    // Weekend: a guaranteed flat +20%, and nothing else from the sky that day.
+    // Weekday: whatever the day's favoured/hindered roll comes out to, alone.
+    const mod = bountiful ? 1 + CONFIG.weather.bountifulXp : (weatherPctFor(w, skillId) ? 1 + weatherPctFor(w, skillId) / 100 : 1);
+    m = mod * (1 + companionBonus(state, "xp", skillId));
   }
   if (state.buff && state.buff.until > at) m *= state.buff.mult;
   return m;
@@ -118,4 +122,3 @@ export function doubleChance(state, skillId) {
   if (!Object.hasOwn(GameData.GATHER_ACTIONS, skillId)) return 0;
   return Math.min(0.75, mastery(state, skillId).double + companionBonus(state, "double", skillId));
 }
-
