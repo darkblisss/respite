@@ -12,7 +12,7 @@
    ============================================================ */
 
 import { h, el, setText, setWidth, setAttr, toggleClass } from "./dom.js";
-import { iconEl } from "./icons.js";
+import { iconEl, artEl, hasArt } from "./icons.js";
 import { fmtAgo, fmtTime, fmtWhole, signedPct, titleCase } from "./format.js";
 import { CONFIG } from "../../shared/config.js";
 import { ARTISAN_ORDER, TRADE_ORDER, getSkill, getZone, regionOfTier, sovereignOf, skillName } from "../../shared/registry.js";
@@ -204,10 +204,18 @@ export function createShell(app) {
 
   /* ---------- topbar ---------- */
 
-  function setIcon(which, box, name) {
-    if (icons[which] === name) return;
-    icons[which] = name;
-    box.replaceChildren(iconEl(name));
+  /* `spec` is a glyph name, or the action itself when that action makes
+     something drawn -- the topbar chip is the one place a material is on
+     screen the whole time, so it wears the material rather than the trade's
+     generic glyph. The cache key is whichever of the two it ends up drawing. */
+  function setIcon(which, box, spec, fallback) {
+    const def = typeof spec === "string" || !spec ? null : spec;
+    const paint = hasArt(def);
+    const key = paint ? def.art.fade : (def && def.icon) || (typeof spec === "string" ? spec : null) || fallback || "hammer";
+    if (icons[which] === key) return;
+    icons[which] = key;
+    toggleClass(box, "is-paint", paint);
+    box.replaceChildren(paint ? artEl(def) : iconEl(key));
   }
 
   function paintBench(s) {
@@ -228,7 +236,7 @@ export function createShell(app) {
     const name = titleCase(plan.def.name);
     const count = plan.limit == null ? fmtWhole(plan.done) : `${fmtWhole(plan.done)} of ${fmtWhole(plan.limit)}`;
     const verb = GERUND[plan.def.skillId];
-    setIcon("bench", $.benchIcon, plan.def.icon || getSkill(plan.def.skillId).icon);
+    setIcon("bench", $.benchIcon, plan.def, getSkill(plan.def.skillId).icon);
     setText($.benchName, name);
     setText($.benchShort, shortName(name));
     setText($.benchMeta, `${verb ? `${verb} · ` : ""}${count} · ${fmtTime(plan.timeLeft)} left`);

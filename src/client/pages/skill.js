@@ -241,7 +241,7 @@ function recipePill(ctx, def, locked) {
   ref.note = recipeNote(def);
   ref.needs = Object.keys(def.cost || {}).map((key) => {
     const have = document.createTextNode("");
-    const node = h("span.need", iconEl(itemDef(key).icon), itemName(key), h("span.have", have, h("small", `/${fmt(def.cost[key])}`)));
+    const node = h("span.need", artEl(itemDef(key)), itemName(key), h("span.have", have, h("small", `/${fmt(def.cost[key])}`)));
     return { key, need: def.cost[key], name: itemName(key), node, have };
   });
   ref.time = h("span");

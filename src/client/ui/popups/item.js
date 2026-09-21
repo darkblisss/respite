@@ -25,7 +25,7 @@
    ============================================================ */
 
 import { h, setText } from "../dom.js";
-import { iconEl } from "../icons.js";
+import { iconEl, artEl, hasArt } from "../icons.js";
 import { openModal, confirm, toast } from "../overlay.js";
 import { fmtWhole, fmtGold, fmtStat } from "../format.js";
 import { qtyPicker, registerPopup, openPopup } from "../widgets.js";
@@ -300,8 +300,11 @@ function openItem(ctx, key, opts, extra) {
   let off = null;
   const m = openModal({
     title: itemName(key),
-    art: d.icon,
-    artRarity: d.heal ? null : gearArt ? d.rarity || "common" : "common",
+    // A drawn material shows itself; a rarity frame belongs to gear, which is
+    // never drawn, so the two never argue over the same plate.
+    art: hasArt(d) ? artEl(d) : d.icon,
+    artClass: hasArt(d) ? "art-paint" : "",
+    artRarity: hasArt(d) ? null : d.heal ? null : gearArt ? d.rarity || "common" : "common",
     artTone: d.heal ? "good" : "violet",
     size: "md",
     body: [],

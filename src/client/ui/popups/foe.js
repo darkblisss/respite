@@ -15,7 +15,7 @@
    ============================================================ */
 
 import { h } from "../dom.js";
-import { iconEl } from "../icons.js";
+import { iconEl, artEl } from "../icons.js";
 import { openModal } from "../overlay.js";
 import { fmt, fmtGold, fmtStat, chancePct, plural } from "../format.js";
 import { registerPopup, openPopup } from "../widgets.js";
@@ -123,7 +123,7 @@ function foeBody(ctx, mob) {
     if (key === "@reagent") return note(`Reagent ×${qty}`, chancePct(Math.min(1, chance * dropMult)));
     const d = itemDef(key);
     return h("div.ap-row",
-      h("button.ap-link", { type: "button", dataset: { item: key } }, iconEl(d ? d.icon : "unknown"), h("span", `${itemName(key)} ×${qty}`)),
+      h("button.ap-link", { type: "button", dataset: { item: key } }, d ? artEl(d) : iconEl("unknown"), h("span", `${itemName(key)} ×${qty}`)),
       h("span.ap-val", chancePct(Math.min(1, chance * dropMult))));
   });
   const band = veilBandOfTier(mob.tier);

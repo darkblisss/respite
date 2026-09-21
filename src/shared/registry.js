@@ -36,9 +36,19 @@ export const matKey = (row, type) => (RENAMED[row.i] && RENAMED[row.i][type]) ||
    lets the tile melt into the row. A Stockpile slot IS a frame, so `cut` drops
    the background entirely and the object sits in the slot. */
 const MAT_ART = {
+  // The ore a crew hauls up.
   slag_delve: "slag", bog_delve: "mire", cold_delve: "gloam",
   cairn_delve: "cairn", crucible_delve: "crucible", star_delve: "starfall",
   wyrm_delve: "wyrmheart", void_delve: "hollow", titan_delve: "titan",
+
+  // What the Forgemaster makes of it. The key on the left is the tier's, which
+  // is why a Mire Bar is bog_bar; the file on the right is what it is called.
+  slag_bar: "slag-bar", bog_bar: "mire-bar", cold_bar: "gloam-bar",
+  cairn_bar: "cairn-bar", crucible_bar: "crucible-bar", star_bar: "starfall-bar",
+  wyrm_bar: "wyrmheart-bar", void_bar: "hollow-bar", titan_bar: "titan-bar",
+
+  // The five reagents, which never had a tier and so were never renamed.
+  coal: "coal", resin: "resin", pulp: "pulp", tallow: "tallow", veil_shard: "veil-shard",
 };
 
 export const matArt = (id) => (MAT_ART[id]
@@ -223,6 +233,8 @@ function buildRegistry() {
   REAGENTS.forEach((r) => {
     MATERIALS[r.id] = { id: r.id, name: r.name, icon: r.icon, kind: "material",
       category: "Reagent", value: 1, tier: 1, reagent: true };
+    const art = matArt(r.id);
+    if (art) MATERIALS[r.id].art = art;
   });
 
   /* ---- THE VEIL: FRAGMENTS AND ESSENCE ----
@@ -319,8 +331,11 @@ function buildRegistry() {
   // (craftGear); everything else produces one of `id` (out). Gear and tools
   // are worth a quarter more than what went into them.
   function addCraft(prof, id, name, icon, tier, time, xpScale, cost, isGear) {
+    // A bench recipe wears the face of what it makes, the same as a gather node.
+    // Gear is rolled rather than minted, so it has no material to take one from.
+    const face = !isGear && MATERIALS[id] && MATERIALS[id].art ? { art: MATERIALS[id].art } : null;
     CRAFT_ACTIONS[prof].push({
-      id: `craft_${id}`, skillId: prof, tier, name, icon,
+      id: `craft_${id}`, skillId: prof, tier, name, icon, ...face,
       level: TIERS[tier - 1].level, time, xp: Math.round(TIERS[tier - 1].xp * xpScale) + 1,
       cost, [isGear ? "craftGear" : "out"]: isGear ? id : { [id]: 1 },
     });
@@ -366,6 +381,7 @@ function buildRegistry() {
         });
         GATHER_ACTIONS[s.id].push({
           id: `${s.id}_t${tier}_reag`, skillId: s.id, tier, name: reag.name, icon: reag.icon,
+          ...(reag.art ? { art: reag.art } : {}),
           level: t.level, time: t.time, xp: t.xp, out: { [s.reagent]: 1 },
         });
       } else {
