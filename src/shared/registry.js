@@ -18,11 +18,28 @@ export const slug = (s) => s.toLowerCase().replace(/[^a-z]/g, "");
    material whose name has changed since it shipped, so the name above it in
    TIERS is free to become anything. Nothing is ever removed from it. */
 const RENAMED = {
-  2: { delve: "bog" },     // Bog Ore     -> Mire Ore
-  3: { delve: "cold" },    // Cold Ore    -> Gloam Ore
-  6: { delve: "star" },    // Star Steel  -> Starfall Steel
-  7: { delve: "wyrm" },    // Wyrm Core   -> Wyrmheart Core
-  8: { delve: "void" },    // Void Core   -> Hollow Core
+  2: { delve: "bog",                        // Bog Ore        -> Mire Ore
+       harvest: "grave",                    // Grave Moss     -> Noose Weed
+       dredge: "river" },                   // River Amber    -> Bog Pebble
+  3: { delve: "cold",                       // Cold Ore       -> Gloam Ore -> Rime Ore
+       fell: "iron",                        // Iron Bark      -> Gnarl Wood
+       dredge: "cave" },                    // Cave Agate     -> Chalk Pebble
+  4: { flay: "cured" },                     // Cured Hide     -> Gaunt Hide
+  5: { harvest: "widows",                   // Widows Bloom   -> Widow Bloom
+       flay: "scaled" },                    // Scaled Hide    -> Slough Hide
+  6: { delve: "star",                       // Star Steel     -> Starfall Steel
+       fell: "umber",                       // Umber Heartwood-> Elder Timber
+       harvest: "dragon",                   // Dragon Bloom   -> Lantern Bloom
+       flay: "chitin",                      // Chitin Hide    -> Stag Hide
+       dredge: "blood" },                   // Blood Ruby     -> Amber Gem
+  7: { delve: "wyrm",                       // Wyrm Core      -> Wyrmheart Core
+       fell: "wyrm",                        // Wyrm Root      -> Ember Heartwood
+       dredge: "abyssal" },                 // Abyssal Coral  -> Hoard Sigil
+  8: { delve: "void",                       // Void Core      -> Hollow Core
+       fell: "void",                        // Void Root      -> Wither Heartwood
+       dredge: "leviathan" },               // Leviathan Bone -> Sunken Sigil
+  9: { fell: "godsdown",                    // Godsdown Knot  -> Marrow Heartwood
+       dredge: "void" },                    // Void Sapphire  -> Idol Sigil
 };
 
 export const matKey = (row, type) => (RENAMED[row.i] && RENAMED[row.i][type]) || basePrefix(row[type]);
@@ -122,15 +139,15 @@ function buildRegistry() {
   ];
 
   const TIERS = [
-    { i: 1, level: 1,  time: 12000, xp: 1,  fell: "Bitter Brush",    delve: "Slag Ore",       harvest: "Stink Weed",     flay: "Mangy Pelt",         dredge: "Mud Pebble" },
-    { i: 2, level: 10, time: 16000, xp: 3,  fell: "Blood Ash",       delve: "Mire Ore",        harvest: "Grave Moss",     flay: "Bristle Pelt",       dredge: "River Amber" },
-    { i: 3, level: 20, time: 24000, xp: 6,  fell: "Iron Bark",       delve: "Gloam Ore",       harvest: "Pale Rush",      flay: "Dire Pelt",          dredge: "Cave Agate" },
-    { i: 4, level: 30, time: 32000, xp: 10, fell: "Barrow Pine",     delve: "Cairn Steel",    harvest: "Corpse Bloom",   flay: "Cured Hide",         dredge: "Mourning Quartz" },
-    { i: 5, level: 40, time: 40000, xp: 15, fell: "Sallow Timber",   delve: "Crucible Steel", harvest: "Widows Bloom",   flay: "Scaled Hide",        dredge: "Ghost Opal" },
-    { i: 6, level: 50, time: 48000, xp: 22, fell: "Umber Heartwood", delve: "Starfall Steel",     harvest: "Dragon Bloom",   flay: "Chitin Hide",        dredge: "Blood Ruby" },
-    { i: 7, level: 60, time: 56000, xp: 30, fell: "Wyrm Root",       delve: "Wyrmheart Core",      harvest: "Moon Frond",     flay: "Drake Carapace",     dredge: "Abyssal Coral" },
-    { i: 8, level: 70, time: 64000, xp: 39, fell: "Void Root",       delve: "Hollow Core",      harvest: "Fade Frond",     flay: "Leviathan Carapace", dredge: "Leviathan Bone" },
-    { i: 9, level: 80, time: 72000, xp: 49, fell: "Godsdown Knot",   delve: "Titan Core",     harvest: "Godsbane Frond", flay: "Demon Carapace",     dredge: "Void Sapphire" },
+    { i: 1, level: 1 , time: 12000, xp: 1 , fell: "Bitter Wood",      delve: "Slag Ore",        harvest: "Stink Weed",      flay: "Mangy Pelt",          dredge: "Mud Pebble" },
+    { i: 2, level: 10, time: 16000, xp: 3 , fell: "Blood Wood",       delve: "Mire Ore",        harvest: "Noose Weed",      flay: "Bristle Pelt",        dredge: "Bog Pebble" },
+    { i: 3, level: 20, time: 24000, xp: 6 , fell: "Gnarl Wood",       delve: "Rime Ore",        harvest: "Pale Weed",       flay: "Dire Pelt",           dredge: "Chalk Pebble" },
+    { i: 4, level: 30, time: 32000, xp: 10, fell: "Barrow Timber",    delve: "Cairn Steel",     harvest: "Corpse Bloom",    flay: "Gaunt Hide",          dredge: "Mourning Gem" },
+    { i: 5, level: 40, time: 40000, xp: 15, fell: "Sallow Timber",    delve: "Crucible Steel",  harvest: "Widow Bloom",     flay: "Slough Hide",         dredge: "Ghost Gem" },
+    { i: 6, level: 50, time: 48000, xp: 22, fell: "Elder Timber",     delve: "Starfall Steel",  harvest: "Lantern Bloom",   flay: "Stag Hide",           dredge: "Amber Gem" },
+    { i: 7, level: 60, time: 56000, xp: 30, fell: "Ember Heartwood",  delve: "Wyrmheart Core",  harvest: "Moon Frond",      flay: "Drake Carapace",      dredge: "Hoard Sigil" },
+    { i: 8, level: 70, time: 64000, xp: 39, fell: "Wither Heartwood", delve: "Hollow Core",     harvest: "Fade Frond",      flay: "Leviathan Carapace",  dredge: "Sunken Sigil" },
+    { i: 9, level: 80, time: 72000, xp: 49, fell: "Marrow Heartwood", delve: "Titan Core",      harvest: "Godsbane Frond",  flay: "Demon Carapace",      dredge: "Idol Sigil" },
   ];
 
   /* ================= 4. SKILLS ================= */
