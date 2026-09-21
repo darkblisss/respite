@@ -20,6 +20,7 @@
    ============================================================ */
 
 import { CONFIG } from "./config.js";
+import { moveKey } from "./renames.js";
 import { GameData, findAction, getSkill, getMonster, getCompanion, getClass, getSkin, getTool, pathOf, regionOfTier } from "./registry.js";
 import { itemDef, parseKey, stacks, validKey } from "./items.js";
 import { canHold, unstacked } from "./storage.js";
@@ -168,10 +169,64 @@ export function migrateSave(raw, { now, seed, userId, account, legacy = false } 
   if (!isObj(raw)) return createState(opts);
   const schema = finite(raw.schema) ? raw.schema : 0;
   const shaped = opts.legacy || schema < 9 ? fromV4(raw, opts) : raw;
-  const state = normalise(shaped, opts);
+  // Keys moved in schema 12. normalise() drops anything it does not recognise,
+  // so the rename has to happen on the way in, before the check.
+  const state = normalise(schema < 12 ? migrate12(shaped) : shaped, opts);
   if (userId !== undefined) state.meta.userId = typeof userId === "string" ? userId : null;
   if (account !== undefined) state.meta.account = typeof account === "string" ? account : null;
   return state;
+}
+
+/* ---------- schema 12: an id is the first word of the name ---------- */
+
+/* Until 12 a material could be renamed without its key moving, so Gloam Ore was
+   stored as "cold" and Gnarl Wood as "iron". 386 keys moved on the day that
+   stopped; shared/renames.js is the whole list. Everything a save holds an item
+   key in gets walked here, and nothing else in the save is touched.
+
+   Copies rather than writes: a schema 9-11 save arrives as the caller's own
+   object, not the fresh one fromV4 builds. */
+function migrate12(src) {
+  const m = { ...src };
+  const pool = (w) => {
+    const p = obj(src[w]);
+    const items = {};
+    keysOf(p.items).forEach((k) => {
+      const to = moveKey(k);
+      // Two old keys cannot land on one new key -- the map was built to rule that
+      // out -- but a corrupt save could still do it, and losing a stack beats
+      // throwing the load away.
+      items[to] = Object.hasOwn(items, to) ? (Number(items[to]) || 0) + (Number(p.items[k]) || 0) : p.items[k];
+    });
+    m[w] = { ...p, items, order: (Array.isArray(p.order) ? p.order : []).map(moveKey) };
+  };
+  ["inv", "bank", "vault", "satchel"].forEach((w) => { if (isObj(src[w])) pool(w); });
+
+  const eq = obj(src.equipment);
+  m.equipment = {};
+  keysOf(eq).forEach((slot) => { m.equipment[slot] = eq[slot] ? moveKey(eq[slot]) : eq[slot]; });
+
+  const tools = obj(src.tools);
+  m.tools = {};
+  keysOf(tools).forEach((skill) => { m.tools[skill] = moveKey(tools[skill]); });
+
+  // The Collection counts what has been held, under "i:<base>".
+  const rolls = obj(src.rolls);
+  m.rolls = {};
+  keysOf(rolls).forEach((k) => {
+    m.rolls[k.startsWith("i:") ? `i:${moveKey(k.slice(2))}` : k] = rolls[k];
+  });
+
+  if (isObj(src.bounty) && typeof src.bounty.targetId === "string") {
+    m.bounty = { ...src.bounty, targetId: moveKey(src.bounty.targetId) };
+  }
+  if (isObj(src.tasks) && isObj(src.tasks.skilling) && typeof src.tasks.skilling.actionId === "string") {
+    m.tasks = { ...src.tasks, skilling: { ...src.tasks.skilling, actionId: moveKey(src.tasks.skilling.actionId) } };
+  }
+  if (Array.isArray(src.requisitions)) {
+    m.requisitions = src.requisitions.map((r) => (isObj(r) && typeof r.itemKey === "string" ? { ...r, itemKey: moveKey(r.itemKey) } : r));
+  }
+  return m;
 }
 
 /* ---------- v4 (schema 8 and older) ---------- */

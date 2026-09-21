@@ -11,38 +11,16 @@ import { CONFIG, deepFreeze } from "./config.js";
 export const basePrefix = (name) => name.split(" ")[0];
 export const slug = (s) => s.toLowerCase().replace(/[^a-z]/g, "");
 
-/* What a material is CALLED and what it is KEYED BY are two different things.
-   Every id in the game is built from the key -- an ore in a vault, a listing on
-   the market, a bounty's target -- so a key that moves orphans live saves and
-   live listings at once. A name is only a name. RENAMED holds the key of every
-   material whose name has changed since it shipped, so the name above it in
-   TIERS is free to become anything. Nothing is ever removed from it. */
-const RENAMED = {
-  2: { delve: "bog",                        // Bog Ore        -> Mire Ore
-       harvest: "grave",                    // Grave Moss     -> Noose Weed
-       dredge: "river" },                   // River Amber    -> Bog Pebble
-  3: { delve: "cold",                       // Cold Ore       -> Gloam Ore -> Rime Ore
-       fell: "iron",                        // Iron Bark      -> Gnarl Wood
-       dredge: "cave" },                    // Cave Agate     -> Chalk Pebble
-  4: { flay: "cured" },                     // Cured Hide     -> Gaunt Hide
-  5: { harvest: "widows",                   // Widows Bloom   -> Widow Bloom
-       flay: "scaled" },                    // Scaled Hide    -> Slough Hide
-  6: { delve: "star",                       // Star Steel     -> Starfall Steel
-       fell: "umber",                       // Umber Heartwood-> Elder Timber
-       harvest: "dragon",                   // Dragon Bloom   -> Lantern Bloom
-       flay: "chitin",                      // Chitin Hide    -> Stag Hide
-       dredge: "blood" },                   // Blood Ruby     -> Amber Gem
-  7: { delve: "wyrm",                       // Wyrm Core      -> Wyrmheart Core
-       fell: "wyrm",                        // Wyrm Root      -> Ember Heartwood
-       dredge: "abyssal" },                 // Abyssal Coral  -> Hoard Sigil
-  8: { delve: "void",                       // Void Core      -> Hollow Core
-       fell: "void",                        // Void Root      -> Wither Heartwood
-       dredge: "leviathan" },               // Leviathan Bone -> Sunken Sigil
-  9: { fell: "godsdown",                    // Godsdown Knot  -> Marrow Heartwood
-       dredge: "void" },                    // Void Sapphire  -> Idol Sigil
-};
+/* An id is the first word of the name, lower-cased. That was not always true:
+   RENAMED used to pin a key while the name above it moved, so Gloam Ore
+   answered to "cold". Schema 12 closed the gap and shared/renames.js carries
+   every key that shifted on the day it did.
 
-export const matKey = (row, type) => (RENAMED[row.i] && RENAMED[row.i][type]) || basePrefix(row[type]);
+   So renaming a material now moves its id, which orphans saves, listings and
+   bounties unless a migration goes with it. That cost is meant to be visible.
+   matKey is the one place that decides, and everything -- the game, the test
+   harness, any tool -- must ask it rather than splitting a name by hand. */
+export const matKey = (row, type) => basePrefix(row[type]);
 
 /* Raw materials drawn rather than glyphed. Keyed by the id, which never moves;
    the file is named for whatever the material is called today, so the folder
@@ -53,18 +31,19 @@ export const matKey = (row, type) => (RENAMED[row.i] && RENAMED[row.i][type]) ||
    lets the tile melt into the row. A Stockpile slot IS a frame, so `cut` drops
    the background entirely and the object sits in the slot. */
 const MAT_ART = {
-  // The ore a crew hauls up.
-  slag_delve: "slag", bog_delve: "mire", cold_delve: "gloam",
-  cairn_delve: "cairn", crucible_delve: "crucible", star_delve: "starfall",
-  wyrm_delve: "wyrmheart", void_delve: "hollow", titan_delve: "titan",
+  // The ore a crew hauls up. Key and file agree now: schema 12 put an id and a
+  // name back on the same word, so gloam.webp is the odd one out -- the painting
+  // kept its filename when Gloam Ore became Rime Ore, because the art is the art.
+  slag_delve: "slag", mire_delve: "mire", rime_delve: "gloam",
+  cairn_delve: "cairn", crucible_delve: "crucible", starfall_delve: "starfall",
+  wyrmheart_delve: "wyrmheart", hollow_delve: "hollow", titan_delve: "titan",
 
-  // What the Forgemaster makes of it. The key on the left is the tier's, which
-  // is why a Mire Bar is bog_bar; the file on the right is what it is called.
-  slag_bar: "slag-bar", bog_bar: "mire-bar", cold_bar: "gloam-bar",
-  cairn_bar: "cairn-bar", crucible_bar: "crucible-bar", star_bar: "starfall-bar",
-  wyrm_bar: "wyrmheart-bar", void_bar: "hollow-bar", titan_bar: "titan-bar",
+  // What the Forgemaster makes of it.
+  slag_bar: "slag-bar", mire_bar: "mire-bar", rime_bar: "gloam-bar",
+  cairn_bar: "cairn-bar", crucible_bar: "crucible-bar", starfall_bar: "starfall-bar",
+  wyrmheart_bar: "wyrmheart-bar", hollow_bar: "hollow-bar", titan_bar: "titan-bar",
 
-  // The five reagents, which never had a tier and so were never renamed.
+  // The five reagents, which never had a tier and so never moved.
   coal: "coal", resin: "resin", pulp: "pulp", tallow: "tallow", veil_shard: "veil-shard",
 };
 
@@ -420,7 +399,7 @@ function buildRegistry() {
     const coal = "coal", resin = "resin", pulp = "pulp", tallow = "tallow", shard = "veil_shard";
 
     // 2. REFINED MATERIALS
-    // The id is built from the key, the name from the name: "Mire Bar" is bog_bar.
+    // Key and name are the same word now, so a Mire Bar is mire_bar.
     const bar = `${kDelve}_bar`;
     const plank = `${kFell}_plank`;
     const weave = `${kHarv}_weave`;

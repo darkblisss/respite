@@ -183,9 +183,9 @@ await run(async () => {
     (b) => v4.call("bondLevelFrom", b), (b) => St.bondLevelFrom(b));
 
   const mixed = {
-    weapon: "star_sword|relic|1|echoing", offhand: "umber_shield|relic|2|wounding", head: "star_helm|relic|3|thorned",
-    chest: "star_chest|relic|4|stalwart", hands: "star_hgaunts|relic|5|resilient", feet: "star_hboots|relic|6|bulwark",
-    neck: "blood_amulet|relic|7|furious", ring: "star_ring|relic|8|executioner",
+    weapon: "starfall_sword|relic|1|echoing", offhand: "elder_shield|relic|2|wounding", head: "starfall_helm|relic|3|thorned",
+    chest: "starfall_chest|relic|4|stalwart", hands: "starfall_hgaunts|relic|5|resilient", feet: "starfall_hboots|relic|6|bulwark",
+    neck: "amber_amulet|relic|7|furious", ring: "starfall_ring|relic|8|executioner",
   };
   const sundering = { ...gearSet(GameData, 4, "rogue", "rare"), weapon: "cairn_dagger|relic|3|sundering" };
   const kits = [{}, gearSet(GameData, 1, "warrior"), gearSet(GameData, 3, "rogue", "uncommon"), gearSet(GameData, 5, "mage", "rare"),
@@ -212,7 +212,7 @@ await run(async () => {
   const sampleDefs = [...gatherDefs.filter((_, i) => i % 3 === 0), ...craftDefs.filter((_, i) => i % 11 === 0)];
   const setups = [
     { name: "bare hands", mutate: () => {} },
-    { name: "tools", mutate: (st) => { st.tools = { delving: "star_pick", felling: "bitter_axe", harvesting: "godsbane_sickle", flaying: "cured_knife", dredging: "void_net" }; } },
+    { name: "tools", mutate: (st) => { st.tools = { delving: "starfall_pick", felling: "bitter_axe", harvesting: "godsbane_sickle", flaying: "gaunt_knife", dredging: "idol_net" }; } },
     { name: "Tunnel Rat at Bond 20 Rank 3", mutate: (st) => { st.companions = { owned: { rat: { bond: CONFIG.bondXpFor(20), rank: 3, dupes: 0 } }, active: "rat" }; st.tools = { delving: "titan_pick" }; } },
     { name: "Carrion Crow at Bond 10", mutate: (st) => { st.companions = { owned: { crow: { bond: CONFIG.bondXpFor(10), rank: 2, dupes: 1 } }, active: "crow" }; } },
     { name: "Veil Stag at Bond 20 Rank 5", mutate: (st) => { st.companions = { owned: { stag: { bond: CONFIG.bondXpFor(20), rank: 5, dupes: 0 } }, active: "stag" }; st.tools = { dredging: "mud_net" }; } },
@@ -375,12 +375,12 @@ await run(async () => {
       { tier: 7, zone: "core", hide: true, lo: { level: 60, klass: "rogue", equipment: gearSet(GameData, 7, "rogue", "legendary") }, threat: 99 },
       { tier: 9, zone: "core", hide: false, lo: { level: 80, klass: "warrior", equipment: gearSet(GameData, 9, "warrior", "relic") }, remedies: heals(400, 1800) },
       { tier: 9, zone: "inner", hide: true, lo: { level: 99, klass: "mage", equipment: gearSet(GameData, 9, "mage", "relic") } },
-      { tier: 8, zone: "middle", hide: false, lo: { level: 70, klass: "warrior", equipment: { ...mixed, weapon: "void_sword|relic|1|echoing" } }, remedies: heals(40, 800) },
+      { tier: 8, zone: "middle", hide: false, lo: { level: 70, klass: "warrior", equipment: { ...mixed, weapon: "hollow_sword|relic|1|echoing" } }, remedies: heals(40, 800) },
       { tier: 5, zone: "outer", hide: false, lo: { level: 45, klass: "rogue", equipment: sundering }, xpMult: 1.5 },
       { tier: 2, zone: "core", hide: false, lo: { level: 12, klass: null, equipment: gearSet(GameData, 1, "warrior") }, hp: 10 },
       { tier: 4, zone: "middle", hide: true, lo: { level: 35, klass: "mage", equipment: gearSet(GameData, 3, "mage") }, horizonMs: 2 * 3600000, chunkMs: 5000 },
-      { tier: 1, zone: "core", hide: true, lo: { level: 25, klass: "rogue", equipment: { ...gearSet(GameData, 2, "rogue"), weapon: "bog_dagger|relic|2|wounding", chest: "bristle_jacket|relic|2|thorned" } }, threat: 100, remedies: heals(10, 70) },
-      { tier: 6, zone: "outer", hide: false, lo: { level: 55, klass: "warrior", equipment: { ...gearSet(GameData, 6, "warrior", "rare"), weapon: "star_greatsword|relic|4|furious", offhand: null, head: "star_helm|relic|4|resilient", feet: "star_hboots|relic|4|stalwart" } }, remedies: heals(15, 380) },
+      { tier: 1, zone: "core", hide: true, lo: { level: 25, klass: "rogue", equipment: { ...gearSet(GameData, 2, "rogue"), weapon: "mire_dagger|relic|2|wounding", chest: "bristle_jacket|relic|2|thorned" } }, threat: 100, remedies: heals(10, 70) },
+      { tier: 6, zone: "outer", hide: false, lo: { level: 55, klass: "warrior", equipment: { ...gearSet(GameData, 6, "warrior", "rare"), weapon: "starfall_greatsword|relic|4|furious", offhand: null, head: "starfall_helm|relic|4|resilient", feet: "starfall_hboots|relic|4|stalwart" } }, remedies: heals(15, 380) },
     ];
     let exact = 0;
     let moved = 0;

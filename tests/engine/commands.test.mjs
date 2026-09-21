@@ -151,9 +151,9 @@ await run(async () => {
     put(s, "vault", "slag_pick", 2);
     w.events.length = 0;
     check("equip a tool into the rack", cmd(s, "equip", { key: "slag_pick", from: "vault" }).ok && s.tools.delving === "slag_pick" && s.vault.items.slag_pick === 1 && s.log.some((l) => l.m === "Slag Pickaxe taken up."));
-    put(s, "inv", "cold_pick", 1);
-    check("a better tool puts the old one away, onto its stack if one is held", cmd(s, "equip", { key: "cold_pick", from: "inv" }).ok && s.tools.delving === "cold_pick" && s.vault.items.slag_pick === 2 && !s.inv.items.cold_pick);
-    check("unequipTool back to the Stockpile", cmd(s, "unequipTool", { skillId: "delving" }).ok && !s.tools.delving && s.bank.items.cold_pick === 1);
+    put(s, "inv", "rime_pick", 1);
+    check("a better tool puts the old one away, onto its stack if one is held", cmd(s, "equip", { key: "rime_pick", from: "inv" }).ok && s.tools.delving === "rime_pick" && s.vault.items.slag_pick === 2 && !s.inv.items.rime_pick);
+    check("unequipTool back to the Stockpile", cmd(s, "unequipTool", { skillId: "delving" }).ok && !s.tools.delving && s.bank.items.rime_pick === 1);
     refused("with no tool in hand", s, "unequipTool", { skillId: "delving" }, "No tool in hand for that.");
     refused("for junk", s, "unequipTool", { skillId: "__proto__" }, "No tool in hand for that.");
     const rack = fresh();
