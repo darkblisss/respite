@@ -176,9 +176,16 @@ export function icon(name, cls) {
    true, which is what moves the violet well out of the way. */
 export const hasArt = (def) => !!(def && def.art);
 
+/* The cut a caller asked for, or whichever one the material actually has.
+   Not everything is drawn both ways and no call site should have to know. */
+export function artSrc(def, variant = "fade") {
+  if (!hasArt(def)) return null;
+  return def.art[variant] || def.art.cut || def.art.fade || null;
+}
+
 export function artEl(def, { variant = "fade", cls } = {}) {
-  if (!hasArt(def)) return iconEl(def && def.icon, cls);
-  const src = def.art[variant] || def.art.fade;
+  const src = artSrc(def, variant);
+  if (!src) return iconEl(def && def.icon, cls);
   return h(`img.mat-art${cls ? `.${cls}` : ""}`, { src, alt: "", loading: "lazy", decoding: "async" });
 }
 

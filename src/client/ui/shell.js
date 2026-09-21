@@ -12,7 +12,7 @@
    ============================================================ */
 
 import { h, el, setText, setWidth, setAttr, toggleClass } from "./dom.js";
-import { iconEl, artEl, hasArt } from "./icons.js";
+import { iconEl, artEl, artSrc, hasArt } from "./icons.js";
 import { fmtAgo, fmtTime, fmtWhole, signedPct, titleCase } from "./format.js";
 import { CONFIG } from "../../shared/config.js";
 import { ARTISAN_ORDER, TRADE_ORDER, getSkill, getZone, regionOfTier, sovereignOf, skillName } from "../../shared/registry.js";
@@ -211,7 +211,7 @@ export function createShell(app) {
   function setIcon(which, box, spec, fallback) {
     const def = typeof spec === "string" || !spec ? null : spec;
     const paint = hasArt(def);
-    const key = paint ? def.art.fade : (def && def.icon) || (typeof spec === "string" ? spec : null) || fallback || "hammer";
+    const key = paint ? artSrc(def) : (def && def.icon) || (typeof spec === "string" ? spec : null) || fallback || "hammer";
     if (icons[which] === key) return;
     icons[which] = key;
     toggleClass(box, "is-paint", paint);
