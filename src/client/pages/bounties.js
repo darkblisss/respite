@@ -11,10 +11,10 @@
    ============================================================ */
 
 import { h, setText, setWidth, setAttr } from "../ui/dom.js";
-import { iconEl } from "../ui/icons.js";
+import { iconEl, artEl, hasArt } from "../ui/icons.js";
 import { fmt, fmtGold, fmtTime, fmtClock } from "../ui/format.js";
 import { GameData, getRegion, matId } from "../../shared/registry.js";
-import { itemName } from "../../shared/items.js";
+import { itemDef, itemName } from "../../shared/items.js";
 import { windowEndsIn } from "../../shared/weather.js";
 import { bountyOwed } from "../../shared/world.js";
 
@@ -62,12 +62,18 @@ export default {
         kind = h("span.chip.chip-violet", iconEl(trade ? trade.icon : "hammer"), trade ? trade.name : "Gathering");
         hint = `Paid on delivery: the ${itemName(b.targetId)} are handed over with the claim.`;
       }
+      // A gather posting is for one of the materials, so it is drawn as that
+      // material. A slay posting wants kills and keeps the scroll.
+      const want = b.kind === "slay" ? null : itemDef(b.targetId);
+      const art = want && hasArt(want)
+        ? h("div.art.art-lg.art-paint", { "aria-hidden": "true" }, artEl(want))
+        : h("div.art.art-lg", { "data-tone": "gold", "aria-hidden": "true" }, iconEl("scroll"));
       const R = { count: h("b"), fill: h("i"), claim: h("button.btn.btn-gold", { type: "button", onClick: () => ctx.dispatch("claimBounty") }) };
       R.bar = h("div.bar.bar-gold.bar-lg", { role: "progressbar", "aria-label": "Bounty progress", "aria-valuemin": "0", "aria-valuemax": "100" }, R.fill);
       return {
         R,
         node: h("section.card.bounty", { "data-tone": "gold" },
-          h("div.art.art-lg", { "data-tone": "gold", "aria-hidden": "true" }, iconEl("scroll")),
+          art,
           h("div", h("div.eyebrow", `Posted for ${region.name}`), h("h2.bounty-title", b.label)),
           h("div.bounty-progress",
             h("div.meter-top", h("span", "Progress"), R.count),
