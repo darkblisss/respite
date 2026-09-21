@@ -3,3 +3,4 @@ tests/e2e/shots/
 *.log
 .DS_Store
 package-lock.json
+Claude outputs/
