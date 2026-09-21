@@ -46,6 +46,9 @@ const MAT_ART = {
   slag_bar: "slag-bar", bog_bar: "mire-bar", cold_bar: "gloam-bar",
   cairn_bar: "cairn-bar", crucible_bar: "crucible-bar", star_bar: "starfall-bar",
   wyrm_bar: "wyrmheart-bar", void_bar: "hollow-bar", titan_bar: "titan-bar",
+
+  // The five reagents, which never had a tier and so were never renamed.
+  coal: "coal", resin: "resin", pulp: "pulp", tallow: "tallow", veil_shard: "veil-shard",
 };
 
 export const matArt = (id) => (MAT_ART[id]
@@ -230,6 +233,8 @@ function buildRegistry() {
   REAGENTS.forEach((r) => {
     MATERIALS[r.id] = { id: r.id, name: r.name, icon: r.icon, kind: "material",
       category: "Reagent", value: 1, tier: 1, reagent: true };
+    const art = matArt(r.id);
+    if (art) MATERIALS[r.id].art = art;
   });
 
   /* ---- THE VEIL: FRAGMENTS AND ESSENCE ----
@@ -376,6 +381,7 @@ function buildRegistry() {
         });
         GATHER_ACTIONS[s.id].push({
           id: `${s.id}_t${tier}_reag`, skillId: s.id, tier, name: reag.name, icon: reag.icon,
+          ...(reag.art ? { art: reag.art } : {}),
           level: t.level, time: t.time, xp: t.xp, out: { [s.reagent]: 1 },
         });
       } else {

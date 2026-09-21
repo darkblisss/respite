@@ -35,7 +35,7 @@
    ============================================================ */
 
 import { h, setText, setAttr, setWidth, toggleClass, on } from "../ui/dom.js";
-import { iconEl } from "../ui/icons.js";
+import { iconEl, artEl, hasArt } from "../ui/icons.js";
 import { openModal, confirm, toast } from "../ui/overlay.js";
 import { fmtWhole, fmtGold, fmtTime, fmtAgo } from "../ui/format.js";
 import { qtyPicker, confirmSpend, openPopup } from "../ui/widgets.js";
@@ -153,7 +153,13 @@ function rarityOf(row) {
 
 function itemArt(key, rarity, cls = "art-sm") {
   const d = itemDef(key);
-  return h("div.art", { class: cls, "data-rarity": rarity || "common", "aria-hidden": "true" }, iconEl(d ? d.icon : "unknown"));
+  // A drawn material shows itself and drops the plate; gear keeps both.
+  const paint = hasArt(d);
+  return h("div.art", {
+    class: paint ? [cls, "art-paint"] : cls,
+    "data-rarity": paint ? null : rarity || "common",
+    "aria-hidden": "true",
+  }, d ? artEl(d) : iconEl("unknown"));
 }
 
 // "Weapon · Lv10", "Bars · Lv10", "Reagent", "Tool · Delving · Lv10".

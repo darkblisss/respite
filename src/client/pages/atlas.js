@@ -11,7 +11,7 @@
    ============================================================ */
 
 import { h, el, qsa, on, setText, setWidth, setAttr, toggleClass } from "../ui/dom.js";
-import { iconEl } from "../ui/icons.js";
+import { iconEl, artEl } from "../ui/icons.js";
 import { confirm } from "../ui/overlay.js";
 import { fmt, fmtGold, fmtWhole } from "../ui/format.js";
 import { confirmSpend, hasPopup, openPopup } from "../ui/widgets.js";
@@ -208,7 +208,7 @@ export default {
         return h("span.chip", {
           class: { "is-locked": !ok },
           "data-tip": ok ? `${s.name} Lv ${lv}` : `Needs ${s.name} Lv ${r.level}. You have Lv ${lv}.`,
-        }, iconEl(ok ? s.matIcon : "lock"), itemDef(matId(r.tier, s.mat)).name);
+        }, ok ? artEl(itemDef(matId(r.tier, s.mat))) : iconEl("lock"), itemDef(matId(r.tier, s.mat)).name);
       });
       const yieldNote = workable === yields.length ? "Your crews can work all five."
         : workable === 0 ? `Your crews need Lv${NBSP}${r.level} in a trade to work any of it.`

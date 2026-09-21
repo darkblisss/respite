@@ -11,7 +11,7 @@
 import { tierLabel } from "../../shared/registry.js";
 import { CONFIG } from "../../shared/config.js";
 import { h, el, setText, setAttr, toggleClass } from "../ui/dom.js";
-import { iconEl } from "../ui/icons.js";
+import { iconEl, artEl, hasArt } from "../ui/icons.js";
 import { toast } from "../ui/overlay.js";
 import { fmt, fmtGold, fmtWhole, fmtTime, fmtClock } from "../ui/format.js";
 import { qtyPicker, confirmSpend } from "../ui/widgets.js";
@@ -82,7 +82,7 @@ export default {
       const buy = h("button.btn.btn-gold.btn-soft.btn-sm", { type: "button", onClick: () => buyRemedy(row) });
       const row = { entry, d, picker, sub, price, buy };
       row.node = h("div.list-row.shop-row.stack-sm",
-        h("div.art", { "data-tone": "good", "aria-hidden": "true" }, iconEl(d.icon)),
+        h("div.art", { class: { "art-paint": hasArt(d) }, "data-tone": "good", "aria-hidden": "true" }, artEl(d)),
         h("div.lr-main", h("div.lr-title", d.name), sub),
         h("div.lr-end", price, h("div.shop-buy", stepper, buy)));
       return row;
@@ -124,7 +124,7 @@ export default {
         const sub = h("div.lr-sub");
         const price = lot.bought ? null : h("span.price", fmtGold(lot.price));
         const node = h("div.list-row.shop-row.stack-sm", { class: { "is-dealt": lot.bought } },
-          h("div.art", { "data-tone": "gold", "aria-hidden": "true" }, iconEl(d.icon)),
+          h("div.art", { class: { "art-paint": hasArt(d) }, "data-tone": "gold", "aria-hidden": "true" }, artEl(d)),
           h("div.lr-main", h("div.lr-title", `${fmtWhole(lot.qty)}× ${d.name}`), sub),
           h("div.lr-end", lot.bought
             ? h("span.tag.tag-good", "Dealt")

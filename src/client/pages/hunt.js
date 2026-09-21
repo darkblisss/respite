@@ -22,7 +22,7 @@
    ============================================================ */
 
 import { h, on, setAttr, setText, setWidth, toggleClass } from "../ui/dom.js";
-import { iconEl } from "../ui/icons.js";
+import { iconEl, artEl } from "../ui/icons.js";
 import { fmt, fmtStat, fmtWhole, fmtTime } from "../ui/format.js";
 import { openPopup, portraitImg, paintPortrait } from "../ui/widgets.js";
 import { monsterArt } from "../ui/popups/foe.js";
@@ -521,7 +521,7 @@ export default {
         if (dsig !== sigs.drops) {
           sigs.drops = dsig;
           dropsList.replaceChildren(...(keys.length
-            ? keys.map((k) => h("span.drop-pip", { "data-tip": itemName(k) }, iconEl(itemDef(k).icon), fmt(drops[k])))
+            ? keys.map((k) => h("span.drop-pip", { "data-tip": itemName(k) }, artEl(itemDef(k)), fmt(drops[k])))
             : [h("span.drop-pip.is-empty", "Nothing yet")]));
         }
         setText(kLeft.v, fmtTime(Math.max(0, IDLE_CAP - c.elapsed)));

@@ -311,7 +311,7 @@ function openActionPopup(ctx, skillId, actionId) {
       listMemo.sig = sig;
       listMemo.vals = rows.map(() => h("span.ap-val"));
       list.replaceChildren(...rows.map((r, i) => h("div.ap-row",
-        h("button.ap-link", { type: "button", "data-key": r.key }, iconEl(itemDef(r.key).icon), h("span", r.label)),
+        h("button.ap-link", { type: "button", "data-key": r.key }, artEl(itemDef(r.key)), h("span", r.label)),
         listMemo.vals[i])));
     }
     setAttr(listBlock, "hidden", rows.length === 0);
