@@ -119,9 +119,16 @@
 
 /* In the Stockpile the slot is the frame already, so the painting only wants
    the room the glyph was not using. */
+/* The painting fills the slot's art box rather than sitting at a fixed 56px in
+   the middle of it. The cap is what keeps the tallest pieces (Coal, Pressed
+   Pulp) clear of the quantity in the corner; `contain` is what keeps them from
+   stretching when the grid drops to four across. */
 .slot-art .mat-art {
-  width: 56px;
-  height: 56px;
+  width: 100%;
+  height: 100%;
+  max-width: 96px;
+  max-height: 96px;
+  object-fit: contain;
   display: block;
 }
 
@@ -1933,7 +1940,7 @@ button.chip:disabled { opacity: .45; }
 }
 
 .slot[data-rarity="common"] .slot-art { color: var(--bone-dim); }
-.slot-art .ico { width: 30px; height: 30px; }
+.slot-art .ico { width: 40px; height: 40px; }
 
 /* One line, cut with an ellipsis. A second line pushed the art up and left the
    slot a different height from the one beside it, which is worse than losing
@@ -1989,7 +1996,7 @@ button.chip:disabled { opacity: .45; }
 @media (max-width: 599px) {
   .slot-grid { gap: 8px; }
   .slot { padding: 7px 7px 6px; border-radius: 9px; }
-  .slot-art .ico { width: 24px; height: 24px; }
+  .slot-art .ico { width: 32px; height: 32px; }
   .slot-name { font-size: 11px; }
   .slot-qty, .slot-wear { top: 5px; right: 6px; font-size: 11px; }
 }
