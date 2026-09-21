@@ -118,7 +118,7 @@ await run(async () => {
       power > 1 && c.foes.length > 0 && c.foes.every((f, i) => f.power === power && f.max === Cb.foeNumbers(getMonster(f.id), f.elite, power).hp && f.max > raw.tasks.combat.foes[i].max),
       c.foes.map((f) => [f.id, f.power, f.max]));
     check("with an id, and the save's one hunt stream from the seed for its dice", id === 1 && !("rng" in c) && m.rng.hunt === hashString(`${SEED}:hunt`) && startedAt === raw.tasks.combat.startedAt && m.serial === 2);
-    check("relics with numeric uids stay as they are", m.equipment.weapon === "cold_sword|relic|4|echoing" && m.equipment.chest === "cold_chest|rare|7");
+    check("relics with numeric uids stay as they are", m.equipment.weapon === "rime_sword|relic|4|echoing" && m.equipment.chest === "rime_chest|rare|7");
     const w = await listening();
     E.advance(m, NOW, w.env);
     check("and it plays on", m.stats.kills > raw.stats.kills && m.log.length > raw.log.length);
@@ -428,7 +428,7 @@ await run(async () => {
       const m = migrateSave(clone(raw), o);
       same(`worn first, then Belongings, the Stockpile, the Vault; one of each, stacks wherever they are (${label})`,
         [m.equipment.weapon, m.inv.items, m.bank.items, m.vault.items, m.inv.order, m.bank.order, m.vault.order],
-        ["cold_sword|rare|4", { "cold_helm|epic|5": 1, coal: 2 }, { "cold_chest|rare|6": 1, coal: 5 }, { coal: 7 }, ["cold_helm|epic|5", "coal"], ["cold_chest|rare|6", "coal"], ["coal"]]);
+        ["rime_sword|rare|4", { "rime_helm|epic|5": 1, coal: 2 }, { "rime_chest|rare|6": 1, coal: 5 }, { coal: 7 }, ["rime_helm|epic|5", "coal"], ["rime_chest|rare|6", "coal"], ["coal"]]);
     }
     same("five entries set right, said once", ledgerLine(migrateSave(clone(raw), legacy)), ["Your old camp's ledger didn't add up. 5 entries were set right."]);
     check("never a ledger line when the save isn't legacy", ledgerLine(migrateSave(clone(raw), opts)).length === 0);
@@ -481,7 +481,7 @@ await run(async () => {
     raw.bank = pool({ "cold_chest|rare|6": 1, "slag_chest|common": 2 }, 30);
     raw.wear = { "cold_sword|rare|4": 30, "cold_chest|rare|6": 12, "slag_chest|common": 5, "cold_helm|epic|5": 99, "slag_helm|common": 7, coal: 3 };
     for (const [label, o] of [["legacy", legacy], ["not legacy", opts]]) {
-      same(`worn and held pieces keep their wear; pieces gone from the camp don't (${label})`, migrateSave(clone(raw), o).wear, { "cold_sword|rare|4": 30, "cold_chest|rare|6": 12, "slag_chest|common": 5 });
+      same(`worn and held pieces keep their wear; pieces gone from the camp don't (${label})`, migrateSave(clone(raw), o).wear, { "rime_sword|rare|4": 30, "rime_chest|rare|6": 12, "slag_chest|common": 5 });
     }
     check("and that alone is no ledger entry", ledgerLine(migrateSave(clone(raw), legacy)).length === 0);
   }
@@ -580,5 +580,55 @@ await run(async () => {
     }
     check("a frozen v4 save migrates without a write (any write to a frozen object throws here)", !wrote, wrote);
     check("to the same result", !differs, differs);
+  }
+  /* ================= SCHEMA 12: THE KEYS MOVED ================= */
+
+  section("Schema 12: an id is the first word of the name");
+  {
+    // Every shape a save holds an item key in, all at once, all on keys that moved.
+    const raw = {
+      schema: 11, clock: NOW, meta: { createdAt: 1 },
+      player: { gold: 500, hp: 40, klass: "warrior" },
+      skills: { delving: 1e6, woodwright: 1e6 },
+      bank: { slots: 30, items: { cold_delve: 40, iron_fell: 12, bog_bar: 7, slag_delve: 9 }, order: ["cold_delve", "iron_fell", "bog_bar", "slag_delve"] },
+      inv: { slots: 10, items: { "star_sword|rare|c1.5|+3": 1 }, order: ["star_sword|rare|c1.5|+3"] },
+      vault: { slots: 50, items: {}, order: [] },
+      equipment: { weapon: "cold_sword|common", offhand: "iron_shield|common", head: "star_helm|epic|c3.1", chest: null, hands: null, feet: null, neck: null, ring: null },
+      tools: { delving: "bog_pick", felling: "iron_axe", dredging: "cave_net" },
+      rolls: { "m:carrion_rat": 12, "i:cold_delve": 1, "i:slag_delve": 4 },
+      bounty: { window: 3, region: "region_3", kind: "gather", targetId: "cold_delve", amount: 40, progress: 12, claimed: false, label: "Bring in 40" },
+      tasks: { skilling: { skillId: "woodwright", actionId: "craft_iron_plank", progress: 500, elapsed: 500, done: 2, limit: 10 }, combat: null },
+      rng: { seed: SEED }, serial: 1, uid: 4, region: "region_3", travel: { unlocked: ["region_1", "region_2", "region_3"] },
+    };
+    const m = migrateSave(clone(raw), opts);
+
+    same("a pool's stacks and its order both move, and what never moved is left alone",
+      [m.bank.items, m.bank.order],
+      [{ rime_delve: 40, gnarl_fell: 12, mire_bar: 7, slag_delve: 9 }, ["rime_delve", "gnarl_fell", "mire_bar", "slag_delve"]]);
+    same("a gear key moves by its base and keeps its rarity, condition and plus",
+      m.inv.order, ["starfall_sword|rare|c1.5|+3"]);
+    same("worn pieces move", [m.equipment.weapon, m.equipment.offhand, m.equipment.head],
+      ["rime_sword|common", "gnarl_shield|common", "starfall_helm|epic|c3.1"]);
+    same("the tool in each hand moves", m.tools, { delving: "mire_pick", felling: "gnarl_axe", dredging: "chalk_net" });
+    same("the Collection's i: counts move and its m: counts do not",
+      m.rolls, { "m:carrion_rat": 12, "i:rime_delve": 1, "i:slag_delve": 4 });
+    check("a posting's target moves", m.bounty && m.bounty.targetId === "rime_delve", m.bounty && m.bounty.targetId);
+    check("a running bench task moves, and is still a task the bench knows",
+      m.tasks.skilling && m.tasks.skilling.actionId === "craft_gnarl_plank", m.tasks.skilling);
+    check("and the save is schema 12 afterwards", m.schema === CONFIG.schema && CONFIG.schema === 12, m.schema);
+
+    // Nothing in a camp may fall out of the world on the way through.
+    const known = (k) => !!I.itemDef(String(k).split("|")[0]);
+    const held = [...m.bank.order, ...m.inv.order, ...Object.values(m.equipment).filter(Boolean), ...Object.values(m.tools)];
+    same("nothing is lost on the way", held.filter((k) => !known(k)), []);
+
+    const twice = migrateSave(clone(m), opts);
+    same("running it again changes nothing: a schema 12 save is already where it belongs",
+      [twice.bank.items, twice.equipment.weapon, twice.tools], [m.bank.items, m.equipment.weapon, m.tools]);
+
+    // A key the map has never heard of is either already current or was never ours.
+    const junk = { ...clone(raw), bank: { slots: 30, items: { not_a_thing: 3, coal: 5 }, order: ["not_a_thing", "coal"] } };
+    same("an unknown key is passed through untouched, for normalise to judge",
+      migrateSave(junk, opts).bank.items, { coal: 5 });
   }
 });

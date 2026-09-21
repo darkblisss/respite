@@ -8,6 +8,7 @@ import vm from "node:vm";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { matKey } from "../../src/shared/registry.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const repo = path.resolve(here, "../..");
@@ -149,11 +150,17 @@ export function put(state, w, key, qty) {
 
 /* A tier's gear set, exactly as the v4 hunt test built it: build is warrior,
    rogue, mage or light. Relic pieces all carry "vital", as v4's did. */
+/* Ids come from the registry's own key, never from the first word of the
+   display name. A material is free to be renamed without its id moving, so
+   deriving ids from names here quietly builds gear that does not exist: the set
+   comes back half empty and the fight it feeds reads as a balance regression
+   rather than a broken fixture. Tier 3 delve was already wrong this way before
+   anything was renamed, because Gloam Ore has been keyed "cold" since it shipped. */
 export function gearSet(GameData, tier, build, rarity = "common") {
   const slug = (s) => s.toLowerCase().replace(/[^a-z]/g, "");
-  const first = (n) => slug(n.split(" ")[0]);
   const t = GameData.TIERS[tier - 1];
-  const d = first(t.delve), f = first(t.fell), h = first(t.harvest), fl = first(t.flay), dr = first(t.dredge);
+  const key = (type) => slug(matKey(t, type));
+  const d = key("delve"), f = key("fell"), h = key("harvest"), fl = key("flay"), dr = key("dredge");
   const k = (id) => (rarity === "common" ? `${id}|common` : `${id}|${rarity}|9${rarity === "relic" ? "|vital" : ""}`);
   const heavy = { head: k(`${d}_helm`), chest: k(`${d}_chest`), feet: k(`${d}_hboots`), hands: k(`${d}_hgaunts`) };
   const medium = { head: k(`${fl}_hood`), chest: k(`${fl}_jacket`), feet: k(`${fl}_mboots`), hands: k(`${fl}_mgloves`) };

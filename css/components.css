@@ -123,6 +123,17 @@
    the middle of it. The cap is what keeps the tallest pieces (Coal, Pressed
    Pulp) clear of the quantity in the corner; `contain` is what keeps them from
    stretching when the grid drops to four across. */
+/* A Collection tile's box is its frame, so the painting fills it the way a
+   Stockpile slot's does. The monster art beside it already works this way
+   (.foe-art .m-art), and a material sitting at 20px next to a 52px foe read as
+   an afterthought. */
+.coll-art .mat-art {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
 .slot-art .mat-art {
   width: 100%;
   height: 100%;

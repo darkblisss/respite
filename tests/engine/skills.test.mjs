@@ -179,8 +179,8 @@ await run(async () => {
     // A reagent with nowhere to go is left behind; the work goes on.
     const s = fresh(8);
     s.skills.delving = CONFIG.xpTable[20];
-    put(s, "bank", "cold_delve", 1);
-    fillAll(s, ["coal", "cold_delve"]);
+    put(s, "bank", "rime_delve", 1);
+    fillAll(s, ["coal", "rime_delve"]);
     const key = "a:delving_t3";
     const def = findAction("delving", "delving_t3");
     let n = 0;

@@ -392,7 +392,7 @@ const masteryTable = (() => {
 })();
 
 export const CONFIG = deepFreeze({
-  schema: 11,
+  schema: 12,
   time,
   storage,
   progression,

@@ -64,7 +64,7 @@ await run(async () => {
       d("slag_sword|common").attack === 1 && d("bitter_shield|common").defence === 1 && d("mud_grimoire|common").attack === 1 && d("mud_amulet|common").attack === 1 && d("slag_ring|common").defence === 1);
     check("Tier 1 Common armour: head +1, chest +2, hands +1, feet +1 Health",
       d("slag_helm|common").health === 1 && d("slag_chest|common").health === 2 && d("slag_hgaunts|common").health === 1 && d("slag_hboots|common").health === 1);
-    const rar = [d("star_sword|common").attack, d("star_sword|rare|1").attack, d("star_sword|legendary|2").attack];
+    const rar = [d("starfall_sword|common").attack, d("starfall_sword|rare|1").attack, d("starfall_sword|legendary|2").attack];
     check("Rarity raises gear stats", rar[0] < rar[1] && rar[1] < rar[2], rar);
     const maxes = ["warrior", "rogue", "mage", null].map((k) => St.combatStats({ level: 99, klass: k, equipment: gearSet(GameData, 9, "light", "relic") }).maxHp);
     check("Nobody passes 5,000 health, even at Hunt 99 in a Relic tier-9 set", maxes.every((h) => h <= 5000) && Math.max(...maxes) > 3500, maxes);
@@ -336,7 +336,7 @@ await run(async () => {
   }
   {
     const s = hunter(43);
-    s.equipment.chest = "star_chest|common";
+    s.equipment.chest = "starfall_chest|common";
     s.player.hp = St.maxHp(s);
     const full = s.player.hp;
     s.equipment.chest = null;
@@ -654,7 +654,7 @@ await run(async () => {
   section("Loot, wear and remedies");
   {
     const s = hunter(71, { level: 99, klass: "warrior", equipment: gearSet(GameData, 9, "warrior", "relic") });
-    const junk = ["coal", "resin", "pulp", "tallow", "veil_shard", "bitter_fell", "stink_harvest", "blood_fell", "bog_delve", "grave_harvest"];
+    const junk = ["coal", "resin", "pulp", "tallow", "veil_shard", "bitter_fell", "stink_harvest", "blood_fell", "mire_delve", "noose_harvest"];
     junk.forEach((k) => put(s, "inv", k, 1));
     put(s, "bank", "mud_dredge", 1);
     const a = await arena();

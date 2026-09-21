@@ -74,7 +74,7 @@ await run(async () => {
     [START + 6 * HOUR + 1, "claimBounty", {}],
     [START + 6 * HOUR + 12345, "setHide", { on: true }],
     [START + 7 * HOUR + 777, "startHunt", { tier: 5, zone: "core", limit: 500 }],
-    [START + 8 * HOUR + 5, "sellItem", { key: "scaled_flay", from: "inv", qty: 10 }],
+    [START + 8 * HOUR + 5, "sellItem", { key: "slough_flay", from: "inv", qty: 10 }],
     [START + 8 * HOUR + 6, "moveItem", { key: "ghost_dredge", from: "inv", to: "vault", qty: null }],
     [START + 9 * HOUR + 1, "deployAgent", { agentId: "agent_3", itemKey: "coal" }],
     [START + 10 * HOUR, "startSkill", { skillId: "forgemaster", actionId: "craft_crucible_bar", limit: 20 }],

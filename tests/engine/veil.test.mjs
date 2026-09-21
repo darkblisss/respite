@@ -38,7 +38,7 @@ await run(async () => {
       ["greatsword", "grimoire"].every((line) => !GameData.LIVE_LINES.includes(line) &&
         ["warrior", "rogue", "mage", null].every((k) => !classWeapons(k).includes(line))));
     check("but its gear is still known, so a save holding one loads",
-      !!GameData.GEAR.titan_greatsword && !!GameData.GEAR.void_grimoire);
+      !!GameData.GEAR.titan_greatsword && !!GameData.GEAR.idol_grimoire);
     check("and no bench will make one, nor the parts only it wanted",
       !Object.values(GameData.CRAFT_ACTIONS).flat().some((a) => /greatsword|grimoire|gblade|ggrip|_book/.test(a.id)));
     check("armour is nobody's business but the wearer's",

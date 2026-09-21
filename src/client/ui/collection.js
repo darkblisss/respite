@@ -22,7 +22,7 @@
    ============================================================ */
 
 import { h, on, setText, setAttr } from "./dom.js";
-import { iconEl } from "./icons.js";
+import { iconEl, artEl, hasArt } from "./icons.js";
 import { fmt, fmtWhole } from "./format.js";
 import { monsterArt } from "./popups/foe.js";
 import { GameData, foesOf, sovereignOf, tierLabel } from "../../shared/registry.js";
@@ -42,26 +42,56 @@ const byTier = (a, b) => (a.tier || 0) - (b.tier || 0) || String(a.name).localeC
    still loads, but nothing shelved belongs in a collection: it cannot be got. */
 const shelved = (g) => GameData.WEAPON_LINE_IDS.includes(g.line) && !GameData.LIVE_LINES.includes(g.line);
 
-/* Gear, by the slot it goes in: a collector thinks in helms and swords, not in tiers.
-   Tools go in with it -- a pick is a thing you own, and it has nowhere else to sit. */
-const GEAR_GROUPS = GameData.EQUIP_SLOTS.map((slot) => ({
-  name: GameData.SLOT_LABELS[slot],
-  items: Object.values(GameData.GEAR).filter((g) => g.slot === slot && !shelved(g)).sort(byTier),
-})).filter((g) => g.items.length).concat([{
-  name: "Tools",
-  items: Object.values(GameData.TOOLS).sort(byTier),
-}].filter((g) => g.items.length));
+/* Grouped by the ground it comes from, the way the bestiary above it already is.
+   A collector asks what Graveshelf makes, not to see every helm in the game at
+   once: nine tiers of helms in one row is a list, not a collection. Inside a
+   region the paperdoll's own slot order holds, so a set reads as a set.
 
-// Components, by what the bench calls them: ores, bars, hides, reagents, remedies, the Veil.
-const PART_GROUPS = (() => {
+   Reagents and the Veil belong to no ground and get their own groups; remedies
+   are brewed rather than found, so they sit at the end of the same run. */
+const SLOT_RANK = new Map(GameData.EQUIP_SLOTS.map((slot, i) => [slot, i]));
+const bySlot = (a, b) => (SLOT_RANK.has(a.slot) ? SLOT_RANK.get(a.slot) : 99) - (SLOT_RANK.has(b.slot) ? SLOT_RANK.get(b.slot) : 99)
+  || String(a.name).localeCompare(String(b.name));
+
+// Raw before refined, trade by trade, then everything the bench builds out of them.
+const CAT_RANK = new Map(["Ore", "Bars", "Timber", "Planks", "Fibre", "Weave", "Hides", "Leather", "Finds", "Inlays", "Component"]
+  .map((c, i) => [c, i]));
+const byCategory = (a, b) => (CAT_RANK.has(a.category) ? CAT_RANK.get(a.category) : 99) - (CAT_RANK.has(b.category) ? CAT_RANK.get(b.category) : 99)
+  || (a.tier || 0) - (b.tier || 0) || String(a.name).localeCompare(String(b.name));
+
+const groundName = (tier) => {
+  const region = GameData.REGIONS.find((r) => r.tier === tier);
+  return region ? `${region.name} · ${tierLabel(tier)}` : `Tier ${tier}`;
+};
+
+// Split items across their regions, tier by tier, dropping any ground with nothing on it.
+function byGround(items, sort) {
   const by = new Map();
-  Object.values(GameData.MATERIALS).forEach((m) => {
-    const name = m.heal > 0 ? "Remedies" : m.category || "Material";
-    if (!by.has(name)) by.set(name, []);
-    by.get(name).push(m);
+  items.forEach((d) => {
+    const tier = Number(d.tier) || 0;
+    if (!by.has(tier)) by.set(tier, []);
+    by.get(tier).push(d);
   });
-  return Array.from(by, ([name, items]) => ({ name, items: items.sort(byTier) }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  return [...by.keys()].sort((a, b) => a - b)
+    .map((tier) => ({ name: groundName(tier), items: by.get(tier).sort(sort) }))
+    .filter((g) => g.items.length);
+}
+
+/* Gear and the tools beside it. A pick is a thing you own and has nowhere else to sit. */
+const GEAR_GROUPS = byGround(
+  Object.values(GameData.GEAR).filter((g) => !shelved(g)).concat(Object.values(GameData.TOOLS)),
+  bySlot);
+
+// Components, by the ground they come off, with what belongs to no ground after.
+const PART_GROUPS = (() => {
+  const all = Object.values(GameData.MATERIALS);
+  const loose = (name, items) => (items.length ? [{ name, items: items.sort(byTier) }] : []);
+  const reagents = all.filter((m) => m.reagent);
+  const veil = all.filter((m) => m.category === "Veil");
+  const remedies = all.filter((m) => m.heal > 0);
+  const set = new Set([...reagents, ...veil, ...remedies]);
+  return byGround(all.filter((m) => !set.has(m)), byCategory)
+    .concat(loose("Reagents", reagents), loose("The Veil", veil), loose("Remedies", remedies));
 })();
 
 const GEAR_COUNT = GEAR_GROUPS.reduce((n, g) => n + g.items.length, 0);
@@ -133,7 +163,10 @@ function itemTile(def, have) {
         h("span.sr-only", "Never held")));
   }
   return h("button.foe-tile.coll-tile", { type: "button", dataset: { item: def.id } },
-    h("span.foe-art.coll-art", { "aria-hidden": "true" }, iconEl(def.icon)),
+    // The cut, not the fade: a collection tile is a framed box, and a fade in a
+    // frame is a smudge. Anything unpainted keeps its glyph.
+    h("span.foe-art.coll-art", { class: { "art-paint": hasArt(def) }, "aria-hidden": "true" },
+      artEl(def, { variant: "cut" })),
     h("span.foe-tile-main",
       h("span.foe-tile-name", def.name),
       h("span.foe-tile-sub", sub.filter(Boolean).join(" · "))));

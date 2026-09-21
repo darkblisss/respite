@@ -11,21 +11,16 @@ import { CONFIG, deepFreeze } from "./config.js";
 export const basePrefix = (name) => name.split(" ")[0];
 export const slug = (s) => s.toLowerCase().replace(/[^a-z]/g, "");
 
-/* What a material is CALLED and what it is KEYED BY are two different things.
-   Every id in the game is built from the key -- an ore in a vault, a listing on
-   the market, a bounty's target -- so a key that moves orphans live saves and
-   live listings at once. A name is only a name. RENAMED holds the key of every
-   material whose name has changed since it shipped, so the name above it in
-   TIERS is free to become anything. Nothing is ever removed from it. */
-const RENAMED = {
-  2: { delve: "bog" },     // Bog Ore     -> Mire Ore
-  3: { delve: "cold" },    // Cold Ore    -> Gloam Ore
-  6: { delve: "star" },    // Star Steel  -> Starfall Steel
-  7: { delve: "wyrm" },    // Wyrm Core   -> Wyrmheart Core
-  8: { delve: "void" },    // Void Core   -> Hollow Core
-};
+/* An id is the first word of the name, lower-cased. That was not always true:
+   RENAMED used to pin a key while the name above it moved, so Gloam Ore
+   answered to "cold". Schema 12 closed the gap and shared/renames.js carries
+   every key that shifted on the day it did.
 
-export const matKey = (row, type) => (RENAMED[row.i] && RENAMED[row.i][type]) || basePrefix(row[type]);
+   So renaming a material now moves its id, which orphans saves, listings and
+   bounties unless a migration goes with it. That cost is meant to be visible.
+   matKey is the one place that decides, and everything -- the game, the test
+   harness, any tool -- must ask it rather than splitting a name by hand. */
+export const matKey = (row, type) => basePrefix(row[type]);
 
 /* Raw materials drawn rather than glyphed. Keyed by the id, which never moves;
    the file is named for whatever the material is called today, so the folder
@@ -36,18 +31,19 @@ export const matKey = (row, type) => (RENAMED[row.i] && RENAMED[row.i][type]) ||
    lets the tile melt into the row. A Stockpile slot IS a frame, so `cut` drops
    the background entirely and the object sits in the slot. */
 const MAT_ART = {
-  // The ore a crew hauls up.
-  slag_delve: "slag", bog_delve: "mire", cold_delve: "gloam",
-  cairn_delve: "cairn", crucible_delve: "crucible", star_delve: "starfall",
-  wyrm_delve: "wyrmheart", void_delve: "hollow", titan_delve: "titan",
+  // The ore a crew hauls up. Key and file agree now: schema 12 put an id and a
+  // name back on the same word, so gloam.webp is the odd one out -- the painting
+  // kept its filename when Gloam Ore became Rime Ore, because the art is the art.
+  slag_delve: "slag", mire_delve: "mire", rime_delve: "gloam",
+  cairn_delve: "cairn", crucible_delve: "crucible", starfall_delve: "starfall",
+  wyrmheart_delve: "wyrmheart", hollow_delve: "hollow", titan_delve: "titan",
 
-  // What the Forgemaster makes of it. The key on the left is the tier's, which
-  // is why a Mire Bar is bog_bar; the file on the right is what it is called.
-  slag_bar: "slag-bar", bog_bar: "mire-bar", cold_bar: "gloam-bar",
-  cairn_bar: "cairn-bar", crucible_bar: "crucible-bar", star_bar: "starfall-bar",
-  wyrm_bar: "wyrmheart-bar", void_bar: "hollow-bar", titan_bar: "titan-bar",
+  // What the Forgemaster makes of it.
+  slag_bar: "slag-bar", mire_bar: "mire-bar", rime_bar: "gloam-bar",
+  cairn_bar: "cairn-bar", crucible_bar: "crucible-bar", starfall_bar: "starfall-bar",
+  wyrmheart_bar: "wyrmheart-bar", hollow_bar: "hollow-bar", titan_bar: "titan-bar",
 
-  // The five reagents, which never had a tier and so were never renamed.
+  // The five reagents, which never had a tier and so never moved.
   coal: "coal", resin: "resin", pulp: "pulp", tallow: "tallow", veil_shard: "veil-shard",
 };
 
@@ -122,15 +118,15 @@ function buildRegistry() {
   ];
 
   const TIERS = [
-    { i: 1, level: 1,  time: 12000, xp: 1,  fell: "Bitter Brush",    delve: "Slag Ore",       harvest: "Stink Weed",     flay: "Mangy Pelt",         dredge: "Mud Pebble" },
-    { i: 2, level: 10, time: 16000, xp: 3,  fell: "Blood Ash",       delve: "Mire Ore",        harvest: "Grave Moss",     flay: "Bristle Pelt",       dredge: "River Amber" },
-    { i: 3, level: 20, time: 24000, xp: 6,  fell: "Iron Bark",       delve: "Gloam Ore",       harvest: "Pale Rush",      flay: "Dire Pelt",          dredge: "Cave Agate" },
-    { i: 4, level: 30, time: 32000, xp: 10, fell: "Barrow Pine",     delve: "Cairn Steel",    harvest: "Corpse Bloom",   flay: "Cured Hide",         dredge: "Mourning Quartz" },
-    { i: 5, level: 40, time: 40000, xp: 15, fell: "Sallow Timber",   delve: "Crucible Steel", harvest: "Widows Bloom",   flay: "Scaled Hide",        dredge: "Ghost Opal" },
-    { i: 6, level: 50, time: 48000, xp: 22, fell: "Umber Heartwood", delve: "Starfall Steel",     harvest: "Dragon Bloom",   flay: "Chitin Hide",        dredge: "Blood Ruby" },
-    { i: 7, level: 60, time: 56000, xp: 30, fell: "Wyrm Root",       delve: "Wyrmheart Core",      harvest: "Moon Frond",     flay: "Drake Carapace",     dredge: "Abyssal Coral" },
-    { i: 8, level: 70, time: 64000, xp: 39, fell: "Void Root",       delve: "Hollow Core",      harvest: "Fade Frond",     flay: "Leviathan Carapace", dredge: "Leviathan Bone" },
-    { i: 9, level: 80, time: 72000, xp: 49, fell: "Godsdown Knot",   delve: "Titan Core",     harvest: "Godsbane Frond", flay: "Demon Carapace",     dredge: "Void Sapphire" },
+    { i: 1, level: 1 , time: 12000, xp: 1 , fell: "Bitter Wood",      delve: "Slag Ore",        harvest: "Stink Weed",      flay: "Mangy Pelt",          dredge: "Mud Pebble" },
+    { i: 2, level: 10, time: 16000, xp: 3 , fell: "Blood Wood",       delve: "Mire Ore",        harvest: "Noose Weed",      flay: "Bristle Pelt",        dredge: "Bog Pebble" },
+    { i: 3, level: 20, time: 24000, xp: 6 , fell: "Gnarl Wood",       delve: "Rime Ore",        harvest: "Pale Weed",       flay: "Dire Pelt",           dredge: "Chalk Pebble" },
+    { i: 4, level: 30, time: 32000, xp: 10, fell: "Barrow Timber",    delve: "Cairn Steel",     harvest: "Corpse Bloom",    flay: "Gaunt Hide",          dredge: "Mourning Gem" },
+    { i: 5, level: 40, time: 40000, xp: 15, fell: "Sallow Timber",    delve: "Crucible Steel",  harvest: "Widow Bloom",     flay: "Slough Hide",         dredge: "Ghost Gem" },
+    { i: 6, level: 50, time: 48000, xp: 22, fell: "Elder Timber",     delve: "Starfall Steel",  harvest: "Lantern Bloom",   flay: "Stag Hide",           dredge: "Amber Gem" },
+    { i: 7, level: 60, time: 56000, xp: 30, fell: "Ember Heartwood",  delve: "Wyrmheart Core",  harvest: "Moon Frond",      flay: "Drake Carapace",      dredge: "Hoard Sigil" },
+    { i: 8, level: 70, time: 64000, xp: 39, fell: "Wither Heartwood", delve: "Hollow Core",     harvest: "Fade Frond",      flay: "Leviathan Carapace",  dredge: "Sunken Sigil" },
+    { i: 9, level: 80, time: 72000, xp: 49, fell: "Marrow Heartwood", delve: "Titan Core",      harvest: "Godsbane Frond",  flay: "Demon Carapace",      dredge: "Idol Sigil" },
   ];
 
   /* ================= 4. SKILLS ================= */
@@ -403,7 +399,7 @@ function buildRegistry() {
     const coal = "coal", resin = "resin", pulp = "pulp", tallow = "tallow", shard = "veil_shard";
 
     // 2. REFINED MATERIALS
-    // The id is built from the key, the name from the name: "Mire Bar" is bog_bar.
+    // Key and name are the same word now, so a Mire Bar is mire_bar.
     const bar = `${kDelve}_bar`;
     const plank = `${kFell}_plank`;
     const weave = `${kHarv}_weave`;

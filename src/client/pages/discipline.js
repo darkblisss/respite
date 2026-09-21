@@ -497,7 +497,7 @@ function pathViewBuild(ctx) {
       if (foot.parentNode) node.removeChild(foot);
       if (!locked.parentNode) node.appendChild(locked);
       setText(sub, "No discipline, no path.");
-      setText(pts, "—");
+      setText(pts, "None");
       sheetNow = null;
       builtFor = null;
       return;

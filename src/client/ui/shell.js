@@ -211,11 +211,13 @@ export function createShell(app) {
   function setIcon(which, box, spec, fallback) {
     const def = typeof spec === "string" || !spec ? null : spec;
     const paint = hasArt(def);
-    const key = paint ? artSrc(def) : (def && def.icon) || (typeof spec === "string" ? spec : null) || fallback || "hammer";
+    // Cut, not fade: the chip is a sunk well with an edge of its own, and a fade
+  // against that edge reads as a smudge rather than a thing being carried.
+  const key = paint ? artSrc(def, "cut") : (def && def.icon) || (typeof spec === "string" ? spec : null) || fallback || "hammer";
     if (icons[which] === key) return;
     icons[which] = key;
     toggleClass(box, "is-paint", paint);
-    box.replaceChildren(paint ? artEl(def) : iconEl(key));
+    box.replaceChildren(paint ? artEl(def, { variant: "cut" }) : iconEl(key));
   }
 
   function paintBench(s) {
