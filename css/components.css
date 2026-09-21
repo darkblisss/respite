@@ -1802,6 +1802,13 @@ button.chip:disabled { opacity: .45; }
 }
 
 .item-pill.is-working > .art { box-shadow: inset 0 0 0 1px var(--pill-tone), 0 0 0 4px var(--pill-soft), 0 0 22px var(--pill-soft); }
+
+/* ...but a painting has no plate to ring, and that inset line drew a box around
+   the ore the moment a node started working. It keeps the glow, which is what
+   says "this one is running", and loses the frame. This rule has to sit here
+   rather than up with .art-paint: `.item-pill.is-working > .art` is three
+   classes deep and outranks it. */
+.item-pill.is-working > .art.art-paint { box-shadow: 0 0 18px var(--pill-soft); }
 .item-pill.is-working .pill-sub { color: var(--pill-tone-hi); }
 .item-pill.is-working .pill-sub b { color: var(--bone); }
 
