@@ -11,8 +11,42 @@ import { CONFIG, deepFreeze } from "./config.js";
 export const basePrefix = (name) => name.split(" ")[0];
 export const slug = (s) => s.toLowerCase().replace(/[^a-z]/g, "");
 
+/* What a material is CALLED and what it is KEYED BY are two different things.
+   Every id in the game is built from the key -- an ore in a vault, a listing on
+   the market, a bounty's target -- so a key that moves orphans live saves and
+   live listings at once. A name is only a name. RENAMED holds the key of every
+   material whose name has changed since it shipped, so the name above it in
+   TIERS is free to become anything. Nothing is ever removed from it. */
+const RENAMED = {
+  2: { delve: "bog" },     // Bog Ore     -> Mire Ore
+  3: { delve: "cold" },    // Cold Ore    -> Gloam Ore
+  6: { delve: "star" },    // Star Steel  -> Starfall Steel
+  7: { delve: "wyrm" },    // Wyrm Core   -> Wyrmheart Core
+  8: { delve: "void" },    // Void Core   -> Hollow Core
+};
+
+export const matKey = (row, type) => (RENAMED[row.i] && RENAMED[row.i][type]) || basePrefix(row[type]);
+
+/* Raw materials drawn rather than glyphed. Keyed by the id, which never moves;
+   the file is named for whatever the material is called today, so the folder
+   reads as the game does. Anything not in here keeps its stroke icon.
+
+   Two cuts of every painting, because the two places they hang want opposite
+   things. A gather pill has no frame, so `fade` keeps the painted light and
+   lets the tile melt into the row. A Stockpile slot IS a frame, so `cut` drops
+   the background entirely and the object sits in the slot. */
+const MAT_ART = {
+  slag_delve: "slag", bog_delve: "mire", cold_delve: "gloam",
+  cairn_delve: "cairn", crucible_delve: "crucible", star_delve: "starfall",
+  wyrm_delve: "wyrmheart", void_delve: "hollow", titan_delve: "titan",
+};
+
+export const matArt = (id) => (MAT_ART[id]
+  ? { fade: `assets/materials/fade/${MAT_ART[id]}.webp`, cut: `assets/materials/cut/${MAT_ART[id]}.webp` }
+  : null);
+
 // A raw material's id from its TIERS row and type: "slag_delve".
-const rowMatId = (row, type) => `${slug(basePrefix(row[type]))}_${type}`;
+const rowMatId = (row, type) => `${slug(matKey(row, type))}_${type}`;
 
 function buildRegistry() {
   /* ================= 1. EQUIPMENT SLOTS ================= */
@@ -72,13 +106,13 @@ function buildRegistry() {
 
   const TIERS = [
     { i: 1, level: 1,  time: 12000, xp: 1,  fell: "Bitter Brush",    delve: "Slag Ore",       harvest: "Stink Weed",     flay: "Mangy Pelt",         dredge: "Mud Pebble" },
-    { i: 2, level: 10, time: 16000, xp: 3,  fell: "Blood Ash",       delve: "Bog Ore",        harvest: "Grave Moss",     flay: "Bristle Pelt",       dredge: "River Amber" },
-    { i: 3, level: 20, time: 24000, xp: 6,  fell: "Iron Bark",       delve: "Cold Ore",       harvest: "Pale Rush",      flay: "Dire Pelt",          dredge: "Cave Agate" },
+    { i: 2, level: 10, time: 16000, xp: 3,  fell: "Blood Ash",       delve: "Mire Ore",        harvest: "Grave Moss",     flay: "Bristle Pelt",       dredge: "River Amber" },
+    { i: 3, level: 20, time: 24000, xp: 6,  fell: "Iron Bark",       delve: "Gloam Ore",       harvest: "Pale Rush",      flay: "Dire Pelt",          dredge: "Cave Agate" },
     { i: 4, level: 30, time: 32000, xp: 10, fell: "Barrow Pine",     delve: "Cairn Steel",    harvest: "Corpse Bloom",   flay: "Cured Hide",         dredge: "Mourning Quartz" },
     { i: 5, level: 40, time: 40000, xp: 15, fell: "Sallow Timber",   delve: "Crucible Steel", harvest: "Widows Bloom",   flay: "Scaled Hide",        dredge: "Ghost Opal" },
-    { i: 6, level: 50, time: 48000, xp: 22, fell: "Umber Heartwood", delve: "Star Steel",     harvest: "Dragon Bloom",   flay: "Chitin Hide",        dredge: "Blood Ruby" },
-    { i: 7, level: 60, time: 56000, xp: 30, fell: "Wyrm Root",       delve: "Wyrm Core",      harvest: "Moon Frond",     flay: "Drake Carapace",     dredge: "Abyssal Coral" },
-    { i: 8, level: 70, time: 64000, xp: 39, fell: "Void Root",       delve: "Void Core",      harvest: "Fade Frond",     flay: "Leviathan Carapace", dredge: "Leviathan Bone" },
+    { i: 6, level: 50, time: 48000, xp: 22, fell: "Umber Heartwood", delve: "Starfall Steel",     harvest: "Dragon Bloom",   flay: "Chitin Hide",        dredge: "Blood Ruby" },
+    { i: 7, level: 60, time: 56000, xp: 30, fell: "Wyrm Root",       delve: "Wyrmheart Core",      harvest: "Moon Frond",     flay: "Drake Carapace",     dredge: "Abyssal Coral" },
+    { i: 8, level: 70, time: 64000, xp: 39, fell: "Void Root",       delve: "Hollow Core",      harvest: "Fade Frond",     flay: "Leviathan Carapace", dredge: "Leviathan Bone" },
     { i: 9, level: 80, time: 72000, xp: 49, fell: "Godsdown Knot",   delve: "Titan Core",     harvest: "Godsbane Frond", flay: "Demon Carapace",     dredge: "Void Sapphire" },
   ];
 
@@ -265,8 +299,12 @@ function buildRegistry() {
   }
 
   function addMat(id, name, icon, tier, valMult, category) {
-    MATERIALS[id] = { id, name, icon, kind: "material",
+    const def = { id, name, icon, kind: "material",
       value: Math.max(1, Math.round(CONFIG.valBase(tier) * valMult)), tier, category: category || "Component" };
+    // Only the drawn ones carry `art`; everything else is shaped exactly as before.
+    const art = matArt(id);
+    if (art) def.art = art;
+    MATERIALS[id] = def;
   }
 
   function addGear(id, name, icon, slot, tier, prof, line, twoHand) {
@@ -298,11 +336,24 @@ function buildRegistry() {
     const tFlay = basePrefix(t.flay);
     const tDred = basePrefix(t.dredge);
 
+    /* The five above are what a tier is CALLED and feed every display name below.
+       The five here are what it is KEYED BY and feed every id. They are the same
+       string until a material is renamed, and that is the whole point: a tier can
+       be renamed without moving a single sword, ingot or component already minted
+       into somebody's vault. */
+    const kDelve = slug(matKey(t, "delve"));
+    const kFell = slug(matKey(t, "fell"));
+    const kHarv = slug(matKey(t, "harvest"));
+    const kFlay = slug(matKey(t, "flay"));
+    const kDred = slug(matKey(t, "dredge"));
+
     // 1. RAW MATERIALS & GATHER ACTIONS (an action is named after what it yields)
     GATHER_SKILLS.forEach((s) => {
       const rawId = rowMatId(t, s.mat);
       const reag = MATERIALS[s.reagent];
       addMat(rawId, t[s.mat], s.matIcon, tier, 1.0, s.resource);
+      // A node wears the face of the thing it yields, when that thing has one.
+      const rawArt = MATERIALS[rawId].art ? { art: MATERIALS[rawId].art } : null;
 
       if (!GATHER_ACTIONS[s.id]) GATHER_ACTIONS[s.id] = [];
 
@@ -310,7 +361,7 @@ function buildRegistry() {
         // Dedicated reagent ground, at the tier's own level so it is
         // workable the moment you arrive.
         GATHER_ACTIONS[s.id].push({
-          id: `${s.id}_t${tier}_raw`, skillId: s.id, tier, name: t[s.mat], icon: s.matIcon,
+          id: `${s.id}_t${tier}_raw`, skillId: s.id, tier, name: t[s.mat], icon: s.matIcon, ...rawArt,
           level: t.level, time: t.time, xp: t.xp, out: { [rawId]: 1 },
         });
         GATHER_ACTIONS[s.id].push({
@@ -319,7 +370,7 @@ function buildRegistry() {
         });
       } else {
         GATHER_ACTIONS[s.id].push({
-          id: `${s.id}_t${tier}`, skillId: s.id, tier, name: t[s.mat], icon: s.matIcon,
+          id: `${s.id}_t${tier}`, skillId: s.id, tier, name: t[s.mat], icon: s.matIcon, ...rawArt,
           level: t.level, time: t.time, xp: t.xp, out: { [rawId]: 1 },
           reagentId: s.reagent, reagentChance: CONFIG.economy.reagentChances[tier],
         });
@@ -329,11 +380,12 @@ function buildRegistry() {
     const coal = "coal", resin = "resin", pulp = "pulp", tallow = "tallow", shard = "veil_shard";
 
     // 2. REFINED MATERIALS
-    const bar = `${slug(tDelve)}_bar`;
-    const plank = `${slug(tFell)}_plank`;
-    const weave = `${slug(tHarv)}_weave`;
-    const leather = `${slug(tFlay)}_leather`;
-    const inlay = `${slug(tDred)}_inlay`;
+    // The id is built from the key, the name from the name: "Mire Bar" is bog_bar.
+    const bar = `${kDelve}_bar`;
+    const plank = `${kFell}_plank`;
+    const weave = `${kHarv}_weave`;
+    const leather = `${kFlay}_leather`;
+    const inlay = `${kDred}_inlay`;
 
     addMat(bar, `${tDelve} Bar`, "ore", tier, 3.5, "Bars");
     addMat(plank, `${tFell} Plank`, "log", tier, 3.5, "Planks");
@@ -348,19 +400,19 @@ function buildRegistry() {
     addCraft("artificer", inlay, MATERIALS[inlay].name, "gem", tier, t.time, 0.5, { [rowMatId(t, "dredge")]: 10, [shard]: tier * 2 });
 
     // 3. COMPONENTS
-    const blade = `${slug(tDelve)}_blade`;
-    const handle = `${slug(tFell)}_handle`;
-    const score = `${slug(tFell)}_score`;
-    const bind = `${slug(tFlay)}_bind`;
-    const stave = `${slug(tFell)}_stave`;
-    const string = `${slug(tHarv)}_string`;
-    const grip = `${slug(tFlay)}_grip`;
-    const shaft = `${slug(tFell)}_shaft`;
-    const head = `${slug(tDelve)}_head`;
-    const gblade = `${slug(tDelve)}_gblade`;
-    const ggrip = `${slug(tFell)}_ggrip`;
-    const book = `${slug(tHarv)}_book`;
-    const clasp = `${slug(tDred)}_clasp`;
+    const blade = `${kDelve}_blade`;
+    const handle = `${kFell}_handle`;
+    const score = `${kFell}_score`;
+    const bind = `${kFlay}_bind`;
+    const stave = `${kFell}_stave`;
+    const string = `${kHarv}_string`;
+    const grip = `${kFlay}_grip`;
+    const shaft = `${kFell}_shaft`;
+    const head = `${kDelve}_head`;
+    const gblade = `${kDelve}_gblade`;
+    const ggrip = `${kFell}_ggrip`;
+    const book = `${kHarv}_book`;
+    const clasp = `${kDred}_clasp`;
 
     addMat(blade, `${tDelve} Blade`, "blade", tier, 10, "Component");
     addMat(handle, `${tFell} Handle`, "log", tier, 10, "Component");
@@ -394,13 +446,13 @@ function buildRegistry() {
     // 4. GEAR (Weapons & Armor)
     const gTime = CONFIG.gearTime(tier);
 
-    const wSword = `${slug(tDelve)}_sword`;
-    const wDagger = `${slug(tDelve)}_dagger`;
-    const wShield = `${slug(tFell)}_shield`;
-    const wBow = `${slug(tFell)}_bow`;
-    const wStaff = `${slug(tDred)}_staff`;
-    const wGsword = `${slug(tDelve)}_greatsword`;
-    const wGrimoire = `${slug(tDred)}_grimoire`;
+    const wSword = `${kDelve}_sword`;
+    const wDagger = `${kDelve}_dagger`;
+    const wShield = `${kFell}_shield`;
+    const wBow = `${kFell}_bow`;
+    const wStaff = `${kDred}_staff`;
+    const wGsword = `${kDelve}_greatsword`;
+    const wGrimoire = `${kDred}_grimoire`;
 
     addGear(wSword, `${tDelve} Sword`, "blade", "weapon", tier, "forgemaster", "sword");
     addGear(wDagger, `${tDelve} Dagger`, "blade", "weapon", tier, "forgemaster", "dagger");
@@ -419,8 +471,8 @@ function buildRegistry() {
     addCraft("artificer", wGrimoire, GEAR[wGrimoire].name, "book", tier, gTime, 3.2, { [book]: 1, [bind]: 1, [clasp]: 1 }, true);
 
     // Jewellery (Artificer)
-    const jAmulet = `${slug(tDred)}_amulet`;
-    const jRing = `${slug(tDelve)}_ring`;
+    const jAmulet = `${kDred}_amulet`;
+    const jRing = `${kDelve}_ring`;
 
     addGear(jAmulet, `${tDred} Amulet`, "charm", "neck", tier, "artificer", "amulet");
     addGear(jRing, `${tDelve} Ring`, "band", "ring", tier, "artificer", "ring");
@@ -429,10 +481,10 @@ function buildRegistry() {
     addCraft("artificer", jRing, GEAR[jRing].name, "band", tier, gTime, 2.5, { [bar]: 6, [inlay]: 1, [shard]: tier }, true);
 
     // Heavy Armor (Forgemaster)
-    const aHH = `${slug(tDelve)}_helm`;
-    const aHC = `${slug(tDelve)}_chest`;
-    const aHB = `${slug(tDelve)}_hboots`;
-    const aHG = `${slug(tDelve)}_hgaunts`;
+    const aHH = `${kDelve}_helm`;
+    const aHC = `${kDelve}_chest`;
+    const aHB = `${kDelve}_hboots`;
+    const aHG = `${kDelve}_hgaunts`;
 
     addGear(aHH, `${tDelve} Helm`, "cowl", "head", tier, "forgemaster", "helm");
     addGear(aHC, `${tDelve} Chestplate`, "plate", "chest", tier, "forgemaster", "chest");
@@ -444,10 +496,10 @@ function buildRegistry() {
     });
 
     // Medium Armor (Tanner)
-    const aMH = `${slug(tFlay)}_hood`;
-    const aMC = `${slug(tFlay)}_jacket`;
-    const aMB = `${slug(tFlay)}_mboots`;
-    const aMG = `${slug(tFlay)}_mgloves`;
+    const aMH = `${kFlay}_hood`;
+    const aMC = `${kFlay}_jacket`;
+    const aMB = `${kFlay}_mboots`;
+    const aMG = `${kFlay}_mgloves`;
 
     addGear(aMH, `${tFlay} Hood`, "cowl", "head", tier, "tanner", "hood_medium");
     addGear(aMC, `${tFlay} Jacket`, "shroud", "chest", tier, "tanner", "jacket");
@@ -459,10 +511,10 @@ function buildRegistry() {
     });
 
     // Light Armor (Weaver)
-    const aLH = `${slug(tHarv)}_hood`;
-    const aLC = `${slug(tHarv)}_robe`;
-    const aLB = `${slug(tHarv)}_lboots`;
-    const aLG = `${slug(tHarv)}_lgloves`;
+    const aLH = `${kHarv}_hood`;
+    const aLC = `${kHarv}_robe`;
+    const aLB = `${kHarv}_lboots`;
+    const aLG = `${kHarv}_lgloves`;
 
     addGear(aLH, `${tHarv} Hood`, "cowl", "head", tier, "weaver", "hood_light");
     addGear(aLC, `${tHarv} Robe`, "shroud", "chest", tier, "weaver", "robe");
@@ -474,11 +526,11 @@ function buildRegistry() {
     });
 
     // 5. TOOLS
-    const pPick = `${slug(tDelve)}_pick`;
-    const pAxe = `${slug(tFell)}_axe`;
-    const pSick = `${slug(tHarv)}_sickle`;
-    const pKni = `${slug(tFlay)}_knife`;
-    const pNet = `${slug(tDred)}_net`;
+    const pPick = `${kDelve}_pick`;
+    const pAxe = `${kFell}_axe`;
+    const pSick = `${kHarv}_sickle`;
+    const pKni = `${kFlay}_knife`;
+    const pNet = `${kDred}_net`;
 
     const mTool = (id, name, icon, skill, prof, cost) => {
       TOOLS[id] = { id, name, icon, kind: "tool", forSkill: skill, tier, speed: tier * B.toolSpeedPerTier, value: 1 };

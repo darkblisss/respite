@@ -14,7 +14,7 @@
    ============================================================ */
 
 import { h, html, on, qs, setText, setWidth, setAttr, toggleClass } from "../ui/dom.js";
-import { iconEl } from "../ui/icons.js";
+import { iconEl, artEl, hasArt } from "../ui/icons.js";
 import { tooltip, tipBody, hideTip } from "../ui/overlay.js";
 import { fmt, fmtWhole, fmtTime, titleCase } from "../ui/format.js";
 import { openPopup } from "../ui/widgets.js";
@@ -152,7 +152,7 @@ function pillShell(def, tipLabel, tip) {
   const info = h("button.info-btn", { type: "button", "aria-label": tipLabel }, iconEl("info"));
   tooltip(info, tip, { placement: "left" });
   const node = h("article.item-pill", { "data-action": def.id },
-    h("div.art", { "aria-hidden": "true" }, iconEl(def.icon)),
+    h("div.art", { class: { "art-paint": hasArt(def) }, "aria-hidden": "true" }, artEl(def)),
     h("div.pill-main", h("button.pill-hit", { type: "button" }, titleCase(def.name)), sub),
     stats,
     h("div.pill-end", info, iconEl("chevron-right", "pill-go")),

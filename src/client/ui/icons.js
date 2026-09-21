@@ -7,7 +7,7 @@
    class "ico" (20px) plus whatever size class you pass.
    ============================================================ */
 
-import { html } from "./dom.js";
+import { h, html } from "./dom.js";
 
 // A bone laid on the diagonal, for the Bonesetter. The knobs meet the shaft exactly.
 const BONE = '<path transform="rotate(-45 12 12)" d="M7.82 10.7H16.18A2.1 2.1 0 1 1 19.3 12 2.1 2.1 0 1 1 16.18 13.3H7.82A2.1 2.1 0 1 1 4.7 12 2.1 2.1 0 1 1 7.82 10.7Z"/>';
@@ -166,6 +166,20 @@ export function icon(name, cls) {
   // icon changes size or colour.
   return `<svg class="ico${cls ? " " + cls : ""}" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" ` +
     `stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${body}</svg>`;
+}
+
+/* A material that has a painting shows it; everything else keeps its glyph.
+   `def` is an item or an action, and only the drawn ones carry `art`, so this
+   is safe to call on anything. `variant` picks the cut: "fade" where there is
+   no frame (a gather pill), "cut" where the frame is already there (a
+   Stockpile slot). The caller puts .art-paint on the plate when hasArt() is
+   true, which is what moves the violet well out of the way. */
+export const hasArt = (def) => !!(def && def.art);
+
+export function artEl(def, { variant = "fade", cls } = {}) {
+  if (!hasArt(def)) return iconEl(def && def.icon, cls);
+  const src = def.art[variant] || def.art.fade;
+  return h(`img.mat-art${cls ? `.${cls}` : ""}`, { src, alt: "", loading: "lazy", decoding: "async" });
 }
 
 // A fresh <svg> element each call, parsed once per name and class.
