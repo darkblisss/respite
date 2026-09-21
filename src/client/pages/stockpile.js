@@ -17,7 +17,7 @@
    ============================================================ */
 
 import { h, el, on, setText, setWidth, setAttr, toggleClass } from "../ui/dom.js";
-import { iconEl } from "../ui/icons.js";
+import { iconEl, artEl } from "../ui/icons.js";
 import { hideTip } from "../ui/overlay.js";
 import { fmt, fmtWhole, fmtGold } from "../ui/format.js";
 import { openPopup } from "../ui/widgets.js";
@@ -152,7 +152,7 @@ export function storageCard(ctx, { pools, view, idBase, filters = true, hint = n
       dataset: { key: cell.key, cell: cell.id, one: cell.one ? "1" : false },
     },
       h("span.slot-qty"),
-      h("span.slot-art", iconEl(d.icon)),
+      h("span.slot-art", artEl(d, { variant: "cut" })),
       h("span.slot-name", names.get(cell.id)));
   }
 
@@ -183,8 +183,11 @@ export function storageCard(ctx, { pools, view, idBase, filters = true, hint = n
     const qty = n.dataset.one ? 1 : qtyIn(state, pool, key);
     const corner = n.firstChild;
     toggleClass(corner, "slot-qty", true);
-    setText(corner, fmt(qty));
+    // One of a thing is what a slot means on its own; only a count worth counting shows.
+    setText(corner, qty > 1 ? fmt(qty) : "");
     setAttr(n, "aria-label", `${names.get(n.dataset.cell)}, ${fmtWhole(qty)}`);
+    // The name is clipped to one line, so the whole of it lives here.
+    setAttr(n, "title", names.get(n.dataset.cell));
   }
 
   function update(nextCtx) {
