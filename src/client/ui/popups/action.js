@@ -11,7 +11,7 @@
    ============================================================ */
 
 import { h, on, setText, setWidth, setAttr, toggleClass } from "../dom.js";
-import { iconEl } from "../icons.js";
+import { iconEl, artEl, hasArt } from "../icons.js";
 import { openModal, tipBody, toast } from "../overlay.js";
 import { fmt, fmtWhole, fmtGold, fmtTime, signedPct, chancePct, titleCase } from "../format.js";
 import { qtyPicker, registerPopup, openPopup } from "../widgets.js";
@@ -391,7 +391,9 @@ function openActionPopup(ctx, skillId, actionId) {
   m = openModal({
     title: name,
     sub: [skill.name, tierLabel(def.tier), craft ? "At camp" : regionOfTier(def.tier).name].join(" · "),
-    art: def.icon,
+    // The sheet is about one material, so it wears that material's face.
+    art: hasArt(def) ? artEl(def) : def.icon,
+    artClass: hasArt(def) ? "art-paint" : "",
     size: "md",
     // Centres the picker and the verb: this sheet is one decision, so it sits down the middle.
     className: "modal-center-foot",

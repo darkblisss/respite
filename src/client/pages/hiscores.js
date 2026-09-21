@@ -455,7 +455,8 @@ function boardBody(ctx, page) {
             h("td", h("span.hs-rank", { class: rank <= 3 && `is-${rank}` }, fmtWhole(rank))),
             /* A face, not an initial in a circle: the skin is locked in, so a board
                reads as a row of people. The name opens their page; a realm that
-               does not publish skins yet simply shows the default bust. */
+               has not run migration 012 answers without a skin and every row
+               falls back to the default bust, which is the old behaviour. */
             h("td.strong", h("a.hs-name.hs-link", { href: `#/player/${encodeURIComponent(r.username)}` },
               h("span.portrait.portrait-bust.hs-face", { "aria-hidden": "true" }, portraitImg(r.skin || null)),
               h("span.truncate", display(r.username)),
