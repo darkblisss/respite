@@ -23,7 +23,7 @@
    ============================================================ */
 
 import { h, on, setText, setWidth, setAttr, toggleClass } from "../ui/dom.js";
-import { iconEl } from "../ui/icons.js";
+import { iconEl, artEl, hasArt } from "../ui/icons.js";
 import { fmt, fmtWhole, fmtGold, fmtTime, titleCase } from "../ui/format.js";
 import { chipNode } from "../ui/popups/action.js";
 import { foeFalls } from "../ui/popups/foe.js";
@@ -140,7 +140,9 @@ function benchCard(ctx) {
         live = { fill: h("i"), count: h("span"), left: h("b") };
         const stop = h("button.btn.btn-sm.btn-quiet", { type: "button", onClick: () => ctx.dispatch("stopSkill", {}) }, "Stop");
         card.swap(h("article.card.act-card", { "data-tone": "violet" },
-          actTop(h("div.art", { "aria-hidden": "true" }, iconEl(skill.icon)), `The crews · ${skill.name}`, titleCase(plan.def.name), stop, `#/skill/${skill.id}`),
+          actTop(h("div.art", { class: { "art-paint": hasArt(plan.def) }, "aria-hidden": "true" },
+          hasArt(plan.def) ? artEl(plan.def) : iconEl(skill.icon)),
+        `The crews · ${skill.name}`, titleCase(plan.def.name), stop, `#/skill/${skill.id}`),
           h("div.bar", live.fill),
           h("div.act-card-meta", live.count, live.left)));
       } else {

@@ -51,9 +51,16 @@ const MAT_ART = {
   coal: "coal", resin: "resin", pulp: "pulp", tallow: "tallow", veil_shard: "veil-shard",
 };
 
-export const matArt = (id) => (MAT_ART[id]
-  ? { fade: `assets/materials/fade/${MAT_ART[id]}.webp`, cut: `assets/materials/cut/${MAT_ART[id]}.webp` }
-  : null);
+/* The reagents are cut by hand and have no fade of their own: a cutout sits on
+   any surface, so asking for a fade that is not there simply gets the cut. */
+const CUT_ONLY = new Set(["coal", "resin", "pulp", "tallow", "veil_shard"]);
+
+export const matArt = (id) => {
+  const file = MAT_ART[id];
+  if (!file) return null;
+  const cut = `assets/materials/cut/${file}.webp`;
+  return CUT_ONLY.has(id) ? { cut } : { fade: `assets/materials/fade/${file}.webp`, cut };
+};
 
 // A raw material's id from its TIERS row and type: "slag_delve".
 const rowMatId = (row, type) => `${slug(matKey(row, type))}_${type}`;
@@ -135,7 +142,7 @@ function buildRegistry() {
   const REAGENTS = [
     { id: "coal",       name: "Coal",       icon: "coalIco",   skill: "delving",    category: "Reagent" },
     { id: "resin",      name: "Resin",      icon: "resinIco",  skill: "felling",    category: "Reagent" },
-    { id: "pulp",       name: "Pulp",       icon: "pulpIco",   skill: "harvesting", category: "Reagent" },
+    { id: "pulp",       name: "Pressed Pulp", icon: "pulpIco", skill: "harvesting", category: "Reagent" },
     { id: "tallow",     name: "Tallow",     icon: "tallowIco", skill: "flaying",    category: "Reagent" },
     { id: "veil_shard", name: "Veil Shard", icon: "shardIco",  skill: "dredging",   category: "Reagent" },
   ];
@@ -1036,7 +1043,7 @@ function buildRegistry() {
       trait: { name: "Reedstalker", kind: "xp", skills: ["harvesting"], base: 0.08, perRank: 0.02, text: "Harvesting XP" },
       unlocks: [
         { bond: 5,  kind: "double",  skills: ["harvesting"], value: 0.02, text: "+2% Harvesting double yield" },
-        { bond: 10, kind: "reagent", skills: ["harvesting"], value: 0.25, text: "+25% Pulp found alongside fibre" },
+        { bond: 10, kind: "reagent", skills: ["harvesting"], value: 0.25, text: "+25% Pressed Pulp found alongside fibre" },
         { bond: 20, kind: "speed",   skills: ["harvesting"], value: 0.05, text: "Harvesting actions 5% quicker" },
         { rank: 3,  kind: "double",  skills: ["harvesting"], value: 0.03, text: "+3% Harvesting double yield" },
       ],
