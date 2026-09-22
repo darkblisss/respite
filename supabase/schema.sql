@@ -1044,6 +1044,7 @@ declare
   v_party_id uuid;
   v_zone text := lower(coalesce(p_zone, ''));
   v_tier int := coalesce(p_tier, 0);
+  v_moved boolean;
 begin
   if v_uid is null then
     raise exception 'Not signed in.';
@@ -1064,13 +1065,22 @@ begin
 
   perform 1 from public.parties p where p.id = v_party_id for update;
 
+  /* Only a CHANGE of ground stands the room down. Putting up the ground already
+     up is somebody agreeing with it, and taking everyone's mark away for that
+     turns a second press into a reason to start over. */
+  select (p.proposed_tier is distinct from v_tier or p.proposed_zone is distinct from v_zone)
+    into v_moved
+  from public.parties p
+  where p.id = v_party_id;
+
   update public.parties
      set proposed_tier = v_tier, proposed_zone = v_zone
    where id = v_party_id;
-  -- A new ground stands the room down, the one who put it up included.
-  update public.party_members set ready = false where party_id = v_party_id;
+  if v_moved then
+    update public.party_members set ready = false where party_id = v_party_id;
+  end if;
 
-  return jsonb_build_object('tier', v_tier, 'zone', v_zone);
+  return jsonb_build_object('tier', v_tier, 'zone', v_zone, 'moved', coalesce(v_moved, true));
 end;
 $$;
 

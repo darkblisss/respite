@@ -141,15 +141,6 @@
    slot on the paperdoll (equipped), never the inventory grid or a bare
    .art tile, so it reads as "this is on you" rather than decorating every
    icon of that rarity wherever it shows up. */
-.doll-slot[data-rarity="relic"]::after,
-.doll-slot[data-rarity="legendary"]::after {
-  content: "";
-  position: absolute;
-  inset: -4px;
-  background: url("../assets/rarity/gilded-frame.webp") center / cover no-repeat;
-  pointer-events: none;
-}
-
 /* ================= 2. BUTTONS ================= */
 
 .btn {
@@ -1520,54 +1511,6 @@ button.chip:disabled { opacity: .45; }
 
 .input-wrap > .input:has(~ .affix) { padding-right: 36px; }
 
-/* A slider, for the one thing in the camp that has a degree rather than a state. */
-.range {
-  flex: 1 1 auto;
-  min-width: 0;
-  height: var(--tap);
-  appearance: none;
-  -webkit-appearance: none;
-  background: none;
-  cursor: pointer;
-}
-
-.range::-webkit-slider-runnable-track {
-  height: 6px;
-  border-radius: 999px;
-  background: var(--surface-3);
-  box-shadow: inset 0 0 0 1px var(--line-soft);
-}
-
-.range::-moz-range-track {
-  height: 6px;
-  border-radius: 999px;
-  background: var(--surface-3);
-  box-shadow: inset 0 0 0 1px var(--line-soft);
-}
-
-.range::-webkit-slider-thumb {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
-  margin-top: -5px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--violet-hi);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, .6);
-}
-
-.range::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--violet-hi);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, .6);
-}
-
-.range:focus-visible { outline: 2px solid var(--violet-hi); outline-offset: 4px; }
-
 .check,
 .switch {
   display: inline-flex;
@@ -1971,7 +1914,53 @@ button.chip:disabled { opacity: .45; }
   transition: border-color var(--dur-1), background var(--dur-1), transform var(--dur-1);
 }
 
-.slot:not([data-rarity="common"])[data-rarity] { box-shadow: var(--hi), inset 0 -2px 0 var(--rar); }
+/* ---- what a rarity looks like ----
+   A strip of colour along the bottom edge said "rare" the way a progress bar
+   says it, and it was the third thing on screen using a flat accent line. A
+   piece carries its rarity the way a piece would: the metal of the frame goes
+   up with it, the light behind the glyph warms, and from Epic a cut corner
+   catches it. Legendary and Relic wear the gilded frame over the top. */
+.slot:not([data-rarity="common"])[data-rarity] {
+  border-color: color-mix(in srgb, var(--rar) 42%, var(--line-strong));
+  box-shadow: var(--hi), inset 0 0 0 1px color-mix(in srgb, var(--rar) 22%, transparent);
+  background:
+    radial-gradient(78% 62% at 50% 34%, var(--rar-soft), transparent 74%),
+    var(--surface-2);
+}
+
+/* The corner cut: a small wedge of the rarity's own colour, from Epic up. */
+.slot[data-rarity="epic"]::before,
+.slot[data-rarity="legendary"]::before,
+.slot[data-rarity="relic"]::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 14px;
+  height: 14px;
+  background: linear-gradient(135deg, var(--rar) 0 48%, transparent 48%);
+  border-top-left-radius: inherit;
+  opacity: .75;
+  pointer-events: none;
+}
+
+/* The frame is a painting, so it sits over the tile rather than inside its box,
+   and it never eats a press: every slot here is a button. */
+.slot[data-rarity="legendary"]::after,
+.slot[data-rarity="relic"]::after,
+.doll-slot[data-rarity="legendary"]::after,
+.doll-slot[data-rarity="relic"]::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  background: url("../assets/rarity/gilded-frame.webp") center / 100% 100% no-repeat;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Relic is the hotter metal: the same frame, pushed toward its own colour. */
+.slot[data-rarity="relic"]::after,
+.doll-slot[data-rarity="relic"]::after { filter: hue-rotate(-28deg) saturate(1.25); }
 
 @media (hover: hover) {
   .slot:not(.is-empty):hover { border-color: var(--line-strong); background: radial-gradient(80% 60% at 50% 40%, var(--rar-soft, transparent), transparent 75%), #211b29; }
@@ -2612,9 +2601,8 @@ button.chip:disabled { opacity: .45; }
   gap: 10px;
   padding: 12px 12px 13px 14px;
   border-radius: var(--r-md);
-  border: 1px solid var(--line-strong);
+  border: 1px solid color-mix(in srgb, var(--toast-tone) 34%, var(--line-strong));
   background: var(--surface-3);
-  background: linear-gradient(90deg, color-mix(in srgb, var(--toast-tone) 9%, transparent), transparent 55%), var(--surface-3);
   box-shadow: var(--shadow-pop);
   font-size: var(--text-md);
   line-height: 1.4;
@@ -2625,15 +2613,8 @@ button.chip:disabled { opacity: .45; }
   animation: toast-in var(--dur-3) var(--ease);
 }
 
-.toast::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--toast-tone);
-}
+/* No bar down the edge and no wash across it: the glyph carries the tone and the
+   border takes a little of it, which is enough to tell good from bad at a glance. */
 
 .toast[data-kind="good"] { --toast-tone: var(--good); }
 .toast[data-kind="warn"] { --toast-tone: var(--warn); }
