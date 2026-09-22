@@ -40,7 +40,7 @@ Serve the repo over HTTP for anything in a browser (ES modules do not load from 
 | `src/client/pages/companions.js`, `bounties.js`, `requisitions.js`, `shop.js`, `atlas.js` | camp and atlas pages | camp |
 | `src/client/ui/popups/sky.js` | popup `sky` (the week's weather, opened from the Atlas and the weather card) | camp |
 | `src/client/pages/fortify.js` | `#/fortify` and `#/fortify/<item key>`: the anvil (the rite with its sockets, beams and stamp) and Convert | camp |
-| `src/client/ui/halo.js` | what a worked piece wears: `plusPlate`, `paintMini`, `haloNode`/`paintHalo`, `auraNode`/`paintAura`, `avatarHaloNode`, `haloTag` (CSS in pages.css, THE HALOS) | shared |
+| `src/client/ui/halo.js` | what a worked piece wears, one effect a piece (the amulet's glow, the ring's ring): `plusPlate`, `paintMini(node, plus, slot)`, `haloNode`/`paintHalo(node, plus, slot)`, `auraNode`/`paintAura(node, wornHalos(eq))`, `avatarHaloNode`, `haloTags` (CSS in pages.css, THE HALOS) | shared |
 | `src/client/ui/popups/profile.js` | popup `profile` (a commander's card, off a name in the Party tab) | realm |
 | `src/client/pages/market.js`, `party.js`, `hiscores.js` | realm pages | realm |
 | `src/client/ui/popups/sell.js` | popup `sell` | realm |

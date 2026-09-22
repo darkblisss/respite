@@ -1,28 +1,44 @@
 /* ============================================================
    Respite · ui/halo.js · What a Worked Piece Wears
    ------------------------------------------------------------
-   The halo, drawn once here for every place it shows: the ring
-   round the piece on the anvil, the glow on a slot or a tile, the
-   aura round the commander on the Worn card, and the ring round an
-   avatar on the profile card. The look is all CSS (pages.css, THE
-   HALOS); this builds the nodes and swaps the classes, reading the
-   levels off CONFIG.enchant.halos so a fourth halo is a config line
-   and a CSS block, not a hunt through the pages.
+   Two pieces take the Veil and each shows it its own way. The
+   amulet is the GLOW: violet from +9, gold from +12, a slow
+   rainbow at +15, round the piece and round the commander wearing
+   it. The ring is the RING: a dashed violet ring from +9, a gold
+   line ring of ticks with sparks in orbit from +12, and at +15 no
+   ring at all but rune marks cut into the air, each flickering on
+   its own time. Worn together they stack: the amulet's glow behind,
+   the ring's ring at the feet.
 
-   Veiled (+9) breathes violet. Sovereign (+12) turns a gold crest
-   with sparks in orbit. Hallowed (+15) scatters rune marks round the
-   piece, each flickering on its own time, over a bone-white glow.
+   The look is all CSS (pages.css, THE HALOS); this builds the nodes
+   and swaps the classes, reading the levels off CONFIG.enchant.halos
+   so a fourth halo is a config line and a CSS block. Every painter
+   takes the piece's slot, because the same +12 means a different
+   thing on an amulet and on a ring.
    ============================================================ */
 
 import { h, setText, setAttr, toggleClass } from "./dom.js";
+import { iconEl } from "./icons.js";
 import { CONFIG } from "../../shared/config.js";
-import { haloOf } from "../../shared/items.js";
+import { GameData } from "../../shared/registry.js";
+import { haloOf, itemDef } from "../../shared/items.js";
 
 const HALOS = CONFIG.enchant.halos;
 const TIERS = HALOS.map((x) => x.at);
 
 // The tag tone a halo is named in, by its id; anything new is bone.
 const TAG_TONE = { veiled: "tag-violet", sovereign: "tag-gold", hallowed: "tag-bone" };
+
+// "glow" for the amulet, "ring" for the ring: which effect a slot's halo is.
+export const kindOfSlot = (slot) => (slot === "ring" ? "ring" : "glow");
+
+// A slot name as given, or the slot of an item key.
+function slotOf(slotOrKey) {
+  if (!slotOrKey) return null;
+  if (GameData.EQUIP_SLOTS.includes(slotOrKey)) return slotOrKey;
+  const d = itemDef(slotOrKey);
+  return d ? d.slot : null;
+}
 
 export const tierClass = (plus) => {
   const hl = haloOf(plus);
@@ -31,9 +47,17 @@ export const tierClass = (plus) => {
 
 export const haloTagClass = (halo) => (halo ? TAG_TONE[halo.id] || "tag-bone" : "");
 
-// A small tag naming the halo, or null below the first.
-export function haloTag(halo) {
-  return halo ? h("span.tag", { class: haloTagClass(halo) }, halo.name) : null;
+/* A small tag naming the halo, or null below the first. With a slot it carries
+   the piece's glyph too, so "Veiled" on an amulet reads apart from "Veiled" on
+   a ring when the two sit side by side. */
+export function haloTag(halo, slot = null) {
+  if (!halo) return null;
+  return h("span.tag", { class: haloTagClass(halo) }, slot ? iconEl(GameData.SLOT_GLYPHS[slot]) : null, halo.name);
+}
+
+// The amulet's tag then the ring's, for whatever a commander wears: [] when bare.
+export function haloTags(halos) {
+  return CONFIG.enchant.slots.map((slot) => haloTag(halos && halos[slot], slot)).filter(Boolean);
 }
 
 /* ================= 1. THE PLATE ================= */
@@ -75,7 +99,7 @@ function runeSvg(d) {
   return h("svg.rune", { viewBox: "0 0 24 24", "aria-hidden": "true" }, h("path", { d }));
 }
 
-// The scatter round a Hallowed piece: one node, twelve marks.
+// The scatter round a Hallowed ring: one node, twelve marks.
 export function runesNode() {
   return h("span.runes", { "aria-hidden": "true" }, RUNES.map(runeSvg));
 }
@@ -83,52 +107,62 @@ export function runesNode() {
 /* ================= 3. THE HALO ROUND A PIECE ================= */
 
 /* The big one, for the anvil. Every layer is built and the CSS shows the ones
-   the tier uses: motes for Veiled, a crest and an orbit for Sovereign, runes for
-   Hallowed. paintHalo swaps the class; nothing is rebuilt. */
+   the kind and tier use: glow and motes for an amulet, crest, orbit and runes
+   for a ring. paintHalo swaps the classes; nothing is rebuilt. */
 export function haloNode() {
-  const node = h("div.halo", { "aria-hidden": "true" },
+  return h("div.halo", { "aria-hidden": "true", hidden: true },
+    h("span.glow"),
     Array.from({ length: 6 }, () => h("span.mote")),
     h("span.crest"),
     h("span.orbit", Array.from({ length: 8 }, () => h("i"))),
     runesNode());
-  return node;
 }
 
-export function paintHalo(node, plus) {
+// `slot` (or a key) says which effect it is; a plus below +9 hides it.
+export function paintHalo(node, plus, slotOrKey = null) {
   const hl = haloOf(plus);
   TIERS.forEach((at) => toggleClass(node, `halo-${at}`, !!hl && hl.at === at));
+  setAttr(node, "data-kind", hl ? kindOfSlot(slotOf(slotOrKey)) : null);
   node.hidden = !hl;
 }
 
-// The small glow on an .art plate or a .doll-slot: mini-9, mini-12, mini-15.
-export function paintMini(node, plus) {
+/* The small version on an .art plate, a .doll-slot or a storage .slot:
+   glow-9/12/15 on an amulet, ring-9/12/15 on a ring. */
+export function paintMini(node, plus, slotOrKey) {
   const hl = haloOf(plus);
-  TIERS.forEach((at) => toggleClass(node, `mini-${at}`, !!hl && hl.at === at));
+  const kind = kindOfSlot(slotOf(slotOrKey));
+  TIERS.forEach((at) => {
+    toggleClass(node, `glow-${at}`, kind === "glow" && !!hl && hl.at === at);
+    toggleClass(node, `ring-${at}`, kind === "ring" && !!hl && hl.at === at);
+  });
 }
 
 /* ================= 4. THE AURA ROUND A COMMANDER ================= */
 
-/* Sits inside a .figure-wrap round the standing figure: a glow behind, a floor
-   ring at the feet, sparks in orbit, motes rising, runes for Hallowed. Hidden
-   until paintAura is given a halo. */
+/* Sits inside a .figure-wrap round the standing figure. The amulet's glow is
+   the light behind them and the motes rising; the ring's ring is the floor
+   ring at their feet, the sparks in orbit, or the runes standing round them.
+   Hidden until paintAura is given a halo on either. */
 export function auraNode() {
-  const node = h("div.aura", { "aria-hidden": "true", hidden: true },
+  return h("div.aura", { "aria-hidden": "true", hidden: true },
     h("div.aura-glow"),
     h("div.aura-floor"),
     h("div.aura-orbit", h("span", Array.from({ length: 8 }, () => h("i")))),
     h("div.aura-motes", Array.from({ length: 8 }, () => h("i"))),
     h("div.aura-runes", runesNode()));
-  return node;
 }
 
-// `halo` is { at, id, name } off wornHalo() / haloOf(), or null for none.
-export function paintAura(node, halo) {
-  setAttr(node, "data-tier", halo ? String(halo.at) : null);
-  node.hidden = !halo;
+// `halos` is { neck, ring } off wornHalos(), each a halo or null.
+export function paintAura(node, halos) {
+  const glow = halos && halos.neck;
+  const ring = halos && halos.ring;
+  setAttr(node, "data-glow", glow ? String(glow.at) : null);
+  setAttr(node, "data-ring", ring ? String(ring.at) : null);
+  node.hidden = !glow && !ring;
 }
 
-/* The ring round an avatar (the profile card). Same idea, smaller: a dashed
-   ring for Veiled, a gold crest for Sovereign, runes for Hallowed. */
+/* The ring round an avatar (the Character hero, a commander's page, the profile
+   card). The amulet lights the frame; the ring draws round it. */
 export function avatarHaloNode() {
   return h("div.avatar-halo", { "aria-hidden": "true", hidden: true }, runesNode());
 }

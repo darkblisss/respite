@@ -19,9 +19,9 @@ import { openModal, toast } from "../overlay.js";
 import { registerPopup, openPopup, portraitImg } from "../widgets.js";
 import { fmtWhole, fmtAgo } from "../format.js";
 import { getClass, getRegion, getZone } from "../../../shared/registry.js";
-import { itemDef, itemName, parseKey, canFortify, wornHalo } from "../../../shared/items.js";
+import { itemDef, itemName, parseKey, canFortify, wornHalos } from "../../../shared/items.js";
 import { CONFIG } from "../../../shared/config.js";
-import { avatarHaloNode, paintAvatarHalo, haloTag, plusPlate, paintMini } from "../halo.js";
+import { avatarHaloNode, paintAvatarHalo, haloTags, plusPlate, paintMini } from "../halo.js";
 
 const ASK_MS = 15 * 1000;
 const ONLINE_MS = 3 * 60 * 1000;   // as the Party tab and online_count() count it
@@ -51,7 +51,7 @@ function wornRows(equipment) {
     }
     const plus = parseKey(key).plus;
     const art = h("span.art.art-sm", { "data-rarity": d.rarity || "common", "aria-hidden": "true" }, iconEl(d.icon));
-    paintMini(art, plus);
+    paintMini(art, plus, slot);
     return h("div.list-row",
       art,
       h("span.lr-main",
@@ -114,12 +114,12 @@ registerPopup("profile", (ctx, username) => {
     const seen = row.last_seen ? Date.parse(row.last_seen) : 0;
     const online = seen && Date.now() - seen < ONLINE_MS;
     const eq = row.equipment && typeof row.equipment === "object" ? row.equipment : {};
-    const hl = wornHalo(eq);
+    const halos = wornHalos(eq);
     const st = row.stats && typeof row.stats === "object" ? row.stats : {};
     const levels = row.levels && typeof row.levels === "object" ? row.levels : {};
 
     face.replaceChildren(portraitImg(row.skin || null));
-    paintAvatarHalo(halo, hl);
+    paintAvatarHalo(halo, halos);
     m.setTitle(display(row.username || who), [
       klass ? klass.name : "Undisciplined",
       `Total level ${fmtWhole(row.total_level || 0)}`,
@@ -132,7 +132,7 @@ registerPopup("profile", (ctx, username) => {
           h("span.dot", { class: online ? "dot-online" : "dot-offline", "aria-hidden": "true" }),
           online ? "Online" : seen ? `Last about ${fmtAgo(Date.now() - seen)}` : "Not seen yet"),
         klass ? h("span.tag.tag-violet", klass.name) : null,
-        haloTag(hl),
+        ...haloTags(halos),
         hunting ? h("span.chip.chip-ember", iconEl("swords"), `Hunting the ${getZone(hunting.zone).name}`) : null,
         h("span.chip", iconEl("swords"), `Hunt Lv ${fmtWhole(num(levels, "warfare") || 1)}`)),
       h("div.kpis",

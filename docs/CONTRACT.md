@@ -127,8 +127,11 @@ Essence of the piece's own band, one to three, at the forge odds
 `min(1, stones x stoneWorth / thresholds[level])` (`CONFIG.enchant`, x1.5 with a
 charm of the band in the fourth socket, which is spent either way); a failure
 takes the stones and the charm and nothing else. From +9 a piece wears a halo
-(`veiled`, `sovereign` at +12, `hallowed` at +15, `haloOf`), and a commander wears
-the highest of their amulet's and ring's (`wornHalo`). `convert {from: {key, at},
+(`veiled`, `sovereign` at +12, `hallowed` at +15, `haloOf`). The two pieces show
+it differently and a commander wears both (`wornHalos` gives `{ neck, ring }`):
+the amulet is the glow round them (violet, gold, a rainbow at +15), the ring is
+the ring at their feet (dashed violet, a gold line of ticks with sparks, rune
+marks at +15). `convert {from: {key, at},
 to: {key, at}}` carries a worked piece's whole level onto an unworked piece of
 the same slot for `goldPerLevelSq x level^2` gold and `essencePerLevel x level`
 Essence of the new piece's band; nothing is rolled, the old piece goes back to

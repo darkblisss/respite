@@ -30,8 +30,8 @@ import { foeFalls } from "../ui/popups/foe.js";
 import { collectionPanel, bestiaryFound, BESTIARY_COUNT } from "../ui/collection.js";
 import { hasPopup, openPopup, portraitImg, paintPortrait } from "../ui/widgets.js";
 import { dollCard, standingCard } from "./armaments.js";
-import { avatarHaloNode, paintAvatarHalo, haloTag } from "../ui/halo.js";
-import { wornHalo } from "../../shared/items.js";
+import { avatarHaloNode, paintAvatarHalo, haloTags } from "../ui/halo.js";
+import { wornHalos } from "../../shared/items.js";
 import { CONFIG } from "../../shared/config.js";
 import {
   ARTISAN_ORDER, GameData, SKILL_ORDER, TRADE_ORDER, getSkill, getClass, getSkin } from "../../shared/registry.js";
@@ -87,16 +87,17 @@ function heroView() {
       const b = state.bounty && !state.bounty.claimed ? state.bounty : null;
       const bountyText = b ? `Bounty ${fmtWhole(Math.min(b.progress, b.amount))} of ${fmtWhole(b.amount)}` : null;
       const skin = state.player.skin ? getSkin(state.player.skin) : null;
-      const halo = wornHalo(state.equipment);
-      const sig = [skin ? skin.id : "-", klass ? klass.id : "-", comp ? comp.id : "-", bountyText || "-", halo ? halo.id : "-"].join("|");
+      const halos = wornHalos(state.equipment);
+      const sig = [skin ? skin.id : "-", klass ? klass.id : "-", comp ? comp.id : "-", bountyText || "-",
+        halos.neck ? halos.neck.id : "-", halos.ring ? halos.ring.id : "-"].join("|");
       if (sig === tagSig) return;
       tagSig = sig;
-      paintAvatarHalo(avatarHalo, halo);
+      paintAvatarHalo(avatarHalo, halos);
       // replaceChildren would write a null out as text, so the absent ones are filtered first.
       tags.replaceChildren(...[
         skin ? h("span.tag", skin.name) : null,
         klass ? h("span.tag.tag-violet", klass.name) : null,
-        haloTag(halo),
+        ...haloTags(halos),
         comp ? chipNode({ text: comp.name, icon: "paw" }) : null,
         bountyText ? chipNode({ text: bountyText, tone: "gold", icon: "scroll" }) : null,
       ].filter(Boolean));

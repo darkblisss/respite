@@ -505,7 +505,7 @@ export default {
       const d = itemDef(p.key);
       const lv = level(p.key);
       const art = h("span.art.art-sm", { "data-rarity": d.rarity || "common", "aria-hidden": "true" }, iconEl(d.icon));
-      paintMini(art, lv);
+      paintMini(art, lv, d.slot);
       const where = p.worn ? "Worn" : poolName(p.at);
       const sub = [`${rarityWord(p.key)} ${slotWord(d)}`, where, p.qty > 1 ? `×${fmtWhole(p.qty)}` : null].filter(Boolean).join(" · ");
       return h("button.pick-row", {
@@ -552,7 +552,7 @@ export default {
       coreArt(fCore, plan ? plan.key : null);
       setAttr(fRiteNode, "data-rarity", d ? d.rarity || "common" : null);
       paintPlate(fPlate, plan ? plan.level : 0);
-      paintHalo(fHalo, plan ? plan.level : 0);
+      paintHalo(fHalo, plan ? plan.level : 0, d ? d.slot : null);
       fPlate.hidden = !plan;
 
       const have = plan ? plan.have : 0;
@@ -633,8 +633,8 @@ export default {
       paintPlate(cToPlate, toLv);
       cFromPlate.hidden = !from;
       cToPlate.hidden = !to;
-      paintHalo(cFromHalo, cphase === "flow" ? 0 : fromLv);
-      paintHalo(cToHalo, toLv);
+      paintHalo(cFromHalo, cphase === "flow" ? 0 : fromLv, from ? from.key : null);
+      paintHalo(cToHalo, toLv, to ? to.key : null);
 
       const plan = from && to ? convertPlan(state, from.key, to.key) : null;
       cIdle.hidden = !(idle && plan && plan.ok);

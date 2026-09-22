@@ -29,12 +29,12 @@ import { iconEl } from "../ui/icons.js";
 import { fmtWhole, fmtAgo, fmtStat } from "../ui/format.js";
 import { openPopup, portraitImg, paintPortrait } from "../ui/widgets.js";
 import { paintDoll } from "./armaments.js";
-import { auraNode, paintAura, haloTag, avatarHaloNode, paintAvatarHalo } from "../ui/halo.js";
+import { auraNode, paintAura, haloTags, avatarHaloNode, paintAvatarHalo } from "../ui/halo.js";
 import { collectionPanel, rollsFromCollection } from "../ui/collection.js";
 import { CONFIG } from "../../shared/config.js";
 import { SKILL_ORDER, getSkill, getClass, getRegion, getZone, getSkin } from "../../shared/registry.js";
 import { combatStats } from "../../shared/stats.js";
-import { wornHalo } from "../../shared/items.js";
+import { wornHalos } from "../../shared/items.js";
 
 const ASK_MS = 15 * 1000;
 const pct = (x) => `${+((Number(x) || 0) * 100).toFixed(1)}%`;
@@ -84,17 +84,18 @@ function headView() {
 
       setText(name, display(row.username));
 
-      const halo = wornHalo(row.equipment && typeof row.equipment === "object" ? row.equipment : {});
-      const next = [row.skin || "-", klass ? klass.id : "-", region ? region.id : "-", hunting ? `${hunting.tier}:${hunting.zone}` : "-", seen, halo ? halo.id : "-"].join("|");
+      const halos = wornHalos(row.equipment && typeof row.equipment === "object" ? row.equipment : {});
+      const next = [row.skin || "-", klass ? klass.id : "-", region ? region.id : "-", hunting ? `${hunting.tier}:${hunting.zone}` : "-", seen,
+        halos.neck ? halos.neck.id : "-", halos.ring ? halos.ring.id : "-"].join("|");
       if (next === sig) return;
       sig = next;
 
       bust.replaceChildren(portraitImg(row.skin || null));
-      paintAvatarHalo(avatarHalo, halo);
+      paintAvatarHalo(avatarHalo, halos);
       tags.replaceChildren(...[
         skin ? h("span.tag", skin.name) : null,
         klass ? h("span.tag.tag-violet", klass.name) : h("span.tag", "Undisciplined"),
-        haloTag(halo),
+        ...haloTags(halos),
         h("span.chip", iconEl("atlas"), region ? region.name : "Somewhere"),
         /* Out on a hunt is worth saying in the present tense; otherwise how long
            since the realm last heard from them, which is what a stranger wants. */
@@ -150,12 +151,14 @@ function standingView(ctx) {
         setAttr(b, "aria-label", `${b.dataset.label}: ${b.dataset.name}`);
       });
       skinSig = paintPortrait(bust, row.skin || null, skinSig);
-      const halo = wornHalo(eq);
-      if ((halo ? halo.id : "") !== haloSig) {
-        haloSig = halo ? halo.id : "";
-        paintAura(aura, halo);
-        dollTags.replaceChildren(haloTag(halo));
-        dollTags.hidden = !halo;
+      const halos = wornHalos(eq);
+      const haloNext = `${halos.neck ? halos.neck.id : ""}|${halos.ring ? halos.ring.id : ""}`;
+      if (haloNext !== haloSig) {
+        haloSig = haloNext;
+        paintAura(aura, halos);
+        const tagNodes = haloTags(halos);
+        dollTags.replaceChildren(...tagNodes);
+        dollTags.hidden = !tagNodes.length;
       }
       setText(dollName, display(row.username));
       setText(dollSub, [klass && klass.name, region && region.name].filter(Boolean).join(" \u00b7 "));

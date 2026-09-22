@@ -71,12 +71,22 @@ export function haloName(id) {
   return hl ? hl.name : String(id);
 }
 
-// The halo a commander wears: the highest of any worn piece's.
+/* What a commander wears, one effect a piece: the amulet's halo is the glow
+   round them, the ring's is the ring at their feet. { neck, ring }, each a halo
+   or null, keyed by the slot the piece is worn in. */
+export function wornHalos(equipment) {
+  const out = {};
+  CONFIG.enchant.slots.forEach((slot) => {
+    const key = equipment && equipment[slot];
+    out[slot] = key && canFortify(key) ? haloOf(parseKey(key).plus) : null;
+  });
+  return out;
+}
+
+// The highest halo a commander wears, for the places that name just one.
 export function wornHalo(equipment) {
   let best = null;
-  Object.values(equipment || {}).forEach((key) => {
-    if (!key) return;
-    const halo = haloOf(parseKey(key).plus);
+  Object.values(wornHalos(equipment)).forEach((halo) => {
     if (halo && (!best || halo.at > best.at)) best = halo;
   });
   return best;
