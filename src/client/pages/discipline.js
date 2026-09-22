@@ -349,7 +349,6 @@ function pathViewBuild(ctx) {
       : [h("circle.path-seg", { cx: RING_MID, cy: RING_MID, r: RING_R })];
     const C = {
       segs,
-      rank: h("span.path-rank"),
       lock: h("span.path-lock", { "aria-hidden": "true" }, iconEl("lock")),
     };
     C.face = h("button.path-face", { type: "button", dataset: { node: def.id } },
@@ -360,20 +359,13 @@ function pathViewBuild(ctx) {
         ...segs),
       h("span.path-art", { "aria-hidden": "true" }, iconEl(def.icon || "book")),
       C.lock);
+    /* The name and nothing under it: the ring's segments are the ranks, the lock
+       is the gate and the staged tint is the stake. "I of IV" beneath a ring
+       already showing one of four filled is the same fact written twice. */
     C.node = h("div.path-node", { class: { "is-keystone": def.keystone } },
-      C.face, h("span.path-name", def.name), C.rank);
+      C.face, h("span.path-name", def.name));
     C.tip = tooltip(C.face, () => tipFor(def.id));
     return C;
-  }
-
-  // What sits under a face: where it stands, in as few words as it takes.
-  function rankWord(def, held, mark) {
-    const shown = held + mark;
-    const tail = mark ? " · staged" : "";
-    if (def.keystone) return shown ? `Taken${tail}` : `${def.cost} points`;
-    if (!shown) return "";
-    if (shown >= def.ranks) return `Walked out${tail}`;
-    return `${roman(shown)} of ${roman(def.ranks)}${tail}`;
   }
 
   function paintFace(C, row, e) {
@@ -391,7 +383,6 @@ function pathViewBuild(ctx) {
     toggleClass(C.node, "is-ready", e.can);
     toggleClass(C.node, "is-hand", hand === def.id);
     setAttr(C.lock, "hidden", e.open);
-    setText(C.rank, rankWord(def, row.rank, mark));
     setAttr(C.face, "aria-label",
       `${def.name}, ${shown} of ${def.ranks}${mark ? `, ${mark} staged` : ""}${e.open ? "" : ", shut"}`);
   }

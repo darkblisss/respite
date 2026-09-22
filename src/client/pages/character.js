@@ -25,12 +25,11 @@
 import { h, on, setText, setWidth, setAttr, toggleClass } from "../ui/dom.js";
 import { iconEl, artEl, hasArt } from "../ui/icons.js";
 import { fmt, fmtWhole, fmtGold, fmtTime, titleCase } from "../ui/format.js";
-import { chipNode } from "../ui/popups/action.js";
 import { foeFalls } from "../ui/popups/foe.js";
 import { collectionPanel, bestiaryFound, BESTIARY_COUNT } from "../ui/collection.js";
 import { hasPopup, openPopup, portraitImg, paintPortrait } from "../ui/widgets.js";
 import { dollCard, standingCard } from "./armaments.js";
-import { avatarHaloNode, paintAvatarHalo, haloTags } from "../ui/halo.js";
+import { avatarHaloNode, paintAvatarHalo } from "../ui/halo.js";
 import { wornHalos } from "../../shared/items.js";
 import { CONFIG } from "../../shared/config.js";
 import {
@@ -39,7 +38,6 @@ import { totalLevel, xpProgress } from "../../shared/stats.js";
 import { skillPlan } from "../../shared/skills.js";
 import { combatPlan } from "../../shared/combat.js";
 import { currentRegion } from "../../shared/world.js";
-import { activeCompanion } from "../../shared/companions.js";
 
 // The order the sidebar lists them in.
 const ZONE_ICONS = { outer: "zoneOuter", middle: "zoneMiddle", inner: "zoneInner", core: "zoneCore" };
@@ -83,12 +81,12 @@ function heroView() {
 
       // The discipline tag waits for a discipline; the bounty chip for a posting still open.
       const klass = state.player.klass ? getClass(state.player.klass) : null;
-      const comp = activeCompanion(state);
-      const b = state.bounty && !state.bounty.claimed ? state.bounty : null;
-      const bountyText = b ? `Bounty ${fmtWhole(Math.min(b.progress, b.amount))} of ${fmtWhole(b.amount)}` : null;
       const skin = state.player.skin ? getSkin(state.player.skin) : null;
       const halos = wornHalos(state.equipment);
-      const sig = [skin ? skin.id : "-", klass ? klass.id : "-", comp ? comp.id : "-", bountyText || "-",
+      /* Two tags: who you look like and what you fight as. The halos are worn on
+         the figure, the bounty has a page, the companion walks beside you on it:
+         a row of every fact about a commander is a row nobody reads. */
+      const sig = [skin ? skin.id : "-", klass ? klass.id : "-",
         halos.neck ? halos.neck.id : "-", halos.ring ? halos.ring.id : "-"].join("|");
       if (sig === tagSig) return;
       tagSig = sig;
@@ -97,9 +95,6 @@ function heroView() {
       tags.replaceChildren(...[
         skin ? h("span.tag", skin.name) : null,
         klass ? h("span.tag.tag-violet", klass.name) : null,
-        ...haloTags(halos),
-        comp ? chipNode({ text: comp.name, icon: "paw" }) : null,
-        bountyText ? chipNode({ text: bountyText, tone: "gold", icon: "scroll" }) : null,
       ].filter(Boolean));
     },
   };

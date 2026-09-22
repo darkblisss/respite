@@ -2080,33 +2080,71 @@ button.seat { cursor: pointer; transition: border-color var(--dur-1), background
   button.seat-shut-box:hover { border-color: var(--line-strong); color: var(--bone-faint); background: var(--surface-2); }
 }
 
-/* A taken square: a bar across the top carrying the crown, the name, the Hunt
-   level and the host's remove in the corner; the face below it, sitting low
-   enough that the bar never crosses it; what they are at along the bottom. */
+/* A taken square: the face fills it, the host's remove rides the top corner
+   with the Hunt level just under it, and the crown, the name and what they are
+   at sit on a wash along the bottom. */
 .seat-taken { display: block; background: var(--surface-2); }
 
-.seat-bar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 26px;
-  padding: 0 4px 0 7px;
-  background: rgba(10, 9, 12, .82);
-  box-shadow: inset 0 -1px 0 var(--line-soft);
-}
-
-.seat-face { position: absolute; inset: 26px 0 0; }
-.seat-face img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 10%; }
+.seat-face { position: absolute; inset: 0; }
+.seat-face img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 12%; }
 .seat-taken.is-offline .seat-face { filter: grayscale(.7); opacity: .55; }
 
+/* The host's remove, topmost right; the level sits under it, in the same column,
+   so a square with no remove on it still reads the same. */
+.seat-x {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 3;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(10, 9, 12, .78);
+  color: var(--bone-faint);
+  cursor: pointer;
+  transition: color var(--dur-1), background var(--dur-1);
+}
+
+.seat-x .ico { width: 13px; height: 13px; }
+.seat-x:hover { color: var(--ember-hi); background: rgba(180, 82, 74, .28); }
+
+.seat-lv {
+  position: absolute;
+  top: 34px;
+  right: 6px;
+  z-index: 2;
+  min-width: 24px;
+  height: 20px;
+  padding: 0 6px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(10, 9, 12, .78);
+  box-shadow: inset 0 0 0 1px var(--gold-edge);
+  color: var(--gold-hi);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.seat-foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: grid;
+  gap: 1px;
+  padding: 18px 8px 8px;
+  background: linear-gradient(to top, rgba(10, 9, 12, .92), transparent);
+}
+
 button.seat-name {
-  flex: 1 1 auto;
-  min-width: 0;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -2126,58 +2164,12 @@ button.seat-name {
 
 button.seat-name:hover { text-decoration: underline; }
 .seat-name .ico { width: 13px; height: 13px; color: var(--gold); flex-shrink: 0; }
-
-.seat-lv {
-  flex-shrink: 0;
-  min-width: 22px;
-  height: 18px;
-  padding: 0 6px;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  box-shadow: inset 0 0 0 1px var(--gold-edge);
-  color: var(--gold-hi);
-  font-family: var(--font-display);
-  font-size: 11px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-/* The host's remove, in the corner the eye goes to last. */
-.seat-x {
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: var(--r-sm);
-  background: none;
-  color: var(--bone-ghost);
-  cursor: pointer;
-  transition: color var(--dur-1), background var(--dur-1);
-}
-
-.seat-x .ico { width: 13px; height: 13px; }
-.seat-x:hover { color: var(--ember-hi); background: rgba(180, 82, 74, .18); }
-
-.seat-foot {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 2;
-  padding: 18px 8px 7px;
-  background: linear-gradient(to top, rgba(10, 9, 12, .92), transparent);
-}
-
-.seat-doing { font-size: 11px; color: var(--bone-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.seat-doing { font-size: 11px; color: var(--bone-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .seat-ready {
   position: absolute;
   left: 50%;
-  top: 48%;
+  top: 46%;
   z-index: 2;
   translate: -50% -50%;
   display: flex;
@@ -2807,23 +2799,14 @@ button.seat-name:hover { text-decoration: underline; }
   color: var(--bone);
 }
 
-.path-rank {
-  font-size: var(--text-xs);
-  line-height: 1.3;
-  letter-spacing: .03em;
-  color: var(--bone-faint);
-}
-
 /* ---- what a node's state looks like ---- */
 
 .path-node.is-ready .path-plate { stroke: color-mix(in oklab, var(--violet) 55%, var(--line)); }
 
 .path-node.is-taken .path-plate { fill: var(--surface-2); stroke: var(--violet-edge); }
 .path-node.is-taken .path-art { color: var(--violet-hi); }
-.path-node.is-taken .path-rank { color: var(--violet); }
 
 .path-node.is-maxed .path-plate { fill: var(--surface-3); stroke: var(--violet-hi); }
-.path-node.is-maxed .path-rank { color: var(--violet-hi); }
 
 .path-node.is-staged .path-plate { stroke: var(--violet-hi); stroke-dasharray: 5 4; }
 .path-node.is-staged .path-rank { color: var(--violet-hi); }
@@ -3398,12 +3381,17 @@ button.seat-name:hover { text-decoration: underline; }
   animation: rite-spin 70s linear infinite reverse;
 }
 
+/* Every sixth tick, violet and a little longer. It has to sit on the same grid
+   as the plain ones: the same start angle, the same width, and a step that is a
+   whole multiple of theirs (30deg is six of 5deg), or the two rings wander past
+   each other and the violet reads as scattered. Only the mask differs, and only
+   inward, so the violet marks share the outer edge and run deeper. */
 .ring-runes {
   width: 292px;
   height: 292px;
-  background: repeating-conic-gradient(from 3deg, var(--violet-hi) 0 1.4deg, transparent 1.4deg 30deg);
-  -webkit-mask: radial-gradient(circle, transparent 0 130px, #000 131px 146px, transparent 147px);
-  mask: radial-gradient(circle, transparent 0 130px, #000 131px 146px, transparent 147px);
+  background: repeating-conic-gradient(from 0deg, var(--violet-hi) 0 1.1deg, transparent 1.1deg 30deg);
+  -webkit-mask: radial-gradient(circle, transparent 0 131px, #000 132px 145px, transparent 146px);
+  mask: radial-gradient(circle, transparent 0 131px, #000 132px 145px, transparent 146px);
   animation: rite-spin 70s linear infinite reverse;
   opacity: .9;
 }

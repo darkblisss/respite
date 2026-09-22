@@ -60,42 +60,6 @@
 
 /* ================= 3. THE COLLECTION ================= */
 
-.char-bestiary {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-  min-width: 0;
-}
-
-/* A foe never felled: the name and a lock, no drawing and no numbers.
-   Dashed and dimmed, as a tier that is not open yet reads. */
-.foe-tile.is-locked {
-  border-style: dashed;
-  border-color: var(--line-soft);
-  background: var(--surface-1);
-  box-shadow: none;
-}
-
-.foe-tile.is-locked .foe-art {
-  background: var(--wash);
-  box-shadow: inset 0 0 0 1px var(--line-soft);
-  color: var(--bone-ghost);
-}
-
-.foe-tile.is-locked .foe-art .ico { width: 22px; height: 22px; }
-.foe-tile.is-locked .foe-tile-name { color: var(--bone-faint); }
-.foe-tile.is-locked .tag { opacity: .6; }
-
-/* The Sovereign's tile spans the row it sits in (the quarry's rule), and
-   a locked one loses the violet wash that says it is something special. */
-.foe-tile.is-locked.is-sovereign {
-  border-color: var(--line-soft);
-  background: var(--surface-1);
-}
-
-/* A felled foe's line carries three counts, so on a narrow tile it breaks
-   rather than pushing the tile wider than its column. */
-.char-bestiary .foe-tile-sub { overflow-wrap: anywhere; }
 
 /* ================= 4. THE RECORD ================= */
 /* Six figures in the ruled grid Standing uses, then the quieter rows.
@@ -105,18 +69,94 @@
   .char-stack .standing { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-/* ================= 5. THE COLLECTION'S OWN TABS AND ITEM TILES ================= */
-/* The four views (monsters, gear, components, everything) sit under the section
-   head, not in the page's tab row: they are a filter on one panel. */
+/* ================= 5. THE COLLECTION ================= */
+/* Three rows narrowing one grid: what kind of thing, what sort of it, and which
+   ground it comes off. Each chip carries how much of itself is in hand, so what
+   is left to find reads off the rows without opening anything. */
 
-.coll-tabs { margin: var(--sp-3) 0 var(--sp-4); }
+.coll-tabs { margin: var(--sp-3) 0 var(--sp-2); }
 
-/* An item's tile is a foe's tile without the monster's den behind the art: the
-   registry's own glyph on the surface the rest of the kit uses. */
-.coll-art {
-  background: var(--wash);
+.coll-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+
+.coll-row[hidden] { display: none; }
+.coll-groups { padding-top: var(--sp-2); box-shadow: inset 0 1px 0 var(--line-soft); }
+
+button.coll-chip { cursor: pointer; gap: 7px; }
+.coll-chip[aria-selected="true"] { background: var(--violet-soft); box-shadow: inset 0 0 0 1px var(--violet-edge); color: var(--bone); }
+
+.coll-n {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--surface-sunk);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--bone-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.coll-chip[aria-selected="true"] .coll-n { background: rgba(10, 9, 12, .45); color: var(--bone-dim); }
+
+/* The grid itself: as many squares as fit, art first and the name under it. */
+.coll-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+
+.coll-cell {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: center;
+}
+
+button.coll-cell { cursor: pointer; }
+
+.coll-box {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
   box-shadow: inset 0 0 0 1px var(--line-soft);
   color: var(--bone-dim);
+  overflow: hidden;
+  transition: box-shadow var(--dur-1), background var(--dur-1);
 }
-.coll-art .ico { width: 26px; height: 26px; }
-button.coll-tile:hover .coll-art { box-shadow: inset 0 0 0 1px var(--line-strong); }
+
+.coll-box .ico { width: 26px; height: 26px; }
+.coll-box .mat-art,
+.coll-box img,
+.coll-box svg:not(.ico) { width: 100%; height: 100%; object-fit: contain; }
+
+.coll-name {
+  font-size: 10.5px;
+  line-height: 1.25;
+  color: var(--bone-faint);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+button.coll-cell:hover .coll-box { background: var(--surface-3); box-shadow: inset 0 0 0 1px var(--line-strong); }
+button.coll-cell:hover .coll-name { color: var(--bone); }
+
+/* Never met: the box stays, the art does not. A collection is mostly the shape
+   of what is missing, so the empties have to hold their places in the grid. */
+.coll-cell.is-locked .coll-box { background: var(--surface-sunk); color: var(--bone-ghost); }
+.coll-cell.is-locked .coll-box .ico { width: 18px; height: 18px; opacity: .6; }
+.coll-cell.is-locked .coll-name { color: var(--bone-ghost); }
+
+.coll-cell.is-sovereign .coll-box { box-shadow: inset 0 0 0 1px var(--violet-edge); }
+
