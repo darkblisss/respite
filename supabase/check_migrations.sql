@@ -56,7 +56,15 @@ with probes(ord, migration, what, present) as (
     (14, '014_party_room',        'parties.slots and party_set_slots()',
          exists (select 1 from information_schema.columns
                   where table_schema = 'public' and table_name = 'parties' and column_name = 'slots')
-         and to_regproc('public.party_set_slots') is not null)
+         and to_regproc('public.party_set_slots') is not null),
+
+    -- 014 writes the room's columns; this is the one that reads them back.
+    (15, '015_party_room_state',  'party_state() answers with the room',
+         coalesce((select pg_get_functiondef(p.oid) like '%proposed%'
+                     from pg_proc p
+                     join pg_namespace n on n.oid = p.pronamespace
+                    where n.nspname = 'public' and p.proname = 'party_state'
+                    limit 1), false))
 )
 select migration,
        case when present then 'in' else 'MISSING' end as status,

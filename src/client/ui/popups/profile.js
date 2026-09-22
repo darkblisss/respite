@@ -9,8 +9,10 @@
    is the telling.
 
    Everything comes off player_profile(), the same row the full
-   page reads; this is the short version, one press from the long
-   one. Guests are sent to make an account, as the page does.
+   page reads. A name anywhere opens this rather than walking off
+   to a page of its own: reading who somebody is should not cost
+   you the party you were looking at. Guests are sent to make an
+   account, as the page does.
    ============================================================ */
 
 import { h } from "../dom.js";
@@ -98,7 +100,6 @@ registerPopup("profile", (ctx, username) => {
           return false;
         },
       } : null,
-      { label: "Their page", kind: "primary", soft: true, icon: "person", onClick: () => ctx.go(`#/player/${encodeURIComponent(who)}`) },
     ],
     onClose: () => { alive = false; },
   });

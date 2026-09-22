@@ -353,28 +353,50 @@ export default {
 
     /* ---- dragging ---- */
 
+    let landed = false;   // whether the drag just ended was taken by a hole
+
     const dragEnd = () => {
       drag = null;
       view.querySelectorAll(".is-over").forEach((n) => n.classList.remove("is-over"));
     };
 
     on(view, "dragstart", "[draggable=true]", (e, b) => {
-      drag = { what: b.dataset.what, key: b.dataset.key, at: b.dataset.at || null };
+      landed = false;
+      drag = b.dataset.socket
+        ? { what: "socket", hole: b.dataset.socket, key: held[b.dataset.socket] }
+        : { what: b.dataset.what, key: b.dataset.key, at: b.dataset.at || null };
       if (e.dataTransfer) {
         e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/plain", b.dataset.key);
+        e.dataTransfer.setData("text/plain", drag.key || "");
       }
     });
-    on(view, "dragend", "[draggable=true]", dragEnd);
+
+    /* A stone let go anywhere but a hole leaves the anvil. Dropping it back on the
+       hole it came from is a change of mind, and the drop handler has already put
+       it there, so only a drag nothing caught empties one. */
+    on(view, "dragend", "[draggable=true]", (e, b) => {
+      const carried = drag;
+      dragEnd();
+      if (!carried || carried.what !== "socket" || landed) return;
+      if (phase !== "idle" || !held[carried.hole]) return;
+      held[carried.hole] = null;
+      sigs.stock = null;
+      paint();
+    });
 
     /* A hole takes the stock aimed at it, a core takes a piece, and anything else
        refuses the drop. The hole under the cursor is the hole it lands in: aiming
        at the third with two empty behind it fills the third. */
     const takes = (target) => {
       if (!drag) return false;
-      if (!target.dataset.socket) return drag.what === "piece";
+      const hole = target.dataset.socket;
+      if (drag.what === "socket") {
+        // A charm hole and an essence hole hold different things, and a hole holds its own.
+        return !!hole && hole !== drag.hole && (hole === "charm") === (drag.hole === "charm");
+      }
+      if (!hole) return drag.what === "piece";
       if (drag.what !== "stock") return false;
-      return canHold(stock(ctx.state).find((x) => x.key === drag.key), target.dataset.socket);
+      return canHold(stock(ctx.state).find((x) => x.key === drag.key), hole);
     };
 
     on(view, "dragover", ".socket, .rite-core.is-drop", (e, t) => {
@@ -387,8 +409,20 @@ export default {
     on(view, "drop", ".socket, .rite-core.is-drop", (e, t) => {
       e.preventDefault();
       const carried = drag;
+      landed = true;
       dragEnd();
       if (!carried) return;
+      if (carried.what === "socket") {
+        // Two holes trade what they hold, so a drop is never a stone lost.
+        const to = t.dataset.socket;
+        if (!to || to === carried.hole || phase !== "idle") return;
+        const was = held[to];
+        held[to] = held[carried.hole];
+        held[carried.hole] = was;
+        sigs.stock = null;
+        paint();
+        return;
+      }
       if (carried.what === "piece") putPiece({ key: carried.key, at: carried.at });
       else putStock(stock(ctx.state).find((x) => x.key === carried.key), t.dataset.socket || null);
     });
@@ -699,6 +733,7 @@ export default {
         toggleClass(s, "is-stray", off);
         setAttr(s, "aria-pressed", !!key);
         s.disabled = !idle;
+        setAttr(s, "draggable", key && idle ? "true" : null);
         socketArt(s, key);
         setAttr(s, "aria-label", key ? `${itemName(key)} in hole ${i + 1}` : `Hole ${i + 1}, empty`);
       });
@@ -707,6 +742,7 @@ export default {
       toggleClass(socketCharm, "is-stray", !!(plan && held.charm && !withCharm));
       setAttr(socketCharm, "aria-pressed", !!held.charm);
       socketCharm.disabled = !idle;
+      setAttr(socketCharm, "draggable", held.charm && idle ? "true" : null);
       socketArt(socketCharm, held.charm);
       setAttr(socketCharm, "aria-label", held.charm ? `${itemName(held.charm)} in the charm hole` : "Charm hole, empty");
 

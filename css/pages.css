@@ -2086,7 +2086,7 @@ button.seat { cursor: pointer; transition: border-color var(--dur-1), background
 .seat-taken { display: block; background: var(--surface-2); }
 
 .seat-face { position: absolute; inset: 0; }
-.seat-face img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 12%; }
+.seat-face img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 12%; user-select: none; -webkit-user-drag: none; }
 .seat-taken.is-offline .seat-face { filter: grayscale(.7); opacity: .55; }
 
 /* The host's remove, topmost right; the level sits under it, in the same column,
@@ -2094,8 +2094,10 @@ button.seat { cursor: pointer; transition: border-color var(--dur-1), background
 .seat-x {
   position: absolute;
   top: 6px;
-  right: 6px;
+  right: 34px;
   z-index: 3;
+  opacity: 0;
+  transition: opacity var(--dur-1), color var(--dur-1), background var(--dur-1);
   width: 22px;
   height: 22px;
   display: grid;
@@ -2111,10 +2113,12 @@ button.seat { cursor: pointer; transition: border-color var(--dur-1), background
 
 .seat-x .ico { width: 13px; height: 13px; }
 .seat-x:hover { color: var(--ember-hi); background: rgba(180, 82, 74, .28); }
+.seat-taken:hover .seat-x,
+.seat-x:focus-visible { opacity: 1; }
 
 .seat-lv {
   position: absolute;
-  top: 34px;
+  top: 6px;
   right: 6px;
   z-index: 2;
   min-width: 24px;
@@ -3228,10 +3232,32 @@ button.seat-name:hover { text-decoration: underline; }
   text-decoration: none;
   border-radius: var(--r-sm, 6px);
 }
-.hs-link:hover .truncate,
+.hs-link:hover .truncate { text-decoration: underline; text-underline-offset: 2px; }
 .hs-link:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }
 
 /* A roster name is a button now (it opens the card), dressed as the link it was. */
+
+/* The small copy of a stack that rides under the cursor while it is being
+   reordered. Fixed to the viewport and out of the way of hit-testing, so
+   elementFromPoint still finds the slot underneath it. */
+.drag-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 90;
+  width: 60px;
+  height: 60px;
+  padding: 6px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--violet-edge), 0 12px 28px -10px rgba(0, 0, 0, .95);
+  opacity: .92;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.drag-ghost .slot-art { width: 100%; height: 100%; }
+.drag-ghost .slot-art img { width: 100%; height: 100%; object-fit: contain; }
 
 /* ================= THE ANVIL (pages/fortify.js) ================= */
 
@@ -4422,12 +4448,23 @@ button.rite-core:disabled { cursor: default; }
   box-shadow: inset 0 0 0 1px var(--violet-edge), var(--shadow-card);
 }
 
-.profile-face { width: 100%; height: 100%; border-radius: 22px; }
-.profile-tags { align-items: center; }
+.profile-face { width: 100%; height: 100%; border-radius: 22px; overflow: hidden; }
+
+/* A bust is anchored to the top and then scaled, which puts the crown of the
+   head outside the box. On a card this size the face is the whole point, so it
+   is dropped far enough for the head to sit inside its own frame. */
+.profile-face img { transform: scale(1.45) translateY(9%); user-select: none; -webkit-user-drag: none; }
+
+.modal-profile .modal-sub { line-height: 1.55; }
+
+/* One gap between every band of the card, rather than each one bringing its own. */
+.profile-body { display: grid; gap: var(--sp-4); }
+.profile-tags { align-items: center; margin: 0; }
 .profile-tags .chip .dot { margin-left: -2px; }
-.worn-list .list-row { padding: 9px 0; }
+.profile-body .kpis { margin: 0; }
+.worn-list .list-row { padding: 10px 0; }
 .worn-list .lr-title, .worn-list .lr-sub { display: block; }
-.worn-list .lr-sub { margin-top: 2px; font-size: var(--text-xs); }
+.worn-list .lr-sub { margin-top: 3px; font-size: var(--text-xs); }
 
 @media (max-width: 599px) {
   .modal-profile .modal-head > .art.profile-art { width: 72px; height: 72px; }

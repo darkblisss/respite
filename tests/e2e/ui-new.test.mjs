@@ -480,6 +480,27 @@ await run(async () => {
     }));
     check("one press at 100% takes: the stamp says so and the ring reads +1",
       took.stamp === "Fortified" && took.vault.some((k) => /^slag_ring\|rare\|c1\.2\|\+1$/.test(k)) && took.essence === 39, took);
+
+    /* A stone goes in by a drag, so it comes out by one: onto another hole it
+       trades places, anywhere else it leaves the anvil. */
+    await app.page.waitForTimeout(2000);
+    await app.page.click('button.slot[data-key="lesser_veil_essence"]');
+    await app.page.waitForTimeout(400);
+    const holes = () => live(app, () => [...document.querySelectorAll(".socket")]
+      .map((n) => `${n.dataset.socket}:${n.classList.contains("is-filled") ? "full" : "empty"}`));
+    const staked = await holes();
+    check("a pressed essence fills the first hole, and it can be lifted",
+      staked[1] === "2:full" && await live(app, () => document.querySelector('.socket[data-socket="2"]').getAttribute("draggable")) === "true", staked);
+
+    await app.page.dragAndDrop('.socket[data-socket="2"]', '.socket[data-socket="3"]');
+    await app.page.waitForTimeout(300);
+    const moved = await holes();
+    check("dragged onto another hole it trades places", moved[1] === "2:empty" && moved[2] === "3:full", moved);
+
+    await app.page.dragAndDrop('.socket[data-socket="3"]', '.forge-rack');
+    await app.page.waitForTimeout(300);
+    const gone = await holes();
+    check("dragged off the circle it leaves the anvil", gone.every((x) => /empty$/.test(x)), gone);
   }
 
   section("nothing went wrong");

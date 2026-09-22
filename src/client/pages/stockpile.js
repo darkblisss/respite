@@ -290,7 +290,19 @@ export function storageCard(ctx, { pools, view, idBase, filters = true, hint = n
     hideTip();
     toggleClass(drag.node, "is-selected", true);
     toggleClass(grid, "is-sorting", true);
+    const art = drag.node.querySelector(".slot-art");
+    if (art) {
+      drag.ghost = h("div.drag-ghost", { "aria-hidden": "true" }, art.cloneNode(true));
+      document.body.appendChild(drag.ghost);
+      moveGhost();
+    }
     aim(slotAt(drag.x, drag.y));
+  }
+
+  // Under the cursor rather than beside it: the thing being moved is what is pointed at.
+  function moveGhost() {
+    if (!drag || !drag.ghost) return;
+    drag.ghost.style.transform = `translate(${drag.x}px, ${drag.y}px) translate(-50%, -50%)`;
   }
 
   // Taking the target's place: before it when moving back, after it when moving on.
@@ -322,6 +334,7 @@ export function storageCard(ctx, { pools, view, idBase, filters = true, hint = n
     window.removeEventListener("pointerup", onUp);
     window.removeEventListener("pointercancel", onCancel);
     document.removeEventListener("keydown", onKey, true);
+    if (d.ghost) d.ghost.remove();
     if (!d.active) return;
     // The press that ended a drag is not also a click on the slot.
     clickHushUntil = performance.now() + 500;
@@ -363,6 +376,7 @@ export function storageCard(ctx, { pools, view, idBase, filters = true, hint = n
       if (dist <= SLOP_MOUSE) return;
       lift();
     }
+    moveGhost();
     aim(slotAt(drag.x, drag.y));
     edgeScroll();
   }
