@@ -113,14 +113,14 @@ await run(async () => {
       const cell = document.querySelector('.path-face[data-node="wr_ironhide"]').closest(".path-node");
       return {
         name: cell.querySelector(".path-name").textContent,
-        rank: cell.querySelector(".path-rank").textContent,
+        rank: cell.querySelector(".path-rank"),
         segs: cell.querySelectorAll(".path-seg").length,
         art: !!cell.querySelector(".path-art .ico"),
       };
     });
-    // An untaken node says nothing under its name: the ring's segments are the ranks.
+    // Nothing is written under the name: the ring's segments are the ranks.
     check("a node says its name and reads its ranks off the ring, one segment apiece",
-      named.name === "Ironhide" && named.segs === 4 && named.art && named.rank === "", named);
+      named.name === "Ironhide" && named.segs === 4 && named.art && named.rank === null, named);
     const shut = await live(app, () => {
       const cell = document.querySelector(".path-node.is-shut");
       return cell ? { id: cell.querySelector(".path-face").dataset.node, locked: !cell.querySelector(".path-lock").hidden } : null;
@@ -351,31 +351,44 @@ await run(async () => {
     await go("#/character");
     await live(app, () => [...document.querySelectorAll("[role=tab]")].find((t) => /Collection/.test(t.textContent)).click());
     await app.page.waitForTimeout(600);
-    const views = await live(app, () => [...document.querySelectorAll(".coll-tabs [role=tab]")].map((t) => t.textContent.trim()));
-    same("four of them, monsters first", views, ["Monsters", "Gear", "Components", "Everything"]);
-    const felled = await live(app, () => document.querySelector(".char-bestiary").textContent);
-    check("a monster you have put down says how many", /Defeated 2,080/.test(felled), felled.slice(0, 200));
-    check("and never says it the old way", !/\d felled\b/i.test(felled) && !/of yours/.test(felled), felled.slice(0, 200));
+    const tabs = await live(app, () => [...document.querySelectorAll(".coll-tabs .coll-chip")].map((t) => t.dataset.tab));
+    same("two tabs: what you own and what you have put down", tabs, ["items", "foes"]);
 
-    await live(app, () => [...document.querySelectorAll(".coll-tabs [role=tab]")].find((t) => /Gear/.test(t.textContent)).click());
+    // Monsters: the ground chips narrow it, and a felled one carries its count.
+    await live(app, () => document.querySelector('[data-tab="foes"]').click());
     await app.page.waitForTimeout(500);
+    const foes = await live(app, () => ({
+      groups: document.querySelectorAll(".coll-groups .coll-chip").length,
+      cells: document.querySelectorAll(".coll-grid .coll-cell").length,
+      titles: [...document.querySelectorAll("button.coll-cell[data-monster]")].map((b) => b.title),
+    }));
+    check("a ground chip for every region", foes.groups === 9, foes.groups);
+    check("and the first ground's foes are in the grid", foes.cells > 0, foes.cells);
+    check("a monster you have put down says how many",
+      foes.titles.some((t) => /Defeated 2,080/.test(t)), foes.titles.slice(0, 4));
+    check("and never says it the old way",
+      !foes.titles.some((t) => /\d felled\b/i.test(t) || /of yours/.test(t)), foes.titles.slice(0, 4));
+
+    // Items: a kind row, and every piece of gear there is, held or not.
+    await live(app, () => document.querySelector('[data-tab="items"]').click());
+    await app.page.waitForTimeout(400);
+    const kinds = await live(app, () => [...document.querySelectorAll(".coll-row:not(.coll-groups) .coll-chip")].map((t) => t.dataset.kind));
+    check("a chip for every kind of item", kinds.includes("gear") && kinds.includes("parts") && kinds.includes("remedies"), kinds);
+
     const gear = await live(app, () => ({
-      tiles: document.querySelectorAll(".char-bestiary .coll-tile").length,
+      cells: document.querySelectorAll(".coll-grid .coll-cell").length,
       chip: document.querySelector(".section-head .chip").textContent,
     }));
-    check("gear lists every piece there is, held or not", gear.tiles > 20, gear);
-    check("and the count says how much of it", /of \d+ held/.test(gear.chip), gear.chip);
+    check("gear lists every piece of the ground it is on, held or not", gear.cells > 10, gear);
+    check("and the count says how much of everything there is", /of [\d,]+ collected/.test(gear.chip), gear.chip);
 
-    await live(app, () => [...document.querySelectorAll(".coll-tabs [role=tab]")].find((t) => /Components/.test(t.textContent)).click());
-    await app.page.waitForTimeout(500);
-    const parts = await live(app, () => ({
-      held: [...document.querySelectorAll("button.coll-tile")].map((b) => b.dataset.item),
-      chip: document.querySelector(".section-head .chip").textContent,
-    }));
+    /* A remedy is bought, not found, so it has a kind of its own. What was bought
+       is lit there, because buying is where the record is written. */
+    await live(app, () => document.querySelector('[data-kind="remedies"]').click());
+    await app.page.waitForTimeout(400);
+    const held = await live(app, () => [...document.querySelectorAll("button.coll-cell[data-item]")].map((b) => b.dataset.item));
     check("what was bought is lit, because that is where a record is written",
-      parts.held.includes("provision_t1"), parts.held.slice(0, 12));
-    check("and it is a record, not a stock count: it survives spending it",
-      /of \d+ held/.test(parts.chip), parts.chip);
+      held.includes("provision_t1"), held.slice(0, 12));
   }
 
   section("the party, and where it sits");

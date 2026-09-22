@@ -1063,12 +1063,12 @@ PAGES.market = () => h("div.page",
    host has closed. The face is a plate here because the kit ships no portraits. */
 function seat({ name, lv, host, ready, me, doing, offline }) {
   return h("div.seat.seat-taken", { class: { "is-me": me, "is-ready": ready, "is-offline": offline } },
-    h("div.seat-bar",
-      h("button.seat-name", { type: "button" }, host ? ic("crown") : null, name),
-      h("span.seat-lv", { "data-tip": "Hunt level" }, String(lv)),
-      host ? null : h("button.seat-x", { type: "button", "aria-label": `Remove ${name}` }, ic("close"))),
     h("div.seat-face", { "aria-hidden": "true" }, avatar(name, { size: "lg" })),
-    h("div.seat-foot", h("span.seat-doing", doing)),
+    host ? null : h("button.seat-x", { type: "button", "aria-label": `Remove ${name}` }, ic("close")),
+    h("span.seat-lv", String(lv)),
+    h("div.seat-foot",
+      h("button.seat-name", { type: "button" }, host ? ic("crown") : null, name),
+      h("span.seat-doing", doing)),
     ready ? h("span.seat-ready", ic("check"), "Ready") : null);
 }
 
