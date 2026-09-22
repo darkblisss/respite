@@ -436,9 +436,12 @@ export default {
       const state = ctx.state;
       const zone = c ? getZone(c.zone) : null;
 
+      /* A hunt on ground this build has never heard of belongs to a newer engine:
+         name what can be named and carry on, rather than taking the page down. */
+      const reg = c ? regionOfTier(c.tier) : null;
       setAttr(huntHead, "hidden", !c);
-      if (c) {
-        setText(huntTitle, `The ${zone.name} of ${regionOfTier(c.tier).name}`);
+      if (c && zone) {
+        setText(huntTitle, reg ? `The ${zone.name} of ${reg.name}` : `The ${zone.name}`);
         const notes = zoneNotes(zone).join(" · ");
         setText(huntSub, notes);
         setAttr(huntSub, "hidden", !notes);
@@ -714,7 +717,10 @@ export default {
       // Travel doesn't end a hunt: say where it is when that isn't here.
       const elsewhere = !!(c && c.tier !== tier);
       setAttr(away, "hidden", !elsewhere);
-      if (elsewhere) setText(awayText, `The hunt is out in ${regionOfTier(c.tier).name}`);
+      if (elsewhere) {
+        const there = regionOfTier(c.tier);
+        setText(awayText, there ? `The hunt is out in ${there.name}` : "The hunt is out elsewhere");
+      }
 
       if (sigs.quarry !== tier) {
         sigs.quarry = tier;

@@ -135,6 +135,9 @@ const rpc = {
   kick: (who, userId) => asValue(who, 'select public.party_kick($1) as v', [userId]),
   say: (who, body) => asValue(who, 'select public.party_say($1) as v', [body]),
   state: (who) => asValue(who, 'select public.party_state() as v'),
+  slots: (who, n) => asValue(who, 'select public.party_set_slots($1) as v', [n]),
+  propose: (who, tier, zone) => asValue(who, 'select public.party_propose($1, $2) as v', [tier, zone]),
+  ready: (who, on) => asValue(who, 'select public.party_ready($1) as v', [on]),
 };
 
 const range = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => from + i);
@@ -934,10 +937,10 @@ async function partyState() {
 
   let st = await rpc.state(U.ash);
   same('party_state member: top level keys', Object.keys(st).sort(), ['invites_in', 'invites_out', 'members', 'messages', 'party']);
-  same('party_state member: party', st.party, { id: P1, name: 'Wardens', leader_id: U.ash });
+  same('party_state member: party', st.party, { id: P1, name: 'Wardens', leader_id: U.ash, slots: 4, proposed: null });
   same('party_state member: members, oldest first', st.members.map((m) => m.user_id), [U.ash, U.bram]);
   same('party_state member: member keys', st.members.map((m) => Object.keys(m).sort()),
-    Array(2).fill(['activity', 'hunt', 'joined_at', 'last_seen', 'levels', 'skin', 'total_level', 'user_id', 'username']));
+    Array(2).fill(['activity', 'hunt', 'joined_at', 'last_seen', 'levels', 'ready', 'skin', 'total_level', 'user_id', 'username']));
   same('party_state member: profile fields',
     [st.members[0].username, st.members[0].total_level, st.members[0].levels, st.members[1].activity, st.members[1].last_seen !== null],
     ['ash', 42, { delving: 12 }, { doing: 'felling' }, true]);
@@ -969,6 +972,47 @@ async function partyState() {
   await rpc.kick(U.ash, U.bram);
   same('party_state after a kick shows nothing of the old party', await rpc.state(U.bram), nothing);
   same('a kicked player can no longer read the party chat', await as(U.bram, 'select id from public.party_messages'), []);
+}
+
+/* The room: squares the leader opens and closes, a ground anyone can put up,
+   and a ready mark each that a new ground clears. */
+async function partyRoom() {
+  await resetParties();
+  const P1 = await partyWith('ash', 'Wardens', 'bram');
+  const slotsOf = () => qv('select slots from public.parties where id = $1', [P1]);
+  const readyOf = (u) => qv('select ready from public.party_members where user_id = $1', [u]);
+  const upOf = () => q1('select proposed_tier, proposed_zone from public.parties where id = $1', [P1]);
+
+  same('a new party opens every square', await slotsOf(), 4);
+  await refuses('party_set_slots refuses a member who is not the leader', () => rpc.slots(U.bram, 3), /Only the party leader/);
+  await refuses('party_set_slots refuses closing a square somebody sits in', () => rpc.slots(U.ash, 1), /sitting in that square/);
+  await refuses('party_set_slots refuses more than the room holds', () => rpc.slots(U.ash, 5), /holds four/);
+  await refuses('party_set_slots refuses a caller with no party', () => rpc.slots(U.dusk, 3), /You are not in a party/);
+  same('refused presses left the room as it was', await slotsOf(), 4);
+
+  same('party_set_slots closes a square', await rpc.slots(U.ash, 3), 3);
+  same('and the room keeps it', await slotsOf(), 3);
+  same('party_set_slots opens one again', await rpc.slots(U.ash, 4), 4);
+
+  await refuses('party_ready refuses a mark with no ground up', () => rpc.ready(U.bram, true), /put a ground up/);
+  await refuses('party_propose refuses a ground nobody has', () => rpc.propose(U.ash, 3, 'nowhere'), /No such ground/);
+  await refuses('party_propose refuses a region nobody has', () => rpc.propose(U.ash, 99, 'outer'), /No such region/);
+  await refuses('party_propose refuses a caller with no party', () => rpc.propose(U.dusk, 3, 'outer'), /You are not in a party/);
+  same('refused proposals put nothing up', await upOf(), { proposed_tier: null, proposed_zone: null });
+
+  same('party_propose puts a ground up', await rpc.propose(U.bram, 3, 'Inner'), { tier: 3, zone: 'inner' });
+  same('and any member may be the one to do it', await upOf(), { proposed_tier: 3, proposed_zone: 'inner' });
+
+  same('party_ready marks you', await rpc.ready(U.bram, true), true);
+  same('the mark is kept', await readyOf(U.bram), true);
+  same('and it is yours alone', await readyOf(U.ash), false);
+  same('party_ready stands you down again', await rpc.ready(U.bram, false), false);
+
+  await rpc.ready(U.ash, true);
+  await rpc.ready(U.bram, true);
+  await rpc.propose(U.ash, 3, 'core');
+  same('a new ground stands the whole room down', [await readyOf(U.ash), await readyOf(U.bram)], [false, false]);
+  same('and the new ground is what is up', await upOf(), { proposed_tier: 3, proposed_zone: 'core' });
 }
 
 async function rerun(schemaSql) {
@@ -1041,6 +1085,7 @@ async function main() {
   await section('party_kick', partyKick);
   await section('party_say', partySay);
   await section('party_state', partyState);
+  await section('the party room', partyRoom);
   await section('re-running the schema', () => rerun(schemaSql));
 }
 

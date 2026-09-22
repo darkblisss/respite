@@ -7,11 +7,18 @@
    refreshParty(), with realtime pokes and a five-second poll
    while the page is open.
 
-   The bonus is the rules' own: partyMult() over the others'
-   hunt presence, read against your hunt right now. Member cards
-   are built when the roster changes and repaint in place; chat
-   appends what is new and only follows the bottom when you are
-   already there. Guests get a sign-in card instead.
+   The party is a room of four squares. A square holds whoever is
+   sitting in it (face, name, total level, ready mark), stands
+   open and says Waiting, or carries the leader's cross. Anyone
+   may put a ground up, everyone marks ready for it, and the
+   leader's press sends the whole room out at once. Squares are
+   rebuilt when the roster, the seats or the marks change and
+   repainted in place every second for what each of them is at.
+
+   The bonus is the rules' own: partyMult() over the others' hunt
+   presence, read against your hunt right now. Chat appends what
+   is new and only follows the bottom when you are already there.
+   Guests get a sign-in card instead.
 
    Setting out together lives here rather than in the zone sheet:
    that sheet is a lone hunter's projection of their own twelve
@@ -26,7 +33,7 @@ import { h, setText, setAttr, toggleClass } from "../ui/dom.js";
 import { iconEl } from "../ui/icons.js";
 import { confirm, openModal, toast } from "../ui/overlay.js";
 import { fmtWhole, fmtTime, fmtAgo, plural } from "../ui/format.js";
-import { openPopup } from "../ui/widgets.js";
+import { openPopup, portraitImg } from "../ui/widgets.js";
 import { CONFIG } from "../../shared/config.js";
 import { GameData, findAction, getSkill, getZone, regionOfTier } from "../../shared/registry.js";
 import { partyMult } from "../../shared/progression.js";
@@ -446,19 +453,58 @@ function partyBody(ctx, page) {
 
   /* One card with the whole of it: where the party is, and the one press that changes that.
      The fight is drawn on the Hunt page, never here: this card only names it. */
-  function huntPanel() {
+  /* ================= THE ROOM ================= */
+
+  /* A party is a room of four squares. Somebody sits in one, one stands open and
+     says so, or the leader has crossed it out. Under them the ground anyone can
+     put up, a ready mark each, and the leader's press that sends the room out
+     together. When the party is already out the same card carries the way in.
+
+     Squares are rebuilt when the roster, the seats or the marks change and
+     repainted in place every second for what each of them is doing. */
+
+  const SEAT_OPEN = "open";
+  const SEAT_SHUT = "shut";
+
+  function roomCard() {
     const sub = h("p.card-sub");
     const chipBox = h("div.card-actions");
-    const body = h("div");
-    const node = h("section.card", { "data-tone": "ember" },
-      h("div.card-head",
-        h("div", h("h2.card-title", iconEl("swords"), "The party's hunt"), sub),
-        chipBox),
-      body);
-    let shape = null;
+    const squares = h("div.room-grid");
+    const groundSel = h("select.select.grow", { "aria-label": "Ground" },
+      GameData.ZONES.map((z) => h("option", { value: z.id }, z.name)));
+    const putUp = h("button.btn.btn-sm", { type: "button" }, "Put it up");
+    const readyBtn = h("button.btn.grow", { type: "button" });
+    const goBtn = h("button.btn.btn-ember.grow", { type: "button" }, iconEl("swords"), "Start");
+    const hint = h("span.field-hint.t-bad", { hidden: true, role: "alert" });
+    const bar = h("div.room-bar",
+      h("div.hstack.gap-2", groundSel, putUp),
+      h("div.btn-row.room-press", readyBtn, goBtn),
+      hint);
+    const outRow = h("div.btn-row.room-out", { hidden: true });
+    const node = h("section.card.room", { "data-tone": "ember" },
+      h("div.card-head", h("div", h("h2.card-title", iconEl("party"), "The room"), sub), chipBox),
+      squares, bar, outRow);
+
+    let seats = [];          // { node, doing, kind, id }
+    let seatSig = null;
     let chipSig = null;
-    let refs = null;        // { btn, hint } of whatever this shape offers
+    let outSig = null;
     let sending = false;
+    let picked = null;       // the zone in the select, kept across repaints
+
+    groundSel.addEventListener("change", () => { picked = groundSel.value; });
+
+    async function call(fn, btn) {
+      sending = true;
+      busy(btn, true);
+      const res = await ask(fn);
+      sending = false;
+      if (!alive) return res;
+      busy(btn, false);
+      if (res.error) toast(String(res.error), { kind: "warn" });
+      refresh();
+      return res;
+    }
 
     async function send(type, args, btn, said) {
       sending = true;
@@ -479,75 +525,157 @@ function partyBody(ctx, page) {
       return res;
     }
 
-    function build(kind, tier) {
-      shape = `${kind}|${tier}`;
-      refs = null;
+    /* ---------- a square ---------- */
 
-      if (kind === "mine") {
-        const watch = h("a.btn.btn-ember", { href: "#/skill/warfare" }, iconEl("swords"), "Watch the fight");
-        const away = h("button.btn.btn-quiet", { type: "button" }, "Break away");
-        away.addEventListener("click", () => send("partyHuntLeave", {}, away, (data) => {
-          toast(data.kills > 0 ? `You break away: ${plural(data.kills, "kill")}` : "You break away", { kind: "info" });
-        }));
-        body.replaceChildren(h("div.btn-row", watch, away));
-        return;
+    function memberSeat(m, isLeader, amLeader, isReady) {
+      const mine = sameId(m.user_id, meId());
+      const doing = h("span.seat-doing");
+      const face = h("div.seat-face", { "aria-hidden": "true" });
+      face.append(portraitImg(m.skin || null));
+      const seat = h("div.seat.seat-taken", { class: [mine && "is-me", isReady && "is-ready"] },
+        face,
+        h("span.seat-lv", fmtWhole(mine ? totalLevel(ctx.state) : m.total_level || 0)),
+        h("div.seat-foot",
+          h("button.seat-name", { type: "button", onClick: () => openPopup("profile", ctx, String(m.username || "")) },
+            isLeader ? iconEl("crown") : null, display(m.username)),
+          doing),
+        isReady ? h("span.seat-ready", iconEl("check"), "Ready") : null,
+        isLeader ? h("span.seat-host", "Host") : null);
+      if (amLeader && !mine) {
+        const kick = h("button.seat-x", { type: "button", "aria-label": `Remove ${display(m.username)}` }, iconEl("close"));
+        kick.addEventListener("click", () => kickMember(m, kick));
+        seat.append(kick);
       }
-
-      const hint = h("span.field-hint.t-bad.mt-2", { hidden: true, role: "alert" });
-
-      if (kind === "theirs") {
-        const join = h("button.btn.btn-ember", { type: "button" }, iconEl("party"), "Join them");
-        join.addEventListener("click", () => send("partyHuntJoin", {}, join, () => {
-          toast("You fall in with the party", { kind: "good", icon: "party" });
-        }));
-        refs = { btn: join, hint };
-        body.replaceChildren(h("div.btn-row", join), hint);
-        return;
-      }
-
-      // The ground is the one you stand in, as on the Hunt page; the server checks it is open to you.
-      const select = h("select.select.grow", { "aria-label": "Ground" },
-        GameData.ZONES.map((z) => h("option", { value: z.id }, `${z.name} · ×${z.xp} XP`)));
-      const go = h("button.btn.btn-ember", { type: "button" }, iconEl("swords"), "Set out together");
-      go.addEventListener("click", () => send("partyHuntStart", { tier, zone: select.value }, go, () => {
-        toast(`The party sets out for ${ground(tier, select.value)}`, { kind: "good", icon: "swords" });
-      }));
-      refs = { btn: go, hint };
-      body.replaceChildren(h("div.hstack.gap-2", select, go), hint);
+      return { node: seat, doing, id: String(m.user_id) };
     }
+
+    /* An open square says so and nothing else; a shut one carries the cross. The
+       leader presses either to turn it into the other. */
+    function emptySeat(kind, index, amLeader) {
+      const open = kind === SEAT_OPEN;
+      const label = amLeader
+        ? open ? "Close this square" : "Open this square"
+        : open ? "An open square" : "A closed square";
+      const inner = open ? h("span.seat-wait", "Waiting") : h("span.seat-shut", { "aria-hidden": "true" }, iconEl("close"));
+      if (!amLeader) return { node: h("div.seat", { class: open ? "seat-open" : "seat-shut-box", "aria-label": label }, inner), doing: null, id: null };
+      const btn = h("button.seat", { type: "button", class: open ? "seat-open" : "seat-shut-box", "aria-label": label, "data-tip": label }, inner);
+      // Closing takes the last square away; opening gives one back.
+      btn.addEventListener("click", () => call(() => ctx.net.party.setSlots(open ? index : index + 1), btn));
+      return { node: btn, doing: null, id: null };
+    }
+
+    /* ---------- the bar ---------- */
+
+    function wire(st, tier) {
+      putUp.onclick = () => call(() => ctx.net.party.propose(tier, groundSel.value), putUp);
+      readyBtn.onclick = () => call(() => ctx.net.party.ready(!myMark(st)), readyBtn);
+      goBtn.onclick = () => {
+        const up = proposed(st);
+        if (!up) return;
+        send("partyHuntStart", { tier: up.tier, zone: up.zone }, goBtn, () => {
+          toast(`The party sets out for ${ground(up.tier, up.zone)}`, { kind: "good", icon: "swords" });
+        });
+      };
+    }
+
+    const proposed = (st) => {
+      const p = st.party && st.party.proposed;
+      return p && p.zone ? { tier: Number(p.tier), zone: String(p.zone) } : null;
+    };
+    const myMark = (st) => list(st.members).some((m) => sameId(m.user_id, meId()) && m.ready);
 
     return {
       node,
-      paint(fight) {
-        const state = ctx.state;
+      paint(st, now, myHunt, fight) {
+        const me = meId();
+        const leaderId = st.party ? st.party.leader_id : null;
+        const amLeader = sameId(leaderId, me);
+        const members = list(st.members).slice().sort((a, b) => (sameId(a.user_id, me) ? -1 : sameId(b.user_id, me) ? 1 : 0));
+        const slots = Math.max(members.length, Math.min(P.maxSize, Number(st.party && st.party.slots) || P.maxSize));
         const mine = outOn(fight);
-        const kind = mine ? "mine" : fight ? "theirs" : "idle";
-        const tier = currentRegion(state).tier;
-        if (`${kind}|${tier}` !== shape) build(kind, tier);
+
+        /* ---- the squares ---- */
+        const sig = [leaderId, amLeader, slots, members.map((m) => `${m.user_id}:${m.ready ? 1 : 0}`).join(",")].join("|");
+        if (sig !== seatSig) {
+          seatSig = sig;
+          seats = Array.from({ length: P.maxSize }, (_, i) => (i < members.length
+            ? memberSeat(members[i], sameId(members[i].user_id, leaderId), amLeader, !!members[i].ready)
+            : emptySeat(i < slots ? SEAT_OPEN : SEAT_SHUT, i, amLeader)));
+          squares.replaceChildren(...seats.map((s) => s.node));
+        }
+
+        // What each of them is at, on the second: the hunt from presence, the bench from the heartbeat.
+        members.forEach((m, i) => {
+          const seat = seats[i];
+          if (!seat || !seat.doing) return;
+          const hunt = sameId(m.user_id, me) ? myHunt : presence(m.hunt, now);
+          const online = sameId(m.user_id, me) || (when(m.last_seen) != null && now - when(m.last_seen) < ONLINE_MS);
+          const task = sameId(m.user_id, me) ? ctx.state.tasks.skilling : null;
+          const work = sameId(m.user_id, me)
+            ? (task ? workOf({ skill: task.skillId, action: task.actionId }) : null)
+            : workOf(m.activity);
+          setText(seat.doing, hunt ? ground(hunt.tier, hunt.zone) : work ? work.text : online ? "At camp" : "Away");
+          toggleClass(seat.node, "is-offline", !online);
+        });
+
+        /* ---- the ground, the marks and the press ---- */
+        const tier = currentRegion(ctx.state).tier;
+        const up = proposed(st);
+        wire(st, tier);
+        if (picked === null) picked = up ? up.zone : groundSel.value;
+        if (groundSel.value !== picked) groundSel.value = picked;
+
+        const marked = members.filter((m) => m.ready).length;
+        const allIn = members.length > 0 && marked === members.length;
+        const iAm = myMark(st);
+        setText(readyBtn, iAm ? "Stand down" : "Ready");
+        toggleClass(readyBtn, "btn-good", iAm);
+        readyBtn.disabled = sending || !up || !!fight;
+        goBtn.disabled = sending || !amLeader || !up || !allIn || !!fight;
+        setText(goBtn.lastChild, amLeader ? "Start" : `${marked} of ${members.length} ready`);
+        setAttr(bar, "hidden", !!fight);
+
+        // The server's own two refusals, said before the press instead of after it.
+        const no = !up ? null
+          : ctx.state.tasks.combat ? "Pull back before you set out with your party."
+            : recovering(ctx.state) ? `You're still recovering. Back on your feet in ${fmtTime(ctx.state.player.recoveryLeft)}.` : null;
+        setText(hint, no || "");
+        setAttr(hint, "hidden", !no);
+        if (no) goBtn.disabled = true;
+
+        /* ---- already out ---- */
+        const outKind = mine ? "mine" : fight ? "theirs" : "";
+        if (outKind !== outSig) {
+          outSig = outKind;
+          if (!outKind) outRow.replaceChildren();
+          else if (mine) {
+            const watch = h("a.btn.btn-ember", { href: "#/skill/warfare" }, iconEl("swords"), "Watch the fight");
+            const away = h("button.btn.btn-quiet", { type: "button" }, "Break away");
+            away.addEventListener("click", () => send("partyHuntLeave", {}, away, (data) => {
+              toast(data.kills > 0 ? `You break away: ${plural(data.kills, "kill")}` : "You break away", { kind: "info" });
+            }));
+            outRow.replaceChildren(watch, away);
+          } else {
+            const join = h("button.btn.btn-ember", { type: "button" }, iconEl("party"), "Join them");
+            join.addEventListener("click", () => send("partyHuntJoin", {}, join, () => {
+              toast("You fall in with the party", { kind: "good", icon: "party" });
+            }));
+            outRow.replaceChildren(join);
+          }
+        }
+        setAttr(outRow, "hidden", !outKind);
+
+        setText(sub, fight
+          ? mine ? `Out in ${ground(fight.tier, fight.zone)}` : `Your party is out in ${ground(fight.tier, fight.zone)}`
+          : up ? `${ground(up.tier, up.zone)}, when everyone is ready` : "Put a ground up, then everyone marks ready.");
 
         const hunters = fight && Array.isArray(fight.hunters) ? fight.hunters.length : 0;
-        setText(sub, fight
-          ? mine
-            ? `You are out in ${ground(fight.tier, fight.zone)}. The Hunt page draws the fight.`
-            : `Your party is out in ${ground(fight.tier, fight.zone)}. Join them and you come in on the walk, never into the middle of an encounter.`
-          : "Set out on one ground together. You face one roster of foes, each one built for the size of the band rather than one apiece. XP is split by what each of you did, damage dealt and damage taken; gold and drops come whole to everyone who fought.");
-
         const chip = fight ? `${fmtWhole(hunters)} out · ${fmtTime(fight.elapsed)}` : "";
         if (chip !== chipSig) {
           chipSig = chip;
           chipBox.replaceChildren(...(chip ? [h("span.chip.chip-ember", iconEl("swords"), chip)] : []));
         }
         setAttr(chipBox, "hidden", !chip);
-
-        // The server's own two refusals, said before the press instead of after it.
-        if (refs) {
-          const no = ctx.state.tasks.combat
-            ? "Pull back before you set out with your party."
-            : recovering(ctx.state) ? `You're still recovering. Back on your feet in ${fmtTime(ctx.state.player.recoveryLeft)}.` : null;
-          setText(refs.hint, no || "");
-          setAttr(refs.hint, "hidden", !no);
-          refs.btn.disabled = sending || !!no;
-        }
       },
     };
   }
@@ -562,10 +690,6 @@ function partyBody(ctx, page) {
     const actions = h("div.page-actions");
     let actionsSig = null;
 
-    const grid = h("div.grid-cards.max-2");
-    let cards = new Map();
-    let rosterSig = null;
-
     // Lives in the invite dialog now, not on the page. Painted either way.
     const invitesBox = h("div");
     const inviteFormNode = inviteForm();
@@ -573,15 +697,14 @@ function partyBody(ctx, page) {
 
     const onlineChip = h("span.chip.chip-good", iconEl("online"), h("span"));
     const chat = chatPanel();
-    const fightCard = huntPanel();
+    const room = roomCard();
 
-    // The chat takes the full width the invites card used to share with it.
+    // The room, then the chat under it at the full width.
     page.replaceChildren(
       h("header.page-head",
         h("div", eyebrow, title, h("p.page-sub", RULE), h("div.chip-row.mt-3", bonusChip)),
         actions),
-      fightCard.node,
-      grid,
+      room.node,
       h("section.card.card-flush.chat", cardHead("Party chat", { actions: onlineChip }), chat.log, chat.alert, chat.form));
 
     /* The page actions: a button that opens the invite dialog, and Leave for everyone.
@@ -677,108 +800,6 @@ function partyBody(ctx, page) {
         hint);
     }
 
-    /* Members: one card each, rebuilt when the roster or the leader changes. */
-    function paintMembers(st, now, myHunt, bonus) {
-      const me = meId();
-      const leaderId = st.party.leader_id;
-      const members = list(st.members).slice().sort((a, b) => (sameId(a.user_id, me) ? -1 : sameId(b.user_id, me) ? 1 : 0));
-      const sig = `${leaderId}|${sameId(leaderId, me)}|${members.map((m) => m.user_id).join(",")}`;
-      if (sig !== rosterSig) {
-        rosterSig = sig;
-        cards = new Map(members.map((m) => [String(m.user_id), memberCard(m, sameId(m.user_id, leaderId), sameId(leaderId, me))]));
-        grid.replaceChildren(...Array.from(cards.values()).map((c) => c.node));
-      }
-      members.forEach((m) => {
-        const card = cards.get(String(m.user_id));
-        if (card) card.paint(m, now, myHunt, bonus);
-      });
-    }
-
-    function memberCard(m, isLeader, amLeader) {
-      const mine = sameId(m.user_id, meId());
-      const dot = h("span.dot");
-      const status = h("span.small");
-      const level = h("div.member-lv");
-      const chipBox = h("span");
-      const foot = h("div.member-foot", chipBox);
-      const node = h("article.card.member", { class: { "is-me": mine } },
-        h("span.avatar", { "aria-hidden": "true" }, initial(m.username), dot),
-        h("div",
-          h("div.member-name",
-            // A name in the roster opens their card: the face, the halo, the counts, and their page one press on.
-            h("button.hs-link.member-look", { type: "button", onClick: () => openPopup("profile", ctx, String(m.username || "")) }, display(m.username)),
-            isLeader ? h("span", { "data-tip": "Party leader", role: "img", "aria-label": "Leader" }, iconEl("crown")) : null),
-          level),
-        status,
-        foot);
-      if (amLeader && !mine) {
-        const kick = h("button.btn.btn-quiet.btn-sm", { type: "button", "aria-label": `Remove ${display(m.username)} from the party` }, "Kick");
-        kick.addEventListener("click", () => kickMember(m, kick));
-        foot.append(kick);
-      }
-      let lines = [];
-      let linesSig = null;
-      let chipSig = null;
-
-      return {
-        node,
-        paint(member, now, myHunt, bonus) {
-          const online = mine || (when(member.last_seen) != null && now - when(member.last_seen) < ONLINE_MS);
-          toggleClass(node, "is-offline", !online);
-          setAttr(dot, "class", `dot ${online ? "dot-online" : "dot-offline"}`);
-          setText(status, online ? "Online" : "Away");
-          toggleClass(status, "t-good", online);
-          toggleClass(status, "muted", !online);
-          setText(level, `Total level ${fmtWhole(mine ? totalLevel(ctx.state) : member.total_level || 0)}`);
-
-          // What they are doing: the hunt from presence, the bench from the heartbeat (yours from your own save).
-          const hunt = mine ? myHunt : presence(member.hunt, now);
-          const want = [];
-          if (hunt) want.push({ tone: "ember", icon: "swords", text: `Hunting ${ground(hunt.tier, hunt.zone)} · ${huntFor(now - hunt.start)}` });
-          if (online) {
-            const task = mine ? ctx.state.tasks.skilling : null;
-            const work = mine ? (task ? workOf({ skill: task.skillId, action: task.actionId }) : null) : workOf(member.activity);
-            if (work) want.push({ tone: "violet", icon: work.icon, text: work.text });
-            else if (!hunt) want.push({ tone: null, icon: "hourglass", text: "Idle at camp" });
-          } else {
-            const seen = when(member.last_seen);
-            want.push({ tone: null, icon: "clock", text: seen == null ? "Not seen yet" : `Last seen ${fmtAgo(now - seen).toLowerCase()}` });
-          }
-          const sig = want.map((w) => `${w.tone}:${w.icon}`).join("|");
-          if (sig !== linesSig) {
-            linesSig = sig;
-            lines.forEach((l) => l.node.remove());
-            lines = want.map((w) => {
-              const text = h("span");
-              const line = h("div.member-doing", { "data-tone": w.tone }, iconEl(w.icon), text);
-              node.insertBefore(line, foot);
-              return { node: line, text };
-            });
-          }
-          want.forEach((w, i) => setText(lines[i].text, w.text));
-
-          // Whether they count toward your bonus right now; your own card carries the bonus itself.
-          let chip;
-          if (mine) {
-            chip = bonus.pct > 0
-              ? { cls: "chip-good", icon: "party", text: `+${bonus.pct}% to your Hunt XP` }
-              : { cls: null, icon: "party", text: "No bonus right now" };
-          } else if (hunt && myHunt && hunt.tier === myHunt.tier && hunt.zone === myHunt.zone) {
-            chip = { cls: "chip-good", icon: "check", text: "Counts toward your bonus" };
-          } else if (hunt) {
-            chip = { cls: null, icon: null, text: myHunt ? "Other ground" : "Hunting without you" };
-          } else {
-            chip = { cls: null, icon: null, text: online ? "Not hunting" : "Offline" };
-          }
-          const cSig = `${chip.cls}|${chip.icon}|${chip.text}`;
-          if (cSig !== chipSig) {
-            chipSig = cSig;
-            chipBox.replaceChildren(h("span.chip", { class: chip.cls }, chip.icon ? iconEl(chip.icon) : null, chip.text));
-          }
-        },
-      };
-    }
-
     /* Invites out (the leader can cancel) and any still waiting for you. */
     function paintInvites(st, now, leader) {
       const out = list(st.invites_out);
@@ -860,9 +881,8 @@ function partyBody(ctx, page) {
         const online = members.filter((m) => sameId(m.user_id, me) || (when(m.last_seen) != null && now - when(m.last_seen) < ONLINE_MS)).length;
         setText(onlineChip.lastChild, `${fmtWhole(online)} online`);
 
-        fightCard.paint(fight);
+        room.paint(st, now, myHunt, fight);
         paintActions(st, leader);
-        paintMembers(st, now, myHunt, bonus);
         paintInvites(st, now, leader);
         chat.paint(list(st.messages), now);
         // The chat is on screen, so it has been read. The sidebar's dot reads the same mark.

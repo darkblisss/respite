@@ -47,6 +47,15 @@ place, and most of the ones that creep in do not.
   paragraph under a control is read once and then in the way forever.
 - **One name for a thing, everywhere.** If the sheet calls it the Vault, no
   other screen calls it deep storage.
+- **Never say the same fact twice on one card.** "Bare hands" beside "No tool",
+  "one point a rank" above a stepper that repeats it, "Capacity 4/30" under a
+  tab reading "Stockpile 4/30". Pick the place it is most useful and cut the
+  other.
+- **Do not gate a board on an order of operations.** A screen where things are
+  placed (the anvil, and anything like it) takes them in whatever order the
+  hand reaches for them, and a dragged thing lands where it was aimed, not in
+  the next free hole along. "Put a piece on the anvil first" is a rule the
+  board should not need and a toast nobody should read.
 
 When a screen is redrawn, the test is: read every string on it aloud and cut
 the ones that tell the player what they can already see.

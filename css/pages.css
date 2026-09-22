@@ -2036,60 +2036,180 @@ button.listing:disabled { opacity: .5; cursor: default; }
 
 /* ================= 11. PARTY ================= */
 
-.member {
+/* The room: four squares, two by two. One holds whoever is sitting in it, one
+   stands open and says so, and one the leader has closed carries the cross. */
+.room-grid {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--sp-3) 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
 }
 
-.member-name {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  font-size: var(--text-md);
-  font-weight: 600;
-  color: var(--bone);
+@media (min-width: 900px) {
+  .room-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
-.member-name .ico { width: 14px; height: 14px; color: var(--gold); }
+.seat {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 3 / 4;
+  min-height: 150px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background: var(--surface-sunk);
+  text-align: left;
+}
 
-.member-lv {
-  margin-top: 1px;
-  font-size: var(--text-xs);
+button.seat { cursor: pointer; transition: border-color var(--dur-1), background var(--dur-1); }
+
+.seat-open {
+  border-style: dashed;
   color: var(--bone-faint);
+  background: color-mix(in srgb, var(--surface-2) 55%, transparent);
+}
+
+.seat-shut-box { color: var(--bone-ghost); background: var(--surface-1); }
+.seat-wait { font-size: var(--text-sm); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.seat-shut .ico { width: 40px; height: 40px; stroke-width: 1.5; opacity: .5; }
+
+@media (hover: hover) {
+  button.seat-open:hover { border-color: var(--violet-edge); color: var(--bone-dim); }
+  button.seat-shut-box:hover { border-color: var(--line-strong); color: var(--bone-faint); background: var(--surface-2); }
+}
+
+/* A taken square: the face fills it, the level rides the top corner, and the
+   name and what they are at sit on a wash along the bottom. */
+.seat-taken { display: block; background: var(--surface-2); }
+
+.seat-face { position: absolute; inset: 0; }
+.seat-face img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 12%; }
+.seat-taken.is-offline .seat-face { filter: grayscale(.7); opacity: .55; }
+
+.seat-lv {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  min-width: 26px;
+  height: 22px;
+  padding: 0 6px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(10, 9, 12, .78);
+  box-shadow: inset 0 0 0 1px var(--gold-edge);
+  color: var(--gold-hi);
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
-.member-doing {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  font-size: var(--text-sm);
-  line-height: 1.45;
-  color: var(--bone-dim);
+.seat-foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: grid;
+  gap: 1px;
+  padding: 18px 8px 8px;
+  background: linear-gradient(to top, rgba(10, 9, 12, .92), transparent);
 }
 
-.member-doing > .ico { width: 16px; height: 16px; margin-top: 1px; color: var(--bone-faint); }
-.member-doing[data-tone="ember"] > .ico { color: var(--ember-hi); }
-.member-doing[data-tone="violet"] > .ico { color: var(--violet-hi); }
-
-.member-foot {
-  grid-column: 1 / -1;
+button.seat-name {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-2);
-  padding-top: var(--sp-3);
-  border-top: 1px solid var(--line-soft);
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--bone);
+  text-align: left;
+  cursor: pointer;
 }
 
-.member.is-offline .avatar { opacity: .6; }
-.member.is-offline .member-name { color: var(--bone-dim); }
-.member.is-me { border-color: var(--violet-edge); }
+button.seat-name:hover { text-decoration: underline; }
+.seat-name .ico { width: 13px; height: 13px; color: var(--gold); flex-shrink: 0; }
+.seat-doing { font-size: 11px; color: var(--bone-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.seat-host {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 2;
+  padding: 2px 7px;
+  border-radius: var(--r-sm);
+  background: rgba(10, 9, 12, .78);
+  box-shadow: inset 0 0 0 1px var(--gold-edge);
+  color: var(--gold-hi);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.seat-ready {
+  position: absolute;
+  left: 50%;
+  top: 44%;
+  z-index: 2;
+  translate: -50% -50%;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(10, 9, 12, .82);
+  box-shadow: inset 0 0 0 1px var(--good-edge, var(--line-strong));
+  color: var(--good, var(--bone));
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.seat-ready .ico { width: 13px; height: 13px; }
+.seat-taken.is-ready { border-color: var(--good, var(--violet-edge)); }
+.seat-taken.is-me { border-color: var(--violet-edge); }
+
+/* The leader's remove, out of the way in the corner until it is wanted. */
+.seat-x {
+  position: absolute;
+  top: 6px;
+  right: 38px;
+  z-index: 3;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(10, 9, 12, .7);
+  color: var(--bone-faint);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--dur-1), color var(--dur-1);
+}
+
+.seat-x .ico { width: 13px; height: 13px; }
+.seat-taken:hover .seat-x,
+.seat-x:focus-visible { opacity: 1; }
+.seat-x:hover { color: var(--ember-hi); }
+
+/* Under the squares: the ground somebody put up, the marks, and the press. */
+.room-bar { display: grid; gap: var(--sp-3); }
+.room-bar[hidden] { display: none; }
+.room-press { display: flex; gap: var(--sp-2); }
+.room-out[hidden] { display: none; }
+.room-out { margin-top: var(--sp-3); }
 
 .chat {
   display: flex;
@@ -2871,7 +2991,12 @@ button.listing:disabled { opacity: .5; cursor: default; }
   margin-top: var(--sp-4);
 }
 
+/* A button's own text box is not centred in it: without the grid the glyph
+   hangs off the baseline and the + and the minus sit at different heights. */
 .path-step {
+  display: grid;
+  place-items: center;
+  padding: 0;
   width: max(var(--tap), 40px);
   height: max(var(--tap), 40px);
   flex-shrink: 0;
@@ -3127,12 +3252,9 @@ button.listing:disabled { opacity: .5; cursor: default; }
   border-radius: var(--r-sm, 6px);
 }
 .hs-link:hover .truncate,
-.member-name .hs-link:hover { text-decoration: underline; }
 .hs-link:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }
 
 /* A roster name is a button now (it opens the card), dressed as the link it was. */
-button.member-look { padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; }
-button.member-look:hover { text-decoration: underline; }
 
 /* ================= THE ANVIL (pages/fortify.js) ================= */
 
@@ -3165,7 +3287,7 @@ button.member-look:hover { text-decoration: underline; }
 .rite-wrap {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   gap: var(--sp-4);
 }
 
@@ -3178,12 +3300,14 @@ button.member-look:hover { text-decoration: underline; }
   --rite-k: 1;
 }
 
+/* The circle is a fixed square and sits in the middle of the card; everything
+   under it takes the card's own width, so the odds, the table and the press all
+   start where the card's title starts. */
 .rite-under {
   display: flex;
   flex-direction: column;
   gap: 12px;
   width: 100%;
-  max-width: 440px;
 }
 
 .rite-under[hidden] { display: none; }
@@ -3429,6 +3553,15 @@ button.rite-core:disabled { cursor: default; }
 
 .socket.is-empty .socket-art .ico { width: 16px; height: 16px; opacity: .7; }
 .socket.is-filled { background: radial-gradient(70% 70% at 50% 40%, rgba(157, 130, 224, .28), transparent 75%), var(--surface-2); }
+
+/* An essence the piece on the anvil does not take: it sits where it was put,
+   counts for nothing, and the press stays down until it comes out. */
+.socket.is-stray {
+  box-shadow: inset 0 0 0 1px var(--bad, #b4524a), 0 6px 16px -8px rgba(0, 0, 0, .9);
+  background: radial-gradient(70% 70% at 50% 40%, rgba(180, 82, 74, .22), transparent 75%), var(--surface-2);
+}
+
+.socket.is-stray .socket-art { opacity: .55; }
 
 @media (hover: hover) {
   .socket:not(:disabled):hover { box-shadow: inset 0 0 0 1px var(--violet-hi), 0 6px 16px -8px rgba(0, 0, 0, .9); }

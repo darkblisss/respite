@@ -121,10 +121,15 @@ create table if not exists public.mail (
 
 create index if not exists mail_unclaimed_idx on public.mail (user_id) where claimed_at is null;
 
+-- A party is a room of four squares. `slots` is how many stand open (the rest
+-- are crossed out), and the proposed ground is whatever anyone last put up.
 create table if not exists public.parties (
   id uuid primary key default gen_random_uuid(),
   name text not null check (char_length(name) between 1 and 24),
   leader_id uuid not null,
+  slots smallint not null default 4 check (slots between 1 and 4),
+  proposed_tier smallint,
+  proposed_zone text,
   created_at timestamptz default now()
 );
 
@@ -132,6 +137,8 @@ create table if not exists public.party_members (
   party_id uuid references public.parties (id) on delete cascade,
   user_id uuid not null unique,
   username text not null,
+  -- Marked for the ground currently up; putting a new one up clears every mark.
+  ready boolean not null default false,
   joined_at timestamptz default now(),
   primary key (party_id, user_id)
 );
@@ -887,7 +894,16 @@ begin
   return jsonb_build_object(
     'party',
       case when v_party.id is null then null
-           else jsonb_build_object('id', v_party.id, 'name', v_party.name, 'leader_id', v_party.leader_id)
+           else jsonb_build_object(
+             'id', v_party.id,
+             'name', v_party.name,
+             'leader_id', v_party.leader_id,
+             'slots', coalesce(v_party.slots, 4),
+             'proposed',
+               case when v_party.proposed_zone is null then null
+                    else jsonb_build_object('tier', v_party.proposed_tier, 'zone', v_party.proposed_zone)
+               end
+           )
       end,
     'members', coalesce((
       select jsonb_agg(
@@ -896,6 +912,7 @@ begin
                  'username', m.username,
                  -- The face a party square draws. Null until they have picked one.
                  'skin', pr.skin,
+                 'ready', coalesce(m.ready, false),
                  'joined_at', m.joined_at,
                  'last_seen', pr.last_seen,
                  'activity', coalesce(pr.activity, '{}'::jsonb),
@@ -967,6 +984,132 @@ begin
 end;
 $$;
 
+-- ------------------------------------------------------------
+-- The room: how many squares stand open, what ground is up, and
+-- who has marked ready for it.
+-- ------------------------------------------------------------
+create or replace function public.party_set_slots(p_slots int)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_party_id uuid;
+  v_leader uuid;
+  v_taken int;
+  v_want int := coalesce(p_slots, 0);
+begin
+  if v_uid is null then
+    raise exception 'Not signed in.';
+  end if;
+
+  select m.party_id into v_party_id
+  from public.party_members m
+  where m.user_id = v_uid;
+  if not found then
+    raise exception 'You are not in a party.';
+  end if;
+
+  select p.leader_id into v_leader
+  from public.parties p
+  where p.id = v_party_id
+  for update;
+  if v_leader is distinct from v_uid then
+    raise exception 'Only the party leader can open and close squares.';
+  end if;
+
+  select count(*) into v_taken from public.party_members m where m.party_id = v_party_id;
+  if v_want < v_taken then
+    raise exception 'Somebody is sitting in that square.';
+  end if;
+  if v_want < 1 or v_want > 4 then
+    raise exception 'A party room holds four.';
+  end if;
+
+  update public.parties set slots = v_want where id = v_party_id;
+  return v_want;
+end;
+$$;
+
+create or replace function public.party_propose(p_tier int, p_zone text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_party_id uuid;
+  v_zone text := lower(coalesce(p_zone, ''));
+  v_tier int := coalesce(p_tier, 0);
+begin
+  if v_uid is null then
+    raise exception 'Not signed in.';
+  end if;
+  if v_zone not in ('outer', 'middle', 'inner', 'core') then
+    raise exception 'No such ground.';
+  end if;
+  if v_tier < 1 or v_tier > 20 then
+    raise exception 'No such region.';
+  end if;
+
+  select m.party_id into v_party_id
+  from public.party_members m
+  where m.user_id = v_uid;
+  if not found then
+    raise exception 'You are not in a party.';
+  end if;
+
+  perform 1 from public.parties p where p.id = v_party_id for update;
+
+  update public.parties
+     set proposed_tier = v_tier, proposed_zone = v_zone
+   where id = v_party_id;
+  -- A new ground stands the room down, the one who put it up included.
+  update public.party_members set ready = false where party_id = v_party_id;
+
+  return jsonb_build_object('tier', v_tier, 'zone', v_zone);
+end;
+$$;
+
+create or replace function public.party_ready(p_ready boolean)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_party_id uuid;
+  v_zone text;
+  v_want boolean := coalesce(p_ready, false);
+begin
+  if v_uid is null then
+    raise exception 'Not signed in.';
+  end if;
+
+  select m.party_id into v_party_id
+  from public.party_members m
+  where m.user_id = v_uid;
+  if not found then
+    raise exception 'You are not in a party.';
+  end if;
+
+  select p.proposed_zone into v_zone from public.parties p where p.id = v_party_id;
+  if v_want and v_zone is null then
+    raise exception 'Nobody has put a ground up yet.';
+  end if;
+
+  update public.party_members
+     set ready = v_want
+   where party_id = v_party_id and user_id = v_uid;
+
+  return v_want;
+end;
+$$;
+
 -- ============================================================
 -- 5. EXECUTE GRANTS
 -- ============================================================
@@ -983,6 +1126,9 @@ revoke execute on function public.party_leave() from public, anon;
 revoke execute on function public.party_kick(uuid) from public, anon;
 revoke execute on function public.party_say(text) from public, anon;
 revoke execute on function public.party_state() from public, anon;
+revoke execute on function public.party_set_slots(int) from public, anon;
+revoke execute on function public.party_propose(int, text) from public, anon;
+revoke execute on function public.party_ready(boolean) from public, anon;
 
 grant execute on function public.heartbeat(jsonb) to authenticated;
 grant execute on function public.online_count() to authenticated;
@@ -995,6 +1141,9 @@ grant execute on function public.party_leave() to authenticated;
 grant execute on function public.party_kick(uuid) to authenticated;
 grant execute on function public.party_say(text) to authenticated;
 grant execute on function public.party_state() to authenticated;
+grant execute on function public.party_set_slots(int) to authenticated;
+grant execute on function public.party_propose(int, text) to authenticated;
+grant execute on function public.party_ready(boolean) to authenticated;
 
 -- ============================================================
 -- 6. REALTIME

@@ -99,8 +99,9 @@ export default {
   mount(view, ctx) {
     let mode = "fortify";        // "fortify" | "convert"
     let sel = null;              // { key, at } on the anvil: nothing, until you put something there
-    let stones = 0;              // essences in the sockets
-    let charm = false;
+    /* What is in each hole, by item key. Holes fill in any order and hold what
+       they are given, so the essence can go down before the piece does. */
+    let held = { 1: null, 2: null, 3: null, charm: null };
     let phase = "idle";          // idle | strike | took | refused
     let cv = { from: null, to: null };
     let cphase = "idle";         // idle | flow | done
@@ -251,19 +252,30 @@ export default {
 
     /* ================= 3. PUTTING THINGS ON THE ANVIL ================= */
 
-    /* A piece goes on the anvil; an essence goes in a socket. Either by a drag or
+    /* A piece goes on the anvil; an essence goes in a hole. Either by a drag or
        by a press, because a press is faster once you know the board and a drag is
-       what the hand reaches for the first time. */
+       what the hand reaches for the first time. Nothing waits on anything else:
+       the holes take essence with the anvil bare, and a dragged stone lands in
+       the hole it was aimed at, not the next one along. */
+
+    // The holes, in the order a press fills them: top left, bottom middle, top right.
+    const HOLES = ["2", "1", "3"];
+    const inHoles = () => HOLES.map((i) => held[i]).filter(Boolean);
+    // How many of the staked essence the piece on the anvil would actually take.
+    const staked = (plan) => (plan ? HOLES.filter((i) => held[i] === plan.stone).length : inHoles().length);
+    // Essence in a hole that this piece does not take: it counts for nothing and blocks the press.
+    const strays = (plan) => (plan ? HOLES.filter((i) => held[i] && held[i] !== plan.stone).length : 0);
+    const charmOn = (plan) => !!(plan && held.charm === plan.charm);
+
+    function clearHoles() {
+      held = { 1: null, 2: null, 3: null, charm: null };
+    }
 
     function putPiece(p) {
       if (mode === "fortify") {
         if (phase !== "idle") return;
-        if (samePiece(p, sel)) sel = null;
-        else {
-          sel = { key: p.key, at: p.at };
-          stones = 0;
-          charm = false;
-        }
+        // The holes keep what they hold: swapping the piece does not empty the anvil.
+        sel = samePiece(p, sel) ? null : { key: p.key, at: p.at };
       } else {
         if (cphase !== "idle") return;
         const lv = level(p.key);
@@ -276,26 +288,44 @@ export default {
       paint();
     }
 
-    // Which socket a held essence or charm would go in, or null when none will take it.
-    function socketFor(row) {
-      if (mode !== "fortify" || phase !== "idle" || !sel) return null;
-      const plan = enchantPlan(ctx.state, sel.key);
-      if (!plan || plan.maxed) return null;
-      if (row.kind === "charm") return row.key === plan.charm && row.qty >= 1 && !charm ? "charm" : null;
-      if (row.key !== plan.stone) return null;
-      return stones < EN.maxStones && stones < plan.have ? String(stones + 1) : null;
+    /* A hole that is free, counting from the press order, or null when all three
+       are taken. A stone the camp holds only one of cannot fill two holes. */
+    function freeHole(row) {
+      const spare = row.qty - HOLES.filter((i) => held[i] === row.key).length;
+      if (spare < 1) return null;
+      return HOLES.find((i) => !held[i]) || null;
     }
 
-    function putStock(row) {
-      const where = socketFor(row);
-      if (!where) {
-        if (!sel) toast("Put a piece on the anvil first", { kind: "info" });
-        else if (row.qty < 1) toast(`No ${itemName(row.key)} held`, { kind: "warn" });
-        else toast(`The ${slotWord(itemDef(sel.key))} takes ${itemName(bandOf(sel.key)[row.kind === "charm" ? "charm" : "stone"])}`, { kind: "warn" });
+    // Would this hole take this stock? Free placement: the camp's stores are the only limit.
+    function canHold(row, hole) {
+      if (mode !== "fortify" || phase !== "idle" || !row || row.qty < 1) return false;
+      if (row.kind === "charm") return hole === "charm" ? held.charm !== row.key : false;
+      if (hole === "charm") return !!freeHole(row);
+      return held[hole] !== row.key && (held[hole] ? true : row.qty > HOLES.filter((i) => held[i] === row.key).length);
+    }
+
+    // Anywhere at all: what the rack highlights, and what a drag is allowed to start.
+    const wanted = (row) => canHold(row, "charm") || HOLES.some((i) => canHold(row, i));
+
+    /* `hole` is the one the cursor was over; without one the press picks the first
+       free hole. A charm always goes to the charm hole and an essence never does. */
+    function putStock(row, hole = null) {
+      if (mode !== "fortify" || phase !== "idle" || !row) return;
+      if (row.qty < 1) {
+        toast(`No ${itemName(row.key)} held`, { kind: "warn" });
         return;
       }
-      if (where === "charm") charm = true;
-      else stones = Number(where);
+      if (row.kind === "charm") {
+        held.charm = held.charm === row.key ? null : row.key;
+      } else {
+        const where = hole && hole !== "charm" && canHold(row, hole) ? hole : freeHole(row);
+        if (!where) {
+          toast(inHoles().length >= EN.maxStones ? "All three holes are full" : `Only ${fmt(row.qty)} held`, { kind: "warn" });
+          return;
+        }
+        held[where] = row.key;
+      }
+      sigs.stock = null;
       paint();
     }
 
@@ -308,18 +338,17 @@ export default {
       if (row) putStock(row);
     });
 
-    // A filled socket empties itself and every socket after it.
+    // A filled hole empties itself and nothing else.
     on(fRiteNode, "click", "button.socket[data-socket]", (e, b) => {
-      if (phase !== "idle" || !sel) return;
-      if (b.dataset.socket === "charm") {
-        if (charm) charm = false;
-        else buyCharm();
+      if (phase !== "idle") return;
+      const id = b.dataset.socket;
+      if (held[id]) {
+        held[id] = null;
+        sigs.stock = null;
         paint();
         return;
       }
-      const i = Number(b.dataset.socket);
-      stones = stones >= i ? i - 1 : Math.min(i, enchantPlan(ctx.state, sel.key).have);
-      paint();
+      if (id === "charm") buyCharm();
     });
 
     /* ---- dragging ---- */
@@ -338,15 +367,14 @@ export default {
     });
     on(view, "dragend", "[draggable=true]", dragEnd);
 
-    /* A socket takes stock the anvil can use, a core takes a piece, and anything
-       else refuses the drop. Which socket it lands in is socketFor's business:
-       aiming at the third hole with two empty ones behind it still fills the next. */
+    /* A hole takes the stock aimed at it, a core takes a piece, and anything else
+       refuses the drop. The hole under the cursor is the hole it lands in: aiming
+       at the third with two empty behind it fills the third. */
     const takes = (target) => {
       if (!drag) return false;
       if (!target.dataset.socket) return drag.what === "piece";
       if (drag.what !== "stock") return false;
-      const row = stock(ctx.state).find((x) => x.key === drag.key);
-      return !!(row && socketFor(row));
+      return canHold(stock(ctx.state).find((x) => x.key === drag.key), target.dataset.socket);
     };
 
     on(view, "dragover", ".socket, .rite-core.is-drop", (e, t) => {
@@ -358,14 +386,11 @@ export default {
     on(view, "dragleave", ".socket, .rite-core.is-drop", (e, t) => t.classList.remove("is-over"));
     on(view, "drop", ".socket, .rite-core.is-drop", (e, t) => {
       e.preventDefault();
-      const held = drag;
+      const carried = drag;
       dragEnd();
-      if (!held) return;
-      if (held.what === "piece") putPiece({ key: held.key, at: held.at });
-      else {
-        const row = stock(ctx.state).find((x) => x.key === held.key);
-        if (row) putStock(row);
-      }
+      if (!carried) return;
+      if (carried.what === "piece") putPiece({ key: carried.key, at: carried.at });
+      else putStock(stock(ctx.state).find((x) => x.key === carried.key), t.dataset.socket || null);
     });
 
     /* A charm the camp does not hold is offered from the Bonesetter right here,
@@ -374,7 +399,7 @@ export default {
       const plan = sel ? enchantPlan(ctx.state, sel.key) : null;
       if (!plan || plan.maxed) return;
       if (plan.charms >= 1) {
-        charm = true;
+        held.charm = plan.charm;
         paint();
         return;
       }
@@ -390,7 +415,8 @@ export default {
       if (!ok || dead) return;
       const res = await ctx.dispatch("buyRemedy", { key: plan.charm, qty: 1 });
       if (dead || !res.ok) return;
-      charm = true;
+      held.charm = plan.charm;
+      sigs.stock = null;
       paint();
     }
 
@@ -414,25 +440,26 @@ export default {
     }
 
     async function strike() {
-      if (phase !== "idle" || !sel || stones < 1) return;
+      if (phase !== "idle" || !sel) return;
       const plan = enchantPlan(ctx.state, sel.key);
-      if (!plan || plan.maxed || plan.have < stones || (charm && plan.charms < 1)) return;
+      if (!plan || plan.maxed || strays(plan)) return;
+      const n = staked(plan);
+      const withCharm = charmOn(plan);
+      if (n < 1 || plan.have < n || (withCharm && plan.charms < 1)) return;
       const { key, at } = sel;
-      const staked = stones;
-      const withCharm = charm;
       const before = plan.level;
 
       // The beams: one a stone, and the charm's from above.
       fx(fFx,
         h("div.beam.b1", h("i")),
-        staked >= 2 ? h("div.beam.b2", h("i")) : null,
-        staked >= 3 ? h("div.beam.b3", h("i")) : null,
+        n >= 2 ? h("div.beam.b2", h("i")) : null,
+        n >= 3 ? h("div.beam.b3", h("i")) : null,
         withCharm ? h("div.beam.beam-charm.b4", h("i")) : null);
       setPhase("strike");
       await wait(STRIKE_MS);
       if (dead) return;
 
-      const res = await ctx.dispatch("enchant", { key, from: at, stones: staked, charm: withCharm });
+      const res = await ctx.dispatch("enchant", { key, from: at, stones: n, charm: withCharm });
       if (dead) return;
       if (!res.ok) {
         setPhase("idle");
@@ -446,14 +473,13 @@ export default {
           stamp("stamp-took", "Fortified", hl ? `+${res.data.level} · the ${hl.name} halo` : `+${res.data.level}`));
         setPhase("took");
       } else {
-        refusals.unshift({ t: ctx.now, m: `${bareName(key)} refused at +${before + 1}. ${staked} Essence lost${withCharm ? " and a charm" : ""}.` });
+        refusals.unshift({ t: ctx.now, m: `${bareName(key)} refused at +${before + 1}. ${n} Essence lost${withCharm ? " and a charm" : ""}.` });
         refusals.splice(LOG_LINES);
         fx(fFx, h("div.flash"), smoke(), stamp("stamp-refused", "Failed", `Still +${before}`));
         setPhase("refused");
       }
-      // The sockets empty: a press is a fresh choice, and a charm is spent either way.
-      stones = 0;
-      charm = false;
+      // The holes empty: a press is a fresh choice, and a charm is spent either way.
+      clearHoles();
       sigs.pieces = null;
       sigs.stock = null;
       sigs.log = null;
@@ -549,17 +575,18 @@ export default {
        between the one below and the one above, and the rest a scroll away. */
     function paintOdds(plan) {
       const me = plan && !plan.maxed ? plan.level + 1 : 0;
-      const sig = `${me}|${stones}|${charm ? 1 : 0}`;
+      const withCharm = charmOn(plan);
+      const n = Math.max(1, staked(plan));
+      const sig = `${me}|${n}|${withCharm ? 1 : 0}`;
       if (sig === sigs.odds) return;
       sigs.odds = sig;
-      const n = Math.max(1, stones);
       oddsRows.replaceChildren(...Array.from({ length: EN.max }, (_, i) => {
         const lv = i + 1;
         const hl = haloOf(lv);
         return h("div.odds-row", { class: lv === me && "is-me", role: "listitem" },
           h("span.odds-lv", `+${lv}`),
           hl && hl.at === lv ? haloTag(hl) : h("span"),
-          h("span.odds-n", pct(enchantChance(i, n, charm))));
+          h("span.odds-n", pct(enchantChance(i, n, withCharm))));
       }));
       const row = oddsRows.children[me - 1];
       if (row) oddsRows.scrollTop = Math.max(0, row.offsetTop - (oddsRows.clientHeight - row.offsetHeight) / 2);
@@ -588,11 +615,10 @@ export default {
 
     function stockTile(row) {
       const d = itemDef(row.key);
-      const wanted = !!socketFor(row);
       return h("button.slot.forge-tile", {
         type: "button", draggable: row.qty > 0 ? "true" : null,
         dataset: { key: row.key, what: "stock", kind: row.kind },
-        class: [row.qty < 1 && "is-spent", wanted && "is-wanted"],
+        class: [row.qty < 1 && "is-spent", wanted(row) && "is-wanted"],
         title: itemName(row.key),
         "aria-label": `${itemName(row.key)}, ${fmtWhole(row.qty)} held`,
       },
@@ -620,7 +646,7 @@ export default {
 
     function paintStock(state) {
       const rows = stock(state);
-      const sig = rows.map((r) => `${r.key}:${r.qty}:${socketFor(r) ? 1 : 0}`).join(",");
+      const sig = rows.map((r) => `${r.key}:${r.qty}:${wanted(r) ? 1 : 0}`).join(",");
       if (sig === sigs.stock) return;
       sigs.stock = sig;
       stockGrid.replaceChildren(...rows.map(stockTile));
@@ -661,30 +687,34 @@ export default {
 
       const have = plan ? plan.have : 0;
       const charms = plan ? plan.charms : 0;
-      if (plan && stones > have) stones = have;
-      if (charm && charms < 1 && idle) charm = false;
+      const n = staked(plan);
+      const stray = strays(plan);
+      const withCharm = charmOn(plan);
 
       sockets.forEach((s, i) => {
-        const filled = !!plan && stones >= i + 1;
-        toggleClass(s, "is-filled", filled);
-        toggleClass(s, "is-empty", !filled);
-        setAttr(s, "aria-pressed", filled);
-        s.disabled = !plan || plan.maxed || !idle;
-        socketArt(s, filled ? plan.stone : null);
-        setAttr(s, "aria-label", `Essence socket ${i + 1}${filled ? ", filled" : ", empty"}`);
+        const key = held[String(i + 1)];
+        const off = !!(plan && key && key !== plan.stone);
+        toggleClass(s, "is-filled", !!key);
+        toggleClass(s, "is-empty", !key);
+        toggleClass(s, "is-stray", off);
+        setAttr(s, "aria-pressed", !!key);
+        s.disabled = !idle;
+        socketArt(s, key);
+        setAttr(s, "aria-label", key ? `${itemName(key)} in hole ${i + 1}` : `Hole ${i + 1}, empty`);
       });
-      toggleClass(socketCharm, "is-filled", charm);
-      toggleClass(socketCharm, "is-empty", !charm);
-      setAttr(socketCharm, "aria-pressed", charm);
-      socketCharm.disabled = !plan || plan.maxed || !idle;
-      socketArt(socketCharm, charm && plan ? plan.charm : null);
-      setAttr(socketCharm, "aria-label", charm ? "Charm socket, filled" : "Charm socket, empty");
+      toggleClass(socketCharm, "is-filled", !!held.charm);
+      toggleClass(socketCharm, "is-empty", !held.charm);
+      toggleClass(socketCharm, "is-stray", !!(plan && held.charm && !withCharm));
+      setAttr(socketCharm, "aria-pressed", !!held.charm);
+      socketCharm.disabled = !idle;
+      socketArt(socketCharm, held.charm);
+      setAttr(socketCharm, "aria-label", held.charm ? `${itemName(held.charm)} in the charm hole` : "Charm hole, empty");
 
       if (!plan) {
-        setText(riteSub, "An amulet or a ring on the anvil, then the essence.");
+        setText(riteSub, "Any amulet or ring, and up to three essence.");
         setText(oddsV, "0%");
         oddsV.className = "odds-v";
-        setText(oddsSub, "Nothing on the anvil");
+        setText(oddsSub, n ? `${n} staked, nothing on the anvil` : "");
         goBtn.disabled = true;
         setText(goBtn, "Fortify");
         paintOdds(null);
@@ -693,22 +723,26 @@ export default {
 
       setText(riteSub, `${bareName(plan.key)} · ${rarityName(plan.key)} ${slotWord(d)} · ${plan.maxed ? `+${plan.max}, as far as it goes` : `reaching +${plan.level + 1}`}`);
 
-      const share = plan.maxed || stones < 1 ? 0 : enchantChance(plan.level, stones, charm);
+      const share = plan.maxed || stray || n < 1 ? 0 : enchantChance(plan.level, n, withCharm);
       if (plan.maxed) {
         setText(oddsV, "Done");
         oddsV.className = "odds-v t-gold";
         setText(oddsSub, `+${plan.max} is the top of the rite`);
-      } else if (stones < 1) {
+      } else if (stray) {
+        setText(oddsV, "0%");
+        oddsV.className = "odds-v t-bad";
+        setText(oddsSub, `Takes ${itemName(plan.stone)}`);
+      } else if (n < 1) {
         setText(oddsV, "0%");
         oddsV.className = "odds-v";
-        setText(oddsSub, have < 1 ? `No ${itemName(plan.stone)} held` : "Socket an essence");
+        setText(oddsSub, have < 1 ? `No ${itemName(plan.stone)} held` : "");
       } else {
         setText(oddsV, pct(share));
         oddsV.className = `odds-v ${oddsTone(share)}`;
-        setText(oddsSub, `${stones} of ${fmt(have)} ${itemName(plan.stone)}${charm ? ` · charm ×${EN.charmMult}` : ""}`);
+        setText(oddsSub, `${n} of ${fmt(have)} ${itemName(plan.stone)}${withCharm ? ` · charm ×${EN.charmMult}` : ""}`);
       }
 
-      goBtn.disabled = !idle || plan.maxed || stones < 1 || have < stones || (charm && charms < 1);
+      goBtn.disabled = !idle || plan.maxed || !!stray || n < 1 || have < n || (withCharm && charms < 1);
       setText(goBtn, phase === "strike" ? "The Veil stirs" : phase === "took" ? "It took" : phase === "refused" ? "It failed" : "Fortify");
       paintOdds(plan);
     }

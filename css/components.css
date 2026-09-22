@@ -1531,6 +1531,54 @@ button.chip:disabled { opacity: .45; }
 
 .input-wrap > .input:has(~ .affix) { padding-right: 36px; }
 
+/* A slider, for the one thing in the camp that has a degree rather than a state. */
+.range {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: var(--tap);
+  appearance: none;
+  -webkit-appearance: none;
+  background: none;
+  cursor: pointer;
+}
+
+.range::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+}
+
+.range::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+}
+
+.range::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -5px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--violet-hi);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .6);
+}
+
+.range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--violet-hi);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .6);
+}
+
+.range:focus-visible { outline: 2px solid var(--violet-hi); outline-offset: 4px; }
+
 .check,
 .switch {
   display: inline-flex;
