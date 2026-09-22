@@ -39,6 +39,9 @@ Serve the repo over HTTP for anything in a browser (ES modules do not load from 
 | `src/client/ui/popups/zone.js`, `foe.js`, `class.js` | popups `zone`, `foe`, `class` | hunt |
 | `src/client/pages/companions.js`, `bounties.js`, `requisitions.js`, `shop.js`, `atlas.js` | camp and atlas pages | camp |
 | `src/client/ui/popups/sky.js` | popup `sky` (the week's weather, opened from the Atlas and the weather card) | camp |
+| `src/client/pages/fortify.js` | `#/fortify` and `#/fortify/<item key>`: the anvil (the rite with its sockets, beams and stamp) and Convert | camp |
+| `src/client/ui/halo.js` | what a worked piece wears: `plusPlate`, `paintMini`, `haloNode`/`paintHalo`, `auraNode`/`paintAura`, `avatarHaloNode`, `haloTag` (CSS in pages.css, THE HALOS) | shared |
+| `src/client/ui/popups/profile.js` | popup `profile` (a commander's card, off a name in the Party tab) | realm |
 | `src/client/pages/market.js`, `party.js`, `hiscores.js` | realm pages | realm |
 | `src/client/ui/popups/sell.js` | popup `sell` | realm |
 | `dev/server.mjs`, `dev/fake-supabase.js`, `tests/e2e/**` | local full-stack harness and browser tests | harness |
@@ -66,7 +69,7 @@ export default {
 
 `skill.js` and `hunt.js` both serve `#/skill/<id>`; the router sends `warfare` to hunt.js and gathering/artisan ids to skill.js. `title` for skill pages is the skill name, `group` the kind ("Trades", "Artisans", "The Field").
 
-Routes: `#/character` (default), `#/armaments`, `#/stockpile`, `#/companions`, `#/bounties`, `#/requisitions`, `#/shop`, `#/skill/<id>`, `#/atlas`, `#/market`, `#/party`, `#/hiscores`. The Sky is the `sky` popup, not a route. Unknown routes go to `#/character`. Route changes call `closeModals("route")`.
+Routes: `#/character` (default), `#/armaments`, `#/stockpile`, `#/companions`, `#/bounties`, `#/requisitions`, `#/shop`, `#/fortify` (with an optional URL-encoded item key, `#/fortify/<key>`, that lands the piece on the anvil), `#/skill/<id>`, `#/atlas`, `#/market`, `#/party`, `#/hiscores`, `#/player/<name>`. The Sky is the `sky` popup, not a route. Unknown routes go to `#/character`. Route changes call `closeModals("route")`.
 
 Rebuild a page section only when its shape changes. Compare a signature string in `update` (for example the ids of the pills shown plus which one is working) and rebuild that section when it changes; otherwise update text and bars in place.
 
@@ -192,6 +195,7 @@ Each popup module calls `registerPopup(name, (ctx, ...args) => handle)` at impor
 | `settings` | none | core | account and settings, Start over (`resetCamp`, danger confirm typing RESET) |
 | `account` | `{ mode: "signin" | "create" }` | core | sign in / create account |
 | `sky` | none | camp | today's weather and the week revealed on Sunday |
+| `profile` | `username` | realm | a commander at a glance: face with the halo they wear, class and where, kills / sovereigns / falls, the amulet and the ring only, "Their page", "Invite to party". Opened from a roster name and the invite form's Look up; guests are sent to make an account |
 
 ## 7. Toasts (core's listeners.js; pages do not toast events)
 
@@ -202,6 +206,7 @@ Only live events toast (never replays or long catch-ups). Kinds from UI-KIT 6.3.
 - `item:crafted` uncommon and better: "Rare: Bog Sword" (epic and better gold, else info); `storage:full` "Nowhere to put Coal" (warn, once a minute at most)
 - `bounty:complete` "Bounty complete" (gold, action View -> #/bounties); `bounty:paid` "Double experience for one hour" (gold)
 - `agent:hired` "Agent hired: Silt"; `requisitions:returned` "Requisitions returned" (good)
+- `item:enchanted` only on the take that reaches a halo: "Cairn Ring +9 wears the Veiled halo" (gold, sparkle); `item:converted` "+12 carried onto the Cairn Ring" (gold, sparkle). The rite's own result is stamped on the anvil, so a plain take or a refusal toasts nothing
 - `travel:unlocked` "Gallowmoor unlocked" (gold); `companion:bought` "Veil Hound joins you" (good); `companion:bond` one per unlock "Veil Hound: +10% gold from kills" (good); `companion:found` "Veil Hound found" or on rank up "Veil Hound: Rank III" (good)
 - `hunt:ended` limit "Hunt finished" (good), cap "The hunt stood down" (info); `hunt:death` "You fell" (bad); `hunt:sovereign` "The Drowned Bailiff comes up out of the dark" (bad); `hunt:felled` "Sovereign felled: Epic Blood Bow" (gold); `hunt:retreat` "You broke away" (warn); `hunt:hide` "Hiding for five minutes" (info); `loot:lost` "No room for loot" (warn); `loot:found` "Found: Rare Bog Helm" (gold); `item:broke` "Bog Helm broke" (bad)
 - `store:rejected` the error (warn); `store:news` mail: "The post: 200g" or "The post: 12 Slag Ore" (gold); away: "Welcome back: away 3h 12m" (info); `party:spoils` "Your share: 4 kills, 1,210 XP, 96g" (gold, party icon, once a minute at most) and, on a fall, "You fell beside your party" (bad). `chronicle.js` writes no camp line for a share, so these toasts are the only word the player gets.

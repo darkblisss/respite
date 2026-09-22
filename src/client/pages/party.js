@@ -632,6 +632,17 @@ function partyBody(ctx, page) {
         autocapitalize: "none", spellcheck: "false", enterkeyhint: "send",
       });
       const btn = h("button.btn.btn-primary.btn-sm", { type: "submit" }, "Invite");
+      // A look before the invite: the typed name's card, with the invite on it too.
+      const look = h("button.btn.btn-sm", { type: "button", "aria-label": "Look up this commander", onClick: () => {
+        const name = input.value.trim().toLowerCase();
+        if (!name) {
+          say("Whose name?");
+          input.focus();
+          return;
+        }
+        say(null);
+        openPopup("profile", ctx, name);
+      } }, iconEl("search"), "Look up");
       const hint = h("span.field-hint.t-bad", { hidden: true, role: "alert" });
       const say = (text) => {
         hint.hidden = !text;
@@ -662,7 +673,7 @@ function partyBody(ctx, page) {
         refresh();
       };
       return h("form.field", { onSubmit: submit, autocomplete: "off" },
-        h("div.hstack.gap-2", h("div.input-wrap", iconEl("user-plus"), input), btn),
+        h("div.hstack.gap-2", h("div.input-wrap", iconEl("user-plus"), input), look, btn),
         hint);
     }
 
@@ -694,8 +705,8 @@ function partyBody(ctx, page) {
         h("span.avatar", { "aria-hidden": "true" }, initial(m.username), dot),
         h("div",
           h("div.member-name",
-            // A name in the roster opens their page, the same as one on a board.
-            h("a.hs-link", { href: `#/player/${encodeURIComponent(String(m.username || ""))}` }, display(m.username)),
+            // A name in the roster opens their card: the face, the halo, the counts, and their page one press on.
+            h("button.hs-link.member-look", { type: "button", onClick: () => openPopup("profile", ctx, String(m.username || "")) }, display(m.username)),
             isLeader ? h("span", { "data-tip": "Party leader", role: "img", "aria-label": "Leader" }, iconEl("crown")) : null),
           level),
         status,

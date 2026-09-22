@@ -591,7 +591,7 @@ await run(async () => {
       player: { gold: 500, hp: 40, klass: "warrior" },
       skills: { delving: 1e6, woodwright: 1e6 },
       bank: { slots: 30, items: { cold_delve: 40, iron_fell: 12, bog_bar: 7, slag_delve: 9 }, order: ["cold_delve", "iron_fell", "bog_bar", "slag_delve"] },
-      inv: { slots: 10, items: { "star_sword|rare|c1.5|+3": 1 }, order: ["star_sword|rare|c1.5|+3"] },
+      inv: { slots: 10, items: { "star_ring|rare|c1.5|+3": 1 }, order: ["star_ring|rare|c1.5|+3"] },
       vault: { slots: 50, items: {}, order: [] },
       equipment: { weapon: "cold_sword|common", offhand: "iron_shield|common", head: "star_helm|epic|c3.1", chest: null, hands: null, feet: null, neck: null, ring: null },
       tools: { delving: "bog_pick", felling: "iron_axe", dredging: "cave_net" },
@@ -606,7 +606,7 @@ await run(async () => {
       [m.bank.items, m.bank.order],
       [{ rime_delve: 40, gnarl_fell: 12, mire_bar: 7, slag_delve: 9 }, ["rime_delve", "gnarl_fell", "mire_bar", "slag_delve"]]);
     same("a gear key moves by its base and keeps its rarity, condition and plus",
-      m.inv.order, ["starfall_sword|rare|c1.5|+3"]);
+      m.inv.order, ["starfall_ring|rare|c1.5|+3"]);
     same("worn pieces move", [m.equipment.weapon, m.equipment.offhand, m.equipment.head],
       ["rime_sword|common", "gnarl_shield|common", "starfall_helm|epic|c3.1"]);
     same("the tool in each hand moves", m.tools, { delving: "mire_pick", felling: "gnarl_axe", dredging: "chalk_net" });
@@ -615,7 +615,7 @@ await run(async () => {
     check("a posting's target moves", m.bounty && m.bounty.targetId === "rime_delve", m.bounty && m.bounty.targetId);
     check("a running bench task moves, and is still a task the bench knows",
       m.tasks.skilling && m.tasks.skilling.actionId === "craft_gnarl_plank", m.tasks.skilling);
-    check("and the save is schema 12 afterwards", m.schema === CONFIG.schema && CONFIG.schema === 12, m.schema);
+    check("and the save is at the current schema afterwards", m.schema === CONFIG.schema && CONFIG.schema === 13, m.schema);
 
     // Nothing in a camp may fall out of the world on the way through.
     const known = (k) => !!I.itemDef(String(k).split("|")[0]);

@@ -113,12 +113,27 @@ leaderboard do not list it. The `GameData.GEAR` entries stay, so a save holding
 one still loads. `greatsword` and `grimoire` are shelved at present.
 
 **Item keys** gained an optional enchantment on the end, `"+N"`, after the relic
-prefix when there is one: `slag_sword|rare|c17.42|+7`. A piece carrying one is
+prefix when there is one: `slag_ring|rare|c17.42|+7`. A piece carrying one is
 unique whatever its rarity, so an enchanted Common is minted a uid and stops
-stacking. Every key written before schema 10 reads as `+0`. `enchant` spends Veil
-Essence of the piece's own band, one to three stones, at
-`0.80 + 0.15 x (stones - 1) - 0.05 x level`; a failure takes the stones and
-nothing else.
+stacking. Every key written before schema 10 reads as `+0`.
+
+### What schema 13 changes: the Veil goes into jewellery only
+
+Only an amulet or a ring takes the Veil (`CONFIG.enchant.slots`, `canFortify`).
+A `+N` on any other base parses as `+0` and `makeKey` never writes one; schema 13
+strips it off every key a save holds (pools, order and equipment, stacks merged),
+with no Essence handed back. `enchant {key, from, stones, charm}` spends Veil
+Essence of the piece's own band, one to three, at the forge odds
+`min(1, stones x stoneWorth / thresholds[level])` (`CONFIG.enchant`, x1.5 with a
+charm of the band in the fourth socket, which is spent either way); a failure
+takes the stones and the charm and nothing else. From +9 a piece wears a halo
+(`veiled`, `sovereign` at +12, `hallowed` at +15, `haloOf`), and a commander wears
+the highest of their amulet's and ring's (`wornHalo`). `convert {from: {key, at},
+to: {key, at}}` carries a worked piece's whole level onto an unworked piece of
+the same slot for `goldPerLevelSq x level^2` gold and `essencePerLevel x level`
+Essence of the new piece's band; nothing is rolled, the old piece goes back to
+`+0` (a Common minted for the Veil back to its pile). The Bonesetter sells the
+three band charms (`GameData.MATERIALS[*].charm`) at an Essence's worth.
 
 ## Database contract (Supabase Postgres)
 
@@ -246,7 +261,7 @@ The handler runs one transaction:
 
 ## Commands (shared `applyCommand(state, {type, args}, env)` → `{ ok, error?, data? }`)
 
-`startSkill {skillId, actionId, limit|null}`, `stopSkill {}`, `startHunt {tier, zone, limit|null}`, `pullBack {}`, `setHide {on}`, `pickClass {id}`, `setSkin {skin}`, `walkPath {node}`, `resetPath {}`, `enchant {key, from, stones}`, `equip {key, from}`, `unequip {slot}`, `unequipTool {skillId}`, `moveItem {key, from, to, qty}`, `sellItem {key, from, qty}`, `salvage {key, from}`, `useChest {key, from}`, `repair {key}`, `reorder {pool, key, before}`, `buyRemedy {key, qty}`, `buySmuggler {slot}`, `travel {regionId}`, `claimBounty {}`, `hireAgent {}`, `deployAgent {agentId, itemKey}`, `buyCompanion {id}`, `setCompanion {id|null}`.
+`startSkill {skillId, actionId, limit|null}`, `stopSkill {}`, `startHunt {tier, zone, limit|null}`, `pullBack {}`, `setHide {on}`, `pickClass {id}`, `setSkin {skin}`, `walkPath {node}`, `resetPath {}`, `enchant {key, from, stones, charm}`, `convert {from: {key, at}, to: {key, at}}`, `equip {key, from}`, `unequip {slot}`, `unequipTool {skillId}`, `moveItem {key, from, to, qty}`, `sellItem {key, from, qty}`, `salvage {key, from}`, `useChest {key, from}`, `repair {key}`, `reorder {pool, key, before}`, `buyRemedy {key, qty}`, `buySmuggler {slot}`, `travel {regionId}`, `claimBounty {}`, `hireAgent {}`, `deployAgent {agentId, itemKey}`, `buyCompanion {id}`, `setCompanion {id|null}`.
 
 Server-only commands, which need the database: `marketList {key, from, qty, price}`, `marketBuy {listingId, qty}` (gear and tools, one listing at a time), `marketBuyPool {key, qty, maxEach}` (a material out of the pool every seller's listing of it makes, cheapest first and oldest first among equal prices, never a unit above `maxEach`), `marketCancel {listingId}`, `partyHuntStart {tier, zone}`, `partyHuntJoin {}`, `partyHuntLeave {}`. The market's fee is taken off both legs (`CONFIG.economy.marketFee`): the buyer pays the ask plus it, the seller receives the ask less it, rounded up and never under 1 gold. The party's fight is played by the server alone (`src/shared/partyHunt.js`, `public.party_hunts`), so the browser cannot predict one and never tries: it draws what the server reports (docs/SERVER.md section 3).
 
@@ -255,7 +270,7 @@ Server-only commands, which need the database: `marketList {key, from, qty, pric
 - Skills: `skill:level`, `skill:mastery`, `task:ended`, `item:crafted`, `storage:full`
 - Hunt: `hunt:ended`, `hunt:death`, `hunt:sovereign`, `hunt:felled`, `hunt:retreat`, `hunt:hide`, `hunt:passed`, `hunt:fx`, `loot:lost`, `loot:found`
 - Items and companions: `item:broke`, `item:repaired`, `companion:bond`, `companion:found`, `companion:bought`, `companion:active`
-- Camp: `bounty:complete`, `bounty:paid`, `agent:hired`, `agent:deployed`, `requisitions:returned`, `shop:bought`, `smuggler:bought`, `travel:unlocked`, `travel:moved`, `class:picked`, `class:available`, `class:laidDown`, `skin:picked`, `path:taken`, `path:reset`, `item:enchanted`, `chest:opened`, `item:salvaged`, `item:sold`, `item:moved`, `settings:hide`
+- Camp: `bounty:complete`, `bounty:paid`, `agent:hired`, `agent:deployed`, `requisitions:returned`, `shop:bought`, `smuggler:bought`, `travel:unlocked`, `travel:moved`, `class:picked`, `class:available`, `class:laidDown`, `skin:picked`, `path:taken`, `path:reset`, `item:enchanted`, `item:converted`, `chest:opened`, `item:salvaged`, `item:sold`, `item:moved`, `settings:hide`
 - Market: `market:listed`, `market:bought` (`cost` is what left the purse, the fee included, and `fee` is that fee), `market:cancelled`, `mail:claimed`
 - Sessions: `away`
 - Party hunts (raised by the server when a share is settled, no camp log line of their own): `party:spoils { tier, zone, kills, xp, gold, drops, remedies, died }`. The events the settlement raises as it pays (`skill:level`, `loot:found`, `loot:lost`, `item:broke`, `companion:found`, `hunt:death`) are the rules' own and are logged as ever.

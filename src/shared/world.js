@@ -12,10 +12,10 @@
 
 import { CONFIG } from "./config.js";
 import {
-  GameData, getRegion, getMaterial, getClass, getSkin, classWeapons, weaponLine, essenceOfTier,
+  GameData, getRegion, getMaterial, getClass, getSkin, classWeapons, weaponLine, essenceOfTier, charmOfTier,
   monsterOfTier, matId, agentRarityDef,
 } from "./registry.js";
-import { itemDef, itemName, parseKey, validKey, agentRarityFromRoll, remedyTooWeak, tierForLevel, makeKey, prefixFromRoll } from "./items.js";
+import { itemDef, itemName, parseKey, validKey, agentRarityFromRoll, remedyTooWeak, tierForLevel, makeKey, prefixFromRoll, canFortify, haloOf } from "./items.js";
 import {
   ORDER, canHold, isPool, poolName, qtyIn, haveQty, placeFor, orderedKeys, transact,
 } from "./storage.js";
@@ -131,15 +131,19 @@ export function claimBounty(state, _args, env) {
   return OK();
 }
 
-/* ================= THE VEIL WORKED INTO GEAR ================= */
-/* Enchanting. The stone is Veil Essence of the piece's own band, which is the
-   only thing in the camp Essence has ever been for. One to three stones an
-   attempt: more stones, better odds, and at the very top three is both the
-   quicker road and the cheaper one, which is the decision the whole thing is for.
+/* ================= THE VEIL WORKED INTO GEAR: FORTIFY ================= */
+/* The rite on the Fortify tab. Only an amulet or a ring takes the Veil
+   (CONFIG.enchant.slots). The stone is Veil Essence of the piece's own band,
+   which is the only thing in the camp Essence has ever been for, and a charm of
+   the same band may ride in the fourth socket. One to three stones an attempt:
+   the odds are the old forge table, a stone's worth against the threshold of the
+   level being reached, times the charm.
 
-   A failure takes the stones and nothing else. The piece is unharmed, the level
-   is where it was, and nothing is ever destroyed -- this camp is grim enough
-   without a smith who can eat your sword.
+   A failure takes the stones and the charm and nothing else. The piece is
+   unharmed, the level is where it was, and nothing is ever destroyed -- this
+   camp is grim enough without a smith who can eat your ring. The odds are as
+   brutal as they are because a level, once earned, can be carried onto a new
+   piece for a toll (convert, below).
 
    The roll comes off one counter, state.rolls.ench, so the outcome of the next
    attempt is fixed before you choose the stone count and cannot be fished for by
@@ -147,37 +151,57 @@ export function claimBounty(state, _args, env) {
 
 const EN = CONFIG.enchant;
 
-// The Essence a piece's tier is worked with, or null for anything that is not gear.
+// Whether a piece is the kind the Veil goes into: an amulet or a ring.
+export const fortifiable = (key) => canFortify(key);
+
+// The Essence a piece's band is worked with, or null for anything the Veil does not take.
 export function stoneFor(key) {
   const d = itemDef(key);
-  return d && d.kind === "gear" ? essenceOfTier(d.tier) : null;
+  return d && d.kind === "gear" && canFortify(key) ? essenceOfTier(d.tier) : null;
 }
 
-/* The chance an attempt takes, as a share. Held at 100%: three stones on a bare
+// The charm of a piece's band, or null likewise.
+export function charmFor(key) {
+  const d = itemDef(key);
+  return d && d.kind === "gear" && canFortify(key) ? charmOfTier(d.tier) : null;
+}
+
+/* The chance an attempt takes, as a share: reaching `level + 1` with `stones`
+   staked, and a charm in the socket or not. Held at 100%: three stones on a bare
    piece is a certainty, and that is on purpose. */
-export function enchantChance(level, stones) {
+export function enchantChance(level, stones, charm = false) {
   const n = Math.max(1, Math.min(EN.maxStones, Math.floor(stones) || 1));
-  return Math.max(0, Math.min(1, EN.baseChance + EN.perStone * (n - 1) - EN.perLevel * Math.max(0, level)));
+  const lvl = Math.max(0, Math.floor(level) || 0);
+  if (lvl >= EN.max) return 0;
+  const threshold = EN.thresholds[lvl];
+  const raw = (n * EN.stoneWorth) / threshold;
+  return Math.max(0, Math.min(1, charm ? raw * EN.charmMult : raw));
 }
 
-/* Everything the smith's panel needs about one piece: what it stands at, what it
-   is worked with, how many you hold, and the three prices on the board. */
+/* Everything the rite needs about one piece: what it stands at, what it is
+   worked with, how many you hold, the charm and the odds by the stone. */
 export function enchantPlan(state, key) {
   const d = itemDef(key);
-  if (!d || d.kind !== "gear") return null;
+  if (!d || d.kind !== "gear" || !canFortify(key)) return null;
   const level = parseKey(key).plus;
   const stone = essenceOfTier(d.tier);
+  const charm = charmOfTier(d.tier);
   const have = haveQty(state, stone);
+  const charms = haveQty(state, charm);
+  const options = level >= EN.max ? [] : Array.from({ length: EN.maxStones }, (_, i) => ({
+    stones: i + 1,
+    chance: enchantChance(level, i + 1, false),
+    charmed: enchantChance(level, i + 1, true),
+    afford: have >= i + 1,
+  }));
   return {
-    key, level, stone, have, def: d,
+    key, level, stone, have, charm, charms, def: d,
     maxed: level >= EN.max,
     max: EN.max,
     gain: EN.gainPerLevel,
-    options: level >= EN.max ? [] : Array.from({ length: EN.maxStones }, (_, i) => ({
-      stones: i + 1,
-      chance: enchantChance(level, i + 1),
-      afford: have >= i + 1,
-    })),
+    halo: haloOf(level),
+    nextHalo: haloOf(level + 1),
+    options,
   };
 }
 
@@ -192,35 +216,39 @@ function findPiece(state, key, from) {
   return { pool: from };
 }
 
-export function enchant(state, { key, from, stones = 1 } = {}, env) {
+// A worked Common is minted a uid off the ench counter, so two worked Commons are never one pile.
+const workedKey = (p, n, plus) => makeKey(p.base, p.rarity, p.uid || `e${n}`, p.prefix, plus);
+
+export function enchant(state, { key, from, stones = 1, charm = false } = {}, env) {
   if (!validKey(key)) return refuse("No such item.");
   const at = findPiece(state, key, from);
   if (!at) return refuse("You don't have that there.");
 
   const d = itemDef(key);
-  if (!d || d.kind !== "gear") return refuse("Only gear takes the Veil.");
+  if (!d || d.kind !== "gear" || !canFortify(key)) return refuse("Only an amulet or a ring takes the Veil.");
   const p = parseKey(key);
   if (p.plus >= EN.max) return refuse(`That is as much Veil as a piece will hold (+${EN.max}).`);
   if (!Number.isInteger(stones) || stones < 1 || stones > EN.maxStones) {
     return refuse(`One to ${EN.maxStones} stones an attempt.`);
   }
+  const withCharm = charm === true;
 
   const stone = essenceOfTier(d.tier);
+  const charmKey = charmOfTier(d.tier);
   if (haveQty(state, stone) < stones) {
     return refuse(`You need ${stones} ${itemName(stone)}${stones === 1 ? "" : "s"}.`);
   }
+  if (withCharm && haveQty(state, charmKey) < 1) return refuse(`You need a ${itemName(charmKey)}.`);
 
-  /* The next attempt's number is already decided, whatever is staked on it.
-     A uid is minted for a Common the first time the Veil goes into it, off the
-     same counter, so two worked Commons are never the same piece. */
+  /* The next attempt's number is already decided, whatever is staked on it. */
   const n = state.rolls.ench || 0;
   const r = roll(state.rng.seed, "ench", n, SALT.enchant);
-  const won = r < enchantChance(p.plus, stones);
-  const uid = p.uid || `e${n}`;
-  const next = makeKey(p.base, p.rarity, uid, p.prefix, p.plus + 1);
+  const won = r < enchantChance(p.plus, stones, withCharm);
+  const next = workedKey(p, n, p.plus + 1);
 
   const res = transact(state, (tx) => {
     tx.pay({ [stone]: stones });
+    if (withCharm) tx.pay({ [charmKey]: 1 });
     tx.set(state.rolls, "ench", n + 1);
     if (!won) return;
     if (at.worn) {
@@ -233,8 +261,99 @@ export function enchant(state, { key, from, stones = 1 } = {}, env) {
   });
   if (!res.ok) return res;
 
-  emit(state, env, "item:enchanted", { key: won ? next : key, was: key, won, stones, level: won ? p.plus + 1 : p.plus });
-  return { ok: true, data: { won, key: won ? next : key, level: won ? p.plus + 1 : p.plus, stones } };
+  const level = won ? p.plus + 1 : p.plus;
+  const halo = won && haloOf(level) && haloOf(level).at === level ? haloOf(level) : null;
+  emit(state, env, "item:enchanted", { key: won ? next : key, was: key, won, stones, charm: withCharm, level, halo: halo ? halo.id : null });
+  return { ok: true, data: { won, key: won ? next : key, level, stones, charm: withCharm, halo: halo ? halo.id : null } };
+}
+
+/* ================= CARRIED ACROSS: CONVERT ================= */
+/* A worked piece hands its whole level to an unworked piece of the same slot,
+   any tier or rarity, for a toll: gold by the square of the level, and Essence
+   of the NEW piece's band, one a level. Nothing is rolled and it always takes;
+   the old piece goes back to +0 (a Common minted for the Veil goes back to its
+   pile). Which is why the rite's odds can be what they are: a +12 is earned
+   once and then carried from ring to ring for the rest of the camp's life. */
+
+// The toll for carrying `level` onto `toKey`: { gold, stone, essence } or null.
+export function convertToll(level, toKey) {
+  const d = itemDef(toKey);
+  if (!d || d.kind !== "gear" || !canFortify(toKey) || level < 1) return null;
+  return {
+    gold: EN.convert.goldPerLevelSq * level * level,
+    stone: essenceOfTier(d.tier),
+    essence: EN.convert.essencePerLevel * level,
+  };
+}
+
+/* Everything the convert rite needs about a pair: what moves, what it costs,
+   what you hold, and why it cannot happen if it cannot. */
+export function convertPlan(state, fromKey, toKey) {
+  const a = validKey(fromKey) ? itemDef(fromKey) : null;
+  const b = validKey(toKey) ? itemDef(toKey) : null;
+  if (!a || a.kind !== "gear" || !canFortify(fromKey)) return { ok: false, why: "Only a worked amulet or ring can give its level." };
+  const level = parseKey(fromKey).plus;
+  if (level < 1) return { ok: false, why: `${itemName(fromKey)} is unworked: there is nothing to carry.` };
+  if (!b || b.kind !== "gear" || !canFortify(toKey)) return { ok: false, why: "Only an amulet or a ring can take a level." };
+  if (a.slot !== b.slot) return { ok: false, why: `A ${GameData.SLOT_LABELS[a.slot].toLowerCase()}'s level goes onto another ${GameData.SLOT_LABELS[a.slot].toLowerCase()}.` };
+  if (fromKey === toKey) return { ok: false, why: "A piece cannot take its own level." };
+  if (parseKey(toKey).plus > 0) return { ok: false, why: `${itemName(toKey)} is already worked. The level goes onto an unworked piece.` };
+  const toll = convertToll(level, toKey);
+  const have = { gold: state.player.gold, essence: haveQty(state, toll.stone) };
+  return {
+    ok: true, level, toll, have,
+    afford: have.gold >= toll.gold && have.essence >= toll.essence,
+    halo: haloOf(level),
+  };
+}
+
+export function convert(state, { from = {}, to = {} } = {}, env) {
+  const fromKey = from && from.key, toKey = to && to.key;
+  if (!validKey(fromKey) || !validKey(toKey)) return refuse("No such item.");
+  const src = findPiece(state, fromKey, from.at);
+  if (!src) return refuse("You don't have that there.");
+  const dst = findPiece(state, toKey, to.at);
+  if (!dst) return refuse("You don't have the new piece there.");
+  const plan = convertPlan(state, fromKey, toKey);
+  if (!plan.ok) return refuse(plan.why);
+  if (state.player.gold < plan.toll.gold) return refuse(`The toll is ${fmtGold(plan.toll.gold)}.`);
+  if (plan.have.essence < plan.toll.essence) {
+    return refuse(`The toll wants ${plan.toll.essence} ${itemName(plan.toll.stone)}${plan.toll.essence === 1 ? "" : "s"}.`);
+  }
+
+  const pa = parseKey(fromKey);
+  const pb = parseKey(toKey);
+  /* The old piece goes back to +0. One minted for the Veil ("e" uid on a Common)
+     goes back to being a Common in a pile; anything else keeps its own uid. */
+  const bare = pa.rarity === "common" && /^e/.test(pa.uid || "") ? makeKey(pa.base, "common") : makeKey(pa.base, pa.rarity, pa.uid, pa.prefix, 0);
+  const n = state.rolls.ench || 0;
+  const worked = workedKey(pb, n, plan.level);
+
+  const res = transact(state, (tx) => {
+    tx.gold(-plan.toll.gold);
+    tx.pay({ [plan.toll.stone]: plan.toll.essence });
+    if (!pb.uid) tx.set(state.rolls, "ench", n + 1);
+    // Take both off the board first, so a worn piece and a stored one never collide.
+    if (src.worn) tx.set(state.equipment, src.worn, null); else tx.remove(src.pool, fromKey, 1);
+    if (dst.worn) tx.set(state.equipment, dst.worn, null); else tx.remove(dst.pool, toKey, 1);
+    if (src.worn) tx.set(state.equipment, src.worn, bare);
+    else {
+      if (!placeFor(state, bare, stowOrderFor(bare, src.pool))) tx.fail("Nowhere to put the old piece once it is bare.");
+      tx.stash(bare, 1, stowOrderFor(bare, src.pool));
+    }
+    if (dst.worn) tx.set(state.equipment, dst.worn, worked);
+    else {
+      if (!placeFor(state, worked, stowOrderFor(worked, dst.pool))) tx.fail("Nowhere to put the new piece once it is worked.");
+      tx.stash(worked, 1, stowOrderFor(worked, dst.pool));
+    }
+  });
+  if (!res.ok) return res;
+
+  emit(state, env, "item:converted", {
+    key: worked, was: toKey, from: bare, wasFrom: fromKey, level: plan.level,
+    gold: plan.toll.gold, stone: plan.toll.stone, essence: plan.toll.essence, halo: plan.halo ? plan.halo.id : null,
+  });
+  return { ok: true, data: { key: worked, from: bare, level: plan.level, gold: plan.toll.gold, essence: plan.toll.essence } };
 }
 
 /* ================= THE SKIN ================= */
@@ -346,13 +465,15 @@ export function resolveRequisitions(state, env, at) {
 
 // The Bonesetter: every remedy, always open.
 export function shopStock(_state) {
-  return GameData.REMEDIES.map((r) => ({ key: r.id, price: r.price }));
+  return GameData.REMEDIES.map((r) => ({ key: r.id, price: r.price }))
+    // The Bonesetter keeps the rite's charms too, at an Essence's worth apiece.
+    .concat(GameData.VEIL_BANDS.map((b) => ({ key: b.charm, price: GameData.MATERIALS[b.charm].value })));
 }
 
-// Materials with a tier, never a remedy or a chest. Fixed, so built once.
+// Materials with a tier, never a remedy, a charm or a chest. Fixed, so built once.
 const SMUGGLER_POOL = Object.keys(GameData.MATERIALS).filter((k) => {
   const m = GameData.MATERIALS[k];
-  return m.tier && !m.heal && k !== "vault_chest";
+  return m.tier && !m.heal && !m.charm && k !== "vault_chest";
 });
 
 const smugglerTag = (w, slot) => `${w}_${slot}`;
@@ -382,10 +503,12 @@ export function buyRemedy(state, { key, qty } = {}, env) {
   /* Bought remedies go into Belongings, where they cost a slot a bottle. The
      hunter packs what they want to drink into the Satchel afterwards, so the
      loadout is always a choice and never the shop's. */
+  // A charm is a material and goes where materials go; a remedy lands in Belongings.
+  const order = itemDef(key).heal > 0 ? ORDER.remedy : ORDER.material;
   const res = transact(state, (tx) => {
     tx.gold(-price);
-    if (!placeFor(state, key, ORDER.remedy, qty)) tx.fail("Nowhere to put it.");
-    tx.stash(key, qty, ORDER.remedy);
+    if (!placeFor(state, key, order, qty)) tx.fail("Nowhere to put it.");
+    tx.stash(key, qty, order);
   });
   if (!res.ok) return res;
   emit(state, env, "shop:bought", { key, qty, price });

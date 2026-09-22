@@ -9,13 +9,15 @@
      common gear         "slag_sword|common"               (stacks)
      uncommon and up     "slag_sword|rare|c17.42"          (unique)
      relic               "slag_sword|relic|f9.3|echoing"   (unique, prefixed)
-     enchanted           "slag_sword|rare|c17.42|+7"       (unique, always)
+     fortified           "cold_ring|rare|c17.42|+7"        (unique, always)
 
-   An enchantment rides on the end as "+N", after the prefix when there
-   is one. A piece that carries one is unique whatever its rarity, so an
-   enchanted Common stops stacking and is minted a uid of its own. Keys
+   A fortification rides on the end as "+N", after the prefix when there
+   is one. A piece that carries one is unique whatever its rarity, so a
+   fortified Common stops stacking and is minted a uid of its own. Keys
    written before the Veil was ever worked into gear simply have no "+"
-   segment, and read as +0.
+   segment, and read as +0. Only an amulet or a ring takes the Veil
+   (CONFIG.enchant.slots): a "+N" on anything else is read as +0, whatever
+   an older save or a stale market row still carries.
 
    Uids are derived from roll counters (c: crafted, f: found on a
    kill, s: a Sovereign's piece, m: bought on the market). Saves
@@ -39,7 +41,45 @@ export function parseKey(key) {
     if (seg.charCodeAt(0) === 43) out.plus = Math.max(0, Math.floor(Number(seg.slice(1))) || 0);
     else out.prefix = seg;
   }
+  // The Veil goes into jewellery and nothing else: a "+N" on a sword reads as +0.
+  if (out.plus > 0 && !canFortify(out.base)) out.plus = 0;
   return out;
+}
+
+/* ================= THE VEIL ================= */
+
+const FORTIFY_SLOTS = new Set(CONFIG.enchant.slots);
+
+// Whether a base item (or a key, or a def) is the kind of gear the Veil goes into.
+export function canFortify(what) {
+  const base = what && typeof what === "object" ? what.base : String(what).split("|")[0];
+  const g = getGear(base);
+  return !!g && FORTIFY_SLOTS.has(g.slot);
+}
+
+/* The halo a worked piece wears at this level: { at, id, name } for the highest
+   halo reached, or null below the first. */
+export function haloOf(plus) {
+  let halo = null;
+  CONFIG.enchant.halos.forEach((hl) => { if (plus >= hl.at) halo = hl; });
+  return halo;
+}
+
+// A halo's name from its id, for lines that only carry the id.
+export function haloName(id) {
+  const hl = CONFIG.enchant.halos.find((x) => x.id === id);
+  return hl ? hl.name : String(id);
+}
+
+// The halo a commander wears: the highest of any worn piece's.
+export function wornHalo(equipment) {
+  let best = null;
+  Object.values(equipment || {}).forEach((key) => {
+    if (!key) return;
+    const halo = haloOf(parseKey(key).plus);
+    if (halo && (!best || halo.at > best.at)) best = halo;
+  });
+  return best;
 }
 
 /* Common gear stacks. Anything finer needs its uid, a relic its prefix, and
@@ -48,7 +88,7 @@ export function parseKey(key) {
    pile however alike they started. */
 export function makeKey(base, rarity, uid, prefix, plus = 0) {
   if (!rarity) return base;
-  const p = plus > 0 ? `|+${plus}` : "";
+  const p = plus > 0 && canFortify(base) ? `|+${plus}` : "";
   if (rarity === "common" && !p) return `${base}|common`;
   if (rarity === "relic") return `${base}|relic|${uid}|${prefix}${p}`;
   return `${base}|${rarity}|${uid}${p}`;

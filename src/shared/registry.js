@@ -248,11 +248,11 @@ function buildRegistry() {
      never trivialises the shallow. Bands follow STRATA exactly. */
   const VEIL_BANDS = [
     { key: "lesser",    name: "Lesser Veil", tiers: [1, 2, 3], level: TIERS[0].level,
-      fragment: "lesser_veil_fragment",    essence: "lesser_veil_essence",    fragValue: 15,   essValue: 300 },
+      fragment: "lesser_veil_fragment",    essence: "lesser_veil_essence",    charm: "lesser_veil_charm",    fragValue: 15,   essValue: 300 },
     { key: "veiled",    name: "Veiled",      tiers: [4, 5, 6], level: TIERS[3].level,
-      fragment: "veiled_fragment",         essence: "veiled_essence",         fragValue: 140,  essValue: 2800 },
+      fragment: "veiled_fragment",         essence: "veiled_essence",         charm: "veiled_charm",         fragValue: 140,  essValue: 2800 },
     { key: "sovereign", name: "Sovereign",   tiers: [7, 8, 9], level: TIERS[6].level,
-      fragment: "sovereign_fragment",      essence: "sovereign_essence",      fragValue: 1200, essValue: 24000 },
+      fragment: "sovereign_fragment",      essence: "sovereign_essence",      charm: "sovereign_charm",      fragValue: 1200, essValue: 24000 },
   ];
   const FRAG_PER_ESSENCE = 20;
 
@@ -261,6 +261,11 @@ function buildRegistry() {
       category: "Veil", value: b.fragValue, tier: b.tiers[0], band: b.key, fragment: true };
     MATERIALS[b.essence] = { id: b.essence, name: `${b.name} Essence`, icon: "gem", kind: "material",
       category: "Veil", value: b.essValue, tier: b.tiers[0], band: b.key, essence: true };
+    /* A charm of the band rides in the rite's fourth socket and betters the odds
+       once. The Bonesetter sells them at an Essence's worth; the Smuggler leaves
+       them alone. */
+    MATERIALS[b.charm] = { id: b.charm, name: `${b.name} Charm`, icon: "charm", kind: "material",
+      category: "Veil", value: Math.round(b.essValue * CONFIG.enchant.charmValue), tier: b.tiers[0], band: b.key, charm: true };
     // Twenty Fragments, one Essence. The Artificer already works the Veil.
     CRAFT_ACTIONS.artificer.push({
       id: `merge_${b.essence}`, skillId: "artificer", tier: b.tiers[0], name: `${b.name} Essence`, icon: "gem",
@@ -1227,6 +1232,7 @@ export const stratumOf = (tier) => GameData.STRATA.find((s) => s.tiers.includes(
 export const veilBandOfTier = (tier) => GameData.VEIL_BANDS.find((b) => b.tiers.includes(tier)) || GameData.VEIL_BANDS[0];
 export const fragmentOfTier = (tier) => veilBandOfTier(tier).fragment;
 export const essenceOfTier = (tier) => veilBandOfTier(tier).essence;
+export const charmOfTier = (tier) => veilBandOfTier(tier).charm;
 
 // The bench tab and group a recipe sits under.
 export function benchGroupOf(def) {

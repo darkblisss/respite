@@ -356,6 +356,20 @@ function openItem(ctx, key, opts, extra) {
     return send("salvage", { key, from });
   }
 
+  /* Working the Veil into it happens on the Fortify tab, which takes the piece
+     from wherever it is: a worn piece is worked on your back, a carried one where
+     it lies. Only an amulet or a ring goes; the rest never see the button. */
+  function fortifyAction(state) {
+    if (d.kind !== "gear" || !d.slot) return null;
+    const plan = enchantPlan(state, key);
+    if (!plan) return null;
+    return {
+      id: "fortify", kind: "primary", soft: true, wide: true, icon: "sparkle",
+      label: plan.maxed ? `Fully worked \u00b7 +${plan.max}` : `Fortify \u00b7 +${plan.level} \u2192 +${plan.level + 1}`,
+      onClick: () => ctx.go(`#/fortify/${encodeURIComponent(key)}`),
+    };
+  }
+
   function actionList(state) {
     if (!acting) return [];
     const list = [];
@@ -378,6 +392,9 @@ function openItem(ctx, key, opts, extra) {
           disabled: !dest || !slot,
           onClick: () => send("unequip", { slot: wornSlot(ctx.state, key, d) }),
         });
+        // A worn amulet or ring is worked on your back: the anvil takes it from there.
+        const fortify = fortifyAction(state);
+        if (fortify) list.push(fortify);
       }
       return list.filter(Boolean);
     }
@@ -455,28 +472,8 @@ function openItem(ctx, key, opts, extra) {
       });
     }
 
-    /* Working the Veil into it. A worn piece is worked where it is: the smith
-       does not need it off your back, and making you strip first is friction for
-       nothing. The bargain itself is laid out in the Veilsmith's own dialog. */
-    if (d.kind === "gear" && d.slot) {
-      const plan = enchantPlan(state, key);
-      const slot = from === "worn" ? wornSlot(state, key, d) : from;
-      if (plan && slot) {
-        list.push({
-          id: "enchant", kind: "primary", soft: true, wide: true, icon: "gem",
-          label: plan.maxed
-            ? `Fully worked \u00b7 +${plan.max}`
-            : plan.have < 1
-              ? `Needs ${itemName(plan.stone)}`
-              : `Work the Veil \u00b7 +${plan.level} \u2192 +${plan.level + 1}`,
-          disabled: plan.maxed || plan.have < 1,
-          onClick: () => {
-            openPopup("enchant", ctx, key, { from: slot });
-            return false;
-          },
-        });
-      }
-    }
+    const fortify = fortifyAction(state);
+    if (fortify) list.push(fortify);
 
     const sv = salvageValue(key);
     if (sv) {

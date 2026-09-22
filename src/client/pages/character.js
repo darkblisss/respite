@@ -30,6 +30,8 @@ import { foeFalls } from "../ui/popups/foe.js";
 import { collectionPanel, bestiaryFound, BESTIARY_COUNT } from "../ui/collection.js";
 import { hasPopup, openPopup, portraitImg, paintPortrait } from "../ui/widgets.js";
 import { dollCard, standingCard } from "./armaments.js";
+import { avatarHaloNode, paintAvatarHalo, haloTag } from "../ui/halo.js";
+import { wornHalo } from "../../shared/items.js";
 import { CONFIG } from "../../shared/config.js";
 import {
   ARTISAN_ORDER, GameData, SKILL_ORDER, TRADE_ORDER, getSkill, getClass, getSkin } from "../../shared/registry.js";
@@ -60,8 +62,10 @@ function heroView() {
   const tags = h("div.chip-row.char-tags");
   const total = h("span.char-total-v");
   const bust = h("div.portrait.portrait-bust.char-portrait", portraitImg(null));
+  // The halo the amulet or the ring earned, round the face: no number, the ring tells it.
+  const avatarHalo = avatarHaloNode();
   const node = h("section.char-hero",
-    bust,
+    h("div.char-portrait-wrap", avatarHalo, bust),
     h("div", eyebrow, name, tags),
     h("div.char-total", total, h("span.eyebrow", "Total level")));
   let tagSig = null;
@@ -83,13 +87,16 @@ function heroView() {
       const b = state.bounty && !state.bounty.claimed ? state.bounty : null;
       const bountyText = b ? `Bounty ${fmtWhole(Math.min(b.progress, b.amount))} of ${fmtWhole(b.amount)}` : null;
       const skin = state.player.skin ? getSkin(state.player.skin) : null;
-      const sig = [skin ? skin.id : "-", klass ? klass.id : "-", comp ? comp.id : "-", bountyText || "-"].join("|");
+      const halo = wornHalo(state.equipment);
+      const sig = [skin ? skin.id : "-", klass ? klass.id : "-", comp ? comp.id : "-", bountyText || "-", halo ? halo.id : "-"].join("|");
       if (sig === tagSig) return;
       tagSig = sig;
+      paintAvatarHalo(avatarHalo, halo);
       // replaceChildren would write a null out as text, so the absent ones are filtered first.
       tags.replaceChildren(...[
         skin ? h("span.tag", skin.name) : null,
         klass ? h("span.tag.tag-violet", klass.name) : null,
+        haloTag(halo),
         comp ? chipNode({ text: comp.name, icon: "paw" }) : null,
         bountyText ? chipNode({ text: bountyText, tone: "gold", icon: "scroll" }) : null,
       ].filter(Boolean));

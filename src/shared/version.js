@@ -12,4 +12,8 @@
    weather roll. Saturday and Sunday now grant the flat +20% alone; the roll
    only ever applies Monday through Friday. Changes the XP a trade action
    pays out on a weekend, so an older browser's prediction would disagree. */
-export const ENGINE_VERSION = 5;
+/* 6: fortifying. Only an amulet or a ring takes the Veil now, the odds run off
+   the forge thresholds instead of the linear table, a charm rides in a fourth
+   socket, and `convert` carries a level onto a new piece. Schema 13 strips the
+   Veil off anything that is not jewellery. */
+export const ENGINE_VERSION = 6;

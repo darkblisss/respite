@@ -26,7 +26,7 @@ import { walkPath, resetPath } from "./path.js";
 import {
   refreshBounty, resolveRequisitions, claimBounty, hireAgent, deployAgent, buyRemedy, buySmuggler,
   travel, equip, unequip, unequipTool, moveItem, sellItem, useChest, useRemedy, salvage, reorder, pickClass,
-  setSkin, enchant, debugGive,
+  setSkin, enchant, convert, debugGive,
 } from "./world.js";
 
 const WINDOW_MS = CONFIG.time.windowMs;
@@ -122,6 +122,7 @@ export const COMMANDS = Object.freeze({
   sellItem:     { run: sellItem, predict: true },
   salvage:      { run: salvage, predict: true },
   enchant:      { run: enchant, predict: true },
+  convert:      { run: convert, predict: true },
   useChest:     { run: useChest, predict: true },
   useRemedy:    { run: useRemedy, predict: true },
   reorder:      { run: reorder, predict: true },
