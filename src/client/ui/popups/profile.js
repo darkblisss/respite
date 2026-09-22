@@ -15,7 +15,7 @@
    account, as the page does.
    ============================================================ */
 
-import { h } from "../dom.js";
+import { h, setText } from "../dom.js";
 import { iconEl } from "../icons.js";
 import { openModal, toast } from "../overlay.js";
 import { registerPopup, openPopup, portraitImg } from "../widgets.js";
@@ -74,7 +74,8 @@ registerPopup("profile", (ctx, username) => {
 
   const halo = avatarHaloNode();
   const face = h("div.portrait.portrait-bust.profile-face");
-  const avatar = h("div.profile-avatar", halo, face);
+  const lvPip = h("span.profile-lv", { hidden: true });
+  const avatar = h("div.profile-avatar", halo, face, lvPip);
   const body = h("div.profile-body");
   let alive = true;
 
@@ -120,6 +121,8 @@ registerPopup("profile", (ctx, username) => {
     const levels = row.levels && typeof row.levels === "object" ? row.levels : {};
 
     face.replaceChildren(portraitImg(row.skin || null));
+    setText(lvPip, fmtWhole(num(levels, "warfare") || 1));
+    lvPip.hidden = false;
     paintAvatarHalo(halo, halos);
     m.setTitle(display(row.username || who), [
       klass ? klass.name : "Undisciplined",
@@ -134,8 +137,7 @@ registerPopup("profile", (ctx, username) => {
           online ? "Online" : seen ? `Last about ${fmtAgo(Date.now() - seen)}` : "Not seen yet"),
         klass ? h("span.tag.tag-violet", klass.name) : null,
         ...haloTags(halos),
-        hunting ? h("span.chip.chip-ember", iconEl("swords"), `Hunting the ${getZone(hunting.zone).name}`) : null,
-        h("span.chip", iconEl("swords"), `Hunt Lv ${fmtWhole(num(levels, "warfare") || 1)}`)),
+        hunting ? h("span.chip.chip-ember", iconEl("swords"), `Hunting the ${getZone(hunting.zone).name}`) : null),
       h("div.kpis",
         h("div.kpi", h("span.l", "Kills"), h("span.v", fmtWhole(num(st, "kills")))),
         h("div.kpi", h("span.l", "Sovereigns"), h("span.v", fmtWhole(num(st, "bosses")))),

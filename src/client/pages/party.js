@@ -647,13 +647,18 @@ function partyBody(ctx, page) {
         if (groundSel.value !== picked) groundSel.value = picked;
 
         const marked = members.filter((m) => m.ready).length;
-        const allIn = members.length > 0 && marked === members.length;
         const iAm = myMark(st);
         setText(readyBtn, iAm ? "Stand down" : "Ready");
         toggleClass(readyBtn, "btn-good", iAm);
         readyBtn.disabled = sending || !up || !!fight;
-        goBtn.disabled = sending || !amLeader || !up || !allIn || !!fight;
-        setText(goBtn.lastChild, amLeader ? "Start" : `${marked} of ${members.length} ready`);
+        /* Waiting on the last mark was a gate over nothing: setting out puts the
+           host on the ground and everyone else comes in behind them, so a member
+           who has not marked simply does not follow. The count is what it says,
+           not a lock on the press. */
+        goBtn.disabled = sending || !amLeader || !up || !!fight;
+        setText(goBtn.lastChild, amLeader
+          ? (marked < members.length ? `Start · ${marked} of ${members.length}` : "Start")
+          : `${marked} of ${members.length} ready`);
         setAttr(bar, "hidden", !!fight);
 
         // The server's own two refusals, said before the press instead of after it.
