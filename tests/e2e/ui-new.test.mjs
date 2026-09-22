@@ -118,8 +118,9 @@ await run(async () => {
         art: !!cell.querySelector(".path-art .ico"),
       };
     });
+    // An untaken node says nothing under its name: the ring's segments are the ranks.
     check("a node says its name and reads its ranks off the ring, one segment apiece",
-      named.name === "Ironhide" && named.segs === 4 && named.art && /ranks/.test(named.rank), named);
+      named.name === "Ironhide" && named.segs === 4 && named.art && named.rank === "", named);
     const shut = await live(app, () => {
       const cell = document.querySelector(".path-node.is-shut");
       return cell ? { id: cell.querySelector(".path-face").dataset.node, locked: !cell.querySelector(".path-lock").hidden } : null;

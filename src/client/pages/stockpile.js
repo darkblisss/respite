@@ -112,9 +112,9 @@ export function storageCard(ctx, { pools, view, idBase, filters = true, hint = n
   const sortSel = h("select.select.select-sm", { id: `${idBase}Sort`, value: view.sort },
     SORTS.map(([id, label]) => h("option", { value: id }, label)));
 
-  const capText = h("b");
+  const capText = h("b", { hidden: true });   // the pool tabs carry the count; the bar is the whole of it
   const capFill = h("i");
-  const capacity = h("div.capacity", h("span", "Capacity"), capText, h("div.bar.bar-thin", { "aria-hidden": "true" }, capFill));
+  const capacity = h("div.capacity", capText, h("div.bar.bar-thin", { "aria-hidden": "true" }, capFill));
 
   const emptyTitle = h("div.empty-title");
   const nothing = h("div.empty.empty-sm", { hidden: true },
@@ -425,8 +425,7 @@ function rackRow(state, g) {
   if (!tool) {
     return h("div.list-row",
       h("div.art.art-sm", { "data-tone": "neutral", "aria-hidden": "true" }, iconEl(g.icon)),
-      h("div.lr-main", h("div.lr-title", "Bare hands"), h("div.lr-sub", g.name)),
-      h("div.lr-end", h("span.small.muted", "No tool")));
+      h("div.lr-main", h("div.lr-title", "Bare hands"), h("div.lr-sub", g.name)));
   }
   const name = itemName(tool.id);
   // The chip is a fact, not a control, so the row keeps one line on phones.

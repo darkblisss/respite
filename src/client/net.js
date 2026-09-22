@@ -421,6 +421,13 @@ export function createNet({
     kick: (userId) => rpc("party_kick", { p_user_id: userId }),
     say: (body) => rpc("party_say", { p_body: body }),
 
+    /* The room: how many squares stand open (the leader's call), the ground put
+       up for it (anyone's), and your own ready mark. All three ride home on the
+       next party_state(), so the page refreshes rather than patching itself. */
+    setSlots: (slots) => rpc("party_set_slots", { p_slots: slots }),
+    propose: (tier, zone) => rpc("party_propose", { p_tier: tier, p_zone: zone }),
+    ready: (on) => rpc("party_ready", { p_ready: !!on }),
+
     /* The party's live fight as a watcher may see it, or null when nobody is out. The same
        shape rides back on a member's own game request as `party`, so this is for the members
        who are not out on it and never get one: it is how they learn there is a fight to join.

@@ -192,10 +192,12 @@ Tables to add (all `public`, RLS enabled on every one):
   - Select: own rows.
   - Index: `(user_id) where claimed_at is null`.
 - `parties`
-  - Columns: `id uuid primary key default gen_random_uuid()`, `name text not null` (check 1 to 24 chars), `leader_id uuid not null`, `created_at timestamptz default now()`.
+  - Columns: `id uuid primary key default gen_random_uuid()`, `name text not null` (check 1 to 24 chars), `leader_id uuid not null`, `slots smallint not null default 4` (check 1 to 4, migration 014), `proposed_tier smallint` and `proposed_zone text` (migration 014), `created_at timestamptz default now()`.
+  - `slots` is how many of the room's four squares stand open; the rest are drawn crossed out and nobody can be invited into them. `proposed_*` is the ground last put up, which every member marks ready against.
   - Select: members only.
 - `party_members`
-  - Columns: `party_id uuid references parties(id) on delete cascade`, `user_id uuid not null unique`, `username text not null`, `joined_at timestamptz default now()`, primary key `(party_id, user_id)`.
+  - Columns: `party_id uuid references parties(id) on delete cascade`, `user_id uuid not null unique`, `username text not null`, `ready boolean not null default false` (migration 014), `joined_at timestamptz default now()`, primary key `(party_id, user_id)`.
+  - `ready` is marked against the ground currently up. Putting a new one up clears every mark in the party, so a ready is never inherited by a ground nobody agreed to.
   - Select: members of the same party.
 - `party_invites`
   - Columns: `id bigint identity pk`, `party_id uuid references parties(id) on delete cascade`, `from_id uuid`, `from_name text`, `to_id uuid`, `to_name text`, `status text not null default 'pending'` (check `pending`, `accepted`, `declined` or `cancelled`), `created_at timestamptz default now()`.
@@ -235,6 +237,10 @@ RPCs are all `security definer`, `set search_path = public`, granted `execute` t
   - The body is trimmed, 1 to 240 chars, and the caller must be a member.
   - Rate limit: reject if the caller posted in that party less than 1.5 seconds ago.
   - Keep only the newest 200 messages per party (delete older ones).
+- The room (migration 014). All three ride home on the next `party_state()`, so a client refreshes rather than patching itself.
+  - `party_set_slots(p_slots int) returns int`: leader only, 1 to 4, and never fewer than the members already sitting in a square.
+  - `party_propose(p_tier int, p_zone text) returns jsonb`: any member. The zone must be one of the four and the tier a real region. Clears every ready mark in the party, the caller's included.
+  - `party_ready(p_ready boolean) returns boolean`: the caller's own mark. Refused when no ground is up.
 - The market's three doors (migration 007). The market is anonymous by default both ways, so none of them selects a `seller_id`, a `seller_name` or a `buyer_id`, and the tables behind them answer about the caller's own rows alone.
   - `market_browse(p_q text default '', p_kind text default null, p_tier int default null, p_sort text default 'price', p_limit int default 50, p_offset int default 0) returns table(id, item_key, item_base, item_name, item_kind, item_tier, rarity, qty_left, price_each, created_at, expires_at, mine boolean)`: open, unexpired listings that are **not** materials, one row a listing, `price` or `newest` order, at most 100. `mine` is true on the caller's own and is the only thing here that says whose a listing is. `p_kind = 'material'` returns nothing: materials are a pool.
   - `market_pools(p_q text default '', p_tier int default null, p_limit int default 50, p_bands int default 8) returns table(item_key, item_base, item_name, item_kind, item_tier, qty_left bigint, price_min bigint, bands jsonb)`: every open material listing aggregated by item key, cheapest pool first. `bands` is the cheapest `p_bands` price bands as `[{ each, qty }]`, cheapest first. The caller's own listings are left out, because the pool is what they can buy.

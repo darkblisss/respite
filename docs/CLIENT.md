@@ -154,6 +154,8 @@ net.party.state()                             // -> { data, error }  party_state
 net.party.huntView()                          // -> { data, error }  party_hunt_view(): the party's live fight, or null
 net.party.create(name) / invite(username) / cancelInvite(id) / respond(id, accept) / leave() / kick(userId) / say(body)
                                               // -> { data, error }
+net.party.setSlots(n) / propose(tier, zone) / ready(on)
+                                              // -> { data, error }  the room: open squares, the ground up, your mark
 net.party.subscribe(partyId, onChange)        // realtime on party_messages, party_members, party_invites; -> unsubscribe
 net.hiscores(skill = "total", limit = 50)     // -> { rows, error }
 net.onlineCount()                             // -> number | null

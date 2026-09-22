@@ -1059,16 +1059,21 @@ PAGES.market = () => h("div.page",
         h("div.list-row", art("blade", { size: "sm", rarity: "rare" }), h("div.lr-main", h("div.lr-title", "Bought Sundering Bog Sword"), h("div.lr-sub", "From Edda · 1d ago")), h("div.lr-end", h("span.price.is-short", "−420g"))),
         h("div.list-row", art("coin", { size: "sm", tone: "gold" }), h("div.lr-main", h("div.lr-title", "Sold 7 Bog Bar to Wren"), h("div.lr-sub", "1d ago")), h("div.lr-end", h("span.price", "+93g")))))));
 
-function member({ name, lv, me, leader, dot, doing, doingTone, doingIcon, bonus }) {
-  return h("article.card.member", { class: { "is-me": me, "is-offline": dot === "offline" } },
-    avatar(name, { dot }),
-    h("div",
-      h("div.member-name", name, leader ? h("span", { "data-tip": "Party leader", role: "img", "aria-label": "Leader" }, ic("crown")) : null, me ? tag("You", "violet") : null),
-      h("div.member-lv", `Total level ${lv}`)),
-    dot === "online" ? h("span.small.t-good", "Online") : h("span.small.muted", "Away"),
-    h("div.member-doing", { "data-tone": doingTone }, ic(doingIcon), h("span", doing)),
-    h("div.member-foot", bonus, me ? null : h("button.btn.btn-quiet.btn-sm", { type: "button", "aria-label": `Remove ${name} from the party` }, "Kick")));
+/* A square in the party room: whoever is sitting in it, an open one, or one the
+   host has closed. The face is a plate here because the kit ships no portraits. */
+function seat({ name, lv, host, ready, me, doing, offline }) {
+  return h("div.seat.seat-taken", { class: { "is-me": me, "is-ready": ready, "is-offline": offline } },
+    h("div.seat-face", { "aria-hidden": "true" }, avatar(name, { size: "lg" })),
+    h("span.seat-lv", String(lv)),
+    h("div.seat-foot",
+      h("button.seat-name", { type: "button" }, host ? ic("crown") : null, name),
+      h("span.seat-doing", doing)),
+    ready ? h("span.seat-ready", ic("check"), "Ready") : null,
+    host ? h("span.seat-host", "Host") : null);
 }
+
+const openSeat = () => h("button.seat.seat-open", { type: "button", "aria-label": "Close this square" }, h("span.seat-wait", "Waiting"));
+const shutSeat = () => h("button.seat.seat-shut-box", { type: "button", "aria-label": "Open this square" }, h("span.seat-shut", { "aria-hidden": "true" }, ic("close")));
 
 PAGES.party = () => h("div.page",
   pageHead({ eyebrow: "The Realm · Party of 3", title: "The Ashen Oath",
@@ -1079,11 +1084,20 @@ PAGES.party = () => h("div.page",
         h("button.btn.btn-primary.btn-sm", { type: "submit" }, "Invite")),
       h("button.btn.btn-quiet.btn-sm", { type: "button" }, ic("logout"), "Leave"),
     ] }),
-  h("div.grid-cards.max-2",
-    member({ name: "Morwen", lv: 187, me: true, leader: true, dot: "online", doing: "Hunting the Inner of Gallowmoor", doingTone: "ember", doingIcon: "swords", bonus: chip("+20% to your Hunt XP", "good", "party") }),
-    member({ name: "Thane", lv: 164, dot: "online", doing: "Hunting the Inner of Gallowmoor · 1h 04m", doingTone: "ember", doingIcon: "swords", bonus: chip("Counts toward your bonus", "good", "check") }),
-    member({ name: "Edda", lv: 201, dot: "online", doing: "Forging Bog Bars · 18 of 60", doingTone: "violet", doingIcon: "plate", bonus: chip("Not hunting") }),
-    member({ name: "Ashlin", lv: 92, dot: "offline", doing: "Last seen 2h ago", doingIcon: "clock", bonus: chip("Offline") })),
+  h("section.card", { "data-tone": "ember" },
+    cardHead("The room", { sub: "The Inner of Gallowmoor, when everyone is ready", actions: chip("2 out · 4m 12s", "ember", "swords") }),
+    h("div.room-grid",
+      seat({ name: "Morwen", lv: 187, me: true, host: true, ready: true, doing: "Inner of Gallowmoor" }),
+      seat({ name: "Thane", lv: 164, ready: true, doing: "At camp" }),
+      openSeat(),
+      shutSeat()),
+    h("div.room-bar",
+      h("div.hstack.gap-2",
+        h("select.select.grow", { "aria-label": "Ground" }, h("option", "Inner")),
+        h("button.btn.btn-sm", { type: "button" }, "Put it up")),
+      h("div.room-press",
+        h("button.btn.btn-good.grow", { type: "button" }, "Stand down"),
+        h("button.btn.btn-ember.grow", { type: "button" }, ic("swords"), "Start")))),
   h("div.grid-2",
     h("section.card.card-flush.chat",
       cardHead("Party chat", { actions: chip("3 online", "good", "online") }),

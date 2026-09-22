@@ -133,7 +133,7 @@ function pathViewBuild(ctx) {
   const barSpent = h("i");
   const barStaged = h("i.is-staged");
   const tallyNote = h("p.path-tally-note");
-  const reset = h("button.btn.btn-sm.btn-quiet", { type: "button" }, iconEl("sync"), "Reset the path");
+  const reset = h("button.btn.btn-sm.btn-quiet", { type: "button" }, iconEl("sync"), "Reset");
   const seal = h("button.btn.btn-primary", { type: "button" });
   const foot = h("div.path-foot",
     h("div.path-tally",
@@ -214,7 +214,7 @@ function pathViewBuild(ctx) {
         can: open && shown < def.ranks && left >= def.cost,
         why: !open ? `${short} more ${short === 1 ? "point" : "points"} on the path first.`
           : shown >= def.ranks ? "That is as far as it goes."
-            : left < def.cost ? (sheet.nextAt ? `No points left. The next comes at Hunt ${sheet.nextAt}.` : "No points left.")
+            : left < def.cost ? "No points left."
               : null,
       });
     });
@@ -335,7 +335,7 @@ function pathViewBuild(ctx) {
       sub: def.keystone ? "Keystone" : BAND_NAMES[def.band - 1] || `Band ${def.band}`,
       text: def.note,
       rows,
-      foot: mark ? "Staged. Seal the path to spend it." : e && e.can ? "Click to stage a rank." : (e && e.why) || "",
+      foot: mark ? "Staged until the path is sealed." : (e && e.why) || "",
       footTone: mark ? null : e && e.can ? null : "bad",
     });
   }
@@ -371,7 +371,7 @@ function pathViewBuild(ctx) {
     const shown = held + mark;
     const tail = mark ? " · staged" : "";
     if (def.keystone) return shown ? `Taken${tail}` : `${def.cost} points`;
-    if (!shown) return `${def.ranks} ranks`;
+    if (!shown) return "";
     if (shown >= def.ranks) return `Walked out${tail}`;
     return `${roman(shown)} of ${roman(def.ranks)}${tail}`;
   }
@@ -442,7 +442,7 @@ function pathViewBuild(ctx) {
 
     R.art.replaceChildren(iconEl(def.icon || "book"));
     setText(R.name, def.name);
-    setText(R.where, `${def.keystone ? "Keystone" : BAND_NAMES[def.band - 1] || `Band ${def.band}`} · ${def.cost === 1 ? "one point a rank" : `${def.cost} points, one rank`}`);
+    setText(R.where, def.keystone ? "Keystone" : BAND_NAMES[def.band - 1] || `Band ${def.band}`);
     setText(R.note, def.note);
 
     // Every rank, what it would come to, and which of them are yours.
@@ -486,7 +486,7 @@ function pathViewBuild(ctx) {
     setText(tallyNote, `${fmtWhole(sheet.spent + eff.mark)} of the ${sheet.full} this tree wants.${sheet.nextAt ? ` The next point comes at Hunt ${sheet.nextAt}.` : ""}`);
     reset.disabled = !sheet.spent || busy;
     seal.disabled = !eff.mark || busy;
-    setText(seal, !eff.mark ? "Seal the path" : eff.mark === 1 ? "Seal one point" : `Seal ${eff.mark} points`);
+    setText(seal, !eff.mark ? "Seal" : eff.mark === 1 ? "Seal one point" : `Seal ${eff.mark} points`);
   }
 
   function paint(next) {
