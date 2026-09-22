@@ -91,7 +91,9 @@ export default {
     function paintRemedy(row) {
       const state = ctx.state;
       const total = row.entry.price * clampQty(row.picker.pick.n);
-      setText(row.sub, [`Restores ${fmt(row.d.heal)} HP`, tierLabel(row.d.tier), heldText(state, row.entry.key)].filter(Boolean).join(" \u00b7 "));
+      // A charm is not drunk: it rides in the rite's fourth socket and betters the odds once.
+      const what = row.d.charm ? `Fortify odds ×${CONFIG.enchant.charmMult}, spent once` : `Restores ${fmt(row.d.heal)} HP`;
+      setText(row.sub, [what, tierLabel(row.d.tier), heldText(state, row.entry.key)].filter(Boolean).join(" \u00b7 "));
       setText(row.buy, `Buy for ${fmtGold(total)}`);
       toggleClass(row.price, "is-short", total > state.player.gold);
     }
@@ -102,7 +104,7 @@ export default {
       const total = entry.price * qty;
       const ok = await confirmSpend(ctx, {
         title: qty === 1 ? `Buy ${d.name}?` : `Buy ${fmtWhole(qty)} × ${d.name}?`,
-        body: landing(ctx.state, entry.key, ORDER.remedy, qty),
+        body: landing(ctx.state, entry.key, d.charm ? ORDER.material : ORDER.remedy, qty),
         gold: total,
         confirmText: `Buy for ${fmtGold(total)}`,
       });
@@ -177,7 +179,7 @@ export default {
         h("div.page-actions",
           h("span.clock", { "data-tip": "World clock. Bounties and the Smuggler run on this." }, iconEl("clock"), clockText))),
       h("section.card",
-        cardHead("The Bonesetter", "bonesetter", `Always open. Remedies land in Belongings; pack the Satchel to take them out. Between encounters one is drunk at or below ${Math.round(CONFIG.hunt.remedyAt * 100)}% health.`),
+        cardHead("The Bonesetter", "bonesetter", `Always open. Remedies land in Belongings; pack the Satchel to take them out. Between encounters one is drunk at or below ${Math.round(CONFIG.hunt.remedyAt * 100)}% health. Charms go where materials go, for the Fortify anvil.`),
         h("div.grid-cards.shop-grid", remedies.map((r) => r.node))),
       h("section.card",
         cardHead("The Smuggler", "hourglass", "Turns up twice a day on the world clock with whatever fell off the back of something. Each lot goes once.",

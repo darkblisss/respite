@@ -22,7 +22,7 @@
 import { CONFIG } from "./config.js";
 import { moveKey } from "./renames.js";
 import { GameData, findAction, getSkill, getMonster, getCompanion, getClass, getSkin, getTool, pathOf, regionOfTier } from "./registry.js";
-import { itemDef, parseKey, stacks, validKey } from "./items.js";
+import { itemDef, parseKey, stacks, validKey, canFortify, makeKey } from "./items.js";
 import { canHold, unstacked } from "./storage.js";
 import { combatStats, levelFromXp, skillLevel, maxHp } from "./stats.js";
 import { pointsEarned, pointsSpent } from "./path.js";
@@ -169,9 +169,11 @@ export function migrateSave(raw, { now, seed, userId, account, legacy = false } 
   if (!isObj(raw)) return createState(opts);
   const schema = finite(raw.schema) ? raw.schema : 0;
   const shaped = opts.legacy || schema < 9 ? fromV4(raw, opts) : raw;
-  // Keys moved in schema 12. normalise() drops anything it does not recognise,
-  // so the rename has to happen on the way in, before the check.
-  const state = normalise(schema < 12 ? migrate12(shaped) : shaped, opts);
+  // Keys moved in schema 12, and the Veil came off everything but jewellery in
+  // 13. normalise() drops anything it does not recognise, so both happen on the
+  // way in, before the check.
+  const moved = schema < 12 ? migrate12(shaped) : shaped;
+  const state = normalise(schema < 13 ? migrate13(moved) : moved, opts);
   if (userId !== undefined) state.meta.userId = typeof userId === "string" ? userId : null;
   if (account !== undefined) state.meta.account = typeof account === "string" ? account : null;
   return state;
@@ -226,6 +228,46 @@ function migrate12(src) {
   if (Array.isArray(src.requisitions)) {
     m.requisitions = src.requisitions.map((r) => (isObj(r) && typeof r.itemKey === "string" ? { ...r, itemKey: moveKey(r.itemKey) } : r));
   }
+  return m;
+}
+
+/* ---------- schema 13: the Veil goes into jewellery and nothing else ---------- */
+
+/* Until 13 any piece of gear could be worked. From 13 only an amulet or a ring
+   takes the Veil, so a "+N" on anything else comes off the key here, with no
+   Essence handed back for it: the level simply is not there any more. A worked
+   Common that had been minted a uid for the Veil goes back to its pile. Two keys
+   that land on one (a bare sword already held) merge, as 12 merges. */
+function bareKey(key) {
+  if (typeof key !== "string" || key.indexOf("|+") < 0 || canFortify(key)) return key;
+  const p = parseKey(key);
+  if (p.rarity === "common" && /^e/.test(p.uid || "")) return `${p.base}|common`;
+  return makeKey(p.base, p.rarity, p.uid, p.prefix, 0);
+}
+
+function migrate13(src) {
+  const m = { ...src };
+  const pool = (w) => {
+    const p = obj(src[w]);
+    const items = {};
+    keysOf(p.items).forEach((k) => {
+      const to = bareKey(k);
+      items[to] = Object.hasOwn(items, to) ? (Number(items[to]) || 0) + (Number(p.items[k]) || 0) : p.items[k];
+    });
+    const seen = new Set();
+    const order = [];
+    (Array.isArray(p.order) ? p.order : []).forEach((k) => {
+      const to = bareKey(k);
+      if (seen.has(to)) return;
+      seen.add(to);
+      order.push(to);
+    });
+    m[w] = { ...p, items, order };
+  };
+  ["inv", "bank", "vault", "satchel"].forEach((w) => { if (isObj(src[w])) pool(w); });
+  const eq = obj(src.equipment);
+  m.equipment = {};
+  keysOf(eq).forEach((slot) => { m.equipment[slot] = eq[slot] ? bareKey(eq[slot]) : eq[slot]; });
   return m;
 }
 

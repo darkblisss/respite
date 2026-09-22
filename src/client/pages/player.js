@@ -29,10 +29,12 @@ import { iconEl } from "../ui/icons.js";
 import { fmtWhole, fmtAgo, fmtStat } from "../ui/format.js";
 import { openPopup, portraitImg, paintPortrait } from "../ui/widgets.js";
 import { paintDoll } from "./armaments.js";
+import { auraNode, paintAura, haloTag, avatarHaloNode, paintAvatarHalo } from "../ui/halo.js";
 import { collectionPanel, rollsFromCollection } from "../ui/collection.js";
 import { CONFIG } from "../../shared/config.js";
 import { SKILL_ORDER, getSkill, getClass, getRegion, getZone, getSkin } from "../../shared/registry.js";
 import { combatStats } from "../../shared/stats.js";
+import { wornHalo } from "../../shared/items.js";
 
 const ASK_MS = 15 * 1000;
 const pct = (x) => `${+((Number(x) || 0) * 100).toFixed(1)}%`;
@@ -60,11 +62,12 @@ function sheetOf(row) {
 
 function headView() {
   const bust = h("div.portrait.portrait-bust.char-portrait");
+  const avatarHalo = avatarHaloNode();
   const name = h("h1.char-name");
   const tags = h("div.chip-row.char-tags");
   const total = h("span.char-total-v");
   const node = h("section.char-hero.pp-head",
-    bust,
+    h("div.char-portrait-wrap", avatarHalo, bust),
     h("div", h("div.eyebrow.page-eyebrow", "The Realm"), name, tags),
     h("div.char-total", total, h("span.eyebrow", "Total level")));
   let sig = null;
@@ -81,14 +84,17 @@ function headView() {
 
       setText(name, display(row.username));
 
-      const next = [row.skin || "-", klass ? klass.id : "-", region ? region.id : "-", hunting ? `${hunting.tier}:${hunting.zone}` : "-", seen].join("|");
+      const halo = wornHalo(row.equipment && typeof row.equipment === "object" ? row.equipment : {});
+      const next = [row.skin || "-", klass ? klass.id : "-", region ? region.id : "-", hunting ? `${hunting.tier}:${hunting.zone}` : "-", seen, halo ? halo.id : "-"].join("|");
       if (next === sig) return;
       sig = next;
 
       bust.replaceChildren(portraitImg(row.skin || null));
+      paintAvatarHalo(avatarHalo, halo);
       tags.replaceChildren(...[
         skin ? h("span.tag", skin.name) : null,
         klass ? h("span.tag.tag-violet", klass.name) : h("span.tag", "Undisciplined"),
+        haloTag(halo),
         h("span.chip", iconEl("atlas"), region ? region.name : "Somewhere"),
         /* Out on a hunt is worth saying in the present tense; otherwise how long
            since the realm last heard from them, which is what a stranger wants. */
@@ -108,15 +114,18 @@ function standingView(ctx) {
   const left = h("div.doll-col");
   const right = h("div.doll-col");
   const bust = h("div.portrait", portraitImg(null));
+  const aura = auraNode();
   const dollName = h("div.doll-name");
   const dollSub = h("div.doll-sub");
+  const dollTags = h("div.chip-row.doll-tags", { hidden: true });
   const chips = h("div.card-actions");
   const stats = h("div.stats");
   let skinSig = null;
+  let haloSig = null;
 
   const doll = h("section.card",
     h("div.card-head", h("div", h("h2.card-title", "Worn")), chips),
-    h("div.doll", left, h("div.doll-figure", bust, dollName, dollSub), right));
+    h("div.doll", left, h("div.doll-figure", h("div.figure-wrap", aura, bust), dollName, dollSub, dollTags), right));
 
   const standing = h("section.card",
     h("div.card-head", h("div",
@@ -141,6 +150,13 @@ function standingView(ctx) {
         setAttr(b, "aria-label", `${b.dataset.label}: ${b.dataset.name}`);
       });
       skinSig = paintPortrait(bust, row.skin || null, skinSig);
+      const halo = wornHalo(eq);
+      if ((halo ? halo.id : "") !== haloSig) {
+        haloSig = halo ? halo.id : "";
+        paintAura(aura, halo);
+        dollTags.replaceChildren(haloTag(halo));
+        dollTags.hidden = !halo;
+      }
       setText(dollName, display(row.username));
       setText(dollSub, [klass && klass.name, region && region.name].filter(Boolean).join(" \u00b7 "));
       chips.replaceChildren(klass ? h("span.chip.chip-violet", klass.name) : h("span.chip", "Undisciplined"));

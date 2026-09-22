@@ -16,7 +16,7 @@ import { hasPopup, openPopup } from "./ui/widgets.js";
 import { fmt, fmtGold, fmtTime, plural } from "./ui/format.js";
 import { CONFIG } from "../shared/config.js";
 import { GameData, getCompanion, getMonster, getRegion, rarityDef, skillName } from "../shared/registry.js";
-import { itemDef, itemName, parseKey } from "../shared/items.js";
+import { itemDef, itemName, parseKey, haloName } from "../shared/items.js";
 
 const BURST_MS = 4000;       // a kind of news gets this many toasts...
 const BURST_MAX = 2;         // ...in this window
@@ -60,6 +60,13 @@ const TABLE = {
   },
 
   "storage:full": (p) => [`Nowhere to put ${itemName(p.key)}`, { kind: "warn" }, { every: 60 * 1000, key: "storage:full" }],
+
+  /* The rite says its own result on the anvil; only a halo earned is news off the
+     page, and a carrying, because the toll was real gold. */
+  "item:enchanted": (p) => (p.won && p.halo
+    ? [`${itemName(p.key)} wears the ${haloName(p.halo)} halo`, { kind: "gold", icon: "sparkle" }, { once: `halo:${p.key}` }]
+    : null),
+  "item:converted": (p) => [`+${p.level} carried onto the ${itemName(p.key).replace(/ \+\d+$/, "")}`, { kind: "gold", icon: "sparkle" }, { once: `converted:${p.key}` }],
 
   "bounty:complete": (p, ctx) => [
     "Bounty complete",

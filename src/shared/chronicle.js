@@ -11,7 +11,7 @@
 
 import { CONFIG } from "./config.js";
 import { GameData, getCompanion, getClass, getMonster, getRegion, getZone, regionOfTier, skillName, findAction } from "./registry.js";
-import { itemName } from "./items.js";
+import { itemName, haloName } from "./items.js";
 import { foeTitle } from "./combat.js";
 import { fmt, fmtGold, fmtTime, titleCase } from "./format.js";
 
@@ -21,6 +21,9 @@ const actionName = (p) => {
   const def = findAction(p.skillId, p.actionId);
   return titleCase(def ? def.name : String(p.actionId));
 };
+
+// A worked piece's name without its "+N": the line says the level itself.
+const bareName = (key) => itemName(key).replace(/ \+\d+$/, "");
 
 const zonePlace = (tier, zone) => `${getZone(zone).name} of ${(regionOfTier(tier) || getRegion(null)).name}`;
 
@@ -39,6 +42,15 @@ const LINES = {
   "item:crafted": (p) => (p.rarity === "relic" || p.rarity === "legendary" ? `${itemName(p.key)} comes off the bench.` : null),
 
   "storage:full": (p) => `Nowhere to put ${itemName(p.key)}.`,
+
+  /* The rite. A take is worth a line; a refusal is not, because at the top of
+     the table there are a hundred of them to every take and the log holds sixty. */
+  "item:enchanted": (p) => {
+    if (!p.won) return null;
+    const halo = p.halo ? ` It wears the ${haloName(p.halo)} halo.` : "";
+    return `${bareName(p.was)} took +${p.level}. ${p.stones} Essence spent${p.charm ? " and a charm" : ""}.${halo}`;
+  },
+  "item:converted": (p) => `${bareName(p.was)} took +${p.level} from ${bareName(p.wasFrom)} for ${fmtGold(p.gold)} and ${p.essence} Essence. ${bareName(p.from)} is bare.`,
 
   "hunt:ended": (p) => (p.reason === "limit"
     ? `Hunt finished: ${fmt(p.kills)} kills in ${fmtTime(p.elapsedMs)}.`

@@ -154,11 +154,13 @@ await run(async () => {
   const bare = (p) => ({ base: p.base, rarity: p.rarity, uid: p.uid, prefix: p.prefix });
   sameOver("parseKey and stacks", keys, (k) => [v4.call("parseKey", k), v4.call("stacks", k)], (k) => [bare(I.parseKey(k)), I.stacks(k)]);
   check("every key v4 could write reads as +0", keys.every((k) => I.parseKey(k).plus === 0));
-  check("and an enchanted key reads its level, and stops stacking",
-    I.parseKey("slag_sword|rare|c1.2|+7").plus === 7 &&
-    I.parseKey("slag_sword|relic|f1.1|echoing|+3").plus === 3 &&
-    I.parseKey("slag_sword|relic|f1.1|echoing|+3").prefix === "echoing" &&
-    !I.stacks("slag_sword|common|e5|+1"));
+  check("and a fortified key reads its level, and stops stacking",
+    I.parseKey("slag_ring|rare|c1.2|+7").plus === 7 &&
+    I.parseKey("slag_ring|relic|f1.1|echoing|+3").plus === 3 &&
+    I.parseKey("slag_ring|relic|f1.1|echoing|+3").prefix === "echoing" &&
+    !I.stacks("slag_ring|common|e5|+1"));
+  check("but only jewellery takes the Veil: a sword's + reads as nothing",
+    I.parseKey("slag_sword|rare|c1.2|+7").plus === 0 && I.parseKey("slag_sword|relic|f1.1|echoing|+3").prefix === "echoing");
   sameOver("itemDef and itemName for unknown bases", ["nope", "nope|common", "", "slag|rare|1"],
     (k) => [v4.call("itemDef", k), v4.call("itemName", k)], (k) => [I.itemDef(k), I.itemName(k)]);
   check("itemDef results are frozen and cached", Object.isFrozen(I.itemDef("slag_sword|rare|1")) && I.itemDef("slag_sword|rare|1") === I.itemDef("slag_sword|rare|2"));

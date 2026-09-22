@@ -32,6 +32,9 @@
   border-radius: 16px;
 }
 
+/* Room for the halo ring round the portrait (ui/halo.js), when there is one. */
+.char-portrait-wrap { position: relative; width: fit-content; }
+
 .char-name {
   margin-top: 4px;
   font-family: var(--font-display);
@@ -680,6 +683,10 @@ button.doll-slot { cursor: pointer; }
   text-align: center;
   color: var(--bone-faint);
 }
+
+/* The halo's name under the figure, once there is one. */
+.doll-tags { justify-content: center; margin-top: -2px; }
+.doll-tags[hidden] { display: none; }
 
 @media (max-width: 599px) {
   .doll { grid-template-columns: 58px minmax(0, 1fr) 58px; gap: 10px; }
@@ -3056,3 +3063,1104 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
 .hs-link:hover .truncate,
 .member-name .hs-link:hover { text-decoration: underline; }
 .hs-link:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }
+
+/* A roster name is a button now (it opens the card), dressed as the link it was. */
+button.member-look { padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+button.member-look:hover { text-decoration: underline; }
+
+/* ================= THE ANVIL (pages/fortify.js) ================= */
+
+/* The rite on the left with the log under it, the pieces and the odds on the
+   right, the same split the Stockpile uses. The circle is drawn on a fixed
+   440px grid and scaled to whatever width its column gives it. */
+.forge {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--page-gap);
+  align-items: start;
+}
+
+.forge-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--page-gap);
+  min-width: 0;
+}
+
+/* Cards and ledgers here set their own display, so hidden has to be said twice. */
+.fortify-page [hidden] { display: none !important; }
+
+@media (min-width: 1200px) {
+  .forge { grid-template-columns: minmax(0, 1fr) 372px; }
+}
+
+.rite-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-4);
+  align-items: center;
+}
+
+@media (min-width: 900px) {
+  .rite-wrap { grid-template-columns: minmax(300px, 440px) minmax(0, 1fr); gap: var(--sp-5); }
+}
+
+.rite-scale {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  aspect-ratio: 1;
+  margin: 0 auto;
+  --rite-k: 1;
+}
+
+.rite-ledger {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.rite-ledger .stat .l { white-space: nowrap; }
+
+.odds { display: flex; flex-direction: column; gap: 2px; }
+
+.odds-v,
+.toll-v {
+  font-family: var(--font-display);
+  font-size: 44px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -.01em;
+  color: var(--bone);
+  font-variant-numeric: tabular-nums;
+}
+
+.toll-v { color: var(--gold-hi); }
+.toll-v.is-short { color: var(--ember-hi); }
+.odds-sub { font-size: var(--text-xs); color: var(--bone-faint); font-variant-numeric: tabular-nums; }
+.stake { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.stake .eyebrow { margin-right: 2px; }
+.rite-note { font-size: var(--text-xs); line-height: 1.5; color: var(--bone-faint); }
+
+/* ---- the circle ---- */
+
+.rite {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 440px;
+  height: 440px;
+  transform: scale(var(--rite-k, 1));
+  transform-origin: 0 0;
+  isolation: isolate;
+}
+
+.rite::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%, rgba(157, 130, 224, .13), rgba(157, 130, 224, .04) 40%, transparent 62%);
+}
+
+.rite-fx { position: absolute; inset: 0; pointer-events: none; }
+
+.ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border-radius: 50%;
+  translate: -50% -50%;
+  pointer-events: none;
+}
+
+.ring-outer { width: 360px; height: 360px; border: 1px dashed var(--violet-edge); animation: rite-spin 90s linear infinite; }
+
+.ring-ticks {
+  width: 292px;
+  height: 292px;
+  background: repeating-conic-gradient(from 0deg, rgba(232, 225, 213, .42) 0 1.1deg, transparent 1.1deg 5deg);
+  -webkit-mask: radial-gradient(circle, transparent 0 135px, #000 136px 145px, transparent 146px);
+  mask: radial-gradient(circle, transparent 0 135px, #000 136px 145px, transparent 146px);
+  animation: rite-spin 70s linear infinite reverse;
+}
+
+.ring-runes {
+  width: 292px;
+  height: 292px;
+  background: repeating-conic-gradient(from 3deg, var(--violet-hi) 0 1.4deg, transparent 1.4deg 30deg);
+  -webkit-mask: radial-gradient(circle, transparent 0 130px, #000 131px 146px, transparent 147px);
+  mask: radial-gradient(circle, transparent 0 130px, #000 131px 146px, transparent 147px);
+  animation: rite-spin 70s linear infinite reverse;
+  opacity: .9;
+}
+
+.ring-inner { width: 204px; height: 204px; border: 1px solid var(--line-strong); box-shadow: inset 0 0 40px rgba(157, 130, 224, .14); }
+
+.rite.is-striking .ring-outer { animation: rite-spin 2.4s linear infinite; border-color: var(--violet-hi); }
+.rite.is-striking .ring-ticks,
+.rite.is-striking .ring-runes { animation: rite-spin 3s linear infinite reverse; filter: brightness(1.5); }
+.rite.is-striking .ring-inner { border-color: var(--violet-edge); box-shadow: inset 0 0 60px rgba(157, 130, 224, .3), 0 0 30px rgba(157, 130, 224, .25); }
+
+.rite-core {
+  position: absolute;
+  left: 170px;
+  top: 170px;
+  width: 100px;
+  height: 100px;
+  padding: 0;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  color: var(--rar, var(--bone-dim));
+  background: radial-gradient(80% 80% at 50% 35%, var(--rar-soft, transparent), transparent 75%), var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--line), inset 0 -2px 0 var(--rar-soft, transparent), 0 10px 30px -10px rgba(0, 0, 0, .9);
+  z-index: 3;
+}
+
+button.rite-core { cursor: pointer; }
+button.rite-core:disabled { cursor: default; }
+.rite-core.is-empty { color: var(--bone-ghost); box-shadow: inset 0 0 0 1px var(--line-strong), 0 10px 30px -10px rgba(0, 0, 0, .9); }
+.rite-core.is-empty::after { display: none; }
+.rite-core-art { display: grid; place-items: center; }
+.rite-core .ico { width: 48px; height: 48px; stroke-width: 1.25; filter: drop-shadow(0 0 6px var(--rar-soft, transparent)); }
+
+.bracket::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  pointer-events: none;
+  border-radius: inherit;
+  --br: var(--rar, var(--line-strong));
+  background:
+    linear-gradient(var(--br), var(--br)) 0 0 / 16px 2px no-repeat, linear-gradient(var(--br), var(--br)) 0 0 / 2px 16px no-repeat,
+    linear-gradient(var(--br), var(--br)) 100% 0 / 16px 2px no-repeat, linear-gradient(var(--br), var(--br)) 100% 0 / 2px 16px no-repeat,
+    linear-gradient(var(--br), var(--br)) 0 100% / 16px 2px no-repeat, linear-gradient(var(--br), var(--br)) 0 100% / 2px 16px no-repeat,
+    linear-gradient(var(--br), var(--br)) 100% 100% / 16px 2px no-repeat, linear-gradient(var(--br), var(--br)) 100% 100% / 2px 16px no-repeat;
+}
+
+/* "+7": the level a piece stands at, in the halo's colour from +9. */
+.plus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-sunk);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--bone);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.plus.is-zero { color: var(--bone-faint); }
+.plus.tier-9 { border-color: var(--violet); color: var(--violet-hi); }
+.plus.tier-12 { border-color: var(--gold); color: var(--gold-hi); }
+.plus.tier-15 { border-color: var(--bone); color: var(--bone); background: #1c1723; }
+
+.rite-plus {
+  position: absolute;
+  left: 50%;
+  top: 280px;
+  translate: -50% 0;
+  z-index: 4;
+  height: 26px;
+  padding: 0 10px;
+  border-color: var(--violet-edge);
+  font-size: 18px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .5);
+}
+
+.rite-plus.tier-9 { border-color: var(--violet); box-shadow: 0 0 14px var(--violet-soft), 0 4px 12px rgba(0, 0, 0, .5); }
+.rite-plus.tier-12 { border-color: var(--gold); box-shadow: 0 0 16px rgba(217, 181, 102, .3), 0 4px 12px rgba(0, 0, 0, .5); }
+.rite-plus.tier-15 { border-color: var(--bone); box-shadow: 0 0 18px rgba(232, 225, 213, .35), 0 4px 12px rgba(0, 0, 0, .5); }
+
+.rite.is-took .rite-core { animation: rite-took-pop .6s cubic-bezier(.2, .7, .2, 1); }
+.rite.is-refused .rite-core { animation: rite-struck .5s ease-in-out; }
+
+@keyframes rite-took-pop {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.14); box-shadow: inset 0 0 0 1px var(--gold), 0 0 0 6px var(--gold-soft), 0 0 40px var(--gold-edge); }
+  100% { transform: scale(1); }
+}
+
+@keyframes rite-struck {
+  0%, 100% { transform: translate(0, 0); }
+  15% { transform: translate(-5px, 2px); }
+  30% { transform: translate(5px, -2px); }
+  45% { transform: translate(-4px, -1px); }
+  60% { transform: translate(4px, 2px); }
+  75% { transform: translate(-2px, 0); }
+}
+
+/* ---- sockets: where the essence goes ---- */
+
+.socket {
+  position: absolute;
+  width: 60px;
+  height: 60px;
+  padding: 0;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  z-index: 3;
+  color: var(--violet-hi);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--violet-edge), 0 6px 16px -8px rgba(0, 0, 0, .9);
+  cursor: pointer;
+  transition: box-shadow var(--dur-2, .2s);
+}
+
+.socket:disabled { cursor: default; }
+.socket .ico { width: 30px; height: 30px; }
+
+.socket.is-empty {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px transparent;
+  outline: 1px dashed var(--line-strong);
+  outline-offset: -1px;
+  color: var(--bone-ghost);
+}
+
+.socket.is-empty .ico { width: 18px; height: 18px; }
+.socket.is-filled .ico { filter: drop-shadow(0 0 6px rgba(157, 130, 224, .7)); }
+.socket.is-filled { background: radial-gradient(70% 70% at 50% 40%, rgba(157, 130, 224, .28), transparent 75%), var(--surface-2); }
+
+@media (hover: hover) {
+  .socket:not(:disabled):hover { box-shadow: inset 0 0 0 1px var(--violet-hi), 0 6px 16px -8px rgba(0, 0, 0, .9); }
+  .socket.is-empty:not(:disabled):hover { outline-color: var(--violet-edge); color: var(--bone-faint); }
+}
+
+.socket-l {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  translate: -50% 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--bone-faint);
+  white-space: nowrap;
+}
+
+.socket-charm { width: 48px; height: 48px; color: var(--gold-hi); box-shadow: inset 0 0 0 1px var(--gold-edge), 0 6px 16px -8px rgba(0, 0, 0, .9); }
+.socket-charm .ico { width: 24px; height: 24px; }
+.socket-charm.is-filled { background: radial-gradient(70% 70% at 50% 40%, rgba(217, 181, 102, .26), transparent 75%), var(--surface-2); }
+.socket-charm.is-filled .ico { filter: drop-shadow(0 0 6px rgba(217, 181, 102, .7)); }
+.socket-charm .socket-l { top: auto; bottom: 100%; translate: -50% -6px; }
+.s1 { left: 190px; top: 370px; }
+.s2 { left: 34px; top: 100px; }
+.s3 { left: 346px; top: 100px; }
+.s4 { left: 196px; top: 16px; }
+
+.rite.is-striking .socket.is-filled { animation: socket-flare .9s ease-out both; }
+
+@keyframes socket-flare {
+  0% { box-shadow: inset 0 0 0 1px var(--violet-edge), 0 0 0 0 rgba(157, 130, 224, .6); }
+  40% { box-shadow: inset 0 0 0 1px var(--violet-hi), 0 0 0 8px rgba(157, 130, 224, .18), 0 0 30px rgba(157, 130, 224, .5); }
+  100% { box-shadow: inset 0 0 0 1px var(--violet-edge), 0 0 0 0 rgba(157, 130, 224, 0); }
+}
+
+/* ---- beams: the lines that converge ---- */
+
+.beam { position: absolute; width: 180px; height: 4px; margin-top: -2px; transform-origin: 0 50%; z-index: 2; pointer-events: none; }
+
+.beam > i {
+  position: absolute;
+  left: 32px;
+  width: 96px;
+  top: 0;
+  height: 4px;
+  border-radius: 2px;
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  background: linear-gradient(90deg, rgba(157, 130, 224, 0), var(--violet) 30%, #fff);
+  box-shadow: 0 0 10px var(--violet), 0 0 24px rgba(157, 130, 224, .45);
+  animation: beam-draw .75s cubic-bezier(.3, 0, .2, 1) both;
+}
+
+.beam-charm > i { left: 26px; width: 104px; background: linear-gradient(90deg, rgba(217, 181, 102, 0), var(--gold) 30%, #fff); box-shadow: 0 0 10px var(--gold), 0 0 24px rgba(217, 181, 102, .45); }
+.b1 { left: 220px; top: 400px; transform: rotate(270deg); }
+.b2 { left: 64px; top: 130px; transform: rotate(30deg); }
+.b3 { left: 376px; top: 130px; transform: rotate(150deg); }
+.b4 { left: 220px; top: 40px; transform: rotate(90deg); }
+.b2 > i { animation-delay: .12s; }
+.b3 > i { animation-delay: .24s; }
+.b4 > i { animation-delay: .06s; }
+
+@keyframes beam-draw {
+  0% { transform: scaleX(0); opacity: 0; }
+  30% { opacity: 1; }
+  100% { transform: scaleX(1); opacity: 1; }
+}
+
+.rite.is-striking .rite-core { animation: core-charge 1s ease-in both; }
+
+@keyframes core-charge {
+  0% { box-shadow: inset 0 0 0 1px var(--line), inset 0 -2px 0 var(--rar-soft, transparent), 0 10px 30px -10px rgba(0, 0, 0, .9); }
+  100% { box-shadow: inset 0 0 0 1px var(--violet-hi), 0 0 0 6px var(--violet-soft), 0 0 50px var(--violet), 0 10px 30px -10px rgba(0, 0, 0, .9); }
+}
+
+/* ---- the result ---- */
+
+.flash {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 200px;
+  height: 200px;
+  margin: -100px 0 0 -100px;
+  border-radius: 50%;
+  z-index: 5;
+  pointer-events: none;
+  background: radial-gradient(circle, #fff 0, rgba(185, 164, 242, .9) 22%, rgba(157, 130, 224, .35) 45%, transparent 68%);
+  animation: rite-flash .7s ease-out both;
+}
+
+.rite.is-took .flash { background: radial-gradient(circle, #fff 0, rgba(236, 208, 143, .95) 20%, rgba(217, 181, 102, .42) 45%, transparent 68%); }
+.rite.is-refused .flash { background: radial-gradient(circle, #fff 0, rgba(235, 144, 104, .85) 22%, rgba(216, 116, 63, .3) 45%, transparent 68%); animation-duration: .45s; }
+
+@keyframes rite-flash {
+  0% { transform: scale(.2); opacity: 1; }
+  60% { opacity: .8; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+.stamp {
+  position: absolute;
+  left: 50%;
+  top: 88px;
+  translate: -50% 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.stamp-t { font-family: var(--font-display); font-size: 30px; font-weight: 700; line-height: 1; letter-spacing: .22em; text-transform: uppercase; padding-left: .22em; }
+.stamp-s { font-size: var(--text-xs); font-weight: 600; color: var(--bone-dim); font-variant-numeric: tabular-nums; }
+.stamp-took .stamp-t,
+.stamp-converted .stamp-t { color: var(--gold-hi); text-shadow: 0 0 18px rgba(217, 181, 102, .65), 0 2px 0 rgba(0, 0, 0, .6); }
+.stamp-took,
+.stamp-converted { animation: stamp-in .55s cubic-bezier(.2, .9, .2, 1.2) both; }
+.stamp-refused .stamp-t { color: var(--ember-hi); text-shadow: 0 0 16px rgba(216, 116, 63, .5), 0 2px 0 rgba(0, 0, 0, .6); }
+.stamp-refused { animation: stamp-drop .5s cubic-bezier(.2, .7, .2, 1) both; }
+
+@keyframes stamp-in {
+  0% { opacity: 0; transform: scale(1.9) rotate(-6deg); }
+  60% { opacity: 1; transform: scale(.96) rotate(-2deg); }
+  100% { opacity: 1; transform: scale(1) rotate(-2deg); }
+}
+
+@keyframes stamp-drop {
+  0% { opacity: 0; transform: translateY(-18px); }
+  55% { opacity: 1; transform: translateY(3px); }
+  70% { transform: translateY(-2px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.sparks { position: absolute; left: 50%; top: 50%; width: 0; height: 0; z-index: 5; pointer-events: none; }
+
+.sparks i {
+  position: absolute;
+  left: 0;
+  top: -3px;
+  width: 26px;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--gold) 0, var(--gold-hi) 50%, #fff);
+  box-shadow: 0 0 10px var(--gold), 0 0 22px rgba(217, 181, 102, .7);
+  transform-origin: 0 50%;
+  animation: spark .9s cubic-bezier(.1, .6, .3, 1) both;
+}
+
+.sparks i:nth-child(1) { --a: 0deg; }
+.sparks i:nth-child(2) { --a: 30deg; }
+.sparks i:nth-child(3) { --a: 60deg; }
+.sparks i:nth-child(4) { --a: 90deg; }
+.sparks i:nth-child(5) { --a: 120deg; }
+.sparks i:nth-child(6) { --a: 150deg; }
+.sparks i:nth-child(7) { --a: 180deg; }
+.sparks i:nth-child(8) { --a: 210deg; }
+.sparks i:nth-child(9) { --a: 240deg; }
+.sparks i:nth-child(10) { --a: 270deg; }
+.sparks i:nth-child(11) { --a: 300deg; }
+.sparks i:nth-child(12) { --a: 330deg; }
+.sparks i:nth-child(2n) { animation-delay: .06s; --d: 150px; }
+.sparks i:nth-child(3n) { animation-delay: .1s; --d: 120px; }
+
+@keyframes spark {
+  0% { transform: rotate(var(--a)) translateX(40px) scaleX(.3); opacity: 0; }
+  10% { opacity: 1; }
+  60% { opacity: 1; }
+  100% { transform: rotate(var(--a)) translateX(var(--d, 175px)) scaleX(1.2); opacity: 0; }
+}
+
+.shock {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 120px;
+  height: 120px;
+  margin: -60px 0 0 -60px;
+  border-radius: 50%;
+  border: 2px solid var(--gold-hi);
+  box-shadow: 0 0 18px var(--gold), inset 0 0 18px rgba(217, 181, 102, .5);
+  z-index: 5;
+  pointer-events: none;
+  animation: shock .8s ease-out both;
+}
+
+@keyframes shock {
+  0% { transform: scale(.4); opacity: 1; }
+  100% { transform: scale(3.3); opacity: 0; }
+}
+
+.smoke { position: absolute; left: 50%; top: 50%; width: 0; height: 0; z-index: 4; pointer-events: none; }
+
+.smoke i {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  margin: -40px 0 0 -40px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(74, 36, 30, .85) 0, rgba(45, 26, 24, .6) 40%, rgba(45, 26, 24, 0) 70%);
+  filter: blur(5px);
+  animation: smoke 1.5s ease-out both;
+}
+
+.smoke i:nth-child(1) { left: -30px; }
+.smoke i:nth-child(2) { left: 26px; top: -12px; animation-delay: .08s; }
+.smoke i:nth-child(3) { left: 0; top: 14px; animation-delay: .16s; width: 100px; height: 100px; margin: -50px 0 0 -50px; }
+.smoke i:nth-child(4) { left: -44px; top: -20px; animation-delay: .24s; }
+.smoke i:nth-child(5) { left: 40px; top: 18px; animation-delay: .3s; }
+.smoke i:nth-child(6) { left: 8px; top: -30px; animation-delay: .36s; width: 60px; height: 60px; margin: -30px 0 0 -30px; }
+
+@keyframes smoke {
+  0% { transform: translateY(10px) scale(.5); opacity: 0; }
+  20% { opacity: .9; }
+  100% { transform: translateY(-110px) scale(1.9); opacity: 0; }
+}
+
+.rite.is-refused .socket.is-filled { animation: socket-spent .6s ease-out both; }
+
+@keyframes socket-spent {
+  0% { filter: brightness(1.4); }
+  100% { filter: brightness(.55) saturate(.5); }
+}
+
+/* ---- convert: two cores and the level crossing ---- */
+
+.rite.is-convert .socket,
+.rite.is-convert .beam { display: none; }
+.core-from,
+.core-to { top: 170px; }
+.core-from { left: 60px; }
+.core-to { left: 280px; }
+.rite-plus.at-from { left: 110px; }
+.rite-plus.at-to { left: 330px; }
+.halo.at-from { left: 110px; }
+.halo.at-to { left: 330px; }
+
+.rite-lbl {
+  position: absolute;
+  top: 130px;
+  width: 100px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--bone-faint);
+}
+
+.rite-lbl.at-from { left: 60px; }
+.rite-lbl.at-to { left: 280px; }
+
+.xbeam { position: absolute; left: 166px; top: 218px; width: 108px; height: 4px; pointer-events: none; z-index: 2; }
+
+.xbeam > i {
+  position: absolute;
+  inset: 0;
+  border-radius: 2px;
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  background: linear-gradient(90deg, rgba(217, 181, 102, 0), var(--gold) 30%, #fff);
+  box-shadow: 0 0 10px var(--gold), 0 0 24px rgba(217, 181, 102, .45);
+  animation: beam-draw .8s cubic-bezier(.3, 0, .2, 1) both;
+}
+
+.xbeam-idle { position: absolute; left: 166px; top: 219px; width: 108px; height: 2px; border-top: 1px dashed var(--line-strong); pointer-events: none; }
+.xbeam-idle::after { content: ""; position: absolute; right: -2px; top: -5px; width: 9px; height: 9px; border-top: 1px solid var(--bone-faint); border-right: 1px solid var(--bone-faint); transform: rotate(45deg); }
+
+.plate-move {
+  position: absolute;
+  left: 110px;
+  top: 206px;
+  translate: -50% 0;
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 11px;
+  border-radius: 6px;
+  border: 1px solid var(--gold);
+  background: var(--surface-sunk);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 19px;
+  line-height: 1;
+  color: var(--gold-hi);
+  box-shadow: 0 0 16px rgba(217, 181, 102, .45), 0 4px 12px rgba(0, 0, 0, .6);
+  animation: plate-move 1s cubic-bezier(.4, 0, .2, 1) both;
+}
+
+@keyframes plate-move {
+  0% { transform: translateX(0) scale(1); opacity: 0; }
+  15% { opacity: 1; }
+  100% { transform: translateX(220px) scale(1.05); opacity: 1; }
+}
+
+.rite.is-flowing .core-from { animation: core-drain 1s ease-in both; }
+.rite.is-flowing .core-to { animation: core-charge 1s ease-in both; }
+.rite.is-done .core-to { animation: rite-took-pop .6s cubic-bezier(.2, .7, .2, 1); }
+.rite.is-done .flash,
+.rite.is-done .sparks,
+.rite.is-done .shock { left: 330px; }
+
+@keyframes core-drain {
+  0% { filter: brightness(1); }
+  100% { filter: brightness(.6) saturate(.6); }
+}
+
+/* ---- the side cards ---- */
+
+.pieces .lr-title,
+.pieces .lr-sub { display: block; }
+.pieces .lr-sub { margin-top: 2px; font-size: var(--text-xs); }
+.pieces .lr-end { display: flex; align-items: center; gap: 8px; }
+.pieces-group + .pieces-group { margin-top: var(--sp-3); }
+.pieces-group > .eyebrow { padding: 0 12px 6px; }
+.pieces-none { padding: 4px 12px 8px; }
+
+.odds-table { padding: 0 var(--sp-3) var(--sp-3); }
+.table-tight { font-size: var(--text-sm); }
+.table-tight th { padding: 0 6px 8px; }
+.table-tight td { padding: 6px; font-size: 12.5px; }
+.table-tight .tag { height: 18px; padding: 0 5px; font-size: 9.5px; letter-spacing: .06em; }
+.table td.dimv { color: var(--bone-faint); }
+.tag-bone { --tag-fg: var(--bone); --tag-line: rgba(232, 225, 213, .4); background: rgba(232, 225, 213, .1); }
+
+@media (max-width: 599px) {
+  .odds-v, .toll-v { font-size: 38px; }
+  .table-tight th, .table-tight td { padding-left: 4px; padding-right: 4px; }
+}
+
+/* ================= THE HALOS (ui/halo.js) ================= */
+
+/* Round the piece on the anvil. Veiled breathes violet with motes rising;
+   Sovereign turns a gold crest with sparks in orbit; Hallowed scatters rune marks
+   that flicker each on their own time, over a bone-white glow. The layers are
+   all in the node and the tier class shows the ones it uses. */
+.halo { position: absolute; left: 50%; top: 50%; width: 0; height: 0; z-index: 2; pointer-events: none; }
+.halo[hidden] { display: none; }
+.halo::before, .halo::after { content: ""; position: absolute; left: 50%; top: 50%; border-radius: 50%; translate: -50% -50%; }
+.halo .mote, .halo .crest, .halo .orbit, .halo .runes { display: none; }
+
+.halo-9::before {
+  width: 230px;
+  height: 230px;
+  background: radial-gradient(circle, rgba(157, 130, 224, .55) 0, rgba(157, 130, 224, .28) 32%, rgba(157, 130, 224, 0) 66%);
+  animation: halo-breathe 2.6s ease-in-out infinite alternate;
+}
+
+.halo-9::after {
+  width: 176px;
+  height: 176px;
+  border: 1px dashed rgba(185, 164, 242, .7);
+  box-shadow: 0 0 12px rgba(157, 130, 224, .35), inset 0 0 12px rgba(157, 130, 224, .25);
+  animation: rite-spin 16s linear infinite;
+}
+
+.halo-9 .mote {
+  display: block;
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: var(--violet-hi);
+  box-shadow: 0 0 8px var(--violet);
+  animation: mote 3.2s ease-out infinite;
+}
+
+.mote:nth-child(1) { left: -58px; top: 40px; }
+.mote:nth-child(2) { left: 52px; top: 52px; animation-delay: .7s; }
+.mote:nth-child(3) { left: -22px; top: 66px; animation-delay: 1.3s; }
+.mote:nth-child(4) { left: 70px; top: 0; animation-delay: 1.9s; }
+.mote:nth-child(5) { left: -70px; top: -10px; animation-delay: 2.4s; }
+.mote:nth-child(6) { left: 18px; top: 74px; animation-delay: 2.9s; }
+
+@keyframes mote {
+  0% { transform: translateY(0) scale(.4); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translateY(-120px) scale(1); opacity: 0; }
+}
+
+@keyframes halo-breathe {
+  0% { transform: scale(.92); opacity: .75; }
+  100% { transform: scale(1.08); opacity: 1; }
+}
+
+.halo-12::before {
+  width: 290px;
+  height: 290px;
+  background: radial-gradient(circle, rgba(236, 208, 143, .5) 0, rgba(157, 130, 224, .34) 26%, rgba(157, 130, 224, .14) 48%, rgba(157, 130, 224, 0) 68%);
+  animation: halo-breathe 2.2s ease-in-out infinite alternate;
+}
+
+.halo-12::after {
+  width: 236px;
+  height: 236px;
+  background: repeating-conic-gradient(from 0deg, rgba(236, 208, 143, .95) 0 2deg, transparent 2deg 12deg);
+  -webkit-mask: radial-gradient(circle, transparent 0 106px, #000 107px 118px, transparent 119px);
+  mask: radial-gradient(circle, transparent 0 106px, #000 107px 118px, transparent 119px);
+  animation: rite-spin 14s linear infinite;
+  filter: drop-shadow(0 0 6px rgba(217, 181, 102, .6));
+}
+
+.halo-12 .crest {
+  display: block;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 196px;
+  height: 196px;
+  translate: -50% -50%;
+  border-radius: 50%;
+  border: 1px solid rgba(217, 181, 102, .55);
+  box-shadow: 0 0 16px rgba(217, 181, 102, .35), inset 0 0 20px rgba(157, 130, 224, .35);
+  animation: rite-spin 22s linear infinite reverse;
+}
+
+.halo-12 .crest::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, rgba(185, 164, 242, .9) 0 6deg, transparent 6deg 45deg);
+  -webkit-mask: radial-gradient(circle, transparent 0 92px, #000 93px 98px, transparent 99px);
+  mask: radial-gradient(circle, transparent 0 92px, #000 93px 98px, transparent 99px);
+}
+
+.halo-12 .orbit,
+.halo-15 .orbit { display: block; position: absolute; left: 0; top: 0; width: 0; height: 0; animation: rite-spin 9s linear infinite; }
+
+.halo .orbit i {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: var(--gold-hi);
+  box-shadow: 0 0 10px var(--gold), 0 0 20px rgba(217, 181, 102, .5);
+}
+
+.orbit i:nth-child(1) { transform: rotate(0deg) translateX(118px); }
+.orbit i:nth-child(2) { transform: rotate(45deg) translateX(118px); }
+.orbit i:nth-child(3) { transform: rotate(90deg) translateX(118px); }
+.orbit i:nth-child(4) { transform: rotate(135deg) translateX(118px); }
+.orbit i:nth-child(5) { transform: rotate(180deg) translateX(118px); }
+.orbit i:nth-child(6) { transform: rotate(225deg) translateX(118px); }
+.orbit i:nth-child(7) { transform: rotate(270deg) translateX(118px); }
+.orbit i:nth-child(8) { transform: rotate(315deg) translateX(118px); }
+.orbit i:nth-child(2n) { width: 4px; height: 4px; margin: -2px 0 0 -2px; background: var(--violet-hi); box-shadow: 0 0 8px var(--violet); }
+
+/* Hallowed: no more rings. Marks, cut into the air round the piece. */
+.halo-15::before {
+  width: 330px;
+  height: 330px;
+  background: radial-gradient(circle, rgba(255, 252, 246, .6) 0, rgba(236, 208, 143, .4) 18%, rgba(157, 130, 224, .3) 40%, rgba(157, 130, 224, 0) 68%);
+  animation: halo-breathe 1.8s ease-in-out infinite alternate;
+}
+
+.halo-15::after {
+  width: 216px;
+  height: 216px;
+  border: 1px solid rgba(232, 225, 213, .35);
+  box-shadow: 0 0 22px rgba(236, 208, 143, .4), inset 0 0 26px rgba(157, 130, 224, .35);
+}
+
+.halo-15 .orbit { animation-duration: 6s; }
+.halo-15 .orbit i { width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; background: #fffaf0; box-shadow: 0 0 10px var(--gold-hi), 0 0 22px rgba(236, 208, 143, .7); }
+.halo-15 .orbit i:nth-child(2n) { width: 4px; height: 4px; margin: -2px 0 0 -2px; background: var(--violet-hi); box-shadow: 0 0 8px var(--violet); }
+
+/* The scatter. Each mark sits at its own angle and distance, tilted its own way,
+   and comes and goes on its own delay, so the ring never reads as a ring. */
+.runes { position: absolute; left: 0; top: 0; width: 0; height: 0; --rr: 132px; --rs: 22px; }
+.halo-15 .runes { display: block; animation: rite-spin 48s linear infinite reverse; }
+
+.rune {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--rs);
+  max-width: none;   /* base.css caps an svg at its box, and this box is a point */
+  height: var(--rs);
+  margin: calc(var(--rs) / -2) 0 0 calc(var(--rs) / -2);
+  fill: none;
+  stroke: #fff6e4;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 4px rgba(236, 208, 143, .9)) drop-shadow(0 0 10px rgba(217, 181, 102, .5));
+  transform: rotate(var(--ra)) translateX(calc(var(--rr) * var(--rd, 1))) rotate(calc(var(--rt) - var(--ra)));
+  animation: rune-flicker 3.4s ease-in-out infinite;
+  animation-delay: var(--rw, 0s);
+}
+
+.rune:nth-child(1) { --ra: 4deg; --rt: 12deg; --rd: 1; --rw: 0s; }
+.rune:nth-child(2) { --ra: 37deg; --rt: -20deg; --rd: .88; --rw: -1.1s; }
+.rune:nth-child(3) { --ra: 71deg; --rt: 31deg; --rd: 1.06; --rw: -2.3s; }
+.rune:nth-child(4) { --ra: 98deg; --rt: 5deg; --rd: .92; --rw: -.6s; }
+.rune:nth-child(5) { --ra: 140deg; --rt: -35deg; --rd: 1.1; --rw: -1.8s; }
+.rune:nth-child(6) { --ra: 167deg; --rt: 18deg; --rd: .85; --rw: -2.9s; }
+.rune:nth-child(7) { --ra: 203deg; --rt: -8deg; --rd: 1.02; --rw: -.3s; }
+.rune:nth-child(8) { --ra: 239deg; --rt: 40deg; --rd: .95; --rw: -1.5s; }
+.rune:nth-child(9) { --ra: 262deg; --rt: -27deg; --rd: 1.12; --rw: -2.6s; }
+.rune:nth-child(10) { --ra: 301deg; --rt: 9deg; --rd: .9; --rw: -.9s; }
+.rune:nth-child(11) { --ra: 329deg; --rt: -15deg; --rd: 1.05; --rw: -2s; }
+.rune:nth-child(12) { --ra: 352deg; --rt: 24deg; --rd: .82; --rw: -1.3s; }
+.rune:nth-child(3n) { --rs: 17px; }
+.rune:nth-child(4n) { --rs: 27px; }
+
+@keyframes rune-flicker {
+  0%, 100% { opacity: .35; }
+  18% { opacity: 1; }
+  31% { opacity: .55; }
+  46% { opacity: .95; }
+  70% { opacity: .25; }
+  84% { opacity: .8; }
+}
+
+@keyframes rite-spin { to { transform: rotate(360deg); } }
+
+/* ---- on a tile: the small glow ---- */
+
+.art.mini-9 { box-shadow: inset 0 0 0 1px var(--violet), 0 0 0 3px var(--violet-soft), 0 0 18px rgba(157, 130, 224, .55); animation: mini-9 2.4s ease-in-out infinite alternate; }
+
+@keyframes mini-9 {
+  0% { box-shadow: inset 0 0 0 1px var(--violet), 0 0 0 3px var(--violet-soft), 0 0 12px rgba(157, 130, 224, .35); }
+  100% { box-shadow: inset 0 0 0 1px var(--violet-hi), 0 0 0 4px rgba(157, 130, 224, .22), 0 0 24px rgba(157, 130, 224, .7); }
+}
+
+.art.mini-12 { box-shadow: inset 0 0 0 1px var(--gold), 0 0 0 3px rgba(217, 181, 102, .16), 0 0 20px rgba(217, 181, 102, .55); animation: mini-12 2s ease-in-out infinite alternate; }
+
+.art.mini-12::after,
+.art.mini-15::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, rgba(236, 208, 143, .9) 0 6deg, transparent 6deg 40deg);
+  -webkit-mask: radial-gradient(circle closest-side, transparent 0 86%, #000 88% 96%, transparent 98%);
+  mask: radial-gradient(circle closest-side, transparent 0 86%, #000 88% 96%, transparent 98%);
+  animation: rite-spin 10s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes mini-12 {
+  0% { box-shadow: inset 0 0 0 1px var(--gold), 0 0 0 3px rgba(217, 181, 102, .14), 0 0 14px rgba(217, 181, 102, .35); }
+  100% { box-shadow: inset 0 0 0 1px var(--gold-hi), 0 0 0 4px rgba(217, 181, 102, .22), 0 0 28px rgba(217, 181, 102, .7); }
+}
+
+/* Hallowed on a tile: marks too small to cut, so an uneven scatter of ticks,
+   two rings turning against each other. */
+.art.mini-15 { box-shadow: inset 0 0 0 1px var(--bone), 0 0 0 3px rgba(232, 225, 213, .16), 0 0 22px rgba(236, 208, 143, .6); animation: mini-12 1.6s ease-in-out infinite alternate; }
+
+.art.mini-15::after {
+  inset: -8px;
+  background: conic-gradient(from 0deg, transparent 0 3deg, #fff6e4 3deg 5deg, transparent 5deg 21deg, #fff6e4 21deg 22deg, transparent 22deg 40deg, #fff6e4 40deg 44deg, transparent 44deg 63deg, #fff6e4 63deg 64deg, transparent 64deg 78deg, #fff6e4 78deg 81deg, transparent 81deg 90deg);
+  background-size: 100% 100%;
+  animation: rite-spin 7s linear infinite reverse;
+  filter: drop-shadow(0 0 4px rgba(236, 208, 143, .8));
+}
+
+/* ---- on the paperdoll ---- */
+
+.doll-slot .plus { position: absolute; right: -9px; top: -10px; z-index: 2; min-width: 32px; height: 20px; padding: 0 6px; font-size: 12px; box-shadow: 0 2px 6px rgba(0, 0, 0, .6); }
+
+.doll-slot.mini-9,
+.doll-slot.mini-9[data-rarity] { box-shadow: 0 0 0 3px var(--violet-soft), 0 0 18px rgba(157, 130, 224, .55); animation: mini-9 2.4s ease-in-out infinite alternate; }
+.doll-slot.mini-12,
+.doll-slot.mini-12[data-rarity] { box-shadow: 0 0 0 3px rgba(217, 181, 102, .16), 0 0 20px rgba(217, 181, 102, .55); animation: mini-12 2s ease-in-out infinite alternate; }
+.doll-slot.mini-15,
+.doll-slot.mini-15[data-rarity] { box-shadow: 0 0 0 3px rgba(232, 225, 213, .16), 0 0 22px rgba(236, 208, 143, .6); animation: mini-12 1.6s ease-in-out infinite alternate; }
+
+.doll-slot.mini-12::after,
+.doll-slot.mini-15::after {
+  content: "";
+  position: absolute;
+  inset: -9px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, rgba(236, 208, 143, .9) 0 5deg, transparent 5deg 36deg);
+  -webkit-mask: radial-gradient(circle closest-side, transparent 0 88%, #000 90% 96%, transparent 98%);
+  mask: radial-gradient(circle closest-side, transparent 0 88%, #000 90% 96%, transparent 98%);
+  animation: rite-spin 10s linear infinite;
+  pointer-events: none;
+}
+
+.doll-slot.mini-15::after {
+  background: conic-gradient(from 0deg, transparent 0 3deg, #fff6e4 3deg 5deg, transparent 5deg 21deg, #fff6e4 21deg 22deg, transparent 22deg 40deg, #fff6e4 40deg 44deg, transparent 44deg 63deg, #fff6e4 63deg 64deg, transparent 64deg 78deg, #fff6e4 78deg 81deg, transparent 81deg 90deg);
+  animation: rite-spin 7s linear infinite reverse;
+  filter: drop-shadow(0 0 4px rgba(236, 208, 143, .8));
+}
+
+/* ---- the aura the commander wears: the highest halo of the amulet and the ring ---- */
+
+.figure-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  min-height: 0;
+  container-type: inline-size;
+}
+
+.figure-wrap > .portrait { position: relative; z-index: 1; }
+
+.aura {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  --au: var(--violet);
+  --au-hi: var(--violet-hi);
+  --au-soft: rgba(157, 130, 224, .45);
+}
+
+.aura[hidden] { display: none; }
+.aura[data-tier="12"] { --au: var(--gold); --au-hi: var(--gold-hi); --au-soft: rgba(217, 181, 102, .5); }
+.aura[data-tier="15"] { --au: #f2ead8; --au-hi: #fffaf0; --au-soft: rgba(236, 208, 143, .5); }
+
+.aura-glow {
+  position: absolute;
+  left: 50%;
+  top: 52%;
+  width: 150%;
+  height: 105%;
+  translate: -50% -50%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 58%, var(--au-soft) 0, rgba(157, 130, 224, .12) 38%, transparent 66%);
+  animation: halo-breathe 2.6s ease-in-out infinite alternate;
+  z-index: 0;
+}
+
+.aura[data-tier="12"] .aura-glow { background: radial-gradient(ellipse at 50% 58%, var(--au-soft) 0, rgba(157, 130, 224, .18) 36%, transparent 66%); }
+
+.aura-floor {
+  position: absolute;
+  left: 50%;
+  bottom: 2%;
+  width: 132%;
+  aspect-ratio: 1;
+  translate: -50% 50%;
+  z-index: 2;
+}
+
+.aura-floor::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px dashed var(--au);
+  box-shadow: 0 0 14px var(--au-soft);
+  animation: floor-spin 18s linear infinite;
+  opacity: .85;
+}
+
+.aura[data-tier="12"] .aura-floor::before,
+.aura[data-tier="15"] .aura-floor::before {
+  border: 0;
+  background: repeating-conic-gradient(from 0deg, var(--au-hi) 0 2.2deg, transparent 2.2deg 12deg);
+  -webkit-mask: radial-gradient(circle closest-side, transparent 0 89%, #000 90% 99%, transparent 100%);
+  mask: radial-gradient(circle closest-side, transparent 0 89%, #000 90% 99%, transparent 100%);
+  filter: drop-shadow(0 0 6px var(--au));
+  animation: floor-spin 14s linear infinite;
+}
+
+.aura[data-tier="15"] .aura-floor::before {
+  background: conic-gradient(from 0deg, transparent 0 2deg, var(--au-hi) 2deg 4deg, transparent 4deg 17deg, var(--au-hi) 17deg 18deg, transparent 18deg 31deg, var(--au-hi) 31deg 34deg, transparent 34deg 49deg, var(--au-hi) 49deg 50deg, transparent 50deg 61deg, var(--au-hi) 61deg 63deg, transparent 63deg 72deg);
+  animation: floor-spin 20s linear infinite reverse;
+}
+
+.aura-floor::after {
+  content: "";
+  position: absolute;
+  inset: 12%;
+  border-radius: 50%;
+  border: 1px solid var(--au);
+  opacity: .7;
+  box-shadow: inset 0 0 26px var(--au-soft);
+  animation: floor-spin 22s linear infinite reverse;
+}
+
+.aura[data-tier="12"] .aura-floor::after,
+.aura[data-tier="15"] .aura-floor::after {
+  border-color: var(--au-hi);
+  background: repeating-conic-gradient(from 0deg, rgba(185, 164, 242, .9) 0 6deg, transparent 6deg 45deg);
+  -webkit-mask: radial-gradient(circle closest-side, transparent 0 93%, #000 94% 99%, transparent 100%);
+  mask: radial-gradient(circle closest-side, transparent 0 93%, #000 94% 99%, transparent 100%);
+}
+
+@keyframes floor-spin {
+  from { transform: scaleY(.3) rotate(0deg); }
+  to { transform: scaleY(.3) rotate(360deg); }
+}
+
+.aura-orbit { position: absolute; left: 50%; bottom: 2%; width: 0; height: 0; translate: -50% 0; z-index: 2; transform: scaleY(.3); display: none; }
+.aura[data-tier="12"] .aura-orbit,
+.aura[data-tier="15"] .aura-orbit { display: block; }
+.aura-orbit > span { position: absolute; left: 0; top: 0; width: 0; height: 0; animation: rite-spin 9s linear infinite; }
+.aura[data-tier="15"] .aura-orbit > span { animation-duration: 6s; }
+
+.aura-orbit i {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  border-radius: 50%;
+  background: var(--au-hi);
+  box-shadow: 0 0 10px var(--au), 0 0 20px var(--au-soft);
+}
+
+.aura-orbit i:nth-child(1) { transform: rotate(0deg) translateX(62cqw); }
+.aura-orbit i:nth-child(2) { transform: rotate(45deg) translateX(62cqw); }
+.aura-orbit i:nth-child(3) { transform: rotate(90deg) translateX(62cqw); }
+.aura-orbit i:nth-child(4) { transform: rotate(135deg) translateX(62cqw); }
+.aura-orbit i:nth-child(5) { transform: rotate(180deg) translateX(62cqw); }
+.aura-orbit i:nth-child(6) { transform: rotate(225deg) translateX(62cqw); }
+.aura-orbit i:nth-child(7) { transform: rotate(270deg) translateX(62cqw); }
+.aura-orbit i:nth-child(8) { transform: rotate(315deg) translateX(62cqw); }
+.aura-orbit i:nth-child(2n) { width: 4px; height: 4px; margin: -2px 0 0 -2px; background: var(--violet-hi); box-shadow: 0 0 8px var(--violet); }
+
+.aura-motes { position: absolute; left: 50%; bottom: 8%; width: 0; height: 0; z-index: 2; }
+
+.aura-motes i {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: var(--au-hi);
+  box-shadow: 0 0 8px var(--au);
+  animation: mote-tall 3.6s ease-out infinite;
+}
+
+.aura-motes i:nth-child(1) { left: -40cqw; }
+.aura-motes i:nth-child(2) { left: 33cqw; animation-delay: .5s; }
+.aura-motes i:nth-child(3) { left: -19cqw; animation-delay: 1s; width: 3px; height: 3px; }
+.aura-motes i:nth-child(4) { left: 45cqw; animation-delay: 1.4s; }
+.aura-motes i:nth-child(5) { left: -47cqw; animation-delay: 1.9s; width: 3px; height: 3px; }
+.aura-motes i:nth-child(6) { left: 9cqw; animation-delay: 2.3s; }
+.aura-motes i:nth-child(7) { left: -28cqw; animation-delay: 2.8s; }
+.aura-motes i:nth-child(8) { left: 24cqw; animation-delay: 3.2s; width: 3px; height: 3px; }
+
+@keyframes mote-tall {
+  0% { transform: translateY(0) scale(.4); opacity: 0; }
+  15% { opacity: 1; }
+  100% { transform: translateY(-160cqw) scale(1); opacity: 0; }
+}
+
+/* Hallowed: the marks stand round the figure at shoulder height. */
+.aura-runes { position: absolute; left: 50%; top: 42%; width: 0; height: 0; z-index: 2; display: none; transform: scaleY(.45); }
+.aura[data-tier="15"] .aura-runes { display: block; }
+.aura-runes .runes { display: block; --rr: 58cqw; --rs: 18px; animation: rite-spin 60s linear infinite reverse; }
+.aura-runes .rune:nth-child(3n) { --rs: 14px; }
+.aura-runes .rune:nth-child(4n) { --rs: 22px; }
+
+/* The floor ring reaches below the feet: the name steps down out of it. */
+.doll-figure .figure-wrap:has(> .aura:not([hidden])) { margin-bottom: 26px; }
+.doll-figure .doll-name { position: relative; z-index: 3; }
+
+/* ---- round an avatar: the profile card ---- */
+
+.avatar-halo { position: absolute; inset: -16px; border-radius: 50%; pointer-events: none; }
+.avatar-halo[hidden] { display: none; }
+.avatar-halo .runes { display: none; }
+
+.avatar-halo[data-tier="9"] {
+  border: 1px dashed rgba(185, 164, 242, .75);
+  box-shadow: 0 0 18px rgba(157, 130, 224, .5), inset 0 0 18px rgba(157, 130, 224, .35);
+  animation: rite-spin 16s linear infinite;
+}
+
+.avatar-halo[data-tier="12"] {
+  background: repeating-conic-gradient(from 0deg, rgba(236, 208, 143, .95) 0 3deg, transparent 3deg 15deg);
+  -webkit-mask: radial-gradient(circle closest-side, transparent 0 88%, #000 90% 100%);
+  mask: radial-gradient(circle closest-side, transparent 0 88%, #000 90% 100%);
+  filter: drop-shadow(0 0 6px rgba(217, 181, 102, .7));
+  animation: rite-spin 12s linear infinite;
+}
+
+.avatar-halo[data-tier="12"]::before {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  border: 1px solid rgba(217, 181, 102, .6);
+  box-shadow: 0 0 16px rgba(217, 181, 102, .4), inset 0 0 16px rgba(157, 130, 224, .35);
+}
+
+.avatar-halo[data-tier="15"] {
+  border: 1px solid rgba(232, 225, 213, .3);
+  box-shadow: 0 0 22px rgba(236, 208, 143, .45), inset 0 0 22px rgba(157, 130, 224, .3);
+}
+
+.avatar-halo[data-tier="15"] .runes { display: block; position: absolute; left: 50%; top: 50%; --rr: 60px; --rs: 14px; animation: rite-spin 40s linear infinite reverse; }
+.avatar-halo[data-tier="15"] .rune:nth-child(3n) { --rs: 11px; }
+.avatar-halo[data-tier="15"] .rune:nth-child(4n) { --rs: 16px; }
+
+/* ---- the profile card (popups/profile.js) ---- */
+
+.modal-profile .modal-head > .art.profile-art { width: 96px; height: 96px; overflow: visible; flex-shrink: 0; }
+.modal-profile .modal-titles { padding-top: 10px; }
+
+.profile-avatar {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 22px;
+  background: radial-gradient(circle at 50% 28%, #2c2140, #120e17 75%);
+  box-shadow: inset 0 0 0 1px var(--violet-edge), var(--shadow-card);
+}
+
+.profile-face { width: 100%; height: 100%; border-radius: 22px; }
+.profile-tags { align-items: center; }
+.profile-tags .chip .dot { margin-left: -2px; }
+.worn-list .list-row { padding: 9px 0; }
+.worn-list .lr-title, .worn-list .lr-sub { display: block; }
+.worn-list .lr-sub { margin-top: 2px; font-size: var(--text-xs); }
+
+@media (max-width: 599px) {
+  .modal-profile .modal-head > .art.profile-art { width: 72px; height: 72px; }
+  .profile-avatar, .profile-face { border-radius: 16px; }
+  .profile-avatar .avatar-halo { inset: -12px; }
+}
+
+/* ---- in a storage slot ---- */
+
+.slot.mini-9[data-rarity] { box-shadow: var(--hi), inset 0 0 0 1px var(--violet), 0 0 0 2px var(--violet-soft), 0 0 16px rgba(157, 130, 224, .5); animation: mini-9 2.4s ease-in-out infinite alternate; }
+.slot.mini-12[data-rarity] { box-shadow: var(--hi), inset 0 0 0 1px var(--gold), 0 0 0 2px rgba(217, 181, 102, .16), 0 0 18px rgba(217, 181, 102, .5); animation: mini-12 2s ease-in-out infinite alternate; }
+.slot.mini-15[data-rarity] { box-shadow: var(--hi), inset 0 0 0 1px var(--bone), 0 0 0 2px rgba(232, 225, 213, .16), 0 0 20px rgba(236, 208, 143, .55); animation: mini-12 1.6s ease-in-out infinite alternate; }

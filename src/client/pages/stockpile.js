@@ -21,7 +21,8 @@ import { iconEl, artEl } from "../ui/icons.js";
 import { hideTip } from "../ui/overlay.js";
 import { fmt, fmtWhole, fmtGold } from "../ui/format.js";
 import { openPopup } from "../ui/widgets.js";
-import { itemDef, itemName } from "../../shared/items.js";
+import { itemDef, itemName, parseKey, canFortify } from "../../shared/items.js";
+import { paintMini } from "../ui/halo.js";
 import { poolName, slotCap, slotsUsed, qtyIn, orderedKeys, unstacked } from "../../shared/storage.js";
 import { GameData, TRADE_ORDER, gatherSkillDef } from "../../shared/registry.js";
 import { toolFor } from "../../shared/progression.js";
@@ -147,13 +148,16 @@ export function storageCard(ctx, { pools, view, idBase, filters = true, hint = n
     const d = itemDef(cell.key);
     const rarity = d.kind === "gear" || d.kind === "tool" ? d.rarity || "common" : "common";
     names.set(cell.id, itemName(cell.key));
-    return h("button.slot", {
+    const node = h("button.slot", {
       type: "button", "data-rarity": rarity,
       dataset: { key: cell.key, cell: cell.id, one: cell.one ? "1" : false },
     },
       h("span.slot-qty"),
       h("span.slot-art", artEl(d, { variant: "cut" })),
       h("span.slot-name", names.get(cell.id)));
+    // A worked amulet or ring glows in its slot from +9, as it does on the anvil.
+    if (d.kind === "gear" && canFortify(cell.key)) paintMini(node, parseKey(cell.key).plus);
+    return node;
   }
 
   // Moves only what is out of place, so a focused slot is not pulled from the page.

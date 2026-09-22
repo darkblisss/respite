@@ -1,7 +1,7 @@
 /* What these batches added, opened in a real browser: the skin a fresh camp
    picks and the face it puts on every page, the Discipline page's two tabs, a
    path spending a point, weapon mastery ranked by the realm, a commander anyone
-   can look up, and the Veilsmith's dialog off an item.
+   can look up, and the Fortify tab off an item.
 
      node tests/e2e/ui-new.test.mjs */
 
@@ -94,7 +94,8 @@ await run(async () => {
     await waitForSync(app.page);
     await editSave(stack, "uinew_a", (s) => {
       s.skills.warfare = 1e7;
-      put(s, "vault", "slag_sword|rare|c1.2", 1);
+      put(s, "vault", "slag_ring|rare|c1.2", 1);
+      put(s, "vault", "slag_sword|common", 1);
       put(s, "bank", "lesser_veil_essence", 40);
     });
     await live(app, () => window.__respite.store.sync());
@@ -382,31 +383,55 @@ await run(async () => {
     check("Party sits under the Vanguard now", nav.length === 1 && /^navVanguard/.test(nav[0].group || ""), nav);
   }
 
-  section("the Veilsmith");
+  section("the anvil");
   {
     await go("#/stockpile");
     // The popup is opened by name through the page's own ctx, as the item card does.
     const opened = await app.page.evaluate(async () => {
       const mod = await import("/src/client/ui/widgets.js");
-      mod.openPopup("item", window.__respite.ctx, "slag_sword|rare|c1.2", { from: "vault" });
+      mod.openPopup("item", window.__respite.ctx, "slag_ring|rare|c1.2", { from: "vault" });
       return !!document.querySelector(".modal-title");
     });
-    check("the item dialog opens on a piece of gear", opened);
+    check("the item dialog opens on a ring", opened);
     const label = await live(app, () => {
-      const b = [...document.querySelectorAll(".modal-foot .btn, .modal .btn")].find((x) => /Work the Veil/.test(x.textContent));
+      const b = [...document.querySelectorAll(".modal-foot .btn, .modal .btn")].find((x) => /Fortify/.test(x.textContent));
       return b ? b.textContent : null;
     });
-    check("and offers to work the Veil into it", !!label && /\+0/.test(label), label);
-    await live(app, () => [...document.querySelectorAll(".modal .btn")].find((x) => /Work the Veil/.test(x.textContent)).click());
-    await app.page.waitForTimeout(500);
-    const smith = await live(app, () => {
-      const t = [...document.querySelectorAll(".modal-title")].map((n) => n.textContent).join("|");
-      const rows = [...document.querySelectorAll("[data-stones]")].map((r) => r.textContent);
-      return { t, rows };
+    check("and offers to take it to the anvil at +0", !!label && /\+0/.test(label), label);
+    await live(app, () => [...document.querySelectorAll(".modal .btn")].find((x) => /Fortify/.test(x.textContent)).click());
+    await app.page.waitForTimeout(800);
+    const anvil = await live(app, () => ({
+      hash: location.hash,
+      title: (document.querySelector(".page-title") || {}).textContent,
+      piece: (document.querySelector(".forge-rite .card-sub") || {}).textContent,
+      odds: (document.querySelector(".odds-v") || {}).textContent,
+      sockets: document.querySelectorAll("button.socket").length,
+      rows: document.querySelectorAll(".pieces button.pick-row").length,
+      nav: !!document.querySelector('.nav-item[aria-current="page"][href="#/fortify"]'),
+    }));
+    check("the Fortify tab opens with the ring on the anvil", /^#\/fortify\//.test(anvil.hash) && anvil.title === "Fortify" && /Slag Ring/.test(anvil.piece || ""), anvil);
+    check("three essence sockets and a charm socket round it, and the Fortify row lit", anvil.sockets === 4 && anvil.nav, anvil);
+    check("and the odds read 100% on a bare piece with one stone", anvil.odds === "100%", anvil.odds);
+    // A sword is never listed: only jewellery takes the Veil.
+    const sword = await live(app, async () => {
+      const mod = await import("/src/client/ui/widgets.js");
+      mod.openPopup("item", window.__respite.ctx, "slag_sword|common", { from: "vault" });
+      await new Promise((ok) => setTimeout(ok, 200));
+      const b = [...document.querySelectorAll(".modal .btn")].find((x) => /Fortify/.test(x.textContent));
+      return { offered: !!b, open: !!document.querySelector(".modal-title") };
     });
-    check("the Veilsmith opens with its three stone counts", /Work the Veil/.test(smith.t) && smith.rows.length === 3, smith);
-    check("and the odds read 80 / 95 / 100 on a bare piece",
-      smith.rows.join(" ").includes("80%") && smith.rows.join(" ").includes("95%") && smith.rows.join(" ").includes("100%"), smith.rows);
+    check("a sword's sheet does not offer the anvil", sword.open && !sword.offered, sword);
+    await app.page.keyboard.press("Escape");
+    await app.page.waitForTimeout(300);
+    await live(app, () => [...document.querySelectorAll(".rite-ledger .btn-primary")][0].click());
+    await app.page.waitForTimeout(2200);
+    const took = await live(app, () => ({
+      stamp: (document.querySelector(".stamp-t") || {}).textContent,
+      vault: Object.keys(window.__respite.store.state.vault.items),
+      essence: window.__respite.store.state.bank.items.lesser_veil_essence,
+    }));
+    check("one press at 100% takes: the stamp says so and the ring reads +1",
+      took.stamp === "Fortified" && took.vault.some((k) => /^slag_ring\|rare\|c1\.2\|\+1$/.test(k)) && took.essence === 39, took);
   }
 
   section("nothing went wrong");

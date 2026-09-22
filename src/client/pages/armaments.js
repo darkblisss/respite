@@ -24,9 +24,10 @@ import { h, on, setText, setAttr, toggleClass } from "../ui/dom.js";
 import { iconEl } from "../ui/icons.js";
 import { fmtWhole, fmtStat } from "../ui/format.js";
 import { openPopup, portraitImg, paintPortrait } from "../ui/widgets.js";
+import { plusPlate, paintMini, auraNode, paintAura, haloTag } from "../ui/halo.js";
 import { storageCard } from "./stockpile.js";
 import { CONFIG } from "../../shared/config.js";
-import { itemDef, itemName } from "../../shared/items.js";
+import { itemDef, itemName, parseKey, canFortify, wornHalo } from "../../shared/items.js";
 import { bestRemedy, remedyHeals } from "../../shared/combat.js";
 import { GameData } from "../../shared/registry.js";
 import { statsOf, myClass, skillLevel } from "../../shared/stats.js";
@@ -64,7 +65,9 @@ function dollSlot(eq, slot) {
       h("span.doll-slot-name", label));
   }
   const twoHands = slot === "weapon" && d.twoHanded;
-  return h("button.doll-slot", {
+  // A worked amulet or ring wears its level on the corner, and its halo from +9.
+  const plus = canFortify(key) ? parseKey(key).plus : 0;
+  const node = h("button.doll-slot", {
     type: "button",
     class: twoHands && "is-span",
     "data-rarity": d.rarity || "common",
@@ -72,7 +75,10 @@ function dollSlot(eq, slot) {
     dataset: { key, slot, label: twoHands ? "Weapon, both hands" : label, name: itemName(key) },
     title: itemName(key),
   },
-    h("span.doll-slot-art", iconEl(d.icon)));
+    h("span.doll-slot-art", iconEl(d.icon)),
+    plus > 0 ? plusPlate(plus) : null);
+  paintMini(node, plus);
+  return node;
 }
 
 /* Both columns of a paperdoll, filled from any equipment object -- your own save's, or a
@@ -97,21 +103,26 @@ export function dollCard(ctx, { link = null } = {}) {
   const right = h("div.doll-col");
   const nameNode = h("div.doll-name");
   const subNode = h("div.doll-sub");
-  // The figure wearing the gear is you, so it wears your skin.
+  const tagsNode = h("div.chip-row.doll-tags");
+  // The figure wearing the gear is you, so it wears your skin, and the aura of the
+  // highest halo on your amulet or ring: the ring does the showing, not a number.
   const dollBust = h("div.portrait", portraitImg(null));
+  const aura = auraNode();
   let dollSkinSig = null;
   const node = h("section.card",
     h("div.card-head", h("div", h("h2.card-title", "Worn")), chips),
     h("div.doll",
       left,
       h("div.doll-figure",
-        dollBust,
+        h("div.figure-wrap", aura, dollBust),
         nameNode,
-        subNode),
+        subNode,
+        tagsNode),
       right));
 
   let sig = null;
   let classSig = null;
+  let haloSig = null;
 
   on(node, "click", "button.doll-slot[data-key]", (e, b) => {
     openPopup("item", ctx, b.dataset.key, { from: "worn" });
@@ -128,6 +139,14 @@ export function dollCard(ctx, { link = null } = {}) {
       if (next !== sig) {
         sig = next;
         paintDoll(left, right, eq);
+      }
+      const halo = wornHalo(eq);
+      const nextHalo = halo ? halo.id : "";
+      if (nextHalo !== haloSig) {
+        haloSig = nextHalo;
+        paintAura(aura, halo);
+        tagsNode.replaceChildren(haloTag(halo));
+        tagsNode.hidden = !halo;
       }
 
       node.querySelectorAll("button.doll-slot[data-key]").forEach((b) => {

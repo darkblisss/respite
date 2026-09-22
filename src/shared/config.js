@@ -229,39 +229,58 @@ const party = {
      party bonus above is then laid on top: partying is worth a little, never a lot. */
 };
 
-/* ================= 9b. ENCHANTING ================= */
+/* ================= 9b. FORTIFYING ================= */
 
-/* Working the Veil into a piece of gear. The stone is Veil Essence of the piece's
-   own band -- Lesser for tiers 1 to 3, Veiled for 4 to 6, Sovereign for 7 to 9 --
-   which is the only thing in the camp Essence has ever been for.
+/* Working the Veil into a piece of gear: the Fortify tab under The Camp. Only an
+   amulet or a ring takes the Veil (slots); armour and weapons never do. The stone
+   is Veil Essence of the piece's own band -- Lesser for tiers 1 to 3, Veiled for
+   4 to 6, Sovereign for 7 to 9 -- which is the only thing in the camp Essence has
+   ever been for.
 
-   One to three stones an attempt. More stones is a better chance, and the table
-   is the whole of it:
+   One to three stones an attempt, and the odds run off the old forge table: a
+   stone is worth stoneWorth points, every level has a threshold, and the chance
+   is what the stones staked come to against the threshold of the level being
+   reached, held at 100%. Three stones on a bare piece is a certainty; three
+   stones going for +12 is one attempt in a hundred. A charm of the piece's band
+   in the fourth socket multiplies the chance by charmMult and is spent either
+   way. The table, three stones, no charm:
 
-       level    1 stone   2 stones   3 stones
-       +0 -> +1   80%       95%       100%
-       +7 -> +8   45%       60%        75%
-       +14 -> +15 10%       25%        40%
+       to  +1   +2   +3   +4   +5    +6    +7   +8   +9   +10   +11  +12   +13   +14   +15
+          100  100  100  100   60  32.1   18   10    6  3.46     2    1   0.5  0.25   0.1 %
 
-   which is chance = 0.80 + 0.15 x (stones - 1) - 0.05 x level, held at 100%.
-
-   A failure takes the stones and nothing else: the piece is unharmed and the
-   level is where it was. So one stone is the thrifty road and three is the quick
-   one, and at the very top three is both -- which is the decision the system is
-   for. Nothing is ever destroyed, and no level is ever lost.
+   A failure takes the stones and the charm and nothing else: the piece is
+   unharmed and the level is where it was. Nothing is ever destroyed, and no
+   level is ever lost -- the odds are brutal because carrying a level forward is
+   cheap: convert (below) moves a whole level onto a new piece of the same slot.
 
    Each level multiplies every stat the piece carries by gainPerLevel again, so
-   +15 is a little over half as much piece again -- earned with, in expectation,
-   about forty-five Essence, which for the deep bands is forty-five Sovereigns. */
+   +15 is a little over half as much piece again. At halo.at a worked piece wears
+   a halo, and so does the commander wearing it: Veiled at +9, Sovereign at +12,
+   Hallowed at +15. */
 
 const enchant = {
   max: 15,
   maxStones: 3,
-  baseChance: 0.80,       // one stone at +0
-  perStone: 0.15,         // each stone past the first
-  perLevel: 0.05,         // taken off for every level already on the piece
-  gainPerLevel: 0.035,    // +3.5% of the whole stat line a level: +52.5% at +15
-  valuePerLevel: 0.15,    // what a worked piece is worth over a bare one, a level
+  slots: ["neck", "ring"],   // the only gear the Veil goes into
+  stoneWorth: 3000,          // what one Essence is worth against a threshold
+  // The threshold of reaching +1 ... +15. chance = min(1, stones * stoneWorth / threshold[level]).
+  thresholds: [1500, 3000, 4500, 7500, 15000, 28000, 50000, 90000, 150000, 260000, 450000, 900000, 1800000, 3600000, 9000000],
+  charmMult: 1.5,            // a charm of the band in the fourth socket
+  charmValue: 1,             // a charm is priced at this many Essence of its band
+  gainPerLevel: 0.035,       // +3.5% of the whole stat line a level: +52.5% at +15
+  valuePerLevel: 0.15,       // what a worked piece is worth over a bare one, a level
+  halos: [                   // what a worked piece wears, from this level up
+    { at: 9, id: "veiled", name: "Veiled" },
+    { at: 12, id: "sovereign", name: "Sovereign" },
+    { at: 15, id: "hallowed", name: "Hallowed" },
+  ],
+  /* Convert: a worked piece hands its whole level to an unworked piece of the
+     same slot, any tier, for gold and Essence of the new piece's band. Nothing is
+     rolled and the old piece goes back to +0: the toll is the only cost. */
+  convert: {
+    goldPerLevelSq: 50,      // 50g x level squared: +9 is 4,050g, +12 is 7,200g, +15 is 11,250g
+    essencePerLevel: 1,      // one Essence of the new piece's band a level carried
+  },
 };
 
 /* ================= 10a. THE PATH ================= */
@@ -392,7 +411,7 @@ const masteryTable = (() => {
 })();
 
 export const CONFIG = deepFreeze({
-  schema: 12,
+  schema: 13,
   time,
   storage,
   progression,

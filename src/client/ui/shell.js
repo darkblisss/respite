@@ -79,6 +79,7 @@ const NAV = [
     { route: { page: "requisitions" }, label: "Requisitions", icon: "crate", shown: (s) => requisitionsOpen(s),
       meta: (s) => `${requisitionsLeft(s)}/${CONFIG.agents.requisitionsPerDay}` },
     { route: { page: "shop" }, label: "Shop", icon: "shop" },
+    { route: { page: "fortify" }, label: "Fortify", icon: "sparkle" },
   ] },
   { id: "navTrades", rows: TRADES.map(skillRow) },
   { id: "navArtisans", rows: ARTISANS.map(skillRow) },
@@ -95,6 +96,8 @@ function dotOf(v) {
 
 const keyOf = (route) => (route ? `${route.page}${route.arg ? `/${route.arg}` : ""}` : "");
 const hrefOf = (route) => `#/${keyOf(route)}`;
+// A row without an arg of its own is lit for any arg on its page (#/fortify/<key> is still the Fortify row).
+const isCurrent = (row, route) => (row.arg ? keyOf(row) === keyOf(route) : !!route && row.page === route.page);
 
 /* ================= 2. SMALL PIECES ================= */
 
@@ -375,7 +378,7 @@ export function createShell(app) {
         .map((r) => ({
           row: r,
           key: keyOf(r.route),
-          current: keyOf(r.route) === keyOf(route),
+          current: isCurrent(r.route, route),
           dot: dotOf(r.dot ? r.dot(s, store) : null),
           badge: r.badge ? r.badge(s, store) : null,
         })),

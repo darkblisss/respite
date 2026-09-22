@@ -221,43 +221,59 @@ await run(async () => {
 
   /* ================= ENCHANTING ================= */
 
-  section("The Veil, worked into gear");
+  section("The Veil, worked into gear: the rite");
   {
-    const table = [[0, [80, 95, 100]], [1, [75, 90, 100]], [2, [70, 85, 100]], [3, [65, 80, 95]], [7, [45, 60, 75]], [14, [10, 25, 40]]];
+    // The forge table: a stone is 3,000 against the threshold of the level reached, a charm is x1.5.
+    const table = [[0, [100, 100, 100]], [4, [20, 40, 60]], [5, [10.71, 21.43, 32.14]], [8, [2, 4, 6]], [11, [0.33, 0.67, 1]], [14, [0.03, 0.07, 0.1]]];
     table.forEach(([level, want]) => {
-      same(`+${level} -> +${level + 1}, by the stone`, [1, 2, 3].map((n) => Math.round(W.enchantChance(level, n) * 100)), want);
+      same(`+${level} -> +${level + 1}, by the stone`, [1, 2, 3].map((n) => Math.round(W.enchantChance(level, n) * 10000) / 100), want);
     });
     check("three stones on a bare piece is a certainty", W.enchantChance(0, 3) === 1);
     check("and nothing is ever hopeless", W.enchantChance(14, 1) > 0);
+    check("a charm is half as much again, held at 100%",
+      Math.abs(W.enchantChance(5, 3, true) - W.enchantChance(5, 3) * CONFIG.enchant.charmMult) < 1e-9 && W.enchantChance(0, 3, true) === 1);
+    check("and past the top there are no odds at all", W.enchantChance(CONFIG.enchant.max, 3) === 0);
+
+    check("only an amulet or a ring takes the Veil",
+      I.canFortify("slag_ring") && I.canFortify("mud_amulet") && !I.canFortify("slag_sword") && !I.canFortify("bog_helm") && !I.canFortify("lesser_veil_essence"));
+    check("a + on a sword reads as nothing, wherever the key came from",
+      I.parseKey("slag_sword|rare|c1.2|+7").plus === 0 && I.itemName("slag_sword|rare|c1.2|+7") === "Slag Sword" &&
+      I.makeKey("slag_sword", "rare", "c1", null, 7) === "slag_sword|rare|c1");
+    same("the halos, from the level they start at", [8, 9, 11, 12, 14, 15].map((n) => (I.haloOf(n) ? I.haloOf(n).id : null)),
+      [null, "veiled", "veiled", "sovereign", "sovereign", "hallowed"]);
+    check("a commander wears the highest of what is worn",
+      I.wornHalo({ ring: "slag_ring|rare|c1|+12", neck: "mud_amulet|rare|c2|+9", weapon: "slag_sword|rare|c3" }).id === "sovereign" &&
+      I.wornHalo({ ring: "slag_ring|rare|c1|+8" }) === null);
 
     const s = fresh(9);
-    const key = "slag_sword|rare|c1.2";
+    const key = "slag_ring|rare|c1.2";
     put(s, "vault", key, 1);
+    put(s, "vault", "slag_sword|rare|c1.3", 1);
     refused("an attempt with no Essence", s, "enchant", { key, from: "vault", stones: 1 });
-    put(s, "bank", "lesser_veil_essence", 400);
+    put(s, "bank", "lesser_veil_essence", 30000);
     refused("four stones", s, "enchant", { key, from: "vault", stones: 4 }, "One to 3 stones an attempt.");
     refused("a piece you do not have there", s, "enchant", { key, from: "inv", stones: 1 }, "You don't have that there.");
     refused("Essence worked into Essence", s, "enchant", { key: "lesser_veil_essence", from: "bank", stones: 1 });
+    refused("the Veil worked into a sword", s, "enchant", { key: "slag_sword|rare|c1.3", from: "vault", stones: 3 }, "Only an amulet or a ring takes the Veil.");
+    refused("a charm you do not hold", s, "enchant", { key, from: "vault", stones: 3, charm: true }, "You need a Lesser Veil Charm.");
 
     let cur = key;
     let stones = 0;
     let fails = 0;
-    for (let i = 0; i < 500 && I.itemDef(cur).plus < CONFIG.enchant.max; i++) {
-      const n = I.itemDef(cur).plus >= 12 ? 3 : 1;
-      const res = cmd(s, "enchant", { key: cur, from: "vault", stones: n });
+    for (let i = 0; i < 10000 && I.itemDef(cur).plus < CONFIG.enchant.max; i++) {
+      const res = cmd(s, "enchant", { key: cur, from: "vault", stones: 3 });
       if (!res.ok) break;
-      stones += n;
+      stones += 3;
       if (res.data.won) cur = res.data.key;
       else fails++;
     }
     const bare = I.itemDef(key);
     const done = I.itemDef(cur);
-    check("a piece can be carried to the cap", done.plus === CONFIG.enchant.max, I.itemName(cur));
-    check("and it cost stones, and some of them were wasted", stones > CONFIG.enchant.max && fails > 0, { stones, fails });
-    check("about forty-five Essence, give or take", stones > 25 && stones < 80, stones);
+    check("a piece can be carried to the cap, with enough Essence", done.plus === CONFIG.enchant.max, I.itemName(cur));
+    check("and it cost stones, and most of them were wasted: thousands, for a ring", stones > 1000 && fails > 300, { stones, fails });
     check("every stat on the line rose together",
-      Math.abs(done.attack / bare.attack - (1 + CONFIG.enchant.max * CONFIG.enchant.gainPerLevel)) < 0.01,
-      [bare.attack, done.attack]);
+      Math.abs(done.defence / bare.defence - (1 + CONFIG.enchant.max * CONFIG.enchant.gainPerLevel)) < 0.01,
+      [bare.defence, done.defence]);
     check("and it is worth more than a bare one", done.value > bare.value);
     refused("a sixteenth level", s, "enchant", { key: cur, from: "vault", stones: 3 }, `That is as much Veil as a piece will hold (+${CONFIG.enchant.max}).`);
 
@@ -279,6 +295,18 @@ await run(async () => {
     }
     check("a failure did happen, so that was a real test", sawFail);
 
+    // The charm is spent either way, and the ride is on the same die.
+    const ch = fresh(21);
+    put(ch, "vault", key, 1);
+    put(ch, "bank", "lesser_veil_essence", 60);
+    put(ch, "bank", "lesser_veil_charm", 1);
+    const r5 = cmd(ch, "enchant", { key, from: "vault", stones: 1, charm: true });
+    check("a charmed attempt spends the charm whatever happens", r5.ok && !ch.bank.items.lesser_veil_charm && r5.data.charm === true, r5);
+    check("and the Bonesetter sells charms at an Essence's worth",
+      W.shopStock(ch).some((e) => e.key === "lesser_veil_charm" && e.price === 300) && cmd(ch, "buyRemedy", { key: "veiled_charm", qty: 1 }).error === "Not enough gold.");
+    ch.player.gold = 1000;
+    check("bought, a charm goes where materials go", cmd(ch, "buyRemedy", { key: "lesser_veil_charm", qty: 2 }).ok && ch.bank.items.lesser_veil_charm === 2 && ch.player.gold === 400);
+
     // The same attempt is the same attempt however it is staked.
     const a = fresh(77);
     const b = fresh(77);
@@ -289,13 +317,88 @@ await run(async () => {
 
     // Worn is worked where it is, and a Common is minted a uid for it.
     const worn = fresh(31);
-    put(worn, "inv", "slag_sword|common", 1);
-    cmd(worn, "equip", { key: "slag_sword|common", from: "inv" });
+    put(worn, "inv", "slag_ring|common", 1);
+    cmd(worn, "equip", { key: "slag_ring|common", from: "inv" });
     put(worn, "bank", "lesser_veil_essence", 3);
-    const res = cmd(worn, "enchant", { key: "slag_sword|common", from: "weapon", stones: 3 });
-    check("a worn piece is worked on your back", res.ok && res.data.won && worn.equipment.weapon === res.data.key, res);
-    check("and an enchanted Common stops stacking", !I.stacks(worn.equipment.weapon) && I.itemDef(worn.equipment.weapon).plus === 1,
-      worn.equipment.weapon);
-    same("a save reads it back exactly", migrateSave(clone(worn), { now: worn.clock, seed: 1 }).equipment.weapon, worn.equipment.weapon);
+    const res = cmd(worn, "enchant", { key: "slag_ring|common", from: "ring", stones: 3 });
+    check("a worn piece is worked on your hand", res.ok && res.data.won && worn.equipment.ring === res.data.key, res);
+    check("and a worked Common stops stacking", !I.stacks(worn.equipment.ring) && I.itemDef(worn.equipment.ring).plus === 1,
+      worn.equipment.ring);
+    check("the halo is announced the moment a piece reaches it", (() => {
+      const h = fresh(2);
+      const k = "slag_ring|rare|c7|+8";
+      put(h, "vault", k, 1);
+      put(h, "bank", "lesser_veil_essence", 3000);
+      for (let i = 0; i < 1000; i++) {
+        const r = cmd(h, "enchant", { key: k, from: "vault", stones: 3 });
+        if (r.ok && r.data.won) return r.data.halo === "veiled" && r.data.level === 9;
+      }
+      return false;
+    })());
   }
+
+  section("Carried across: convert");
+  {
+    const s = fresh(12);
+    const from = "slag_ring|rare|c1.2|+12";
+    const to = "cairn_ring|epic|c2.4";
+    put(s, "vault", from, 1);
+    put(s, "vault", to, 1);
+    put(s, "vault", "mud_amulet|rare|c3", 1);
+    put(s, "vault", "slag_sword|rare|c4", 1);
+    const toll = W.convertToll(12, to);
+    same("the toll: gold by the square, and Essence of the new piece's band", toll, { gold: 7200, stone: "veiled_essence", essence: 12 });
+    check("carrying nothing costs nothing and is not a rite", W.convertToll(0, to) === null && W.convertToll(5, "slag_sword|rare|c4") === null);
+    const plan = W.convertPlan(s, from, to);
+    check("the plan says what moves and what it wants", plan.ok && plan.level === 12 && plan.afford === false && plan.halo.id === "sovereign", plan);
+    check("a ring's level goes onto a ring, not an amulet", !W.convertPlan(s, from, "mud_amulet|rare|c3").ok);
+    check("nor onto a sword", !W.convertPlan(s, from, "slag_sword|rare|c4").ok);
+    check("nor onto a worked piece", !W.convertPlan(s, from, "slag_ring|rare|c9|+3").ok);
+    check("nor from an unworked one", !W.convertPlan(s, to, from).ok);
+
+    refused("a carrying with no gold", s, "convert", { from: { key: from, at: "vault" }, to: { key: to, at: "vault" } }, "The toll is 7,200g.");
+    s.player.gold = 10000;
+    refused("a carrying with no Essence of the new band", s, "convert", { from: { key: from, at: "vault" }, to: { key: to, at: "vault" } }, "The toll wants 12 Veiled Essences.");
+    put(s, "bank", "veiled_essence", 20);
+    refused("the wrong slot", s, "convert", { from: { key: from, at: "vault" }, to: { key: "mud_amulet|rare|c3", at: "vault" } });
+    refused("a piece you do not have there", s, "convert", { from: { key: from, at: "inv" }, to: { key: to, at: "vault" } }, "You don't have that there.");
+
+    const res = cmd(s, "convert", { from: { key: from, at: "vault" }, to: { key: to, at: "vault" } });
+    check("the level crosses whole, for the toll", res.ok && res.data.level === 12 && s.player.gold === 2800 && s.bank.items.veiled_essence === 8, res);
+    check("the new piece wears it", res.ok && I.itemDef(res.data.key).plus === 12 && res.data.key.startsWith("cairn_ring|epic|c2.4") && s.vault.items[res.data.key] === 1);
+    check("and the old one is bare, not gone", res.ok && res.data.from === "slag_ring|rare|c1.2" && s.vault.items["slag_ring|rare|c1.2"] === 1 && !s.vault.items[from]);
+    refused("carrying it again from a bare piece", s, "convert", { from: { key: "slag_ring|rare|c1.2", at: "vault" }, to: { key: res.data.key, at: "vault" } });
+
+    // Worn pieces are worked where they are, on both ends.
+    const w = fresh(13);
+    put(w, "inv", "slag_ring|common", 1);
+    cmd(w, "equip", { key: "slag_ring|common", from: "inv" });
+    put(w, "bank", "lesser_veil_essence", 3);
+    const up = cmd(w, "enchant", { key: "slag_ring|common", from: "ring", stones: 3 });
+    put(w, "inv", "mire_ring|rare|c5", 1);
+    w.player.gold = 100;
+    put(w, "bank", "lesser_veil_essence", 5);
+    const r2 = cmd(w, "convert", { from: { key: up.data.key, at: "ring" }, to: { key: "mire_ring|rare|c5", at: "inv" } });
+    check("a worn ring hands its level to one in Belongings", r2.ok && w.equipment.ring === "slag_ring|common" && w.inv.items[r2.data.key] === 1 && I.itemDef(r2.data.key).plus === 1, r2);
+    check("and a minted Common goes back to its pile", r2.ok && r2.data.from === "slag_ring|common");
+  }
+
+  section("Schema 13 takes the Veil off everything but jewellery");
+  {
+    const s = fresh(4);
+    s.schema = 12;
+    put(s, "vault", "slag_sword|rare|c1.2|+7", 1);
+    put(s, "vault", "slag_sword|common|e4|+2", 1);
+    put(s, "vault", "slag_sword|common", 2);
+    put(s, "vault", "slag_ring|rare|c9|+9", 1);
+    s.equipment.weapon = "bitter_bow|epic|c3|+5";
+    s.equipment.ring = "mire_ring|epic|c8|+12";
+    const m = migrateSave(clone(s), { now: s.clock, seed: 4 });
+    same("a worked sword is a sword", m.vault.items["slag_sword|rare|c1.2"], 1);
+    same("a minted Common goes back to its pile, and the piles merge", m.vault.items["slag_sword|common"], 3);
+    same("a worked ring keeps its level", m.vault.items["slag_ring|rare|c9|+9"], 1);
+    check("worn too, both ways", m.equipment.weapon === "bitter_bow|epic|c3" && m.equipment.ring === "mire_ring|epic|c8|+12");
+    check("and nothing is handed back for it", !m.bank.items.lesser_veil_essence && m.schema === 13);
+  }
+
 });
