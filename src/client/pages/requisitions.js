@@ -12,12 +12,12 @@
 
 import { h, setText, setAttr, toggleClass } from "../ui/dom.js";
 import { iconEl } from "../ui/icons.js";
-import { openModal } from "../ui/overlay.js";
+import { confirm, openModal } from "../ui/overlay.js";
 import { fmtGold, fmtTime, fmtWhole } from "../ui/format.js";
 import { confirmSpend } from "../ui/widgets.js";
 import { CONFIG } from "../../shared/config.js";
 import { agentRarityDef, regionOfTier, tierLabel } from "../../shared/registry.js";
-import { requisitionsOpen, requisitionsLeft, requisitionTargets } from "../../shared/world.js";
+import { requisitionsOpen, requisitionsLeft, requisitionTargets, requisitionQty, agentLevel, agentHours } from "../../shared/world.js";
 import { nextDayAt } from "../../shared/weather.js";
 import { itemDef, itemName } from "../../shared/items.js";
 import { ORDER, placeFor, haveQty } from "../../shared/storage.js";
@@ -25,8 +25,32 @@ import { ORDER, placeFor, haveQty } from "../../shared/storage.js";
 const A = CONFIG.agents;
 const INTO = { inv: "Belongings", bank: "the Stockpile", vault: "the Vault" };
 
-// What an Agent brings back, as deployAgent reckons it (world.js has no query for it).
-const bringsBack = (agent) => Math.max(1, Math.round(12 * agentRarityDef(agent.rarity).mult));
+/* What an Agent brings back now depends on what you ask for, because it is paid
+   in hours of your own gathering: an hour of Titan Core is fifty of them and an
+   hour of Slag Ore is three hundred. The rules own the sum (requisitionQty); this
+   page had its own copy of the old one and they drifted the moment either moved. */
+/* An agent's own progress. xpProgress() in stats.js reads a skill off the save;
+   an agent carries its learning on itself, so the same sum is done here. */
+function learning(xp) {
+  const max = CONFIG.progression.maxLevel;
+  const at = Math.max(0, Number(xp) || 0);
+  let level = 1;
+  for (let n = 2; n <= max; n++) {
+    if (!(at >= CONFIG.xpTable[n])) break;
+    level = n;
+  }
+  const base = CONFIG.xpTable[level];
+  const next = CONFIG.xpTable[Math.min(level + 1, max)];
+  const span = Math.max(1, next - base);
+  return { level, into: Math.max(0, at - base), need: span, pct: level >= max ? 1 : Math.min(1, (at - base) / span) };
+}
+
+const hoursWord = (agent) => {
+  const hrs = agentHours(agent);
+  const whole = Math.floor(hrs);
+  const mins = Math.round((hrs - whole) * 60);
+  return mins ? `${whole}h ${mins}m` : `${whole}h`;
+};
 
 const pendingOf = (state) => state.requisitions.filter((r) => !r.resolved);
 
@@ -106,6 +130,8 @@ export default {
 
     function agentCard(a, run, left) {
       const rd = agentRarityDef(a.rarity);
+      const lvl = agentLevel(a);
+      const prog = learning(a.xp);
       return h("article.card.agent-card", { class: { "is-out": !!run } },
         h("div.agent-top",
           h("span.avatar", { "data-tone": run ? null : "gold", "aria-hidden": "true" }, a.name.charAt(0)),
@@ -113,10 +139,18 @@ export default {
             h("div.agent-name", a.name),
             h("div.chip-row.mt-1",
               h("span.tag", { "data-rarity": a.rarity }, rd.name),
+              h("span.tag", `Lv ${fmtWhole(lvl)}`),
               run ? h("span.tag.tag-violet", "Out") : null))),
+        /* What they have learned, and what it is worth. An agent is paid in your
+           hours, so that is the figure: the units follow from what you ask for. */
+        h("div.agent-learn",
+          h("div.bar.bar-gold.bar-thin", h("i", { style: `width:${Math.round(prog.pct * 100)}%` })),
+          h("span.small.muted", lvl >= CONFIG.progression.maxLevel
+            ? "As far as they go"
+            : `${fmtWhole(prog.into)} / ${fmtWhole(prog.need)} to Lv ${fmtWhole(lvl + 1)}`)),
         h("p.agent-yield", run
           ? `Bringing back ${fmtWhole(run.qty)} × ${itemName(run.itemKey)}.`
-          : `Returns about ${fmtWhole(bringsBack(a))} of whatever you ask for.`),
+          : `Brings back ${hoursWord(a)} of your own gathering, whatever you ask for.`),
         h("div.agent-deploy", run
           ? h("span.small.muted", "Back at the daily reset")
           : h("button.btn.btn-primary.btn-soft.btn-sm.btn-block", {
@@ -124,12 +158,30 @@ export default {
             disabled: left <= 0,
             "aria-label": left > 0 ? `Deploy ${a.name}` : null,
             onClick: () => openDeploy(a.id),
-          }, left > 0 ? "Deploy" : "None left today")));
+          }, left > 0 ? "Deploy" : "None left today")),
+        run ? null : h("button.btn.btn-quiet.btn-sm.btn-block.mt-2", {
+          type: "button", onClick: () => resign(a),
+        }, "Let them go"));
+    }
+
+    /* The only way to try the roll again with a roster of three. Everything the
+       agent learned goes with them, so it is asked for plainly. */
+    async function resign(a) {
+      const lvl = agentLevel(a);
+      const ok = await confirm({
+        title: `Let ${a.name} go?`,
+        body: lvl > 1
+          ? `They are ${agentRarityDef(a.rarity).name} and Level ${fmtWhole(lvl)}. Everything they have learned goes with them, and the seat opens for another hire.`
+          : `The seat opens for another hire. Nothing comes back.`,
+        confirmText: "Let them go",
+        kind: "bad",
+      });
+      if (ok) await ctx.dispatch("resignAgent", { agentId: a.id });
     }
 
     function paintRoster(state, pending, left) {
       const full = state.agents.length >= A.rosterMax;
-      const sig = `${state.agents.map((a) => `${a.id}:${a.rarity}`).join("|")}#${runSig}#${left > 0 ? 1 : 0}`;
+      const sig = `${state.agents.map((a) => `${a.id}:${a.rarity}:${a.xp || 0}`).join("|")}#${runSig}#${left > 0 ? 1 : 0}`;
       if (sig !== rosterSig) {
         rosterSig = sig;
         if (!state.agents.length) {
@@ -141,7 +193,7 @@ export default {
           R.roster.replaceChildren(h("div.grid-cards", state.agents.map((a) => agentCard(a, pending.find((r) => r.agentId === a.id), left))));
         }
       }
-      setText(R.rosterSub, `${fmtWhole(state.agents.length)} of ${A.rosterMax} on the books. Hiring is a gamble: every hire rolls its own rarity.`);
+      setText(R.rosterSub, `${fmtWhole(state.agents.length)} of ${A.rosterMax} on the books. Every hire rolls its own rarity, and rarity is the ceiling they climb to, not what they bring on day one.`);
       setText(R.hire, full ? "The roster is full" : `Hire an Agent · ${fmtGold(A.hireCost)}`);
       R.hire.disabled = full;
     }
@@ -152,7 +204,7 @@ export default {
       if (ctx.state.agents.length >= A.rosterMax) return;
       const ok = await confirmSpend(ctx, {
         title: "Hire an Agent?",
-        body: "Every hire rolls its own rarity, and better Agents come back heavier. You learn who signed on once the gold is paid.",
+        body: "Every hire rolls its own rarity. All of them start bringing back an hour of your own gathering; the rarer ones climb higher than that, and faster. You learn who signed on once the gold is paid.",
         gold: A.hireCost,
         confirmText: `Hire for ${fmtGold(A.hireCost)}`,
       });

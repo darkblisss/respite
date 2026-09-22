@@ -511,7 +511,9 @@ await run(async () => {
     const m = migrateSave(clone(raw), legacy);
     same("errands: an agent on the roster, out once, three a day, for what agents bring, in the amount they bring",
       m.requisitions.map((r) => [r.agentId, r.agentName, r.itemKey, r.qty]),
-      [["agent_1", "Silt", "coal", W.requisitionQty(s.agents[0])], ["agent_2", "Moss", "coal", 12], ["agent_3", "Ash", "resin", 48]]);
+      [["agent_1", "Silt", "coal", W.requisitionQty(s.agents[0], "coal")],
+        ["agent_2", "Moss", "coal", W.requisitionQty(s.agents[1], "coal")],
+        ["agent_3", "Ash", "resin", W.requisitionQty(s.agents[2], "resin")]]);
     same("the posting is the board's: its pay back to what was posted, its progress kept", m.bounty, { ...posted, progress: 7 });
     same("a bounty's buff is double experience for an hour at most", m.buff, { until: NOW + 3600000, mult: 2 });
     check("two hands on a bow hold no shield", m.equipment.weapon === "bitter_bow|common" && m.equipment.offhand === null);
@@ -520,7 +522,7 @@ await run(async () => {
     same("a fight holds three foes at most, each no more than whole, and no Sovereign outside its own fight",
       c.foes.map((f) => [f.uid, f.id, f.hp, f.max]), [[1, stalker.id, Cb.foeNumbers(stalker, false).hp, Cb.foeNumbers(stalker, false).hp], [3, stalker.id, 10, Cb.foeNumbers(stalker, false).hp], [4, stalker.id, 10, Cb.foeNumbers(stalker, false).hp]]);
     // Five errands (agent 9, agent 1 again, titan ore, agent 4 past three, agent 2's amount), the bounty, the buff, the shield, the progress, three foes.
-    same("every one of them in the ledger", ledgerLine(m), ["Your old camp's ledger didn't add up. 12 entries were set right."]);
+    same("every one of them in the ledger", ledgerLine(m), ["Your old camp's ledger didn't add up. 14 entries were set right."]);
     const own = migrateSave(clone(raw), opts);
     const ruled = (x) => [x.requisitions, x.bounty, x.buff, x.equipment, x.tasks.skilling.progress, x.tasks.combat.foes];
     same("the server's own save gets the same rules, without the line", [ruled(own), ledgerLine(own)], [ruled(m), []]);
