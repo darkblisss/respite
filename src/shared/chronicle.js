@@ -128,7 +128,6 @@ const LINES = {
   },
 
   "chest:opened": (p) => `The Stockpile widened to ${p.slots} slots.`,
-  "item:salvaged": (p) => `Broke down ${itemName(p.key)} for ${p.qty} ${itemName(p.mat)}.`,
 
   // The market runs on the server; its halves in the save leave a record too.
   "market:listed": (p) => `Listed ${fmt(p.qty)} × ${itemName(p.key)} at ${fmtGold(p.priceEach)} each.`,

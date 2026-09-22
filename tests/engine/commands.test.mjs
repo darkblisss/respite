@@ -57,7 +57,7 @@ await run(async () => {
       [{ ok: false, error: "Unknown command." }, { ok: false, error: "Unknown command." }, { ok: false, error: "Unknown command." }, { ok: false, error: "Unknown command." }, { ok: false, error: "Unknown command." }, before]);
     same("server-only commands", E.SERVER_ONLY.map((t) => cmd(s, t, { key: "coal" })), E.SERVER_ONLY.map(() => ({ ok: false, error: "That needs the server." })));
     same("COMMANDS: the predictable ones and the server's", Object.keys(E.COMMANDS).filter((t) => E.COMMANDS[t].predict).sort(),
-      ["startSkill", "stopSkill", "startHunt", "pullBack", "setHide", "pickClass", "setSkin", "equip", "unequip", "unequipTool", "moveItem", "sellItem", "salvage", "useChest", "repair", "reorder", "buyRemedy", "buySmuggler", "travel", "claimBounty", "hireAgent", "deployAgent", "buyCompanion", "setCompanion"].sort());
+      ["startSkill", "stopSkill", "startHunt", "pullBack", "setHide", "pickClass", "setSkin", "equip", "unequip", "unequipTool", "moveItem", "sellItem", "useChest", "repair", "reorder", "buyRemedy", "buySmuggler", "travel", "claimBounty", "hireAgent", "deployAgent", "buyCompanion", "setCompanion"].sort());
     check("SERVER_ONLY is the market and the party's fight", E.SERVER_ONLY.join(",") === "marketList,marketBuy,marketBuyPool,marketCancel,partyHuntStart,partyHuntJoin,partyHuntLeave" && E.SERVER_ONLY.every((t) => E.COMMANDS[t] && !E.COMMANDS[t].predict));
     check("args that aren't an object count as none", cmd(s, "stopSkill", "junk").ok && cmd(s, "stopSkill", [1, 2]).ok && cmd(s, "setHide", null).error === "Hiding is on or off.");
   }
@@ -187,14 +187,6 @@ await run(async () => {
     put(s, "inv", "resin", 2);
     refused("qty 0", s, "sellItem", { key: "resin", from: "inv", qty: 0 }, "Pick an amount to sell.");
 
-    put(s, "vault", "slag_helm|epic|s1.0", 1);
-    check("salvage", cmd(s, "salvage", { key: "slag_helm|epic|s1.0", from: "vault" }).ok && s.bank.items.slag_bar === 8 && !s.vault.items["slag_helm|epic|s1.0"] && s.log.some((l) => l.m === "Broke down Slag Helm for 8 Slag Bar."));
-    refused("a material", s, "salvage", { key: "resin", from: "inv" }, "That can't be broken down.");
-    const cramped = fresh();
-    put(cramped, "inv", "slag_helm|common", 2);
-    fillAll(cramped, S.POOLS, ["slag_bar"]);
-    refused("with no room for what it breaks down into", cramped, "salvage", { key: "slag_helm|common", from: "inv" }, "No room for what it breaks down into.");
-
     put(s, "inv", "vault_chest", 2);
     check("useChest widens the Stockpile", cmd(s, "useChest", { key: "vault_chest", from: "inv" }).ok && s.bank.slots === 35 && s.inv.items.vault_chest === 1 && s.log.some((l) => l.m === "The Stockpile widened to 35 slots."));
     refused("on something else", s, "useChest", { key: "resin", from: "inv" }, "That isn't a chest.");
@@ -287,6 +279,20 @@ await run(async () => {
       w.events.map((e) => e[0]).join(",") === "travel:unlocked,travel:moved" && s.bounty.region === "region_2" && s.log.some((l) => l.m === "Road to Gallowmoor open."));
     check("travel back is free", cmd(s, "travel", { regionId: "region_1" }).ok && s.player.gold === 10 && s.region === "region_1");
     for (const regionId of ["region_10", "", null, 2]) refused(`region ${JSON.stringify(regionId)}`, s, "travel", { regionId }, "No such region.");
+
+    /* The road ends whatever was running: crews do not follow you into another
+       region and a fight does not travel. The hunt is broken off by pullBack,
+       which banks its kills and empties the pack into the Vault on the way. */
+    s.skills.warfare = 1e6;
+    check("a bench and a hunt are both running", cmd(s, "startSkill", { skillId: "delving", actionId: "delving_t1_raw", limit: null }).ok &&
+      cmd(s, "startHunt", { tier: 1, zone: "outer", limit: null }).ok && !!s.tasks.skilling && !!s.tasks.combat);
+    put(s, "inv", "coal", 6);
+    check("and the road stands them both down", cmd(s, "travel", { regionId: "region_2" }).ok &&
+      s.tasks.skilling === null && s.tasks.combat === null, { skilling: s.tasks.skilling, combat: s.tasks.combat });
+    check("the pack goes into the Vault on the way", s.vault.items.coal === 6 && !Object.hasOwn(s.inv.items, "coal"));
+    check("moving without leaving the region leaves the work alone",
+      cmd(s, "startSkill", { skillId: "delving", actionId: "delving_t1_raw", limit: null }).ok &&
+      cmd(s, "travel", { regionId: "region_2" }).ok && !!s.tasks.skilling);
   }
   {
     const s = fresh();
@@ -388,7 +394,7 @@ await run(async () => {
     const FIELDS = {
       startSkill: ["skillId", "actionId", "limit"], startHunt: ["tier", "zone", "limit"], setHide: ["on"], pickClass: ["id"], setSkin: ["skin"],
       equip: ["key", "from"], unequip: ["slot"], unequipTool: ["skillId"], moveItem: ["key", "from", "to", "qty"],
-      sellItem: ["key", "from", "qty"], salvage: ["key", "from"], useChest: ["key", "from"], repair: ["key"],
+      sellItem: ["key", "from", "qty"], useChest: ["key", "from"], repair: ["key"],
       reorder: ["pool", "key", "before"], buyRemedy: ["key", "qty"], buySmuggler: ["slot"], travel: ["regionId"],
       deployAgent: ["agentId", "itemKey"], buyCompanion: ["id"], setCompanion: ["id"],
       stopSkill: [], pullBack: [], claimBounty: [], hireAgent: [],
@@ -397,7 +403,7 @@ await run(async () => {
       startSkill: { skillId: "delving", actionId: "delving_t1_raw", limit: 5 }, startHunt: { tier: 1, zone: "outer", limit: 5 },
       setHide: { on: true }, pickClass: { id: "rogue" }, setSkin: { skin: "drifter" }, equip: { key: "slag_sword|rare|c1.1", from: "inv" }, unequip: { slot: "head" },
       unequipTool: { skillId: "felling" }, moveItem: { key: "coal", from: "bank", to: "vault", qty: 1 }, sellItem: { key: "coal", from: "bank", qty: 1 },
-      salvage: { key: "slag_helm|common", from: "inv" }, useChest: { key: "vault_chest", from: "vault" }, repair: { key: "slag_helm|epic|s1.0" },
+      useChest: { key: "vault_chest", from: "vault" }, repair: { key: "slag_helm|epic|s1.0" },
       reorder: { pool: "bank", key: "coal", before: null }, buyRemedy: { key: "provision_t1", qty: 1 }, buySmuggler: { slot: 0 },
       travel: { regionId: "region_2" }, deployAgent: { agentId: "agent_1", itemKey: "coal" }, buyCompanion: { id: "crow" }, setCompanion: { id: "rat" },
     };

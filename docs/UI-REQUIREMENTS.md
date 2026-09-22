@@ -26,6 +26,31 @@ The owner's words (verbatim where it matters) and the decisions taken from them.
 - Shop page: the Bonesetter (remedies) and the Smuggler.
 - No em dashes or en dashes anywhere, on screen or in source.
 
+## Say it once (owner's rule, and the one most often broken)
+
+Words on screen are the scarcest thing on the page. Every one has to earn its
+place, and most of the ones that creep in do not.
+
+- **The control's label is what it does, not a sentence about it.** A button
+  that moves a stack to the Stockpile says "Stockpile": the icon says it is a
+  move and the picker above says how many, so "Move 1,724 to the Stockpile"
+  says the same thing three times. Same for "View 3" and "Buy" at the end of a
+  row you can already press: if the row is the button, it needs no button.
+- **Never print a value that says nothing.** "One at once", "×1 XP per kill",
+  "Sovereign: not on this ground" are rows about the absence of a fact. Build
+  the line from the parts that differ from plain and leave it out when none do.
+- **No word that is true of every row.** "Foes here", "Turns up here", "of
+  foes", "each" after a price in a column headed Price. The heading, the
+  grouping or the page already said it.
+- **Explanations hover, they do not sit.** Rates, formulas, what a stat means:
+  a `?` (`.info-btn` plus `tooltip()`) or `data-tip` on the thing itself. A
+  paragraph under a control is read once and then in the way forever.
+- **One name for a thing, everywhere.** If the sheet calls it the Vault, no
+  other screen calls it deep storage.
+
+When a screen is redrawn, the test is: read every string on it aloud and cut
+the ones that tell the player what they can already see.
+
 ## Information architecture
 
 Sidebar groups (desktop) / drawer (phones and tablets):

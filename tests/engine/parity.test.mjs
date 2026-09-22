@@ -293,16 +293,7 @@ await run(async () => {
       (w) => { v4.now(w * WINDOW + 1); return v4("smugglerStock()"); },
       (w) => Wd.smugglerStock(createState({ now: w * WINDOW + 1, seed: 1 })).map(({ bought, ...rest }) => rest));
     same("shopStock: every remedy at its price", v4("shopStock()"), Wd.shopStock(createState({ now: T0, seed: 1 })));
-    /* Gear whose line is marked released: false has no recipe on any bench, so it
-       breaks down into nothing where v4 broke it into what it was made from. Those
-       pieces are compared on their own below rather than against v4. */
-    const shelvedGear = gearIds.filter((id) => !lineLive(GameData.GEAR[id].line));
-    const liveGear = gearIds.filter((id) => !shelvedGear.includes(id));
-    sameOver("salvageValue for every gear and tool that is out", [...liveGear.map((id) => `${id}|common`), ...liveGear.map((id) => `${id}|relic|4|vital`), ...toolIds, ...matIds.slice(0, 20)],
-      (k) => v4.call("salvageValue", k), (k) => Wd.salvageValue(k));
-    check("and a shelved line breaks down into nothing, because no bench makes one",
-      shelvedGear.length > 0 && shelvedGear.every((id) => Wd.salvageValue(`${id}|common`) === null),
-      shelvedGear.slice(0, 4));
+    // Breaking gear down is gone: nothing here answers v4's salvageValue any more.
     const wearInputs = gearIds.filter((_, i) => i % 7 === 0).flatMap((id) => [0, 1, 79, 80, 81, 500, 1000].map((w) => [`${id}|rare|3`, w]));
     sameOver("repairCost and wearPct", wearInputs,
       ([k, w]) => { both((st) => { st.wear = { [k]: w }; }); return [v4.call("repairCost", k), v4.call("wearPct", k)]; },

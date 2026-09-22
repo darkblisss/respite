@@ -129,11 +129,41 @@ export function orderedKeys(state, w) {
 
 /* A stack already held grows where it is; otherwise the first pool in order
    with room. `qty` matters only where a pool does not stack the thing, and
-   there even a held stack needs the slots. */
-export function placeFor(state, key, order = orderFor(key), qty = 1) {
-  for (const w of order) if (qtyIn(state, w, key) > 0 && roomFor(state, w, key, qty)) return w;
-  for (const w of order) if (qtyIn(state, w, key) === 0 && roomFor(state, w, key, qty)) return w;
+   there even a held stack needs the slots.
+
+   `grow: false` turns that off and takes the order at its word: the first pool
+   with room wins, whatever is already stacked further down. That is what the
+   bench and the ground use, so a gathered ore lands in the Stockpile even when
+   the Vault holds a pile of it, and the two piles stay apart. */
+export function placeFor(state, key, order = orderFor(key), qty = 1, { grow = true } = {}) {
+  if (grow) for (const w of order) if (qtyIn(state, w, key) > 0 && roomFor(state, w, key, qty)) return w;
+  for (const w of order) if (roomFor(state, w, key, qty)) return w;
   return null;
+}
+
+/* Everything loose that belongs in the deep store, moved there. The hunt fills
+   Belongings with ore and hide and leaves it there; walking back into camp puts
+   the lot in the Vault so the pack is empty for the next run. Gear, tools and
+   remedies stay where they are, because those are what Belongings is for.
+
+   Best effort by design: what the Vault has no room for stays in the pack
+   rather than failing the walk home. */
+export function sweepToVault(state, from = "inv") {
+  if (!isPool(from) || from === "vault") return 0;
+  let moved = 0;
+  for (const key of orderedKeys(state, from)) {
+    const d = itemDef(key);
+    // Gear, tools and remedies are what a pack is for; everything else is stock.
+    if (!d || d.kind === "gear" || d.kind === "tool" || d.heal > 0) continue;
+    const qty = qtyIn(state, from, key);
+    if (qty <= 0 || !roomFor(state, "vault", key, qty)) continue;
+    const res = transact(state, (tx) => {
+      tx.remove(from, key, qty);
+      tx.add("vault", key, qty);
+    });
+    if (res.ok) moved += qty;
+  }
+  return moved;
 }
 
 export function canPay(state, cost) {
@@ -239,10 +269,10 @@ class Tx {
     this.set(rolls, at, (rolls[at] || 0) + qty);
   }
 
-  // Wherever it belongs. Returns the pool it went into.
-  stash(key, qty, order = orderFor(key)) {
+  // Wherever it belongs. Returns the pool it went into. `opts` is placeFor's.
+  stash(key, qty, order = orderFor(key), opts) {
     checkQty(qty);
-    const w = placeFor(this.state, key, order, qty);
+    const w = placeFor(this.state, key, order, qty, opts);
     if (!w) this.fail(`Nowhere to put ${itemName(key)}.`);
     this.add(w, key, qty);
     return w;

@@ -502,10 +502,7 @@ function marketBody(ctx, page, actions) {
     listBox.replaceChildren(
       h("div.listing-head", { role: "row" },
         h("span", { role: "columnheader" }, "Item"),
-        h("span.num", { role: "columnheader" }, "Available"),
-        h("span.num", { role: "columnheader" }, "Cheapest"),
-        h("span", { role: "columnheader" }, "What's there"),
-        h("span", { role: "columnheader" }, h("span.sr-only", "Buy"))),
+        h("span.num", { role: "columnheader" }, "Price")),
       ...shown.map((s) => s.node));
     paintClock(true);
   }
@@ -518,20 +515,20 @@ function marketBody(ctx, page, actions) {
     const name = String(row.item_name || "Goods");
     const depth = poolDepth(bands);
     const total = Math.max(depth, Math.floor(num(row.qty_left)));
-    const buy = h("button.btn.btn-gold.btn-soft.btn-sm", { type: "button", "data-act": "buy", "aria-label": `Buy ${name}` }, "Buy");
-    const node = h("div.listing", { role: "row", dataset: { key: String(row.item_key) } },
+    /* The row is the button: a Buy at the end of a line you already have to read is
+       a second thing to aim at for the same result. */
+    const node = h("button.listing", {
+      type: "button", role: "row", "data-act": "open",
+      dataset: { key: String(row.item_key) },
+      "aria-label": `${name}, ${fmtWhole(total)} to be had from ${fmtGold(num(row.price_min))}`,
+    },
       h("div.listing-item", { role: "cell" },
         itemArt(row.item_key, "common"),
         h("div.lr-main",
-          h("button.lr-title.listing-name", { type: "button", "data-act": "item", "aria-label": `${name}: details` }, name),
+          h("span.lr-title.listing-name", name),
           h("div.lr-sub", kindLine(row)))),
-      h("div.listing-qty", { role: "cell" }, h("span.listing-l", "Available"), fmtWhole(total)),
-      h("div.listing-price", { role: "cell" }, h("span.listing-l", "Cheapest"), fmtGold(num(row.price_min))),
-      h("div.listing-depth", { role: "cell" },
-        h("span.listing-l", "Bands"),
-        h("span.truncate", bandText(bands))),
-      h("div.listing-buy", { role: "cell" }, buy));
-    return { row, node, buy, time: null, pool: true, bands, id: `pool:${row.item_key}` };
+      h("div.listing-price", { role: "cell" }, fmtGold(num(row.price_min)), h("small", `${fmtWhole(total)} to be had`)));
+    return { row, node, buy: null, time: null, pool: true, bands, id: `pool:${row.item_key}` };
   }
 
   /* One row a base, not one a piece: the sword once, at the cheapest it can be had for, with
@@ -546,22 +543,22 @@ function marketBody(ctx, page, actions) {
     const lots = Math.max(1, Math.floor(num(row.lots)));
     const top = topRarity(rars);
     const own = Math.floor(num(row.mine_lots)) > 0;
-    const view = h("button.btn.btn-gold.btn-soft.btn-sm", { type: "button", "data-act": "shelf", "aria-label": `What is on the ${name} shelf` }, lots === 1 ? "View" : `View ${fmtWhole(lots)}`);
-    const node = h("div.listing", { role: "row", class: { "is-mine": own }, dataset: { base } },
+    const qty = Math.floor(num(row.qty_left));
+    const node = h("button.listing", {
+      type: "button", role: "row", "data-act": "open",
+      class: { "is-mine": own },
+      dataset: { base },
+      "aria-label": `${name}, ${fmtWhole(qty)} on the shelf from ${fmtGold(num(row.price_min))}`,
+    },
       h("div.listing-item", { role: "cell" },
         itemArt(base, top),
         h("div.lr-main",
-          h("button.lr-title.listing-name", { type: "button", class: top !== "common" && `rar-${top}`, "data-act": "shelf", "aria-label": `${name}: what is on the shelf` }, name),
+          h("span.lr-title.listing-name", { class: top !== "common" && `rar-${top}` }, name),
           h("div.lr-sub", kindLine(row)))),
-      h("div.listing-qty", { role: "cell" }, h("span.listing-l", "Available"), fmtWhole(num(row.qty_left))),
-      h("div.listing-price", { role: "cell" }, h("span.listing-l", "Cheapest"), fmtGold(num(row.price_min))),
       // No "Yours" badge: a pill that isn't a button reads as one. The row's own
       // tint and left accent (.listing.is-mine) carry it instead.
-      h("div.listing-depth", { role: "cell" },
-        h("span.listing-l", "On the shelf"),
-        h("span.truncate", rarText(rars))),
-      h("div.listing-buy", { role: "cell" }, view));
-    return { row, node, buy: view, time: null, shelf: true, own, rars, base, id: `base:${base}` };
+      h("div.listing-price", { role: "cell" }, fmtGold(num(row.price_min)), h("small", `${fmtWhole(qty)} on the shelf`)));
+    return { row, node, buy: null, time: null, shelf: true, own, rars, base, id: `base:${base}` };
   }
 
   // Time left and pending buttons, once a second (and right after a rebuild).
@@ -575,8 +572,10 @@ function marketBody(ctx, page, actions) {
       const left = s.pool || s.shelf ? 1 : when(s.row.expires_at) - now;
       if (s.time) setText(s.time, left > 0 ? `${fmtTime(left)} left` : "Expired");
       const wait = pending.has(s.id);
-      toggleClass(s.buy, "is-loading", wait);
-      s.buy.disabled = wait || left <= 0;
+      // A board row is its own button now; a shelf row has none of its own at all.
+      const btn = s.buy || s.node;
+      toggleClass(btn, "is-loading", wait);
+      if (btn.tagName === "BUTTON") btn.disabled = wait || left <= 0;
     });
     mineShown.forEach((s) => {
       const left = when(s.row.expires_at) - now;
@@ -960,28 +959,38 @@ function marketBody(ctx, page, actions) {
         }));
         return;
       }
+      /* The book, the way a book reads: price down the left, what stands at it
+         down the middle, how many at the right, and the row itself is the deal. */
       const now = ctx.now;
-      box.replaceChildren(h("div.list", lots.map((row) => {
-        const rarity = rarityOf(row);
-        const own = isMine(row);
-        const label = String(row.item_name || name);
-        const left = when(row.expires_at) - now;
-        const qty = Math.max(1, Math.floor(num(row.qty_left)));
-        const each = num(row.price_each);
-        const act = own
-          ? h("button.btn.btn-quiet.btn-sm", { type: "button", "data-act": "cancel", "aria-label": `Take ${label} off the market` }, "Remove")
-          : h("button.btn.btn-gold.btn-soft.btn-sm", { type: "button", "data-act": "buy", "aria-label": `Buy ${label}` }, "Buy");
-        act.disabled = pending.has(String(row.id)) || left <= 0;
-        return h("div.list-row", { class: { "is-mine": own }, dataset: { id: String(row.id) } },
-          itemArt(row.item_key, rarity),
-          h("div.lr-main",
-            h("button.lr-title", { type: "button", class: rarity !== "common" && `rar-${rarity}`, "data-act": "item" }, label),
-            h("div.lr-sub", [
-              `${rarityDef(rarity).name}${qty > 1 ? ` · ${fmtWhole(qty)} of them` : ""}`,
-              left > 0 ? `${fmtTime(left)} left` : "Expired",
-            ].join(" · "))),
-          h("div.lr-end", h("span.price", `${fmtGold(each)} each`), act));
-      })));
+      box.replaceChildren(
+        h("div.book-head", { role: "row" },
+          h("span", { role: "columnheader" }, "Price"),
+          h("span", { role: "columnheader" }, "Piece"),
+          h("span.num", { role: "columnheader" }, "Quantity")),
+        h("div.book", { role: "table" }, lots.map((row) => {
+          const rarity = rarityOf(row);
+          const own = isMine(row);
+          const label = String(row.item_name || name);
+          const left = when(row.expires_at) - now;
+          const qty = Math.max(1, Math.floor(num(row.qty_left)));
+          const each = num(row.price_each);
+          const node = h("button.book-row", {
+            type: "button", role: "row",
+            class: { "is-mine": own },
+            dataset: { id: String(row.id), act: own ? "cancel" : "buy" },
+            "aria-label": own
+              ? `Yours: ${fmtWhole(qty)} ${label} at ${fmtGold(each)} each. Take off the market`
+              : `Buy ${fmtWhole(qty)} ${label} at ${fmtGold(each)} each`,
+          },
+            h("span.book-price", { role: "cell" }, fmtGold(each)),
+            h("span.book-what", { role: "cell" },
+              h("span.book-name", { class: rarity !== "common" && `rar-${rarity}` }, label),
+              h("span.book-sub", `${rarityDef(rarity).name} · ${left > 0 ? `${fmtTime(left)} left` : "Expired"}`)),
+            h("span.book-qty", { role: "cell" }, fmtWhole(qty)),
+            own ? h("span.book-act", "Remove") : null);
+          node.disabled = pending.has(String(row.id)) || left <= 0;
+          return node;
+        })));
     }
 
     async function pull() {
@@ -996,10 +1005,8 @@ function marketBody(ctx, page, actions) {
     }
 
     const off = on(box, "click", "[data-act]", async (e, btn) => {
-      const node = btn.closest(".list-row");
-      const row = node && lots.find((r) => String(r.id) === node.dataset.id);
+      const row = lots.find((r) => String(r.id) === btn.dataset.id);
       if (!row) return;
-      if (btn.dataset.act === "item") { openPopup("item", ctx, row.item_key, { from: null, readOnly: true }); return; }
       if (btn.dataset.act === "buy") await buyListing(row);
       else if (btn.dataset.act === "cancel") await takeBack(row);
       if (m && !m.closed) pull();
@@ -1008,7 +1015,7 @@ function marketBody(ctx, page, actions) {
     m = openModal({
       title: name,
       sub: [
-        `${fmtWhole(Math.floor(num(entry.row.lots)))} on the market · from ${fmtGold(num(entry.row.price_min))} each`,
+        `${fmtWhole(Math.floor(num(entry.row.lots)))} on the market, from ${fmtGold(num(entry.row.price_min))}`,
         floor && floor.id ? floor.label.toLowerCase() : null,
       ].filter(Boolean).join(" · "),
       art: d ? d.icon : "market",
@@ -1088,7 +1095,9 @@ function marketBody(ctx, page, actions) {
       else if (node) id = node.dataset.id;
       const s = id && shown.find((x) => x.id === id);
       if (!s) return;
-      if (btn.dataset.act === "shelf") openShelf(s);
+      // A pool has one price and buys straight off; a shelf opens, because every piece on it is its own.
+      if (btn.dataset.act === "open") (s.shelf ? openShelf(s) : buyPool(s));
+      else if (btn.dataset.act === "shelf") openShelf(s);
       else if (btn.dataset.act === "item") openPopup("item", ctx, s.row.item_key, { from: null, readOnly: true });
       else if (btn.dataset.act === "buy") (s.pool ? buyPool(s) : buyListing(s.row));
       else if (btn.dataset.act === "cancel") takeBack(s.row);

@@ -287,28 +287,34 @@ await run(async () => {
     await app.page.waitForTimeout(2500);
     const rows = await live(app, () => [...document.querySelectorAll(".listing[data-base]")].map((n) => ({
       base: n.dataset.base,
+      tag: n.tagName,
       name: n.querySelector(".listing-name").textContent,
       cheapest: n.querySelector(".listing-price").textContent,
-      shelf: n.querySelector(".listing-depth").textContent,
+      buttons: n.querySelectorAll("button").length,
     })));
     const sword = rows.find((r) => r.base === "slag_sword");
     check("gear is one row a base, not one a listing", rows.filter((r) => r.base === "slag_sword").length === 1, rows);
     check("named plainly, with no rarity in it", !!sword && sword.name === "Slag Sword", sword);
     check("priced at the cheapest on the shelf", !!sword && /140/.test(sword.cheapest), sword);
-    check("and the rarities behind it are named", !!sword && /Common/.test(sword.shelf) && /Epic/.test(sword.shelf), sword);
+    check("the row is the button, so it carries none of its own", !!sword && sword.tag === "BUTTON" && sword.buttons === 0, sword);
     const pools = await live(app, () => [...document.querySelectorAll(".listing[data-key]")].map((n) => n.dataset.key));
     check("your own ore is not in the pool, because a pool is what you can buy", !pools.includes("slag_delve"), pools);
     const mine = await live(app, () => document.querySelector(".grid-2 .list").textContent);
     check("it is on your own card instead, with Remove", /Slag Ore/.test(mine) && /Remove/.test(mine), mine.slice(0, 200));
 
-    await live(app, () => document.querySelector('.listing[data-base="slag_sword"] [data-act="shelf"]').click());
+    await live(app, () => document.querySelector('.listing[data-base="slag_sword"]').click());
     await app.page.waitForTimeout(1800);
     const sheet = await live(app, () => {
       const m = document.querySelector(".modal");
-      return m ? { title: m.querySelector(".modal-title").textContent, lots: [...m.querySelectorAll(".list-row")].map((r) => r.textContent) } : null;
+      return m ? {
+        title: m.querySelector(".modal-title").textContent,
+        head: [...m.querySelectorAll(".book-head > *")].map((n) => n.textContent),
+        lots: [...m.querySelectorAll(".book-row")].map((r) => r.textContent),
+      } : null;
     });
     check("opening it lists every piece on it", !!sheet && sheet.lots.length === 2, sheet && sheet.lots);
-    check("each with its own rarity and price", !!sheet && /Common/.test(sheet.lots.join(" ")) && /Epic/.test(sheet.lots.join(" ")) && /900/.test(sheet.lots.join(" ")), sheet && sheet.lots);
+    check("priced down one column and counted down another", !!sheet && sheet.head.join("|") === "Price|Piece|Quantity", sheet && sheet.head);
+    check("each with its own rarity and price", !!sheet && /Epic/.test(sheet.lots.join(" ")) && /900/.test(sheet.lots.join(" ")), sheet && sheet.lots);
     check("and they are your own, so they say Remove", !!sheet && /Remove/.test(sheet.lots.join(" ")), sheet && sheet.lots);
     await live(app, () => [...document.querySelectorAll(".modal button")].find((b) => /Close/.test(b.textContent)).click());
     await app.page.waitForTimeout(400);
@@ -386,44 +392,49 @@ await run(async () => {
   section("the anvil");
   {
     await go("#/stockpile");
-    // The popup is opened by name through the page's own ctx, as the item card does.
+    // A piece's own sheet no longer works the Veil: the anvil is the one place it happens.
     const opened = await app.page.evaluate(async () => {
       const mod = await import("/src/client/ui/widgets.js");
       mod.openPopup("item", window.__respite.ctx, "slag_ring|rare|c1.2", { from: "vault" });
-      return !!document.querySelector(".modal-title");
-    });
-    check("the item dialog opens on a ring", opened);
-    const label = await live(app, () => {
-      const b = [...document.querySelectorAll(".modal-foot .btn, .modal .btn")].find((x) => /Fortify/.test(x.textContent));
-      return b ? b.textContent : null;
-    });
-    check("and offers to take it to the anvil at +0", !!label && /\+0/.test(label), label);
-    await live(app, () => [...document.querySelectorAll(".modal .btn")].find((x) => /Fortify/.test(x.textContent)).click());
-    await app.page.waitForTimeout(800);
-    const anvil = await live(app, () => ({
-      hash: location.hash,
-      title: (document.querySelector(".page-title") || {}).textContent,
-      piece: (document.querySelector(".forge-rite .card-sub") || {}).textContent,
-      odds: (document.querySelector(".odds-v") || {}).textContent,
-      sockets: document.querySelectorAll("button.socket").length,
-      rows: document.querySelectorAll(".pieces button.pick-row").length,
-      nav: !!document.querySelector('.nav-item[aria-current="page"][href="#/fortify"]'),
-    }));
-    check("the Fortify tab opens with the ring on the anvil", /^#\/fortify\//.test(anvil.hash) && anvil.title === "Fortify" && /Slag Ring/.test(anvil.piece || ""), anvil);
-    check("three essence sockets and a charm socket round it, and the Fortify row lit", anvil.sockets === 4 && anvil.nav, anvil);
-    check("and the odds read 100% on a bare piece with one stone", anvil.odds === "100%", anvil.odds);
-    // A sword is never listed: only jewellery takes the Veil.
-    const sword = await live(app, async () => {
-      const mod = await import("/src/client/ui/widgets.js");
-      mod.openPopup("item", window.__respite.ctx, "slag_sword|common", { from: "vault" });
       await new Promise((ok) => setTimeout(ok, 200));
-      const b = [...document.querySelectorAll(".modal .btn")].find((x) => /Fortify/.test(x.textContent));
-      return { offered: !!b, open: !!document.querySelector(".modal-title") };
+      return [...document.querySelectorAll(".modal-foot .btn")].map((b) => b.textContent.trim());
     });
-    check("a sword's sheet does not offer the anvil", sword.open && !sword.offered, sword);
+    check("a ring's sheet does not work the Veil, and does not break it down either",
+      opened.length > 0 && !opened.some((l) => /Fortify|Break down/.test(l)), opened);
+    check("and a move button is the place it moves to, nothing more",
+      opened.some((l) => l === "Stockpile" || l === "Belongings"), opened);
     await app.page.keyboard.press("Escape");
     await app.page.waitForTimeout(300);
-    await live(app, () => [...document.querySelectorAll(".rite-ledger .btn-primary")][0].click());
+
+    await go("#/fortify");
+    await app.page.waitForTimeout(800);
+    const anvil = await live(app, () => ({
+      title: (document.querySelector(".page-title") || {}).textContent,
+      empty: !!document.querySelector(".rite-core.is-empty"),
+      staked: document.querySelectorAll(".socket.is-filled").length,
+      sockets: document.querySelectorAll("button.socket").length,
+      racks: document.querySelectorAll(".forge-rack").length,
+      go: (document.querySelector(".rite-under .btn") || {}).disabled,
+      nav: !!document.querySelector('.nav-item[aria-current="page"][href="#/fortify"]'),
+    }));
+    check("the Fortify tab opens with an empty anvil", anvil.title === "Fortify" && anvil.empty && anvil.staked === 0, anvil);
+    check("three essence sockets and a charm socket round it, two racks beside it",
+      anvil.sockets === 4 && anvil.racks === 2 && anvil.nav, anvil);
+    check("and nothing to press until something is on it", anvil.go === true, anvil);
+
+    // A ring onto the anvil, an essence in a socket, one press at 100%.
+    await live(app, () => document.querySelector('.forge-tile[data-key="slag_ring|rare|c1.2"]').click());
+    await app.page.waitForTimeout(250);
+    await live(app, () => document.querySelector('.forge-tile[data-key="lesser_veil_essence"]').click());
+    await app.page.waitForTimeout(250);
+    const armed = await live(app, () => ({
+      odds: (document.querySelector(".odds-v") || {}).textContent,
+      staked: document.querySelectorAll(".socket.is-filled").length,
+      go: (document.querySelector(".rite-under .btn") || {}).disabled,
+    }));
+    check("a piece and an essence put on it read 100% on a bare ring",
+      armed.odds === "100%" && armed.staked === 1 && armed.go === false, armed);
+    await live(app, () => document.querySelector(".rite-under .btn").click());
     await app.page.waitForTimeout(2200);
     const took = await live(app, () => ({
       stamp: (document.querySelector(".stamp-t") || {}).textContent,

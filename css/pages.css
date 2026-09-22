@@ -1863,13 +1863,17 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
 
 .listings { display: flex; flex-direction: column; }
 
+/* Two columns: what it is, and what it costs. Everything else the board used to
+   carry is on the item's own page, a press away, and the whole row is that press. */
 .listing-head,
 .listing {
   display: grid;
-  grid-template-columns: minmax(0, 2.4fr) minmax(64px, .6fr) minmax(90px, .8fr) minmax(0, 1fr) 96px;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, auto);
   align-items: center;
   gap: var(--sp-4);
   padding: 12px var(--card-pad);
+  width: 100%;
+  text-align: left;
 }
 
 .listing-head {
@@ -1888,9 +1892,12 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
 }
 
 .listing + .listing { border-top: 1px solid var(--line-soft); }
+button.listing { cursor: pointer; transition: background var(--dur-1); }
+button.listing:disabled { opacity: .5; cursor: default; }
 
 @media (hover: hover) {
-  .listing:hover { background: var(--wash); }
+  button.listing:hover:not(:disabled) { background: var(--wash); }
+  button.listing:hover:not(:disabled) .listing-name { text-decoration: underline; }
 }
 
 .listing-item {
@@ -1900,8 +1907,25 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
   min-width: 0;
 }
 
+.listing-price {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  min-width: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--gold-hi);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.listing-price small { font-size: var(--text-xs); font-weight: 500; color: var(--bone-faint); }
+
+/* .listing-qty, .listing-seller and .listing-depth are the kit's sample rows; the
+   board itself has not used them since the columns went. */
 .listing-qty,
-.listing-price,
 .listing-seller,
 .listing-depth {
   min-width: 0;
@@ -1913,14 +1937,11 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
   text-overflow: ellipsis;
 }
 
-.listing-price { font-weight: 600; color: var(--gold-hi); }
-/* The market names nobody, so the column that held the seller holds the pool's price
-   bands instead ("40 at 12g · 15 at 13g"). .listing-seller stays for the kit's sample. */
 .listing-seller,
 .listing-depth { display: flex; align-items: center; gap: 6px; }
-.listing-depth { font-size: var(--text-sm); }
 .listing-buy { display: flex; justify-content: flex-end; }
 .listing-l { display: none; }
+
 /* Your own listing: a tint and a thin left accent, in place of the old "Yours" pill.
    The same on a row of a shelf sheet, where your own lots stand beside everyone else's. */
 .listing.is-mine,
@@ -1929,34 +1950,79 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
   box-shadow: inset 2px 0 0 var(--violet-hi);
 }
 
-.listing-head .num,
-.listing-qty,
-.listing-price { text-align: right; }
+.listing-head .num { text-align: right; }
 
 @media (max-width: 767px) {
   .listing-head { display: none; }
-  .listing {
-    grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto;
-    grid-template-areas:
-      "item item price"
-      "qty seller buy";
-    gap: 10px var(--sp-3);
-    padding: 14px var(--card-pad);
-  }
-  .listing-item { grid-area: item; }
-  .listing-price { grid-area: price; align-self: start; font-size: var(--text-lg); }
-  .listing-qty { grid-area: qty; text-align: left; font-size: var(--text-sm); }
-  .listing-seller,
-  .listing-depth { grid-area: seller; font-size: var(--text-sm); }
-  .listing-buy { grid-area: buy; }
-  .listing-l {
-    display: inline;
-    margin-right: 4px;
-    font-size: var(--text-xs);
-    font-weight: 500;
-    color: var(--bone-faint);
-  }
-  .listing-price .listing-l { display: none; }
+  .listing { padding: 14px var(--card-pad); gap: var(--sp-3); }
+  .listing-price { font-size: var(--text-md); }
+}
+
+/* ---- the shelf sheet: the book of what stands on it ---- */
+
+.book-head,
+.book-row {
+  display: grid;
+  grid-template-columns: minmax(84px, auto) minmax(0, 1fr) minmax(56px, auto);
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 10px 12px;
+  width: 100%;
+  text-align: left;
+}
+
+.book-head {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.book-head > * {
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--bone-faint);
+  white-space: nowrap;
+}
+
+.book { display: flex; flex-direction: column; }
+.book-row { position: relative; border-radius: var(--r-md); cursor: pointer; transition: background var(--dur-1); }
+.book-row + .book-row { box-shadow: inset 0 1px 0 var(--line-soft); }
+.book-row:disabled { opacity: .45; cursor: default; }
+
+@media (hover: hover) {
+  .book-row:hover:not(:disabled) { background: var(--wash); }
+}
+
+.book-price {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--gold-hi);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.book-what { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.book-name { font-size: var(--text-md); font-weight: 600; color: var(--bone); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.book-sub { font-size: var(--text-xs); color: var(--bone-faint); font-variant-numeric: tabular-nums; }
+.book-qty { font-size: var(--text-md); font-weight: 600; color: var(--bone-dim); font-variant-numeric: tabular-nums; text-align: right; }
+.book-head .num { text-align: right; }
+
+.book-act {
+  position: absolute;
+  right: 12px;
+  bottom: 6px;
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--violet-hi);
+}
+
+.book-row.is-mine {
+  background: linear-gradient(90deg, rgba(157, 130, 224, .07), transparent 50%);
+  box-shadow: inset 2px 0 0 var(--violet-hi);
 }
 
 .fee {
@@ -3094,15 +3160,13 @@ button.member-look:hover { text-decoration: underline; }
   .forge { grid-template-columns: minmax(0, 1fr) 372px; }
 }
 
+/* The circle, then the odds, then the press, in that order down the card: the
+   shape of a forge, and it reads the same on a phone as on a desk. */
 .rite-wrap {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--sp-4);
+  display: flex;
+  flex-direction: column;
   align-items: center;
-}
-
-@media (min-width: 900px) {
-  .rite-wrap { grid-template-columns: minmax(300px, 440px) minmax(0, 1fr); gap: var(--sp-5); }
+  gap: var(--sp-4);
 }
 
 .rite-scale {
@@ -3114,16 +3178,18 @@ button.member-look:hover { text-decoration: underline; }
   --rite-k: 1;
 }
 
-.rite-ledger {
+.rite-under {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  min-width: 0;
+  gap: 12px;
+  width: 100%;
+  max-width: 440px;
 }
 
-.rite-ledger .stat .l { white-space: nowrap; }
+.rite-under[hidden] { display: none; }
 
-.odds { display: flex; flex-direction: column; gap: 2px; }
+.odds-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-3); }
+.odds { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 
 .odds-v,
 .toll-v {
@@ -3139,9 +3205,37 @@ button.member-look:hover { text-decoration: underline; }
 .toll-v { color: var(--gold-hi); }
 .toll-v.is-short { color: var(--ember-hi); }
 .odds-sub { font-size: var(--text-xs); color: var(--bone-faint); font-variant-numeric: tabular-nums; }
-.stake { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.stake .eyebrow { margin-right: 2px; }
-.rite-note { font-size: var(--text-xs); line-height: 1.5; color: var(--bone-faint); }
+
+/* Three rows of the table, the one you are reaching for in the middle, the rest
+   a scroll away. Enough to see where you stand without the whole ladder on the board. */
+.odds-strip {
+  position: relative;   /* offsetTop inside it is what centres the row you are on */
+  height: 96px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  border-radius: var(--r-md);
+  background: var(--surface-sunk);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+}
+
+.odds-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-2);
+  height: 32px;
+  padding: 0 12px;
+  font-size: var(--text-sm);
+  color: var(--bone-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.odds-row + .odds-row { box-shadow: inset 0 1px 0 var(--line-soft); }
+.odds-lv { font-family: var(--font-display); font-weight: 700; }
+.odds-n { font-weight: 600; }
+.odds-row.is-me { background: var(--violet-soft); color: var(--bone); box-shadow: inset 3px 0 0 var(--violet); }
+.odds-row .tag { justify-self: start; height: 17px; padding: 0 5px; font-size: 9.5px; letter-spacing: .06em; }
+.odds-row .tag .ico { display: none; }
 
 /* ---- the circle ---- */
 
@@ -3319,7 +3413,11 @@ button.rite-core:disabled { cursor: default; }
 }
 
 .socket:disabled { cursor: default; }
-.socket .ico { width: 30px; height: 30px; }
+.socket-art { display: grid; place-items: center; width: 34px; height: 34px; }
+.socket-art .ico { width: 20px; height: 20px; }
+.socket-art .mat-art { width: 34px; height: 34px; object-fit: contain; filter: drop-shadow(0 0 6px rgba(157, 130, 224, .7)); }
+.socket.is-over { box-shadow: inset 0 0 0 2px var(--violet-hi), 0 0 22px rgba(157, 130, 224, .6); }
+.rite-core.is-over { box-shadow: inset 0 0 0 2px var(--violet-hi), 0 0 26px rgba(157, 130, 224, .5), 0 10px 30px -10px rgba(0, 0, 0, .9); }
 
 .socket.is-empty {
   background: transparent;
@@ -3329,8 +3427,7 @@ button.rite-core:disabled { cursor: default; }
   color: var(--bone-ghost);
 }
 
-.socket.is-empty .ico { width: 18px; height: 18px; }
-.socket.is-filled .ico { filter: drop-shadow(0 0 6px rgba(157, 130, 224, .7)); }
+.socket.is-empty .socket-art .ico { width: 16px; height: 16px; opacity: .7; }
 .socket.is-filled { background: radial-gradient(70% 70% at 50% 40%, rgba(157, 130, 224, .28), transparent 75%), var(--surface-2); }
 
 @media (hover: hover) {
@@ -3352,9 +3449,9 @@ button.rite-core:disabled { cursor: default; }
 }
 
 .socket-charm { width: 48px; height: 48px; color: var(--gold-hi); box-shadow: inset 0 0 0 1px var(--gold-edge), 0 6px 16px -8px rgba(0, 0, 0, .9); }
-.socket-charm .ico { width: 24px; height: 24px; }
+.socket-charm .socket-art { width: 28px; height: 28px; }
+.socket-charm .socket-art .mat-art { width: 28px; height: 28px; filter: drop-shadow(0 0 6px rgba(217, 181, 102, .7)); }
 .socket-charm.is-filled { background: radial-gradient(70% 70% at 50% 40%, rgba(217, 181, 102, .26), transparent 75%), var(--surface-2); }
-.socket-charm.is-filled .ico { filter: drop-shadow(0 0 6px rgba(217, 181, 102, .7)); }
 .socket-charm .socket-l { top: auto; bottom: 100%; translate: -50% -6px; }
 .s1 { left: 190px; top: 370px; }
 .s2 { left: 34px; top: 100px; }
@@ -3645,56 +3742,98 @@ button.rite-core:disabled { cursor: default; }
   100% { filter: brightness(.6) saturate(.6); }
 }
 
-/* ---- the side cards ---- */
+/* ---- the racks: two grids of stock down the side ---- */
 
-.pieces .lr-title,
-.pieces .lr-sub { display: block; }
-.pieces .lr-sub { margin-top: 2px; font-size: var(--text-xs); }
-.pieces .lr-end { display: flex; align-items: center; gap: 8px; }
-.pieces-group + .pieces-group { margin-top: var(--sp-3); }
-.pieces-group > .eyebrow { padding: 0 12px 6px; }
-.pieces-none { padding: 4px 12px 8px; }
+.forge-rack .card-head { margin-bottom: 12px; }
+.forge-grid { grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 6px; }
+.rack-none { padding: 2px 0 6px; }
 
-.odds-table { padding: 0 var(--sp-3) var(--sp-3); }
-.table-tight { font-size: var(--text-sm); }
-.table-tight th { padding: 0 6px 8px; }
-.table-tight td { padding: 6px; font-size: 12.5px; }
-.table-tight .tag { height: 18px; padding: 0 5px; font-size: 9.5px; letter-spacing: .06em; }
-.table td.dimv { color: var(--bone-faint); }
-.tag-bone { --tag-fg: var(--bone); --tag-line: rgba(232, 225, 213, .4); background: rgba(232, 225, 213, .1); }
+.forge-tile { position: relative; aspect-ratio: 1 / 1.1; padding: 8px 6px 7px; gap: 3px; justify-content: center; align-items: center; cursor: pointer; }
+.forge-tile .slot-art { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; }
+.forge-tile .slot-art .ico { width: 26px; height: 26px; color: var(--rar, var(--bone-dim)); }
+.forge-tile .slot-art .mat-art { width: 32px; height: 32px; object-fit: contain; }
+.forge-tile .slot-name { font-size: 10px; line-height: 1.2; text-align: center; -webkit-line-clamp: 2; }
+.forge-tile .slot-qty { position: absolute; left: 6px; top: 5px; font-size: var(--text-2xs); font-weight: 700; color: var(--bone); font-variant-numeric: tabular-nums; }
+.forge-tile .slot-plus { position: absolute; right: -5px; top: -6px; z-index: 2; min-width: 28px; height: 18px; padding: 0 5px; font-size: 11px; box-shadow: 0 2px 6px rgba(0, 0, 0, .6); }
+
+.slot-tag {
+  height: 15px;
+  padding: 0 5px;
+  border-radius: 3px;
+  border: 1px solid var(--line-strong);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  line-height: 13px;
+  color: var(--bone-faint);
+  white-space: nowrap;
+}
+
+.slot-tag.tag-gold { border-color: var(--gold-edge); background: var(--gold-soft); color: var(--gold-hi); }
+.slot-tag.tag-good { border-color: var(--good-edge); background: var(--good-soft); color: var(--good); }
+
+.forge-tile.is-on { border-color: var(--violet); background: radial-gradient(80% 60% at 50% 40%, var(--violet-soft), transparent 75%), var(--surface-2); }
+.forge-tile.is-on::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 0 3px 3px 0; background: var(--violet); }
+.forge-tile.is-spent { opacity: .38; cursor: default; }
+.forge-tile.is-wanted { box-shadow: var(--hi), inset 0 0 0 1px var(--violet-edge); }
+.forge-tile:active { transform: scale(.97); }
 
 @media (max-width: 599px) {
   .odds-v, .toll-v { font-size: 38px; }
-  .table-tight th, .table-tight td { padding-left: 4px; padding-right: 4px; }
+  .forge-grid { grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); }
 }
 
 /* ================= THE HALOS (ui/halo.js) ================= */
 
-/* Round the piece on the anvil. Veiled breathes violet with motes rising;
-   Sovereign turns a gold crest with sparks in orbit; Hallowed scatters rune marks
-   that flicker each on their own time, over a bone-white glow. The layers are
-   all in the node and the tier class shows the ones it uses. */
+/* Two effects, one a piece. The GLOW is the amulet's: violet from +9, gold from
+   +12, a slow rainbow at +15, behind the piece and behind the commander. The
+   RING is the ring's: a dashed violet ring from +9, a gold line ring of ticks
+   with sparks in orbit from +12, and at +15 no ring at all but rune marks cut
+   into the air, each flickering on its own time. Worn together they stack. */
+
 .halo { position: absolute; left: 50%; top: 50%; width: 0; height: 0; z-index: 2; pointer-events: none; }
 .halo[hidden] { display: none; }
-.halo::before, .halo::after { content: ""; position: absolute; left: 50%; top: 50%; border-radius: 50%; translate: -50% -50%; }
-.halo .mote, .halo .crest, .halo .orbit, .halo .runes { display: none; }
+.halo .glow, .halo .mote, .halo .crest, .halo .orbit, .halo .runes { display: none; }
+.halo::after { content: ""; display: none; position: absolute; left: 50%; top: 50%; border-radius: 50%; translate: -50% -50%; }
 
-.halo-9::before {
-  width: 230px;
-  height: 230px;
-  background: radial-gradient(circle, rgba(157, 130, 224, .55) 0, rgba(157, 130, 224, .28) 32%, rgba(157, 130, 224, 0) 66%);
+/* ---- the glow: an amulet on the anvil ---- */
+
+.halo[data-kind="glow"] .glow {
+  display: block;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  border-radius: 50%;
   animation: halo-breathe 2.6s ease-in-out infinite alternate;
 }
 
-.halo-9::after {
-  width: 176px;
-  height: 176px;
-  border: 1px dashed rgba(185, 164, 242, .7);
-  box-shadow: 0 0 12px rgba(157, 130, 224, .35), inset 0 0 12px rgba(157, 130, 224, .25);
-  animation: rite-spin 16s linear infinite;
+.halo-9[data-kind="glow"] .glow {
+  width: 240px;
+  height: 240px;
+  background: radial-gradient(circle, rgba(157, 130, 224, .62) 0, rgba(157, 130, 224, .3) 32%, rgba(157, 130, 224, 0) 66%);
 }
 
-.halo-9 .mote {
+.halo-12[data-kind="glow"] .glow {
+  width: 290px;
+  height: 290px;
+  background: radial-gradient(circle, rgba(236, 208, 143, .62) 0, rgba(217, 181, 102, .32) 30%, rgba(217, 181, 102, 0) 66%);
+  animation-duration: 2.2s;
+}
+
+.halo-15[data-kind="glow"] .glow {
+  width: 330px;
+  height: 330px;
+  background: conic-gradient(from 0deg, #ff6b6b, #ffb347, #fff275, #7dffa1, #6ec6ff, #b48cff, #ff8ad8, #ff6b6b);
+  -webkit-mask: radial-gradient(circle, #000 0, rgba(0, 0, 0, .6) 28%, transparent 64%);
+  mask: radial-gradient(circle, #000 0, rgba(0, 0, 0, .6) 28%, transparent 64%);
+  filter: blur(16px) saturate(1.2);
+  opacity: .8;
+  animation: rainbow-spin 12s linear infinite;
+}
+
+.halo[data-kind="glow"] .mote {
   display: block;
   position: absolute;
   width: 4px;
@@ -3706,12 +3845,17 @@ button.rite-core:disabled { cursor: default; }
   animation: mote 3.2s ease-out infinite;
 }
 
-.mote:nth-child(1) { left: -58px; top: 40px; }
-.mote:nth-child(2) { left: 52px; top: 52px; animation-delay: .7s; }
-.mote:nth-child(3) { left: -22px; top: 66px; animation-delay: 1.3s; }
-.mote:nth-child(4) { left: 70px; top: 0; animation-delay: 1.9s; }
-.mote:nth-child(5) { left: -70px; top: -10px; animation-delay: 2.4s; }
-.mote:nth-child(6) { left: 18px; top: 74px; animation-delay: 2.9s; }
+.halo-12[data-kind="glow"] .mote { background: var(--gold-hi); box-shadow: 0 0 8px var(--gold); }
+.halo-15[data-kind="glow"] .mote { background: #fffaf0; box-shadow: 0 0 10px #ff8ad8; }
+.halo-15[data-kind="glow"] .mote:nth-child(2n) { box-shadow: 0 0 10px #6ec6ff; }
+.halo-15[data-kind="glow"] .mote:nth-child(3n) { box-shadow: 0 0 10px #fff275; }
+
+.mote:nth-child(2) { left: -58px; top: 40px; }
+.mote:nth-child(3) { left: 52px; top: 52px; animation-delay: .7s; }
+.mote:nth-child(4) { left: -22px; top: 66px; animation-delay: 1.3s; }
+.mote:nth-child(5) { left: 70px; top: 0; animation-delay: 1.9s; }
+.mote:nth-child(6) { left: -70px; top: -10px; animation-delay: 2.4s; }
+.mote:nth-child(7) { left: 18px; top: 74px; animation-delay: 2.9s; }
 
 @keyframes mote {
   0% { transform: translateY(0) scale(.4); opacity: 0; }
@@ -3724,14 +3868,21 @@ button.rite-core:disabled { cursor: default; }
   100% { transform: scale(1.08); opacity: 1; }
 }
 
-.halo-12::before {
-  width: 290px;
-  height: 290px;
-  background: radial-gradient(circle, rgba(236, 208, 143, .5) 0, rgba(157, 130, 224, .34) 26%, rgba(157, 130, 224, .14) 48%, rgba(157, 130, 224, 0) 68%);
-  animation: halo-breathe 2.2s ease-in-out infinite alternate;
+@keyframes rainbow-spin { to { transform: rotate(360deg); } }
+
+/* ---- the ring: a ring on the anvil ---- */
+
+.halo[data-kind="ring"]::after { display: block; }
+
+.halo-9[data-kind="ring"]::after {
+  width: 176px;
+  height: 176px;
+  border: 1px dashed rgba(185, 164, 242, .8);
+  box-shadow: 0 0 14px rgba(157, 130, 224, .4), inset 0 0 14px rgba(157, 130, 224, .28);
+  animation: rite-spin 16s linear infinite;
 }
 
-.halo-12::after {
+.halo-12[data-kind="ring"]::after {
   width: 236px;
   height: 236px;
   background: repeating-conic-gradient(from 0deg, rgba(236, 208, 143, .95) 0 2deg, transparent 2deg 12deg);
@@ -3741,7 +3892,7 @@ button.rite-core:disabled { cursor: default; }
   filter: drop-shadow(0 0 6px rgba(217, 181, 102, .6));
 }
 
-.halo-12 .crest {
+.halo-12[data-kind="ring"] .crest {
   display: block;
   position: absolute;
   left: 50%;
@@ -3751,11 +3902,11 @@ button.rite-core:disabled { cursor: default; }
   translate: -50% -50%;
   border-radius: 50%;
   border: 1px solid rgba(217, 181, 102, .55);
-  box-shadow: 0 0 16px rgba(217, 181, 102, .35), inset 0 0 20px rgba(157, 130, 224, .35);
+  box-shadow: 0 0 16px rgba(217, 181, 102, .3);
   animation: rite-spin 22s linear infinite reverse;
 }
 
-.halo-12 .crest::before {
+.halo-12[data-kind="ring"] .crest::before {
   content: "";
   position: absolute;
   inset: -1px;
@@ -3765,8 +3916,7 @@ button.rite-core:disabled { cursor: default; }
   mask: radial-gradient(circle, transparent 0 92px, #000 93px 98px, transparent 99px);
 }
 
-.halo-12 .orbit,
-.halo-15 .orbit { display: block; position: absolute; left: 0; top: 0; width: 0; height: 0; animation: rite-spin 9s linear infinite; }
+.halo-12[data-kind="ring"] .orbit { display: block; position: absolute; left: 0; top: 0; width: 0; height: 0; animation: rite-spin 9s linear infinite; }
 
 .halo .orbit i {
   position: absolute;
@@ -3788,29 +3938,16 @@ button.rite-core:disabled { cursor: default; }
 .orbit i:nth-child(8) { transform: rotate(315deg) translateX(118px); }
 .orbit i:nth-child(2n) { width: 4px; height: 4px; margin: -2px 0 0 -2px; background: var(--violet-hi); box-shadow: 0 0 8px var(--violet); }
 
-/* Hallowed: no more rings. Marks, cut into the air round the piece. */
-.halo-15::before {
-  width: 330px;
-  height: 330px;
-  background: radial-gradient(circle, rgba(255, 252, 246, .6) 0, rgba(236, 208, 143, .4) 18%, rgba(157, 130, 224, .3) 40%, rgba(157, 130, 224, 0) 68%);
-  animation: halo-breathe 1.8s ease-in-out infinite alternate;
-}
-
-.halo-15::after {
+/* Hallowed ring: no ring. Marks, cut into the air round the piece. */
+.halo-15[data-kind="ring"]::after {
   width: 216px;
   height: 216px;
-  border: 1px solid rgba(232, 225, 213, .35);
-  box-shadow: 0 0 22px rgba(236, 208, 143, .4), inset 0 0 26px rgba(157, 130, 224, .35);
+  border: 1px solid rgba(232, 225, 213, .22);
+  box-shadow: 0 0 22px rgba(236, 208, 143, .25), inset 0 0 26px rgba(157, 130, 224, .2);
 }
 
-.halo-15 .orbit { animation-duration: 6s; }
-.halo-15 .orbit i { width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; background: #fffaf0; box-shadow: 0 0 10px var(--gold-hi), 0 0 22px rgba(236, 208, 143, .7); }
-.halo-15 .orbit i:nth-child(2n) { width: 4px; height: 4px; margin: -2px 0 0 -2px; background: var(--violet-hi); box-shadow: 0 0 8px var(--violet); }
-
-/* The scatter. Each mark sits at its own angle and distance, tilted its own way,
-   and comes and goes on its own delay, so the ring never reads as a ring. */
 .runes { position: absolute; left: 0; top: 0; width: 0; height: 0; --rr: 132px; --rs: 22px; }
-.halo-15 .runes { display: block; animation: rite-spin 48s linear infinite reverse; }
+.halo-15[data-kind="ring"] .runes { display: block; animation: rite-spin 48s linear infinite reverse; }
 
 .rune {
   position: absolute;
@@ -3857,78 +3994,66 @@ button.rite-core:disabled { cursor: default; }
 
 @keyframes rite-spin { to { transform: rotate(360deg); } }
 
-/* ---- on a tile: the small glow ---- */
+/* ---- on a tile: .art, .doll-slot, .slot ---- */
 
-.art.mini-9 { box-shadow: inset 0 0 0 1px var(--violet), 0 0 0 3px var(--violet-soft), 0 0 18px rgba(157, 130, 224, .55); animation: mini-9 2.4s ease-in-out infinite alternate; }
+/* The amulet's glow is the tile's own shadow, pulsing; the ring's ring is drawn
+   round the tile on ::after. The two never share a property, so a tile can be
+   given either without the other minding. */
+.glow-9, .glow-9[data-rarity] { box-shadow: inset 0 0 0 1px var(--violet), 0 0 0 3px var(--violet-soft), 0 0 18px rgba(157, 130, 224, .55); animation: glow-9 2.4s ease-in-out infinite alternate; }
+.glow-12, .glow-12[data-rarity] { box-shadow: inset 0 0 0 1px var(--gold), 0 0 0 3px rgba(217, 181, 102, .16), 0 0 20px rgba(217, 181, 102, .55); animation: glow-12 2s ease-in-out infinite alternate; }
+.glow-15, .glow-15[data-rarity] { box-shadow: inset 0 0 0 1px rgba(255, 250, 240, .8), 0 -7px 16px rgba(255, 107, 107, .55), 7px 0 16px rgba(255, 242, 117, .55), 0 7px 16px rgba(110, 198, 255, .55), -7px 0 16px rgba(180, 140, 255, .55); animation: glow-15 4s linear infinite; }
 
-@keyframes mini-9 {
+@keyframes glow-9 {
   0% { box-shadow: inset 0 0 0 1px var(--violet), 0 0 0 3px var(--violet-soft), 0 0 12px rgba(157, 130, 224, .35); }
   100% { box-shadow: inset 0 0 0 1px var(--violet-hi), 0 0 0 4px rgba(157, 130, 224, .22), 0 0 24px rgba(157, 130, 224, .7); }
 }
 
-.art.mini-12 { box-shadow: inset 0 0 0 1px var(--gold), 0 0 0 3px rgba(217, 181, 102, .16), 0 0 20px rgba(217, 181, 102, .55); animation: mini-12 2s ease-in-out infinite alternate; }
-
-.art.mini-12::after,
-.art.mini-15::after {
-  content: "";
-  position: absolute;
-  inset: -7px;
-  border-radius: 50%;
-  background: repeating-conic-gradient(from 0deg, rgba(236, 208, 143, .9) 0 6deg, transparent 6deg 40deg);
-  -webkit-mask: radial-gradient(circle closest-side, transparent 0 86%, #000 88% 96%, transparent 98%);
-  mask: radial-gradient(circle closest-side, transparent 0 86%, #000 88% 96%, transparent 98%);
-  animation: rite-spin 10s linear infinite;
-  pointer-events: none;
-}
-
-@keyframes mini-12 {
+@keyframes glow-12 {
   0% { box-shadow: inset 0 0 0 1px var(--gold), 0 0 0 3px rgba(217, 181, 102, .14), 0 0 14px rgba(217, 181, 102, .35); }
   100% { box-shadow: inset 0 0 0 1px var(--gold-hi), 0 0 0 4px rgba(217, 181, 102, .22), 0 0 28px rgba(217, 181, 102, .7); }
 }
 
-/* Hallowed on a tile: marks too small to cut, so an uneven scatter of ticks,
-   two rings turning against each other. */
-.art.mini-15 { box-shadow: inset 0 0 0 1px var(--bone), 0 0 0 3px rgba(232, 225, 213, .16), 0 0 22px rgba(236, 208, 143, .6); animation: mini-12 1.6s ease-in-out infinite alternate; }
-
-.art.mini-15::after {
-  inset: -8px;
-  background: conic-gradient(from 0deg, transparent 0 3deg, #fff6e4 3deg 5deg, transparent 5deg 21deg, #fff6e4 21deg 22deg, transparent 22deg 40deg, #fff6e4 40deg 44deg, transparent 44deg 63deg, #fff6e4 63deg 64deg, transparent 64deg 78deg, #fff6e4 78deg 81deg, transparent 81deg 90deg);
-  background-size: 100% 100%;
-  animation: rite-spin 7s linear infinite reverse;
-  filter: drop-shadow(0 0 4px rgba(236, 208, 143, .8));
+/* The rainbow walks round the tile: four coloured shadows trading places. */
+@keyframes glow-15 {
+  0% { box-shadow: inset 0 0 0 1px rgba(255, 250, 240, .8), 0 -7px 16px rgba(255, 107, 107, .55), 7px 0 16px rgba(255, 242, 117, .55), 0 7px 16px rgba(110, 198, 255, .55), -7px 0 16px rgba(180, 140, 255, .55); }
+  25% { box-shadow: inset 0 0 0 1px rgba(255, 250, 240, .8), 0 -7px 16px rgba(180, 140, 255, .55), 7px 0 16px rgba(255, 107, 107, .55), 0 7px 16px rgba(255, 242, 117, .55), -7px 0 16px rgba(110, 198, 255, .55); }
+  50% { box-shadow: inset 0 0 0 1px rgba(255, 250, 240, .8), 0 -7px 16px rgba(110, 198, 255, .55), 7px 0 16px rgba(180, 140, 255, .55), 0 7px 16px rgba(255, 107, 107, .55), -7px 0 16px rgba(255, 242, 117, .55); }
+  75% { box-shadow: inset 0 0 0 1px rgba(255, 250, 240, .8), 0 -7px 16px rgba(255, 242, 117, .55), 7px 0 16px rgba(110, 198, 255, .55), 0 7px 16px rgba(180, 140, 255, .55), -7px 0 16px rgba(255, 107, 107, .55); }
+  100% { box-shadow: inset 0 0 0 1px rgba(255, 250, 240, .8), 0 -7px 16px rgba(255, 107, 107, .55), 7px 0 16px rgba(255, 242, 117, .55), 0 7px 16px rgba(110, 198, 255, .55), -7px 0 16px rgba(180, 140, 255, .55); }
 }
 
-/* ---- on the paperdoll ---- */
-
-.doll-slot .plus { position: absolute; right: -9px; top: -10px; z-index: 2; min-width: 32px; height: 20px; padding: 0 6px; font-size: 12px; box-shadow: 0 2px 6px rgba(0, 0, 0, .6); }
-
-.doll-slot.mini-9,
-.doll-slot.mini-9[data-rarity] { box-shadow: 0 0 0 3px var(--violet-soft), 0 0 18px rgba(157, 130, 224, .55); animation: mini-9 2.4s ease-in-out infinite alternate; }
-.doll-slot.mini-12,
-.doll-slot.mini-12[data-rarity] { box-shadow: 0 0 0 3px rgba(217, 181, 102, .16), 0 0 20px rgba(217, 181, 102, .55); animation: mini-12 2s ease-in-out infinite alternate; }
-.doll-slot.mini-15,
-.doll-slot.mini-15[data-rarity] { box-shadow: 0 0 0 3px rgba(232, 225, 213, .16), 0 0 22px rgba(236, 208, 143, .6); animation: mini-12 1.6s ease-in-out infinite alternate; }
-
-.doll-slot.mini-12::after,
-.doll-slot.mini-15::after {
+.ring-9::after, .ring-12::after, .ring-15::after {
   content: "";
   position: absolute;
-  inset: -9px;
+  inset: -7px;
   border-radius: 50%;
-  background: repeating-conic-gradient(from 0deg, rgba(236, 208, 143, .9) 0 5deg, transparent 5deg 36deg);
-  -webkit-mask: radial-gradient(circle closest-side, transparent 0 88%, #000 90% 96%, transparent 98%);
-  mask: radial-gradient(circle closest-side, transparent 0 88%, #000 90% 96%, transparent 98%);
-  animation: rite-spin 10s linear infinite;
   pointer-events: none;
 }
 
-.doll-slot.mini-15::after {
+.ring-9::after { border: 1px dashed rgba(185, 164, 242, .85); box-shadow: 0 0 10px rgba(157, 130, 224, .4); animation: rite-spin 12s linear infinite; }
+
+.ring-12::after {
+  background: repeating-conic-gradient(from 0deg, rgba(236, 208, 143, .9) 0 6deg, transparent 6deg 40deg);
+  -webkit-mask: radial-gradient(circle closest-side, transparent 0 86%, #000 88% 96%, transparent 98%);
+  mask: radial-gradient(circle closest-side, transparent 0 86%, #000 88% 96%, transparent 98%);
+  animation: rite-spin 10s linear infinite;
+  filter: drop-shadow(0 0 4px rgba(217, 181, 102, .7));
+}
+
+/* Hallowed on a tile: marks too small to cut, so an uneven scatter of ticks. */
+.ring-15::after {
+  inset: -8px;
   background: conic-gradient(from 0deg, transparent 0 3deg, #fff6e4 3deg 5deg, transparent 5deg 21deg, #fff6e4 21deg 22deg, transparent 22deg 40deg, #fff6e4 40deg 44deg, transparent 44deg 63deg, #fff6e4 63deg 64deg, transparent 64deg 78deg, #fff6e4 78deg 81deg, transparent 81deg 90deg);
+  -webkit-mask: radial-gradient(circle closest-side, transparent 0 86%, #000 88% 96%, transparent 98%);
+  mask: radial-gradient(circle closest-side, transparent 0 86%, #000 88% 96%, transparent 98%);
   animation: rite-spin 7s linear infinite reverse;
   filter: drop-shadow(0 0 4px rgba(236, 208, 143, .8));
 }
 
-/* ---- the aura the commander wears: the highest halo of the amulet and the ring ---- */
+.doll-slot.ring-9::after, .doll-slot.ring-12::after, .doll-slot.ring-15::after { inset: -9px; }
+.doll-slot .plus { position: absolute; right: -9px; top: -10px; z-index: 2; min-width: 32px; height: 20px; padding: 0 6px; font-size: 12px; box-shadow: 0 2px 6px rgba(0, 0, 0, .6); }
+
+/* ---- the aura the commander wears: the amulet's glow, the ring's ring ---- */
 
 .figure-wrap {
   position: relative;
@@ -3939,20 +4064,32 @@ button.rite-core:disabled { cursor: default; }
   container-type: inline-size;
 }
 
+/* The commander stands in front of everything the Veil does. The aura is taken
+   out of the flow and pinned to the same box, under the art, so the floor ring
+   passes behind the boots instead of eating them and nothing reads as a decal
+   sitting on top of the figure. */
 .figure-wrap > .portrait { position: relative; z-index: 1; }
 
 .aura {
   position: absolute;
-  inset: 0;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 0;
   pointer-events: none;
-  --au: var(--violet);
-  --au-hi: var(--violet-hi);
-  --au-soft: rgba(157, 130, 224, .45);
 }
 
+.aura { --gl: var(--violet); --gl-hi: var(--violet-hi); --gl-soft: rgba(157, 130, 224, .62); --rg: var(--violet); --rg-hi: var(--violet-hi); --rg-soft: rgba(157, 130, 224, .45); }
 .aura[hidden] { display: none; }
-.aura[data-tier="12"] { --au: var(--gold); --au-hi: var(--gold-hi); --au-soft: rgba(217, 181, 102, .5); }
-.aura[data-tier="15"] { --au: #f2ead8; --au-hi: #fffaf0; --au-soft: rgba(236, 208, 143, .5); }
+.aura[data-glow="12"] { --gl: var(--gold); --gl-hi: var(--gold-hi); --gl-soft: rgba(217, 181, 102, .62); }
+.aura[data-glow="15"] { --gl: #fffaf0; --gl-hi: #fffaf0; --gl-soft: rgba(255, 250, 240, .4); }
+.aura[data-ring="12"] { --rg: var(--gold); --rg-hi: var(--gold-hi); --rg-soft: rgba(217, 181, 102, .5); }
+.aura[data-ring="15"] { --rg: #f2ead8; --rg-hi: #fffaf0; --rg-soft: rgba(236, 208, 143, .5); }
+
+/* The glow: behind the figure, breathing. Rainbow at +15. */
+.aura-glow, .aura-motes { display: none; }
+.aura[data-glow] .aura-glow, .aura[data-glow] .aura-motes { display: block; }
 
 .aura-glow {
   position: absolute;
@@ -3962,100 +4099,26 @@ button.rite-core:disabled { cursor: default; }
   height: 105%;
   translate: -50% -50%;
   border-radius: 50%;
-  background: radial-gradient(ellipse at 50% 58%, var(--au-soft) 0, rgba(157, 130, 224, .12) 38%, transparent 66%);
+  background: radial-gradient(ellipse at 50% 58%, var(--gl-soft) 0, rgba(157, 130, 224, .22) 38%, transparent 66%);
   animation: halo-breathe 2.6s ease-in-out infinite alternate;
   z-index: 0;
 }
 
-.aura[data-tier="12"] .aura-glow { background: radial-gradient(ellipse at 50% 58%, var(--au-soft) 0, rgba(157, 130, 224, .18) 36%, transparent 66%); }
+.aura[data-glow="12"] .aura-glow { background: radial-gradient(ellipse at 50% 58%, var(--gl-soft) 0, rgba(217, 181, 102, .24) 38%, transparent 66%); }
 
-.aura-floor {
-  position: absolute;
-  left: 50%;
-  bottom: 2%;
-  width: 132%;
-  aspect-ratio: 1;
-  translate: -50% 50%;
-  z-index: 2;
-}
-
-.aura-floor::before {
-  content: "";
-  position: absolute;
-  inset: 0;
+.aura[data-glow="15"] .aura-glow {
+  width: 130%;
+  height: 100%;
   border-radius: 50%;
-  border: 1px dashed var(--au);
-  box-shadow: 0 0 14px var(--au-soft);
-  animation: floor-spin 18s linear infinite;
-  opacity: .85;
-}
-
-.aura[data-tier="12"] .aura-floor::before,
-.aura[data-tier="15"] .aura-floor::before {
-  border: 0;
-  background: repeating-conic-gradient(from 0deg, var(--au-hi) 0 2.2deg, transparent 2.2deg 12deg);
-  -webkit-mask: radial-gradient(circle closest-side, transparent 0 89%, #000 90% 99%, transparent 100%);
-  mask: radial-gradient(circle closest-side, transparent 0 89%, #000 90% 99%, transparent 100%);
-  filter: drop-shadow(0 0 6px var(--au));
-  animation: floor-spin 14s linear infinite;
-}
-
-.aura[data-tier="15"] .aura-floor::before {
-  background: conic-gradient(from 0deg, transparent 0 2deg, var(--au-hi) 2deg 4deg, transparent 4deg 17deg, var(--au-hi) 17deg 18deg, transparent 18deg 31deg, var(--au-hi) 31deg 34deg, transparent 34deg 49deg, var(--au-hi) 49deg 50deg, transparent 50deg 61deg, var(--au-hi) 61deg 63deg, transparent 63deg 72deg);
-  animation: floor-spin 20s linear infinite reverse;
-}
-
-.aura-floor::after {
-  content: "";
-  position: absolute;
-  inset: 12%;
-  border-radius: 50%;
-  border: 1px solid var(--au);
+  background: conic-gradient(from 0deg, #ff6b6b, #ffb347, #fff275, #7dffa1, #6ec6ff, #b48cff, #ff8ad8, #ff6b6b);
+  -webkit-mask: radial-gradient(ellipse at 50% 55%, #000 0, rgba(0, 0, 0, .55) 30%, transparent 66%);
+  mask: radial-gradient(ellipse at 50% 55%, #000 0, rgba(0, 0, 0, .55) 30%, transparent 66%);
+  filter: blur(22px) saturate(1.2);
   opacity: .7;
-  box-shadow: inset 0 0 26px var(--au-soft);
-  animation: floor-spin 22s linear infinite reverse;
+  animation: rainbow-spin 14s linear infinite;
 }
 
-.aura[data-tier="12"] .aura-floor::after,
-.aura[data-tier="15"] .aura-floor::after {
-  border-color: var(--au-hi);
-  background: repeating-conic-gradient(from 0deg, rgba(185, 164, 242, .9) 0 6deg, transparent 6deg 45deg);
-  -webkit-mask: radial-gradient(circle closest-side, transparent 0 93%, #000 94% 99%, transparent 100%);
-  mask: radial-gradient(circle closest-side, transparent 0 93%, #000 94% 99%, transparent 100%);
-}
-
-@keyframes floor-spin {
-  from { transform: scaleY(.3) rotate(0deg); }
-  to { transform: scaleY(.3) rotate(360deg); }
-}
-
-.aura-orbit { position: absolute; left: 50%; bottom: 2%; width: 0; height: 0; translate: -50% 0; z-index: 2; transform: scaleY(.3); display: none; }
-.aura[data-tier="12"] .aura-orbit,
-.aura[data-tier="15"] .aura-orbit { display: block; }
-.aura-orbit > span { position: absolute; left: 0; top: 0; width: 0; height: 0; animation: rite-spin 9s linear infinite; }
-.aura[data-tier="15"] .aura-orbit > span { animation-duration: 6s; }
-
-.aura-orbit i {
-  position: absolute;
-  width: 7px;
-  height: 7px;
-  margin: -3.5px 0 0 -3.5px;
-  border-radius: 50%;
-  background: var(--au-hi);
-  box-shadow: 0 0 10px var(--au), 0 0 20px var(--au-soft);
-}
-
-.aura-orbit i:nth-child(1) { transform: rotate(0deg) translateX(62cqw); }
-.aura-orbit i:nth-child(2) { transform: rotate(45deg) translateX(62cqw); }
-.aura-orbit i:nth-child(3) { transform: rotate(90deg) translateX(62cqw); }
-.aura-orbit i:nth-child(4) { transform: rotate(135deg) translateX(62cqw); }
-.aura-orbit i:nth-child(5) { transform: rotate(180deg) translateX(62cqw); }
-.aura-orbit i:nth-child(6) { transform: rotate(225deg) translateX(62cqw); }
-.aura-orbit i:nth-child(7) { transform: rotate(270deg) translateX(62cqw); }
-.aura-orbit i:nth-child(8) { transform: rotate(315deg) translateX(62cqw); }
-.aura-orbit i:nth-child(2n) { width: 4px; height: 4px; margin: -2px 0 0 -2px; background: var(--violet-hi); box-shadow: 0 0 8px var(--violet); }
-
-.aura-motes { position: absolute; left: 50%; bottom: 8%; width: 0; height: 0; z-index: 2; }
+.aura-motes { position: absolute; left: 50%; bottom: 8%; width: 0; height: 0; z-index: 0; }
 
 .aura-motes i {
   position: absolute;
@@ -4063,10 +4126,14 @@ button.rite-core:disabled { cursor: default; }
   height: 4px;
   margin: -2px 0 0 -2px;
   border-radius: 50%;
-  background: var(--au-hi);
-  box-shadow: 0 0 8px var(--au);
+  background: var(--gl-hi);
+  box-shadow: 0 0 8px var(--gl);
   animation: mote-tall 3.6s ease-out infinite;
 }
+
+.aura[data-glow="15"] .aura-motes i:nth-child(3n) { box-shadow: 0 0 10px #6ec6ff; }
+.aura[data-glow="15"] .aura-motes i:nth-child(3n+1) { box-shadow: 0 0 10px #ff8ad8; }
+.aura[data-glow="15"] .aura-motes i:nth-child(3n+2) { box-shadow: 0 0 10px #fff275; }
 
 .aura-motes i:nth-child(1) { left: -40cqw; }
 .aura-motes i:nth-child(2) { left: 33cqw; animation-delay: .5s; }
@@ -4083,30 +4150,135 @@ button.rite-core:disabled { cursor: default; }
   100% { transform: translateY(-160cqw) scale(1); opacity: 0; }
 }
 
-/* Hallowed: the marks stand round the figure at shoulder height. */
-.aura-runes { position: absolute; left: 50%; top: 42%; width: 0; height: 0; z-index: 2; display: none; transform: scaleY(.45); }
-.aura[data-tier="15"] .aura-runes { display: block; }
+/* The ring: at the feet, drawn in perspective. */
+.aura-floor, .aura-orbit, .aura-runes { display: none; }
+.aura[data-ring="9"] .aura-floor, .aura[data-ring="12"] .aura-floor { display: block; }
+.aura[data-ring="12"] .aura-orbit { display: block; }
+.aura[data-ring="15"] .aura-runes { display: block; }
+
+/* Bottom-aligned on the figure's own box: the ring is centred on the feet, and
+   it reaches below them the way a ring drawn on the ground would. */
+.aura-floor {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 132%;
+  aspect-ratio: 1;
+  translate: -50% 42%;
+  z-index: 0;
+}
+
+.aura-floor::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px dashed var(--rg);
+  box-shadow: 0 0 14px var(--rg-soft);
+  animation: floor-spin 18s linear infinite;
+  opacity: .85;
+}
+
+.aura[data-ring="12"] .aura-floor::before {
+  border: 0;
+  background: repeating-conic-gradient(from 0deg, var(--rg-hi) 0 2.2deg, transparent 2.2deg 12deg);
+  -webkit-mask: radial-gradient(circle closest-side, transparent 0 89%, #000 90% 99%, transparent 100%);
+  mask: radial-gradient(circle closest-side, transparent 0 89%, #000 90% 99%, transparent 100%);
+  filter: drop-shadow(0 0 6px var(--rg));
+  animation: floor-spin 14s linear infinite;
+}
+
+.aura-floor::after {
+  content: "";
+  position: absolute;
+  inset: 12%;
+  border-radius: 50%;
+  border: 1px solid var(--rg);
+  opacity: .7;
+  box-shadow: inset 0 0 26px var(--rg-soft);
+  animation: floor-spin 22s linear infinite reverse;
+}
+
+.aura[data-ring="12"] .aura-floor::after {
+  border-color: var(--rg-hi);
+  background: repeating-conic-gradient(from 0deg, rgba(185, 164, 242, .9) 0 6deg, transparent 6deg 45deg);
+  -webkit-mask: radial-gradient(circle closest-side, transparent 0 93%, #000 94% 99%, transparent 100%);
+  mask: radial-gradient(circle closest-side, transparent 0 93%, #000 94% 99%, transparent 100%);
+}
+
+@keyframes floor-spin {
+  from { transform: scaleY(.3) rotate(0deg); }
+  to { transform: scaleY(.3) rotate(360deg); }
+}
+
+.aura-orbit { position: absolute; left: 50%; bottom: 0; width: 0; height: 0; translate: -50% -4%; z-index: 0; transform: scaleY(.3); }
+.aura-orbit > span { position: absolute; left: 0; top: 0; width: 0; height: 0; animation: rite-spin 9s linear infinite; }
+
+.aura-orbit i {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  border-radius: 50%;
+  background: var(--rg-hi);
+  box-shadow: 0 0 10px var(--rg), 0 0 20px var(--rg-soft);
+}
+
+.aura-orbit i:nth-child(1) { transform: rotate(0deg) translateX(62cqw); }
+.aura-orbit i:nth-child(2) { transform: rotate(45deg) translateX(62cqw); }
+.aura-orbit i:nth-child(3) { transform: rotate(90deg) translateX(62cqw); }
+.aura-orbit i:nth-child(4) { transform: rotate(135deg) translateX(62cqw); }
+.aura-orbit i:nth-child(5) { transform: rotate(180deg) translateX(62cqw); }
+.aura-orbit i:nth-child(6) { transform: rotate(225deg) translateX(62cqw); }
+.aura-orbit i:nth-child(7) { transform: rotate(270deg) translateX(62cqw); }
+.aura-orbit i:nth-child(8) { transform: rotate(315deg) translateX(62cqw); }
+.aura-orbit i:nth-child(2n) { width: 4px; height: 4px; margin: -2px 0 0 -2px; background: var(--violet-hi); box-shadow: 0 0 8px var(--violet); }
+
+/* Hallowed ring: the marks stand round the figure at shoulder height. */
+.aura-runes { position: absolute; left: 50%; top: 42%; width: 0; height: 0; z-index: 0; transform: scaleY(.45); }
 .aura-runes .runes { display: block; --rr: 58cqw; --rs: 18px; animation: rite-spin 60s linear infinite reverse; }
 .aura-runes .rune:nth-child(3n) { --rs: 14px; }
 .aura-runes .rune:nth-child(4n) { --rs: 22px; }
 
-/* The floor ring reaches below the feet: the name steps down out of it. */
-.doll-figure .figure-wrap:has(> .aura:not([hidden])) { margin-bottom: 26px; }
-.doll-figure .doll-name { position: relative; z-index: 3; }
+/* The ring reaches a little below the art's box; the name clears it. */
+.doll-figure .figure-wrap:has(> .aura:not([hidden])) { margin-bottom: 34px; }
+.doll-figure .doll-name { position: relative; z-index: 2; }
 
-/* ---- round an avatar: the profile card ---- */
+/* ---- round an avatar: the Character hero, a commander's page, the profile card ---- */
 
+/* The amulet lights the frame (the element's own shadow); the ring draws round
+   it (::before, spinning), with an inner line at +12 (::after) and runes at +15. */
 .avatar-halo { position: absolute; inset: -16px; border-radius: 50%; pointer-events: none; }
 .avatar-halo[hidden] { display: none; }
 .avatar-halo .runes { display: none; }
+.avatar-halo::before, .avatar-halo::after { content: ""; display: none; position: absolute; inset: 0; border-radius: 50%; }
 
-.avatar-halo[data-tier="9"] {
-  border: 1px dashed rgba(185, 164, 242, .75);
-  box-shadow: 0 0 18px rgba(157, 130, 224, .5), inset 0 0 18px rgba(157, 130, 224, .35);
-  animation: rite-spin 16s linear infinite;
+.avatar-halo[data-glow="9"] { box-shadow: 0 0 26px 4px rgba(157, 130, 224, .5), inset 0 0 22px rgba(157, 130, 224, .4); animation: avatar-glow-9 2.6s ease-in-out infinite alternate; }
+.avatar-halo[data-glow="12"] { box-shadow: 0 0 28px 5px rgba(217, 181, 102, .5), inset 0 0 24px rgba(217, 181, 102, .4); animation: avatar-glow-12 2.2s ease-in-out infinite alternate; }
+.avatar-halo[data-glow="15"] { box-shadow: 0 -10px 24px rgba(255, 107, 107, .6), 10px 0 24px rgba(255, 242, 117, .6), 0 10px 24px rgba(110, 198, 255, .6), -10px 0 24px rgba(180, 140, 255, .6), inset 0 0 22px rgba(255, 250, 240, .35); animation: avatar-glow-15 5s linear infinite; }
+
+@keyframes avatar-glow-9 {
+  0% { box-shadow: 0 0 18px 2px rgba(157, 130, 224, .35), inset 0 0 18px rgba(157, 130, 224, .3); }
+  100% { box-shadow: 0 0 32px 6px rgba(157, 130, 224, .6), inset 0 0 26px rgba(157, 130, 224, .45); }
 }
 
-.avatar-halo[data-tier="12"] {
+@keyframes avatar-glow-12 {
+  0% { box-shadow: 0 0 18px 2px rgba(217, 181, 102, .35), inset 0 0 18px rgba(217, 181, 102, .3); }
+  100% { box-shadow: 0 0 34px 7px rgba(217, 181, 102, .6), inset 0 0 28px rgba(217, 181, 102, .45); }
+}
+
+@keyframes avatar-glow-15 {
+  0% { box-shadow: 0 -10px 24px rgba(255, 107, 107, .6), 10px 0 24px rgba(255, 242, 117, .6), 0 10px 24px rgba(110, 198, 255, .6), -10px 0 24px rgba(180, 140, 255, .6), inset 0 0 22px rgba(255, 250, 240, .35); }
+  25% { box-shadow: 0 -10px 24px rgba(180, 140, 255, .6), 10px 0 24px rgba(255, 107, 107, .6), 0 10px 24px rgba(255, 242, 117, .6), -10px 0 24px rgba(110, 198, 255, .6), inset 0 0 22px rgba(255, 250, 240, .35); }
+  50% { box-shadow: 0 -10px 24px rgba(110, 198, 255, .6), 10px 0 24px rgba(180, 140, 255, .6), 0 10px 24px rgba(255, 107, 107, .6), -10px 0 24px rgba(255, 242, 117, .6), inset 0 0 22px rgba(255, 250, 240, .35); }
+  75% { box-shadow: 0 -10px 24px rgba(255, 242, 117, .6), 10px 0 24px rgba(110, 198, 255, .6), 0 10px 24px rgba(180, 140, 255, .6), -10px 0 24px rgba(255, 107, 107, .6), inset 0 0 22px rgba(255, 250, 240, .35); }
+  100% { box-shadow: 0 -10px 24px rgba(255, 107, 107, .6), 10px 0 24px rgba(255, 242, 117, .6), 0 10px 24px rgba(110, 198, 255, .6), -10px 0 24px rgba(180, 140, 255, .6), inset 0 0 22px rgba(255, 250, 240, .35); }
+}
+
+.avatar-halo[data-ring="9"]::before { display: block; border: 1px dashed rgba(185, 164, 242, .8); box-shadow: 0 0 12px rgba(157, 130, 224, .35); animation: rite-spin 16s linear infinite; }
+
+.avatar-halo[data-ring="12"]::before {
+  display: block;
   background: repeating-conic-gradient(from 0deg, rgba(236, 208, 143, .95) 0 3deg, transparent 3deg 15deg);
   -webkit-mask: radial-gradient(circle closest-side, transparent 0 88%, #000 90% 100%);
   mask: radial-gradient(circle closest-side, transparent 0 88%, #000 90% 100%);
@@ -4114,23 +4286,12 @@ button.rite-core:disabled { cursor: default; }
   animation: rite-spin 12s linear infinite;
 }
 
-.avatar-halo[data-tier="12"]::before {
-  content: "";
-  position: absolute;
-  inset: 8px;
-  border-radius: 50%;
-  border: 1px solid rgba(217, 181, 102, .6);
-  box-shadow: 0 0 16px rgba(217, 181, 102, .4), inset 0 0 16px rgba(157, 130, 224, .35);
-}
+.avatar-halo[data-ring="12"]::after { display: block; inset: 8px; border: 1px solid rgba(217, 181, 102, .6); box-shadow: 0 0 12px rgba(217, 181, 102, .3); }
 
-.avatar-halo[data-tier="15"] {
-  border: 1px solid rgba(232, 225, 213, .3);
-  box-shadow: 0 0 22px rgba(236, 208, 143, .45), inset 0 0 22px rgba(157, 130, 224, .3);
-}
-
-.avatar-halo[data-tier="15"] .runes { display: block; position: absolute; left: 50%; top: 50%; --rr: 60px; --rs: 14px; animation: rite-spin 40s linear infinite reverse; }
-.avatar-halo[data-tier="15"] .rune:nth-child(3n) { --rs: 11px; }
-.avatar-halo[data-tier="15"] .rune:nth-child(4n) { --rs: 16px; }
+.avatar-halo[data-ring="15"]::before { display: block; border: 1px solid rgba(232, 225, 213, .25); box-shadow: 0 0 16px rgba(236, 208, 143, .3); }
+.avatar-halo[data-ring="15"] .runes { display: block; position: absolute; left: 50%; top: 50%; --rr: 60px; --rs: 14px; animation: rite-spin 40s linear infinite reverse; }
+.avatar-halo[data-ring="15"] .rune:nth-child(3n) { --rs: 11px; }
+.avatar-halo[data-ring="15"] .rune:nth-child(4n) { --rs: 16px; }
 
 /* ---- the profile card (popups/profile.js) ---- */
 
@@ -4158,9 +4319,3 @@ button.rite-core:disabled { cursor: default; }
   .profile-avatar, .profile-face { border-radius: 16px; }
   .profile-avatar .avatar-halo { inset: -12px; }
 }
-
-/* ---- in a storage slot ---- */
-
-.slot.mini-9[data-rarity] { box-shadow: var(--hi), inset 0 0 0 1px var(--violet), 0 0 0 2px var(--violet-soft), 0 0 16px rgba(157, 130, 224, .5); animation: mini-9 2.4s ease-in-out infinite alternate; }
-.slot.mini-12[data-rarity] { box-shadow: var(--hi), inset 0 0 0 1px var(--gold), 0 0 0 2px rgba(217, 181, 102, .16), 0 0 18px rgba(217, 181, 102, .5); animation: mini-12 2s ease-in-out infinite alternate; }
-.slot.mini-15[data-rarity] { box-shadow: var(--hi), inset 0 0 0 1px var(--bone), 0 0 0 2px rgba(232, 225, 213, .16), 0 0 20px rgba(236, 208, 143, .55); animation: mini-12 1.6s ease-in-out infinite alternate; }

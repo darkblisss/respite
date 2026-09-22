@@ -72,7 +72,7 @@ export function huntChips(ctx, { tier = null, zoneId = null } = {}) {
   if (x.buff > 1) out.push({ tone: "good", text: `×${x.buff} XP · Bounty reward` });
   if (tier != null && zoneId) {
     const p = partyHere(ctx, tier, zoneId);
-    if (p.pct > 0) out.push({ tone: "violet", icon: "party", text: `${signedPct(p.pct)} Hunt XP · ${p.names.length} of your party here` });
+    if (p.pct > 0) out.push({ tone: "violet", icon: "party", text: `${signedPct(p.pct)} Hunt XP · ${p.names.length} of your party` });
   }
   return out;
 }
@@ -86,8 +86,8 @@ export const chipNode = (c) => h("span.chip", { class: `chip-${c.tone}` }, c.ico
 function survivalWarning(odds) {
   const ms = odds ? odds.survivalMs : null;
   if (ms == null) return null;
-  if (ms < HOUR) return { text: "You will not last here.", tone: "bad" };
-  if (ms < 6 * HOUR) return { text: "You will be overwhelmed here.", tone: "ember" };
+  if (ms < HOUR) return { text: "You will not last.", tone: "bad" };
+  if (ms < 6 * HOUR) return { text: "You will be overwhelmed.", tone: "ember" };
   if (ms < 12 * HOUR) return { text: "This place will break you.", tone: "warn" };
   return null;
 }
@@ -195,11 +195,12 @@ registerPopup("zone", (ctx, tier, zoneId) => {
     /* Threat is gone, so there is no counter to report. What the sheet says instead
        is the flat chance this ground shows its Sovereign, which is the whole of it. */
     const facts = h("div.stats");
-    if (skillLevel(state, "warfare") < region.level) stat(facts, "Suited to", `Hunt Lv ${region.level} and up`, "bad");
+    if (skillLevel(state, "warfare") < region.level) stat(facts, "Suited to", `Hunt Lv ${region.level}+`, "bad");
     stat(facts, "Reinforcements", `Every ${zone.windowMs / 1000}s`);
     stat(facts, "Elites", pctOf(zone.elite));
-    stat(facts, "XP per kill", `×${zone.xp}`);
-    stat(facts, "Foes here", `×${zone.power} health and damage`);
+    // A multiplier of one is the plain case: printing it is a row about nothing.
+    if (zone.xp !== 1) stat(facts, "XP a kill", `×${zone.xp}`);
+    if (zone.power !== 1) stat(facts, "Foes", `×${zone.power} health and damage`);
     if (zone.sovereign > 0) {
       stat(facts, "Sovereign", `${pctOf(zone.sovereign)} an encounter`);
       stat(facts, "At its side", `${GameData.SOVEREIGN.escorts} Elites`);
@@ -225,14 +226,14 @@ registerPopup("zone", (ctx, tier, zoneId) => {
     const foeRow = (mob, value) => h("div.ap-row",
       h("button.ap-link", { type: "button", "data-tone": "ember", dataset: { monster: mob.id } }, iconEl(mob.icon), h("span", mob.name)),
       h("span.ap-val", value));
-    /* The Sovereign's line is not a per-encounter chance like the rest of the list,
-       and a percentage there read as though it were. It says what it is instead. */
-    const sovRow = foeRow(sov, zone.sovereign > 0 ? `${pctOf(zone.sovereign)} an encounter` : "Not on this ground");
+    /* A ground its Sovereign never walks is a ground that does not list it: a row
+       saying "not here" is a row about nothing. */
+    const sovRow = zone.sovereign > 0 ? foeRow(sov, `${pctOf(zone.sovereign)} an encounter`) : null;
     const list = h("div.ap-list",
-      foesOf(tier).map((mob) => foeRow(mob, `${pctOf(zone.mix[mob.archetype])} of foes`)),
+      foesOf(tier).map((mob) => foeRow(mob, pctOf(zone.mix[mob.archetype]))),
       sovRow);
     // Flavour, not something to act on, so it hovers rather than taking a line of its own.
-    tooltip(sovRow, () => sovereignTip(region, sov, odds), { placement: "top" });
+    if (sovRow) tooltip(sovRow, () => sovereignTip(region, sov, odds), { placement: "top" });
     list.addEventListener("click", (e) => {
       const link = e.target instanceof Element ? e.target.closest("button.ap-link[data-monster]") : null;
       if (!link) return;
@@ -252,8 +253,8 @@ registerPopup("zone", (ctx, tier, zoneId) => {
       chips,
       facts,
       run,
-      h("div.ap-block", h("div.eyebrow", "Twelve hours from full health"), played, warn, stock),
-      h("div.ap-block", h("div.eyebrow", "Turns up here"), list),
+      h("div.ap-block", h("div.eyebrow", "Twelve hours"), played, warn, stock),
+      h("div.ap-block", h("div.eyebrow", "Quarry"), list),
       h("p.ap-plan", planWarn),
     ]);
 

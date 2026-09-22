@@ -23,6 +23,11 @@ import { skillLevel, maxHp, canPickClass, statsOf, classCanHold, heldWrongly } f
 import { dayIndex, windowIndex } from "./weather.js";
 import { makeRng, randIntWith, seedFrom, roll, SALT } from "./rng.js";
 import { emit } from "./events.js";
+/* combat.js and skills.js both read bountyProgress from here, so these two make
+   a cycle. Both are hoisted function declarations and are only ever called, not
+   read at load, which is the shape ES modules resolve cleanly. */
+import { pullBack } from "./combat.js";
+import { stopSkill } from "./skills.js";
 import { fmtGold, titleCase } from "./format.js";
 
 const refuse = (error) => ({ ok: false, error });
@@ -556,6 +561,12 @@ export function travel(state, { regionId } = {}, env) {
   }
   if (state.region !== region.id) {
     state.region = region.id;
+    /* The road is the end of whatever you were doing. Crews do not follow you
+       across a region and a fight does not travel: the bench stands down, the
+       hunt is broken off (its kills banked, its pack emptied into the Vault by
+       pullBack) and you arrive with nothing running. */
+    stopSkill(state, {}, env);
+    pullBack(state, {}, env);
     emit(state, env, "travel:moved", { regionId: region.id });
   }
   refreshBounty(state);
@@ -729,36 +740,6 @@ export function useChest(state, { key, from } = {}, env) {
     tx.set(state.bank, "slots", slots);
   });
   emit(state, env, "chest:opened", { slots });
-  return OK();
-}
-
-// What breaking a piece of gear down gives back: 40% of its main material.
-export function salvageValue(key) {
-  const d = itemDef(key);
-  if (!d || (d.kind !== "gear" && d.kind !== "tool")) return null;
-  const profs = GameData.PROFESSIONS;
-  const matchProf = profs.find((p) => p.id === d.prof) || profs.find((p) => d.name.includes(p.name));
-  if (!matchProf) return null;
-  const list = Object.hasOwn(GameData.CRAFT_ACTIONS, d.prof) ? GameData.CRAFT_ACTIONS[d.prof] : null;
-  const ref = list && list.find((a) => a.craftGear === d.base || (a.out && Object.hasOwn(a.out, d.base)));
-  if (!ref || !ref.cost) return null;
-  const mainKey = Object.keys(ref.cost)[0];
-  return { mat: mainKey, qty: Math.max(1, Math.floor(ref.cost[mainKey] * 0.4)) };
-}
-
-export function salvage(state, { key, from } = {}, env) {
-  const bad = held(state, key, from);
-  if (bad) return refuse(bad);
-  const out = salvageValue(key);
-  if (!out) return refuse("That can't be broken down.");
-
-  const res = transact(state, (tx) => {
-    tx.remove(from, key, 1);
-    if (!placeFor(state, out.mat, ORDER.material)) tx.fail("No room for what it breaks down into.");
-    tx.stash(out.mat, out.qty, ORDER.material);
-  });
-  if (!res.ok) return res;
-  emit(state, env, "item:salvaged", { key, mat: out.mat, qty: out.qty });
   return OK();
 }
 

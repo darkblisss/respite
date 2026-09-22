@@ -507,7 +507,7 @@ function partyBody(ctx, page) {
 
       // The ground is the one you stand in, as on the Hunt page; the server checks it is open to you.
       const select = h("select.select.grow", { "aria-label": "Ground" },
-        GameData.ZONES.map((z) => h("option", { value: z.id }, `${z.name} · ×${z.xp} XP per kill`)));
+        GameData.ZONES.map((z) => h("option", { value: z.id }, `${z.name} · ×${z.xp} XP`)));
       const go = h("button.btn.btn-ember", { type: "button" }, iconEl("swords"), "Set out together");
       go.addEventListener("click", () => send("partyHuntStart", { tier, zone: select.value }, go, () => {
         toast(`The party sets out for ${ground(tier, select.value)}`, { kind: "good", icon: "swords" });

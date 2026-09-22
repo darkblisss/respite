@@ -104,7 +104,8 @@ function completeAction(state, task, def, env, at) {
       Object.keys(def.out).forEach((k) => {
         const qty = dbl ? def.out[k] * 2 : def.out[k];
         yielded[k] = qty;
-        tx.stash(k, qty);
+        // The bench and the ground fill the Stockpile, never a pile in the Vault.
+        tx.stash(k, qty, orderFor(k), { grow: false });
       });
     }
     if (def.craftGear) {

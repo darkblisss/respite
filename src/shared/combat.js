@@ -20,7 +20,7 @@ import {
   fragmentOfTier, essenceOfTier,
 } from "./registry.js";
 import { itemDef, validKey, remedyTooWeak } from "./items.js";
-import { ORDER, transact } from "./storage.js";
+import { ORDER, transact, sweepToVault } from "./storage.js";
 import { statsOf, maxHp, mitigation, skillLevel } from "./stats.js";
 import { addMastery, masteryMods } from "./mastery.js";
 import { xpMult, partyMult, addXp } from "./progression.js";
@@ -216,6 +216,7 @@ export function pullBack(state, _args, _env) {
   bankRun(state, c);
   state.player.camp = campNote(state, c, state.clock);
   state.tasks.combat = null;
+  sweepToVault(state);
   return { ok: true };
 }
 
@@ -818,6 +819,7 @@ function liveHunt(state, c, env, nowAt) {
       state.player.recoveryLeft = 0;
       state.player.hp = 1;
       state.player.camp = { since: at, hp: 1, walkUntil: at };
+      sweepToVault(state);
       ctx.fx("you", "fall", 0);
       emit(state, env, "hunt:death", { monsterId: mob.id, elapsedMs: Math.round(took), at });
     },
@@ -825,6 +827,7 @@ function liveHunt(state, c, env, nowAt) {
       bankRun(state, c);
       state.player.camp = campNote(state, c, nowAt());
       state.tasks.combat = null;
+      sweepToVault(state);
       say("hunt:ended", { reason, kills: c.done, elapsedMs: Math.round(c.elapsed) });
     },
   };
@@ -977,11 +980,12 @@ export function remedyHeals(state) {
 
 const LOOT_LOST_QUIET_MS = 10 * 60 * 1000;
 
-/* Loot goes straight into storage: Belongings, then the Vault, then the
-   Stockpile. A stack already held somewhere grows where it is. When nothing
-   fits, the camp log hears about it at most once every ten minutes. */
+/* Loot goes into the pack: Belongings first, whatever is stacked elsewhere, so
+   a run's takings sit together and the walk home can move them in one go. Then
+   the Vault, then the Stockpile. When nothing fits, the camp log hears about it
+   at most once every ten minutes. */
 export function stashLoot(state, key, qty, env, at) {
-  const res = transact(state, (tx) => tx.stash(key, qty, ORDER.loot));
+  const res = transact(state, (tx) => tx.stash(key, qty, ORDER.loot, { grow: false }));
   if (res.ok) return res.value;
   if (state.lootLostAt == null || at - state.lootLostAt > LOOT_LOST_QUIET_MS) {
     state.lootLostAt = at;

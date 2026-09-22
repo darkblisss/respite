@@ -156,7 +156,7 @@ export function storageCard(ctx, { pools, view, idBase, filters = true, hint = n
       h("span.slot-art", artEl(d, { variant: "cut" })),
       h("span.slot-name", names.get(cell.id)));
     // A worked amulet or ring glows in its slot from +9, as it does on the anvil.
-    if (d.kind === "gear" && canFortify(cell.key)) paintMini(node, parseKey(cell.key).plus);
+    if (d.kind === "gear" && canFortify(cell.key)) paintMini(node, parseKey(cell.key).plus, d.slot);
     return node;
   }
 

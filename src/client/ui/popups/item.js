@@ -33,7 +33,7 @@ import { CONFIG } from "../../../shared/config.js";
 import { GameData, itemSources, prefixDef, rarityDef, skillName, tierLabel } from "../../../shared/registry.js";
 import { itemDef, itemName, stacks } from "../../../shared/items.js";
 import { ORDER, POOLS, canHold, isPool, poolName, qtyIn, haveQty, roomFor, slotCap, slotsUsed, placeFor } from "../../../shared/storage.js";
-import { displacedBy, salvageValue, enchantPlan } from "../../../shared/world.js";
+import { displacedBy } from "../../../shared/world.js";
 import { statsOf, combatStats, skillLevel } from "../../../shared/stats.js";
 import { itemLore } from "../../../shared/lore.js";
 
@@ -100,13 +100,6 @@ function stowPlan(state, key, from, olds) {
     }
     return dest;
   });
-}
-
-// world.js salvage takes the piece out first, then stashes what it gives by ORDER.material.
-function salvageRoom(state, key, from, mat) {
-  if (ORDER.material.some((w) => qtyIn(state, w, mat) > 0)) return true;
-  const freed = qtyIn(state, from, key) <= 1;
-  return ORDER.material.some((w) => slotsUsed(state, w) - (w === from && freed ? 1 : 0) < slotCap(state, w));
 }
 
 // "the Slag Sword to Belongings", or both pieces, sharing a place when they can.
@@ -342,34 +335,6 @@ function openItem(ctx, key, opts, extra) {
     return send("sellItem", { key, from, qty: n });
   }
 
-  async function breakDown() {
-    const sv = salvageValue(key);
-    if (!sv) return false;
-    if (fineOrBetter(d)) {
-      const ok = await confirm({
-        title: `Break down the ${itemName(key)}?`,
-        body: `It comes apart into ${fmtWhole(sv.qty)} ${itemName(sv.mat)}. The piece is gone for good.`,
-        confirmText: "Break it down",
-      });
-      if (!ok || m.closed) return false;
-    }
-    return send("salvage", { key, from });
-  }
-
-  /* Working the Veil into it happens on the Fortify tab, which takes the piece
-     from wherever it is: a worn piece is worked on your back, a carried one where
-     it lies. Only an amulet or a ring goes; the rest never see the button. */
-  function fortifyAction(state) {
-    if (d.kind !== "gear" || !d.slot) return null;
-    const plan = enchantPlan(state, key);
-    if (!plan) return null;
-    return {
-      id: "fortify", kind: "primary", soft: true, wide: true, icon: "sparkle",
-      label: plan.maxed ? `Fully worked \u00b7 +${plan.max}` : `Fortify \u00b7 +${plan.level} \u2192 +${plan.level + 1}`,
-      onClick: () => ctx.go(`#/fortify/${encodeURIComponent(key)}`),
-    };
-  }
-
   function actionList(state) {
     if (!acting) return [];
     const list = [];
@@ -392,9 +357,6 @@ function openItem(ctx, key, opts, extra) {
           disabled: !dest || !slot,
           onClick: () => send("unequip", { slot: wornSlot(ctx.state, key, d) }),
         });
-        // A worn amulet or ring is worked on your back: the anvil takes it from there.
-        const fortify = fortifyAction(state);
-        if (fortify) list.push(fortify);
       }
       return list.filter(Boolean);
     }
@@ -436,33 +398,34 @@ function openItem(ctx, key, opts, extra) {
       });
     }
 
-    /* One move a pool that would take it. The Satchel is left out for
-       anything but a remedy, and the room asked for is the amount on the
-       picker, because Belongings spend a slot a bottle. */
+    /* One move a pool that would take it. The Satchel is left out for anything
+       but a remedy, and the room asked for is the amount on the picker, because
+       Belongings spend a slot a bottle.
+
+       The button is the place and nothing else: the icon says it is a move and
+       the picker above says how many, so "Move 1,724 to the Stockpile" is three
+       words of the same thing said again. */
     POOLS.filter((w) => w !== from && canHold(w, key)).forEach((w) => {
       const room = roomFor(state, w, key, n);
-      // "Pack 4 in Satchel" beside "Move 4 to Stockpile": the same shape, on one line.
-      const verb = w === "satchel" ? "Pack" : "Move";
-      const prep = w === "satchel" ? "in" : "to";
       list.push({
         id: `move-${w}`, icon: POOL_ICON[w],
-        label: !room ? `${poolName(w)} is full`
-          : many ? `${verb} ${fmtWhole(n)} ${prep} ${poolName(w)}` : `${verb} ${prep} ${poolName(w)}`,
+        label: room ? poolName(w) : `${poolName(w)} is full`,
         disabled: !room,
         onClick: () => send("moveItem", { key, from, to: w, qty: amountNow(ctx.state) }),
       });
     });
 
+    // Nothing is broken down any more, so selling is the one way out and gets the width.
     list.push({
-      id: "sell", kind: "gold", soft: true, icon: "coin",
-      label: many ? `Sell ${fmtWhole(n)} · ${fmtGold(d.value * n)}` : `Sell · ${fmtGold(d.value)}`,
+      id: "sell", kind: "gold", soft: true, wide: true, icon: "coin",
+      label: `Sell · ${fmtGold(d.value * (many ? n : 1))}`,
       onClick: sell,
     });
 
     const tradeable = TRADEABLE.includes(d.kind) && !(!stacks(key) && Object.values(state.equipment).includes(key));
     if (ctx.account && ctx.account.mode === "account" && tradeable) {
       list.push({
-        id: "list", kind: "primary", soft: true, icon: "market",
+        id: "list", kind: "primary", soft: true, wide: true, icon: "market",
         label: "List on the market",
         // The sell dialog opens on top; this one stays for when it closes.
         onClick: () => {
@@ -472,19 +435,6 @@ function openItem(ctx, key, opts, extra) {
       });
     }
 
-    const fortify = fortifyAction(state);
-    if (fortify) list.push(fortify);
-
-    const sv = salvageValue(key);
-    if (sv) {
-      const room = salvageRoom(state, key, from, sv.mat);
-      list.push({
-        id: "salvage", kind: "quiet", wide: true, icon: "hammer",
-        label: room ? `Break down · ${fmtWhole(sv.qty)} ${itemName(sv.mat)}` : "No room for what it breaks into",
-        disabled: !room,
-        onClick: breakDown,
-      });
-    }
 
     return list.filter(Boolean);
   }

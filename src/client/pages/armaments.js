@@ -24,10 +24,10 @@ import { h, on, setText, setAttr, toggleClass } from "../ui/dom.js";
 import { iconEl } from "../ui/icons.js";
 import { fmtWhole, fmtStat } from "../ui/format.js";
 import { openPopup, portraitImg, paintPortrait } from "../ui/widgets.js";
-import { plusPlate, paintMini, auraNode, paintAura, haloTag } from "../ui/halo.js";
+import { plusPlate, paintMini, auraNode, paintAura, haloTags } from "../ui/halo.js";
 import { storageCard } from "./stockpile.js";
 import { CONFIG } from "../../shared/config.js";
-import { itemDef, itemName, parseKey, canFortify, wornHalo } from "../../shared/items.js";
+import { itemDef, itemName, parseKey, canFortify, wornHalos } from "../../shared/items.js";
 import { bestRemedy, remedyHeals } from "../../shared/combat.js";
 import { GameData } from "../../shared/registry.js";
 import { statsOf, myClass, skillLevel } from "../../shared/stats.js";
@@ -77,7 +77,7 @@ function dollSlot(eq, slot) {
   },
     h("span.doll-slot-art", iconEl(d.icon)),
     plus > 0 ? plusPlate(plus) : null);
-  paintMini(node, plus);
+  paintMini(node, plus, d.slot);
   return node;
 }
 
@@ -140,13 +140,14 @@ export function dollCard(ctx, { link = null } = {}) {
         sig = next;
         paintDoll(left, right, eq);
       }
-      const halo = wornHalo(eq);
-      const nextHalo = halo ? halo.id : "";
+      const halos = wornHalos(eq);
+      const nextHalo = `${halos.neck ? halos.neck.id : ""}|${halos.ring ? halos.ring.id : ""}`;
       if (nextHalo !== haloSig) {
         haloSig = nextHalo;
-        paintAura(aura, halo);
-        tagsNode.replaceChildren(haloTag(halo));
-        tagsNode.hidden = !halo;
+        paintAura(aura, halos);
+        const tags = haloTags(halos);
+        tagsNode.replaceChildren(...tags);
+        tagsNode.hidden = !tags.length;
       }
 
       node.querySelectorAll("button.doll-slot[data-key]").forEach((b) => {
