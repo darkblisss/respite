@@ -4466,6 +4466,30 @@ button.rite-core:disabled { cursor: default; }
 
 .modal-profile .modal-sub { line-height: 1.55; }
 
+/* The Hunt level rides the face's own corner: it is a fact about the fighter,
+   and it reads faster there than as one more chip in the row under them. */
+.profile-lv {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  z-index: 3;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 6px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--surface-1);
+  box-shadow: inset 0 0 0 1px var(--gold-edge), 0 2px 8px rgba(0, 0, 0, .7);
+  color: var(--gold-hi);
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.profile-lv[hidden] { display: none; }
+
 /* One gap between every band of the card, rather than each one bringing its own. */
 .profile-body { display: grid; gap: var(--sp-4); }
 .profile-tags { align-items: center; margin: 0; }

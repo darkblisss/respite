@@ -1928,34 +1928,52 @@ button.chip:disabled { opacity: .45; }
     var(--surface-2);
 }
 
-/* The corner cut: a small wedge of the rarity's own colour, from Epic up. */
-.slot[data-rarity="epic"]::before,
-.slot[data-rarity="legendary"]::before,
-.slot[data-rarity="relic"]::before {
+/* The mark: a cut gem in the corner, in the piece's own colour, lit from the
+   top left and throwing a little of itself onto the tile. A wedge in the corner
+   was quiet enough to miss; this reads down a whole grid at a glance. */
+.slot:not([data-rarity="common"])[data-rarity]::before {
   content: "";
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 14px;
-  height: 14px;
-  background: linear-gradient(135deg, var(--rar) 0 48%, transparent 48%);
-  border-top-left-radius: inherit;
-  opacity: .75;
+  top: 7px;
+  left: 7px;
+  width: 9px;
+  height: 9px;
+  rotate: 45deg;
+  border-radius: 2px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--rar) 65%, #fff) 0 42%, var(--rar) 42%);
+  box-shadow: 0 0 9px color-mix(in srgb, var(--rar) 60%, transparent);
   pointer-events: none;
 }
 
-/* The frame is a painting, so it sits over the tile rather than inside its box,
-   and it never eats a press: every slot here is a button. */
+/* Uncommon is a chip of stone, not a gem: no shine, no throw. */
+.slot[data-rarity="uncommon"]::before { background: var(--rar); box-shadow: none; }
+
+/* The frame is a FRAME, so it is drawn as one. The art is 500px square with its
+   rail about 130px deep and nothing in the middle; painting it as a background
+   stretched the rail across the whole tile and buried the item under it.
+   border-image slices those 130px off each edge and draws only the ring, at
+   whatever thickness the border asks for, leaving the middle untouched.
+
+   It rides on the overlay rather than the tile's own border so a 15px rail
+   costs the contents nothing, and it never eats a press: these are buttons. */
 .slot[data-rarity="legendary"]::after,
 .slot[data-rarity="relic"]::after,
 .doll-slot[data-rarity="legendary"]::after,
 .doll-slot[data-rarity="relic"]::after {
   content: "";
   position: absolute;
-  inset: -3px;
-  background: url("../assets/rarity/gilded-frame.webp") center / 100% 100% no-repeat;
+  inset: -7px;
+  border: 15px solid transparent;
+  border-image: url("../assets/rarity/gilded-frame.webp") 130 stretch;
   pointer-events: none;
   z-index: 2;
+}
+
+/* The paperdoll's slots are smaller, so the rail comes down with them. */
+.doll-slot[data-rarity="legendary"]::after,
+.doll-slot[data-rarity="relic"]::after {
+  inset: -6px;
+  border-width: 13px;
 }
 
 /* Relic is the hotter metal: the same frame, pushed toward its own colour. */
@@ -2931,7 +2949,11 @@ button.chip:disabled { opacity: .45; }
   color: var(--bone);
 }
 
-.table tr.is-me td:first-child { box-shadow: inset 3px 0 0 var(--violet); }
+/* Your row is lit, not striped: the same hairline seat the sidebar uses, drawn
+   across the row so it reads as one thing rather than a bar with a tint behind it. */
+.table tr.is-me td:first-child { box-shadow: inset 1px 0 0 var(--violet-edge), inset 0 1px 0 var(--violet-edge), inset 0 -1px 0 var(--violet-edge); }
+.table tr.is-me td { box-shadow: inset 0 1px 0 var(--violet-edge), inset 0 -1px 0 var(--violet-edge); }
+.table tr.is-me td:last-child { box-shadow: inset -1px 0 0 var(--violet-edge), inset 0 1px 0 var(--violet-edge), inset 0 -1px 0 var(--violet-edge); }
 
 @media (max-width: 599px) {
   .table { font-size: var(--text-sm); }

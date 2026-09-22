@@ -256,7 +256,10 @@ export default {
   group: "The Vanguard",
 
   mount(view, ctx) {
-    const store = storageCard(ctx, { pools: ["inv"], view: VIEW, idBase: "arm" });
+    /* Belongings, the Stockpile and the Vault on one card. Moving a piece out of
+       the pack meant walking to another page to look at where it went; the card
+       already knew how to hold more than one store, and only ever got one. */
+    const store = storageCard(ctx, { pools: ["inv", "bank", "vault"], view: VIEW, idBase: "arm" });
     const satchel = satchelCard(ctx, SATCHEL_VIEW);
     const doll = dollCard(ctx);
     const standing = standingCard();
