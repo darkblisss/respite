@@ -198,21 +198,20 @@ registerPopup("zone", (ctx, tier, zoneId) => {
     if (skillLevel(state, "warfare") < region.level) stat(facts, "Suited to", `Hunt Lv ${region.level}+`, "bad");
     stat(facts, "Reinforcements", `Every ${zone.windowMs / 1000}s`);
     stat(facts, "Elites", pctOf(zone.elite));
-    // A multiplier of one is the plain case: printing it is a row about nothing.
-    if (zone.xp !== 1) stat(facts, "XP a kill", `×${zone.xp}`);
-    if (zone.power !== 1) stat(facts, "Foes", `×${zone.power} health and damage`);
-    if (zone.sovereign > 0) {
-      stat(facts, "Sovereign", `${pctOf(zone.sovereign)} an encounter`);
-      stat(facts, "At its side", `${GameData.SOVEREIGN.escorts} Elites`);
-    }
-    if (zone.fragments) stat(facts, "Elites leave", "A Veil Fragment");
+    /* A multiplier of one is the plain case: printing it is a row about nothing.
+       What a Sovereign brings with it and what an Elite leaves behind are the
+       same on every ground that has them, so they belong to the Hunt, not to a
+       sheet you read to choose between grounds. */
+    if (zone.xp !== 1) stat(facts, "XP", `×${zone.xp}`);
+    if (zone.power !== 1) stat(facts, "Foes", `×${zone.power} stats`);
+    if (zone.sovereign > 0) stat(facts, "Sovereign", `${pctOf(zone.sovereign)} an encounter`);
 
     /* Throughput numbers are gone from this sheet: the live XP/hr and DPS are on the
        run bar and the Hunt page, and a projected kills-an-hour only encouraged
        staring at the rate. What is left is a record to beat and an honest warning. */
     const played = h("div.stats");
     const best = stat(played, "Best run", h("small", "Reckoning"));
-    const remedies = stat(played, "In the Satchel", "");
+    const remedies = stat(played, "Satchel", "");
     const warn = h("p.zone-warn", { hidden: true });
     const stock = h("p.zone-warn.t-warn", { hidden: true }, "Nothing is packed. Put remedies in your Satchel before you set out.");
 

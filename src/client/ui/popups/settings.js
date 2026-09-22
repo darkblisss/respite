@@ -1,13 +1,10 @@
 /* ============================================================
    Respite · popups/settings.js · The Ledger Keeper
    ------------------------------------------------------------
-   Two dialogs. `settings`: sound, who you are, how the connection
+   Two dialogs. `settings`: who you are, how the connection
    stands, how saving works, and starting over. `account`: sign
    in or make an account. Signing in leaves a guest camp behind,
    so a guest with anything to lose is asked first.
-
-   Sound is the tab's preference, not the camp's: it is kept in
-   localStorage by ui/audio.js and never rides on a save.
 
    The switch from one camp to another is main.js's: it hears
    net's sign in and sign out and swaps the store, which closes
@@ -20,7 +17,6 @@ import { confirm, openModal, toast } from "../overlay.js";
 import { openPopup, registerPopup } from "../widgets.js";
 import { fmtAgo, fmtWhole } from "../format.js";
 import { hasProgress } from "../../store.js";
-import { sound } from "../audio.js";
 import { cleanUsername, passwordError, usernameError } from "../../net.js";
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -131,36 +127,11 @@ registerPopup("settings", (ctx) => {
     ctx.go("#/character");
   });
 
-  /* Sound. Kept with the tab's other preferences, never in a save, so it does
-     not follow the account from one machine to another. */
-  const sp = sound.prefs;
-  const music = h("input", { type: "checkbox", role: "switch", checked: sp.music });
-  const sfx = h("input", { type: "checkbox", role: "switch", checked: sp.sfx });
-  const vol = h("input.range", {
-    type: "range", min: "0", max: "100", step: "5",
-    value: String(Math.round(sp.volume * 100)), "aria-label": "Volume",
-  });
-  const volNote = h("span.small.muted", `${Math.round(sp.volume * 100)}%`);
-  music.addEventListener("change", () => sound.set({ music: music.checked }));
-  sfx.addEventListener("change", () => sound.set({ sfx: sfx.checked }));
-  vol.addEventListener("input", () => {
-    setText(volNote, `${vol.value}%`);
-    sound.set({ volume: Number(vol.value) / 100 });
-  });
-  const soundBody = h("div.vstack.gap-2",
-    h("label.switch", music, "Music"),
-    h("label.switch", sfx, "Sound effects"),
-    h("div.hstack.gap-3", vol, volNote),
-    sound.silent ? h("p.set-copy", "No track is installed. Drop an audio file you hold the rights to at assets/audio/bgm.mp3 and it plays from the next load.") : null);
-
   modal = openModal({
     title: "Settings",
-    sub: "Sound, account, connection and starting over",
+    sub: "Account, connection and starting over",
     art: "gear",
     body: [
-      h("section.set-section",
-        h("div.set-head", h("h3.set-title", "Sound")),
-        soundBody),
       h("section.set-section",
         h("div.set-head", h("h3.set-title", "Account"), accountNote),
         accountBody),

@@ -64,6 +64,13 @@ with probes(ord, migration, what, present) as (
                      from pg_proc p
                      join pg_namespace n on n.oid = p.pronamespace
                     where n.nspname = 'public' and p.proname = 'party_state'
+                    limit 1), false)),
+
+    (16, '016_propose_same_ground', 'party_propose() only clears on a change',
+         coalesce((select pg_get_functiondef(p.oid) like '%v_moved%'
+                     from pg_proc p
+                     join pg_namespace n on n.oid = p.pronamespace
+                    where n.nspname = 'public' and p.proname = 'party_propose'
                     limit 1), false))
 )
 select migration,

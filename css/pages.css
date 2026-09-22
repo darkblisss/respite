@@ -2085,8 +2085,8 @@ button.seat { cursor: pointer; transition: border-color var(--dur-1), background
    at sit on a wash along the bottom. */
 .seat-taken { display: block; background: var(--surface-2); }
 
-.seat-face { position: absolute; inset: 0; }
-.seat-face img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 12%; user-select: none; -webkit-user-drag: none; }
+.seat-face { position: absolute; inset: 9% 0 0; }
+.seat-face img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 0%; user-select: none; -webkit-user-drag: none; }
 .seat-taken.is-offline .seat-face { filter: grayscale(.7); opacity: .55; }
 
 /* The host's remove, topmost right; the level sits under it, in the same column,
@@ -2461,7 +2461,16 @@ button.seat-name:hover { text-decoration: underline; }
   grid-template-rows: repeat(4, minmax(0, 1fr));
 }
 
-.doll-slot.is-span { grid-row: span 2; }
+/* A two-handed weapon takes the offhand's row as well. The slot is square by
+   default and 72px wide, and an aspect-ratio outranks a grid row span, so
+   without dropping it the spanning slot spanned two rows and drew itself 72px
+   tall in the first one. */
+.doll-slot.is-span {
+  grid-row: span 2;
+  aspect-ratio: auto;
+  height: 100%;
+  align-self: stretch;
+}
 .doll-slot.is-span .doll-slot-art .ico { width: 34px; height: 34px; }
 .doll-slot.is-span .doll-slot-name { -webkit-line-clamp: 3; }
 
@@ -4453,7 +4462,7 @@ button.rite-core:disabled { cursor: default; }
 /* A bust is anchored to the top and then scaled, which puts the crown of the
    head outside the box. On a card this size the face is the whole point, so it
    is dropped far enough for the head to sit inside its own frame. */
-.profile-face img { transform: scale(1.45) translateY(9%); user-select: none; -webkit-user-drag: none; }
+.profile-face img { transform: scale(1.35) translateY(13%); user-select: none; -webkit-user-drag: none; }
 
 .modal-profile .modal-sub { line-height: 1.55; }
 

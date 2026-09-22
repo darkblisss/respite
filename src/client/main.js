@@ -19,7 +19,6 @@ import { createShell } from "./ui/shell.js";
 import { el, h } from "./ui/dom.js";
 import { bindDrawer, closeModals, toast } from "./ui/overlay.js";
 import { openPopup } from "./ui/widgets.js";
-import { sound } from "./ui/audio.js";
 
 // Every popup module in CLIENT.md 6 (settings.js registers both settings and account).
 const POPUPS = ["item", "action", "zone", "foe", "class", "skin", "profile", "sell", "settings", "sky"];
@@ -320,8 +319,6 @@ async function boot() {
   if (session) startAccount(session);
   else startGuest();
   startLoop();
-  // Armed, not playing: browsers hold the sound until the first press.
-  sound.start();
 
   // Every page module, once the first one is up: later visits open at once.
   setTimeout(() => app.router.preload(app.router.files()), 1500);

@@ -1000,7 +1000,7 @@ async function partyRoom() {
   await refuses('party_propose refuses a caller with no party', () => rpc.propose(U.dusk, 3, 'outer'), /You are not in a party/);
   same('refused proposals put nothing up', await upOf(), { proposed_tier: null, proposed_zone: null });
 
-  same('party_propose puts a ground up', await rpc.propose(U.bram, 3, 'Inner'), { tier: 3, zone: 'inner' });
+  same('party_propose puts a ground up', await rpc.propose(U.bram, 3, 'Inner'), { tier: 3, zone: 'inner', moved: true });
   same('and any member may be the one to do it', await upOf(), { proposed_tier: 3, proposed_zone: 'inner' });
 
   same('party_ready marks you', await rpc.ready(U.bram, true), true);
@@ -1010,7 +1010,17 @@ async function partyRoom() {
 
   await rpc.ready(U.ash, true);
   await rpc.ready(U.bram, true);
-  await rpc.propose(U.ash, 3, 'core');
+
+  /* Agreeing with the ground already up is not changing it. Clearing the marks
+     for a repeat press turned a second voice for the same plan into a reason to
+     start the whole room over. */
+  same('putting up the ground already up says so', await rpc.propose(U.ash, 3, 'inner'), { tier: 3, zone: 'inner', moved: false });
+  same('and it leaves every mark where it was', [await readyOf(U.ash), await readyOf(U.bram)], [true, true]);
+  same('the same ground in different letters is still the same ground',
+    await rpc.propose(U.bram, 3, 'INNER'), { tier: 3, zone: 'inner', moved: false });
+  same('so those marks stand too', [await readyOf(U.ash), await readyOf(U.bram)], [true, true]);
+
+  same('a different ground is a change', await rpc.propose(U.ash, 3, 'core'), { tier: 3, zone: 'core', moved: true });
   same('a new ground stands the whole room down', [await readyOf(U.ash), await readyOf(U.bram)], [false, false]);
   same('and the new ground is what is up', await upOf(), { proposed_tier: 3, proposed_zone: 'core' });
 }

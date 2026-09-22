@@ -8,12 +8,12 @@
 export const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
 
 // Counts: 9,999 stays whole, then 10.0K, 1.25M, 3.10B.
+/* Every number, written out. It used to shorten past ten thousand (12.3K, 4.51M),
+   which reads as an approximation of a number the camp knows exactly: a kill
+   count, a stack, a price. There is nothing here big enough to need the space,
+   and "1,234,567" tells you things "1.23M" does not. */
 export function fmt(n) {
-  const v = Math.floor(Number(n) || 0);
-  if (Math.abs(v) < 10000) return fmtWhole(v);
-  if (Math.abs(v) < 1e6) return (v / 1e3).toFixed(1) + "K";
-  if (Math.abs(v) < 1e9) return (v / 1e6).toFixed(2) + "M";
-  return (v / 1e9).toFixed(2) + "B";
+  return fmtWhole(Math.floor(Number(n) || 0));
 }
 
 // A whole number with thousands marked the same way everywhere: 10000 -> "10,000".
