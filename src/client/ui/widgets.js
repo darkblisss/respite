@@ -26,7 +26,10 @@ export const DEFAULT_PORTRAIT = "assets/commander-default.webp";
 export const portraitFor = (skin) => (skin ? `assets/skin-${skin}.webp` : DEFAULT_PORTRAIT);
 
 export function portraitImg(skin, extra = {}) {
-  const img = h("img", Object.assign({ src: portraitFor(skin), alt: "" }, extra));
+  /* draggable=false matters: an <img> drags natively, and a face dragged out of a
+     party square or a board row hands the browser a file to carry. Nothing in the
+     camp wants that, and the ghost reads as the page breaking. */
+  const img = h("img", Object.assign({ src: portraitFor(skin), alt: "", draggable: "false" }, extra));
   img.addEventListener("error", () => {
     if (img.getAttribute("src") === DEFAULT_PORTRAIT) return;
     img.setAttribute("src", DEFAULT_PORTRAIT);
