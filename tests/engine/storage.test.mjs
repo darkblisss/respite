@@ -283,5 +283,36 @@ await run(async () => {
     check("after the outermost ends, a new transaction starts clean", S.transact(s3, (tx) => tx.stash("coal", 1)).ok && s3.bank.items.coal === 1);
   }
 
+  section("Taking the order at its word, and emptying the pack");
+  {
+    /* The bench and the ground fill the Stockpile whatever is stacked elsewhere,
+       so the piles stay apart and you can keep a working stack and a deep one. */
+    const s = fresh();
+    put(s, "vault", "slag_delve", 40);
+    check("by default a stack already held grows where it is",
+      S.placeFor(s, "slag_delve", S.ORDER.material, 5) === "vault");
+    check("but grow: false takes the first pool in the order with room",
+      S.placeFor(s, "slag_delve", S.ORDER.material, 5, { grow: false }) === "bank");
+    check("and stash passes it through", S.transact(s, (tx) => tx.stash("slag_delve", 5, S.ORDER.material, { grow: false })).ok &&
+      s.bank.items.slag_delve === 5 && s.vault.items.slag_delve === 40);
+    check("with the head of the order full it still falls to the next",
+      (() => { const f = fresh(); fill(f, "bank", ["coal"]); return S.placeFor(f, "coal", S.ORDER.material, 1, { grow: false }) === "vault"; })());
+
+    /* Walking back into camp empties the pack of stock and leaves the kit alone. */
+    const back = fresh();
+    put(back, "inv", "slag_delve", 12);
+    put(back, "inv", "coal", 3);
+    put(back, "inv", "slag_sword|rare|c1.2", 1);
+    put(back, "inv", "provision_t1", 2);
+    put(back, "inv", "slag_pick", 1);
+    const moved = S.sweepToVault(back);
+    check("the walk home puts stock in the Vault", moved === 15 && back.vault.items.slag_delve === 12 && back.vault.items.coal === 3);
+    same("and leaves gear, tools and remedies in the pack",
+      Object.keys(back.inv.items).sort(), ["provision_t1", "slag_pick", "slag_sword|rare|c1.2"]);
+    check("a Vault with no room keeps the pack as it was rather than failing the walk",
+      (() => { const f = fresh(); fill(f, "vault", ["coal"]); put(f, "inv", "coal", 4); return S.sweepToVault(f) === 0 && f.inv.items.coal === 4; })());
+    check("it never sweeps the Vault into itself", S.sweepToVault(back, "vault") === 0);
+  }
+
   check("CONFIG storage untouched", CONFIG.storage.slots.inv === 10 && Object.isFrozen(CONFIG.storage));
 });

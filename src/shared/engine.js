@@ -25,7 +25,7 @@ import { startHunt, pullBack, setHide, huntStep } from "./combat.js";
 import { walkPath, resetPath } from "./path.js";
 import {
   refreshBounty, resolveRequisitions, claimBounty, hireAgent, deployAgent, buyRemedy, buySmuggler,
-  travel, equip, unequip, unequipTool, moveItem, sellItem, useChest, useRemedy, salvage, reorder, pickClass,
+  travel, equip, unequip, unequipTool, moveItem, sellItem, useChest, useRemedy, reorder, pickClass,
   setSkin, enchant, convert, debugGive,
 } from "./world.js";
 
@@ -120,7 +120,6 @@ export const COMMANDS = Object.freeze({
   unequipTool:  { run: unequipTool, predict: true },
   moveItem:     { run: moveItem, predict: true },
   sellItem:     { run: sellItem, predict: true },
-  salvage:      { run: salvage, predict: true },
   enchant:      { run: enchant, predict: true },
   convert:      { run: convert, predict: true },
   useChest:     { run: useChest, predict: true },

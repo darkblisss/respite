@@ -117,6 +117,31 @@ prefix when there is one: `slag_ring|rare|c17.42|+7`. A piece carrying one is
 unique whatever its rarity, so an enchanted Common is minted a uid and stops
 stacking. Every key written before schema 10 reads as `+0`.
 
+### Where things land (schema 13)
+
+`placeFor(state, key, order, qty, { grow })` takes an option. `grow: true` (the
+default) keeps the old rule: a stack already held anywhere in the order grows
+where it is. `grow: false` takes the order at its word, so the first pool with
+room wins. Three paths use it, and they are what decide where a camp's stock
+sits:
+
+- **The bench and the ground** (`skills.js`, gathered and crafted output) place
+  with `grow: false` on `ORDER.material`, so everything made lands in the
+  Stockpile even when the Vault holds a pile of the same thing. The two piles
+  stay apart on purpose.
+- **The hunt** (`stashLoot`) places with `grow: false` on `ORDER.loot`, so a
+  run's takings gather in Belongings rather than following an old stack.
+- **The walk home** (`sweepToVault(state, from = "inv")`) moves everything that
+  is not gear, a tool or a remedy from the pack into the Vault, as much as fits,
+  and never fails. `pullBack`, a hunt ending and a death all call it.
+
+`travel` to a different region calls `stopSkill` and `pullBack` first: crews do
+not follow you across a region and a fight does not travel. Unlocking a road
+without moving, or "travelling" to the region you are in, leaves the work alone.
+
+Breaking gear down is gone. There is no `salvage` command, no `salvageValue`,
+and no `item:salvaged` event; selling is the one way out of a piece.
+
 ### What schema 13 changes: the Veil goes into jewellery only
 
 Only an amulet or a ring takes the Veil (`CONFIG.enchant.slots`, `canFortify`).
@@ -264,7 +289,7 @@ The handler runs one transaction:
 
 ## Commands (shared `applyCommand(state, {type, args}, env)` → `{ ok, error?, data? }`)
 
-`startSkill {skillId, actionId, limit|null}`, `stopSkill {}`, `startHunt {tier, zone, limit|null}`, `pullBack {}`, `setHide {on}`, `pickClass {id}`, `setSkin {skin}`, `walkPath {node}`, `resetPath {}`, `enchant {key, from, stones, charm}`, `convert {from: {key, at}, to: {key, at}}`, `equip {key, from}`, `unequip {slot}`, `unequipTool {skillId}`, `moveItem {key, from, to, qty}`, `sellItem {key, from, qty}`, `salvage {key, from}`, `useChest {key, from}`, `repair {key}`, `reorder {pool, key, before}`, `buyRemedy {key, qty}`, `buySmuggler {slot}`, `travel {regionId}`, `claimBounty {}`, `hireAgent {}`, `deployAgent {agentId, itemKey}`, `buyCompanion {id}`, `setCompanion {id|null}`.
+`startSkill {skillId, actionId, limit|null}`, `stopSkill {}`, `startHunt {tier, zone, limit|null}`, `pullBack {}`, `setHide {on}`, `pickClass {id}`, `setSkin {skin}`, `walkPath {node}`, `resetPath {}`, `enchant {key, from, stones, charm}`, `convert {from: {key, at}, to: {key, at}}`, `equip {key, from}`, `unequip {slot}`, `unequipTool {skillId}`, `moveItem {key, from, to, qty}`, `sellItem {key, from, qty}`, `useChest {key, from}`, `repair {key}`, `reorder {pool, key, before}`, `buyRemedy {key, qty}`, `buySmuggler {slot}`, `travel {regionId}`, `claimBounty {}`, `hireAgent {}`, `deployAgent {agentId, itemKey}`, `buyCompanion {id}`, `setCompanion {id|null}`.
 
 Server-only commands, which need the database: `marketList {key, from, qty, price}`, `marketBuy {listingId, qty}` (gear and tools, one listing at a time), `marketBuyPool {key, qty, maxEach}` (a material out of the pool every seller's listing of it makes, cheapest first and oldest first among equal prices, never a unit above `maxEach`), `marketCancel {listingId}`, `partyHuntStart {tier, zone}`, `partyHuntJoin {}`, `partyHuntLeave {}`. The market's fee is taken off both legs (`CONFIG.economy.marketFee`): the buyer pays the ask plus it, the seller receives the ask less it, rounded up and never under 1 gold. The party's fight is played by the server alone (`src/shared/partyHunt.js`, `public.party_hunts`), so the browser cannot predict one and never tries: it draws what the server reports (docs/SERVER.md section 3).
 
@@ -273,7 +298,7 @@ Server-only commands, which need the database: `marketList {key, from, qty, pric
 - Skills: `skill:level`, `skill:mastery`, `task:ended`, `item:crafted`, `storage:full`
 - Hunt: `hunt:ended`, `hunt:death`, `hunt:sovereign`, `hunt:felled`, `hunt:retreat`, `hunt:hide`, `hunt:passed`, `hunt:fx`, `loot:lost`, `loot:found`
 - Items and companions: `item:broke`, `item:repaired`, `companion:bond`, `companion:found`, `companion:bought`, `companion:active`
-- Camp: `bounty:complete`, `bounty:paid`, `agent:hired`, `agent:deployed`, `requisitions:returned`, `shop:bought`, `smuggler:bought`, `travel:unlocked`, `travel:moved`, `class:picked`, `class:available`, `class:laidDown`, `skin:picked`, `path:taken`, `path:reset`, `item:enchanted`, `item:converted`, `chest:opened`, `item:salvaged`, `item:sold`, `item:moved`, `settings:hide`
+- Camp: `bounty:complete`, `bounty:paid`, `agent:hired`, `agent:deployed`, `requisitions:returned`, `shop:bought`, `smuggler:bought`, `travel:unlocked`, `travel:moved`, `class:picked`, `class:available`, `class:laidDown`, `skin:picked`, `path:taken`, `path:reset`, `item:enchanted`, `item:converted`, `chest:opened`, `item:sold`, `item:moved`, `settings:hide`
 - Market: `market:listed`, `market:bought` (`cost` is what left the purse, the fee included, and `fee` is that fee), `market:cancelled`, `mail:claimed`
 - Sessions: `away`
 - Party hunts (raised by the server when a share is settled, no camp log line of their own): `party:spoils { tier, zone, kills, xp, gold, drops, remedies, died }`. The events the settlement raises as it pays (`skill:level`, `loot:found`, `loot:lost`, `item:broke`, `companion:found`, `hunt:death`) are the rules' own and are logged as ever.

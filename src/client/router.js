@@ -13,7 +13,6 @@ import { iconEl } from "./ui/icons.js";
 import { closeModals } from "./ui/overlay.js";
 import { getSkill } from "../shared/registry.js";
 import { requisitionsOpen } from "../shared/world.js";
-import { validKey, canFortify } from "../shared/items.js";
 
 /* ================= 1. ROUTES ================= */
 
@@ -56,21 +55,10 @@ export function parseHash(hash) {
     const name = decodeURIComponent(parts[1] || "").trim();
     return /^[a-zA-Z0-9_]{1,40}$/.test(name) ? { page: "player", arg: name } : null;
   }
-  /* The rite, with a piece already on the anvil: #/fortify/<item key>. Only a
-     key the rules know and the Veil takes rides along; anything else is the bare tab. */
-  if (page === "fortify") {
-    let key = "";
-    try {
-      key = decodeURIComponent(parts.slice(1).join("/") || "").trim();
-    } catch (err) {
-      key = "";
-    }
-    return { page: "fortify", arg: key && validKey(key) && canFortify(key) ? key : null };
-  }
   return Object.hasOwn(PAGES, page) ? { page, arg: null } : null;
 }
 
-export const hashOf = (route) => `#/${route.page}${route.arg ? `/${route.page === "fortify" ? encodeURIComponent(route.arg) : route.arg}` : ""}`;
+export const hashOf = (route) => `#/${route.page}${route.arg ? `/${route.arg}` : ""}`;
 
 // The Hunt shares #/skill/ with the benches but has a module of its own.
 export function moduleOf(route) {

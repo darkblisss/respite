@@ -1,38 +1,34 @@
 /* ============================================================
    Respite · pages/fortify.js · The Anvil
    ------------------------------------------------------------
-   The Veil worked into an amulet or a ring, on a tab of its own.
-   The piece sits in the circle with three essence sockets round
-   it and a charm socket above; you stake one to three essences,
-   press once, and the beams converge on the piece. FORTIFIED or
-   FAILED, stamped over the anvil. A failure takes the essence and
-   the charm and nothing else: no level is ever lost.
+   The forge, laid out the way a forge is: the piece in the middle
+   of the circle, three essence sockets and a charm socket round
+   it, the odds and the press under it, and two racks of stock down
+   the side. Nothing is on the anvil when you arrive and no essence
+   is staked: you put them there, by dragging or by clicking, and
+   the numbers follow what is in the sockets.
 
-   Convert, on the same tab, carries a worked piece's whole level
-   onto an unworked piece of the same slot for a toll. Nothing is
-   rolled there and it always takes.
+   Convert shares the circle: a worked piece on the left, an
+   unworked one of the same slot on the right, a toll, one press.
 
    Every number is the rules' own (enchantPlan, enchantChance,
-   convertPlan off world.js); this only stages it. The page holds
-   what is on the anvil and how many essences are staked, nothing
-   the save needs, and the camp log keeps the takes: refusals are
-   only remembered while the tab is open.
+   convertPlan off world.js); this only stages it. Nothing here is
+   kept in the save: what is on the anvil lasts as long as the tab.
    ============================================================ */
 
 import { CONFIG } from "../../shared/config.js";
-import { GameData } from "../../shared/registry.js";
+import { GameData, essenceOfTier, charmOfTier } from "../../shared/registry.js";
 import { itemDef, itemName, parseKey, canFortify, haloOf, rarityName } from "../../shared/items.js";
-import { enchantPlan, enchantChance, convertPlan, convertToll, stoneFor, charmFor, shopStock } from "../../shared/world.js";
+import { enchantPlan, enchantChance, convertPlan, convertToll, shopStock } from "../../shared/world.js";
 import { orderedKeys, qtyIn, haveQty, poolName } from "../../shared/storage.js";
 import { h, on, setText, setAttr, toggleClass } from "../ui/dom.js";
-import { iconEl } from "../ui/icons.js";
-import { toast } from "../ui/overlay.js";
-import { confirmSpend, openPopup } from "../ui/widgets.js";
+import { iconEl, artEl, hasArt } from "../ui/icons.js";
+import { toast, tooltip, tipBody } from "../ui/overlay.js";
+import { confirmSpend } from "../ui/widgets.js";
 import { fmt, fmtWhole, fmtGold, fmtAgo } from "../ui/format.js";
 import { haloTag, haloTagClass, plusPlate, paintPlate, haloNode, paintHalo, paintMini } from "../ui/halo.js";
 
 const EN = CONFIG.enchant;
-const { SLOT_LABELS } = GameData;
 const SPARE_POOLS = ["inv", "bank", "vault"];
 
 // Beams take a second to converge; the stamp stays up long enough to read.
@@ -54,17 +50,16 @@ function pct(share) {
 }
 
 const oddsTone = (share) => (share >= 0.5 ? "t-good" : share >= 0.15 ? "t-warn" : "t-bad");
-
-const slotWord = (d) => (SLOT_LABELS[d.slot] === "Neck" ? "amulet" : "ring");
+const slotWord = (d) => (d && d.slot === "neck" ? "amulet" : "ring");
 // The name without its "+N": the plate beside it says the level.
 const bareName = (key) => itemName(key).replace(/ \+\d+$/, "");
-const rarityWord = (key) => rarityName(key) || "Common";
-const gainPct = (level) => `${+(level * EN.gainPerLevel * 100).toFixed(1)}%`;
+const level = (key) => parseKey(key).plus;
+const bandOf = (key) => {
+  const d = itemDef(key);
+  return d ? { stone: essenceOfTier(d.tier), charm: charmOfTier(d.tier) } : null;
+};
 
-// Where a piece is, in a sentence: "worn", "Belongings", "the Stockpile".
-const whereWord = (at) => (GameData.EQUIP_SLOTS.includes(at) ? "worn" : poolName(at));
-
-/* Every amulet and ring in the camp, worn ones first, then the pools in their own
+/* Every amulet and ring in the camp, worn first, then the pools in their own
    order. `at` is what the rules want as `from`: the slot worn, or the pool. */
 function pieces(state) {
   const out = [];
@@ -81,9 +76,18 @@ function pieces(state) {
   return out;
 }
 
+// The stock rack: every band's essence and charm, held or not, strongest last.
+function stock(state) {
+  const out = [];
+  GameData.VEIL_BANDS.forEach((band) => {
+    out.push({ key: band.essence, kind: "essence", band: band.key, qty: haveQty(state, band.essence) });
+    out.push({ key: band.charm, kind: "charm", band: band.key, qty: haveQty(state, band.charm) });
+  });
+  return out;
+}
+
 const samePiece = (a, b) => !!(a && b && a.key === b.key && a.at === b.at);
 const findPiece = (list, p) => (p ? list.find((x) => samePiece(x, p)) || null : null);
-const level = (key) => parseKey(key).plus;
 
 /* ================= 2. THE PAGE ================= */
 
@@ -94,17 +98,16 @@ export default {
 
   mount(view, ctx) {
     let mode = "fortify";        // "fortify" | "convert"
-    let sel = null;              // { key, at } on the anvil
-    let stones = 1;
+    let sel = null;              // { key, at } on the anvil: nothing, until you put something there
+    let stones = 0;              // essences in the sockets
     let charm = false;
     let phase = "idle";          // idle | strike | took | refused
     let cv = { from: null, to: null };
     let cphase = "idle";         // idle | flow | done
+    let drag = null;             // what the cursor is carrying: { what, key, at }
     const refusals = [];         // this visit's failures, newest first: { t, m }
     const timers = new Set();
     let dead = false;
-    // The piece the link brought: picked once the list is known, then forgotten.
-    let wanted = ctx.route && ctx.route.arg ? ctx.route.arg : null;
 
     function later(ms, fn) {
       const id = setTimeout(() => {
@@ -115,13 +118,6 @@ export default {
       return id;
     }
     const wait = (ms) => new Promise((ok) => later(ms, ok));
-
-    /* ---------- the head ---------- */
-
-    const chipEssence = h("span.chip.chip-violet", iconEl("gem"), h("span"));
-    const chipCharm = h("span.chip.chip-gold", iconEl("charm"), h("span"));
-    const chipPieces = h("span.chip", iconEl("band"), h("span"));
-    const pageSub = h("p.page-sub");
 
     /* ---------- the mode ---------- */
 
@@ -134,63 +130,55 @@ export default {
       mode = next;
       setAttr(segFortify, "aria-selected", mode === "fortify");
       setAttr(segConvert, "aria-selected", mode === "convert");
-      toggleClass(view, "is-convert", mode === "convert");
-      riteCard.dataset.tone = mode === "convert" ? "gold" : "violet";
-      fRite.hidden = mode !== "fortify";
-      fLedger.hidden = mode !== "fortify";
-      cRite.hidden = mode !== "convert";
-      cLedger.hidden = mode !== "convert";
-      oddsCard.hidden = mode !== "fortify";
-      tollCard.hidden = mode !== "convert";
+      const forge = mode === "fortify";
+      fRite.hidden = !forge;
+      fUnder.hidden = !forge;
+      cRite.hidden = forge;
+      cUnder.hidden = forge;
+      stockCard.hidden = !forge;
       sigs.pieces = null;
-      sigs.log = null;
+      sigs.stock = null;
       paint();
     }
 
-    /* ---------- the rite: fortify ---------- */
+    /* ---------- the circle ---------- */
 
     const rings = () => [h("div.ring.ring-outer"), h("div.ring.ring-ticks"), h("div.ring.ring-runes"), h("div.ring.ring-inner")];
 
     const fHalo = haloNode();
-    const fCore = h("button.rite-core.bracket", { type: "button", onClick: () => look(sel) }, h("span.rite-core-art"));
+    const fCore = h("div.rite-core.bracket.is-drop", { role: "img" }, h("span.rite-core-art"));
     const fPlate = plusPlate(0, "rite-plus");
     const fFx = h("div.rite-fx");
     const sockets = [1, 2, 3].map((i) => h("button.socket", {
       type: "button", class: `s${i}`, dataset: { socket: String(i) }, "aria-pressed": false,
-    }, iconEl("gem"), h("span.socket-l", "Essence")));
+    }, h("span.socket-art"), h("span.socket-l", "Essence")));
     const socketCharm = h("button.socket.socket-charm.s4", { type: "button", dataset: { socket: "charm" }, "aria-pressed": false },
-      iconEl("charm"), h("span.socket-l", "Charm"));
+      h("span.socket-art"), h("span.socket-l", "Charm"));
     const fRiteNode = h("div.rite", rings(), fHalo, fFx, fCore, fPlate, sockets, socketCharm);
     const fRite = h("div.rite-scale", fRiteNode);
 
+    /* ---------- under the circle: the odds and the press ---------- */
+
     const oddsV = h("span.odds-v");
     const oddsSub = h("span.odds-sub");
-    const stakeChips = [1, 2, 3].map((n) => h("button.chip", { type: "button", dataset: { stake: String(n) }, "aria-pressed": false }, String(n)));
-    const rowStaked = h("span.v");
-    const rowCharm = h("span.v");
-    const rowTakes = h("span.v.t-good");
-    const rowFails = h("span.v");
+    const help = h("button.info-btn", { type: "button", "aria-label": "How the odds and the gain work" }, iconEl("info"));
+    const oddsRows = h("div.odds-strip", { role: "list" });
     const goBtn = h("button.btn.btn-primary.btn-lg.btn-block", { type: "button", onClick: () => strike() }, "Fortify");
-    const fNote = h("p.rite-note", "The Veil takes only what you stake. A charm is spent whether it takes or not.");
-    const fLedger = h("div.rite-ledger",
-      h("div.odds", h("span.eyebrow", "Odds of taking"), oddsV, oddsSub),
-      h("div.stake", { role: "group", "aria-label": "Essence to stake" }, h("span.eyebrow", "Stake"), stakeChips),
-      h("div.stats",
-        h("div.stat", h("span.l", "Essence staked"), rowStaked),
-        h("div.stat", h("span.l", "Charm"), rowCharm),
-        h("div.stat", h("span.l", "If it takes"), rowTakes),
-        h("div.stat", h("span.l", "If it fails"), rowFails)),
-      goBtn,
-      fNote);
+    const fUnder = h("div.rite-under",
+      h("div.odds-head",
+        h("div.odds", h("span.eyebrow", "Odds of taking"), oddsV, oddsSub),
+        help),
+      oddsRows,
+      goBtn);
 
-    /* ---------- the rite: convert ---------- */
+    /* ---------- convert ---------- */
 
     const cFromHalo = haloNode();
     const cToHalo = haloNode();
     cFromHalo.classList.add("at-from");
     cToHalo.classList.add("at-to");
-    const cFrom = h("button.rite-core.bracket.core-from", { type: "button", onClick: () => look(cv.from) }, h("span.rite-core-art"));
-    const cTo = h("button.rite-core.bracket.core-to", { type: "button", onClick: () => look(cv.to) }, h("span.rite-core-art"));
+    const cFrom = h("div.rite-core.bracket.core-from.is-drop", { role: "img", dataset: { core: "from" } }, h("span.rite-core-art"));
+    const cTo = h("div.rite-core.bracket.core-to.is-drop", { role: "img", dataset: { core: "to" } }, h("span.rite-core-art"));
     const cFromPlate = plusPlate(0, "rite-plus at-from");
     const cToPlate = plusPlate(0, "rite-plus at-to");
     const cIdle = h("div.xbeam-idle", { hidden: true });
@@ -202,80 +190,51 @@ export default {
 
     const tollV = h("span.toll-v");
     const tollSub = h("span.odds-sub");
-    const cRowFrom = h("span.v");
-    const cRowTo = h("span.v");
-    const cRowEss = h("span.v");
-    const cRowAfter = h("span.v.t-good");
+    const cHelp = h("button.info-btn", { type: "button", "aria-label": "How the toll works" }, iconEl("info"));
     const cBtn = h("button.btn.btn-gold.btn-lg.btn-block", { type: "button", onClick: () => carry() }, "Convert");
-    const cLedger = h("div.rite-ledger", { hidden: true },
-      h("div.odds", h("span.eyebrow", "The toll"), tollV, tollSub),
-      h("div.stats",
-        h("div.stat", h("span.l", "From"), cRowFrom),
-        h("div.stat", h("span.l", "To"), cRowTo),
-        h("div.stat", h("span.l", "Essence"), cRowEss),
-        h("div.stat", h("span.l", "After"), cRowAfter)),
-      cBtn,
-      h("p.rite-note", "Same slot only, and the new piece must be unworked. Nothing is rolled: it always takes, and the old piece goes back to +0."));
+    const cUnder = h("div.rite-under", { hidden: true },
+      h("div.odds-head",
+        h("div.odds", h("span.eyebrow", "The toll"), tollV, tollSub),
+        cHelp),
+      cBtn);
 
     /* ---------- the cards ---------- */
 
-    const riteTitle = h("h2.card-title", iconEl("gem"), "The rite");
     const riteSub = h("p.card-sub");
-    const riteTag = h("span.tag.tag-violet");
     const riteCard = h("section.card.forge-rite", { "data-tone": "violet" },
-      h("div.card-head", h("div", riteTitle, riteSub), h("div.card-actions", seg, riteTag)),
-      h("div.rite-wrap", fRite, cRite, fLedger, cLedger));
+      h("div.card-head", h("div", h("h2.card-title", "The rite"), riteSub), h("div.card-actions", seg)),
+      h("div.rite-wrap", fRite, cRite, fUnder, cUnder));
 
-    const piecesSub = h("p.card-sub");
-    const piecesList = h("div.pick-list.pieces");
-    const piecesCard = h("section.card.forge-pieces",
-      h("div.card-head", h("div", h("h2.card-title", "Pieces"), piecesSub), h("div.card-actions", chipPieces)),
-      piecesList);
+    const piecesGrid = h("div.slot-grid.forge-grid");
+    const piecesCard = h("section.card.forge-rack",
+      h("div.card-head", h("div", h("h2.card-title", "Pieces"))),
+      piecesGrid);
 
-    const oddsBody = h("tbody");
-    const oddsCard = h("section.card.card-flush.forge-odds",
-      h("div.card-head", h("div", h("h2.card-title", "The odds"),
-        h("p.card-sub", `By essence staked. A charm multiplies the row by ×${EN.charmMult}, held at 100%.`))),
-      h("div.odds-table", h("table.table.table-tight",
-        h("thead", h("tr", h("th", "To"), h("th.num", "1"), h("th.num", "2"), h("th.num", "3"), h("th", "Halo"))),
-        oddsBody)));
-
-    const tollBody = h("tbody");
-    const tollCard = h("section.card.card-flush.forge-odds", { hidden: true },
-      h("div.card-head", h("div", h("h2.card-title", "The toll"),
-        h("p.card-sub", `${fmtGold(EN.convert.goldPerLevelSq)} × level², and ${EN.convert.essencePerLevel} essence a level of the new piece's band. The level carries whole.`))),
-      h("div.odds-table", h("table.table.table-tight",
-        h("thead", h("tr", h("th", "Carry"), h("th.num", "Gold"), h("th.num", "Essence"), h("th", "Halo"))),
-        tollBody)));
+    const stockGrid = h("div.slot-grid.forge-grid");
+    const stockCard = h("section.card.forge-rack",
+      h("div.card-head", h("div", h("h2.card-title", "Essence"))),
+      stockGrid);
 
     const logList = h("ol.log");
     const logEmpty = h("p.small.muted", "Nothing worked yet.");
     const logCard = h("section.card.forge-log",
-      h("div.card-head", h("div", h("h2.card-title", "Worked lately"),
-        h("p.card-sub", "Takes and carryings are kept in the camp log. Refusals are only remembered while you are here."))),
+      h("div.card-head", h("div", h("h2.card-title", "History"))),
       logList, logEmpty);
-
-    const empty = h("section.card", { hidden: true },
-      h("div.empty",
-        h("div.empty-art", iconEl("band")),
-        h("div.empty-title", "Nothing takes the Veil yet"),
-        h("p.empty-text", "An amulet or a ring, worn or in Belongings, the Stockpile or the Vault, goes on the anvil. Armour and weapons are never worked.")));
 
     view.appendChild(h("div.page.fortify-page",
       h("header.page-head",
         h("div",
           h("div.eyebrow.page-eyebrow", "The Camp"),
-          h("h1.page-title", "Fortify"),
-          pageSub),
-        h("div.page-actions", chipEssence, chipCharm, chipPieces)),
-      empty,
+          h("h1.page-title", "Fortify"))),
       h("div.forge",
         h("div.forge-col", riteCard, logCard),
-        h("div.forge-col", piecesCard, oddsCard, tollCard))));
+        h("div.forge-col", piecesCard, stockCard))));
+
+    tooltip(help, () => oddsTip(), { placement: "left" });
+    tooltip(cHelp, () => tollTip(), { placement: "left" });
 
     /* ---------- fitting the circle ---------- */
 
-    // The rite is drawn on a 440px grid and scaled to whatever width it has.
     const fit = () => {
       [fRite, cRite].forEach((wrap) => {
         const w = wrap.clientWidth || 440;
@@ -290,76 +249,142 @@ export default {
       window.addEventListener("resize", fit);
     }
 
-    /* ---------- picking ---------- */
+    /* ================= 3. PUTTING THINGS ON THE ANVIL ================= */
 
-    on(piecesList, "click", "button.pick-row[data-key]", (e, b) => {
-      const p = { key: b.dataset.key, at: b.dataset.at };
+    /* A piece goes on the anvil; an essence goes in a socket. Either by a drag or
+       by a press, because a press is faster once you know the board and a drag is
+       what the hand reaches for the first time. */
+
+    function putPiece(p) {
       if (mode === "fortify") {
         if (phase !== "idle") return;
-        sel = p;
-        stones = 1;
+        if (samePiece(p, sel)) sel = null;
+        else {
+          sel = { key: p.key, at: p.at };
+          stones = 0;
+          charm = false;
+        }
       } else {
         if (cphase !== "idle") return;
-        if (b.dataset.role === "from") {
-          cv = samePiece(cv.from, p) ? { from: null, to: null } : { from: p, to: null };
-        } else {
-          cv.to = samePiece(cv.to, p) ? null : p;
-        }
+        const lv = level(p.key);
+        // A worked piece gives; an unworked one of the same slot takes.
+        if (lv >= 1 && !samePiece(p, cv.to)) cv = samePiece(p, cv.from) ? { from: null, to: null } : { from: p, to: cv.to };
+        else cv.to = samePiece(p, cv.to) ? null : p;
+        if (cv.from && cv.to && itemDef(cv.from.key).slot !== itemDef(cv.to.key).slot) cv.to = null;
       }
       sigs.pieces = null;
       paint();
-    });
-
-    // The piece's own sheet, off the core: what it carries and what it is worth.
-    function look(p) {
-      if (!p) return;
-      openPopup("item", ctx, p.key, { from: GameData.EQUIP_SLOTS.includes(p.at) ? "worn" : p.at });
     }
 
-    on(fRiteNode, "click", "button.socket[data-socket]", (e, b) => {
-      if (phase !== "idle" || !sel) return;
+    // Which socket a held essence or charm would go in, or null when none will take it.
+    function socketFor(row) {
+      if (mode !== "fortify" || phase !== "idle" || !sel) return null;
       const plan = enchantPlan(ctx.state, sel.key);
-      if (!plan || plan.maxed) return;
-      if (b.dataset.socket === "charm") {
-        toggleCharm(plan);
+      if (!plan || plan.maxed) return null;
+      if (row.kind === "charm") return row.key === plan.charm && row.qty >= 1 && !charm ? "charm" : null;
+      if (row.key !== plan.stone) return null;
+      return stones < EN.maxStones && stones < plan.have ? String(stones + 1) : null;
+    }
+
+    function putStock(row) {
+      const where = socketFor(row);
+      if (!where) {
+        if (!sel) toast("Put a piece on the anvil first", { kind: "info" });
+        else if (row.qty < 1) toast(`No ${itemName(row.key)} held`, { kind: "warn" });
+        else toast(`The ${slotWord(itemDef(sel.key))} takes ${itemName(bandOf(sel.key)[row.kind === "charm" ? "charm" : "stone"])}`, { kind: "warn" });
         return;
       }
-      const i = Number(b.dataset.socket);
-      // A filled socket empties itself and the ones after it; an empty one fills up to itself.
-      stones = stones >= i ? Math.max(1, i - 1) : Math.min(i, Math.max(1, plan.have));
+      if (where === "charm") charm = true;
+      else stones = Number(where);
       paint();
+    }
+
+    on(piecesGrid, "click", "button.slot[data-key]", (e, b) => {
+      putPiece({ key: b.dataset.key, at: b.dataset.at });
     });
 
-    on(fLedger, "click", "button.chip[data-stake]", (e, b) => {
-      if (phase !== "idle") return;
-      stones = Number(b.dataset.stake) || 1;
-      paint();
+    on(stockGrid, "click", "button.slot[data-key]", (e, b) => {
+      const row = stock(ctx.state).find((x) => x.key === b.dataset.key);
+      if (row) putStock(row);
     });
 
-    /* The charm socket: off, on, or bought. A charm the camp does not hold is
-       offered from the Bonesetter right here, because walking to the Shop for one
-       is friction for nothing. */
-    async function toggleCharm(plan) {
-      if (charm) {
-        charm = false;
+    // A filled socket empties itself and every socket after it.
+    on(fRiteNode, "click", "button.socket[data-socket]", (e, b) => {
+      if (phase !== "idle" || !sel) return;
+      if (b.dataset.socket === "charm") {
+        if (charm) charm = false;
+        else buyCharm();
         paint();
         return;
       }
+      const i = Number(b.dataset.socket);
+      stones = stones >= i ? i - 1 : Math.min(i, enchantPlan(ctx.state, sel.key).have);
+      paint();
+    });
+
+    /* ---- dragging ---- */
+
+    const dragEnd = () => {
+      drag = null;
+      view.querySelectorAll(".is-over").forEach((n) => n.classList.remove("is-over"));
+    };
+
+    on(view, "dragstart", "[draggable=true]", (e, b) => {
+      drag = { what: b.dataset.what, key: b.dataset.key, at: b.dataset.at || null };
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", b.dataset.key);
+      }
+    });
+    on(view, "dragend", "[draggable=true]", dragEnd);
+
+    /* A socket takes stock the anvil can use, a core takes a piece, and anything
+       else refuses the drop. Which socket it lands in is socketFor's business:
+       aiming at the third hole with two empty ones behind it still fills the next. */
+    const takes = (target) => {
+      if (!drag) return false;
+      if (!target.dataset.socket) return drag.what === "piece";
+      if (drag.what !== "stock") return false;
+      const row = stock(ctx.state).find((x) => x.key === drag.key);
+      return !!(row && socketFor(row));
+    };
+
+    on(view, "dragover", ".socket, .rite-core.is-drop", (e, t) => {
+      if (!takes(t)) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+      t.classList.add("is-over");
+    });
+    on(view, "dragleave", ".socket, .rite-core.is-drop", (e, t) => t.classList.remove("is-over"));
+    on(view, "drop", ".socket, .rite-core.is-drop", (e, t) => {
+      e.preventDefault();
+      const held = drag;
+      dragEnd();
+      if (!held) return;
+      if (held.what === "piece") putPiece({ key: held.key, at: held.at });
+      else {
+        const row = stock(ctx.state).find((x) => x.key === held.key);
+        if (row) putStock(row);
+      }
+    });
+
+    /* A charm the camp does not hold is offered from the Bonesetter right here,
+       because walking to the Shop for one is friction for nothing. */
+    async function buyCharm() {
+      const plan = sel ? enchantPlan(ctx.state, sel.key) : null;
+      if (!plan || plan.maxed) return;
       if (plan.charms >= 1) {
         charm = true;
         paint();
         return;
       }
       const entry = shopStock(ctx.state).find((x) => x.key === plan.charm);
-      if (!entry) {
-        toast(`The Bonesetter has no ${itemName(plan.charm)}`, { kind: "warn" });
-        return;
-      }
+      if (!entry) return;
       const ok = await confirmSpend(ctx, {
         title: `Buy a ${itemName(plan.charm)}?`,
-        body: `It rides in the fourth socket and multiplies the odds by ×${EN.charmMult}. Spent whether the rite takes or not.`,
+        body: `Multiplies the odds by ×${EN.charmMult}, spent either way.`,
         gold: entry.price,
-        confirmText: `Buy for ${fmtGold(entry.price)}`,
+        confirmText: fmtGold(entry.price),
         art: "charm",
       });
       if (!ok || dead) return;
@@ -369,7 +394,7 @@ export default {
       paint();
     }
 
-    /* ---------- the press ---------- */
+    /* ================= 4. THE PRESS ================= */
 
     function fx(box, ...nodes) {
       box.replaceChildren(...nodes);
@@ -389,7 +414,7 @@ export default {
     }
 
     async function strike() {
-      if (phase !== "idle" || !sel) return;
+      if (phase !== "idle" || !sel || stones < 1) return;
       const plan = enchantPlan(ctx.state, sel.key);
       if (!plan || plan.maxed || plan.have < stones || (charm && plan.charms < 1)) return;
       const { key, at } = sel;
@@ -410,7 +435,6 @@ export default {
       const res = await ctx.dispatch("enchant", { key, from: at, stones: staked, charm: withCharm });
       if (dead) return;
       if (!res.ok) {
-        // The toast has already said why.
         setPhase("idle");
         return;
       }
@@ -419,18 +443,19 @@ export default {
         sel = { key: res.data.key, at };
         const hl = res.data.halo ? haloOf(res.data.level) : null;
         fx(fFx, h("div.flash"), h("div.shock"), sparks(),
-          stamp("stamp-took", "Fortified", hl ? `+${res.data.level} · the ${hl.name} halo` : `+${res.data.level} · the Veil holds`));
+          stamp("stamp-took", "Fortified", hl ? `+${res.data.level} · the ${hl.name} halo` : `+${res.data.level}`));
         setPhase("took");
       } else {
-        refusals.unshift({ t: ctx.now, m: `The Veil refused ${bareName(key)} at +${before + 1}. ${staked} Essence lost${withCharm ? ", and the charm" : ""}.` });
+        refusals.unshift({ t: ctx.now, m: `${bareName(key)} refused at +${before + 1}. ${staked} Essence lost${withCharm ? " and a charm" : ""}.` });
         refusals.splice(LOG_LINES);
-        fx(fFx, h("div.flash"), smoke(),
-          stamp("stamp-refused", "Failed", `${staked} Essence lost · still +${before}`));
+        fx(fFx, h("div.flash"), smoke(), stamp("stamp-refused", "Failed", `Still +${before}`));
         setPhase("refused");
       }
-      // A charm is spent either way; the next press is a fresh choice.
+      // The sockets empty: a press is a fresh choice, and a charm is spent either way.
+      stones = 0;
       charm = false;
       sigs.pieces = null;
+      sigs.stock = null;
       sigs.log = null;
       paint();
       later(REST_MS, () => setPhase("idle"));
@@ -455,9 +480,9 @@ export default {
       const to = { ...cv.to };
       const ok = await confirmSpend(ctx, {
         title: `Carry +${plan.level} onto the ${bareName(to.key)}?`,
-        body: `${fmtGold(plan.toll.gold)} and ${plan.toll.essence} ${itemName(plan.toll.stone)}. The ${bareName(from.key)} goes back to +0.`,
+        body: `${plan.toll.essence} ${itemName(plan.toll.stone)} as well. The ${bareName(from.key)} goes back to +0.`,
         gold: plan.toll.gold,
-        confirmText: `Pay ${fmtGold(plan.toll.gold)}`,
+        confirmText: fmtGold(plan.toll.gold),
         art: "coin",
       });
       if (!ok || dead || cphase !== "idle") return;
@@ -475,7 +500,7 @@ export default {
       }
       cv = { from: { key: res.data.key, at: to.at }, to: null };
       fx(cFx, h("div.flash"), h("div.shock"), sparks(),
-        stamp("stamp-converted", "Converted", `${bareName(res.data.key)} +${res.data.level} · ${bareName(res.data.from)} +0`));
+        stamp("stamp-converted", "Converted", `+${res.data.level}`));
       setCPhase("done");
       sigs.pieces = null;
       sigs.log = null;
@@ -483,10 +508,125 @@ export default {
       later(REST_MS, () => setCPhase("idle"));
     }
 
-    /* ---------- painting ---------- */
+    /* ================= 5. PAINTING ================= */
 
-    const sigs = { pieces: null, odds: null, toll: null, log: null, logAt: 0 };
+    const sigs = { pieces: null, stock: null, odds: null, log: null, logAt: 0 };
     const logTimes = [];
+
+    /* The whole table, and what a level is worth, behind the one question mark:
+       it is reference, wanted once, and it has no business on the board. */
+    function oddsTip() {
+      const at = sel ? enchantPlan(ctx.state, sel.key) : null;
+      const me = at && !at.maxed ? at.level + 1 : 0;
+      return tipBody({
+        title: "The odds",
+        text: `An essence is worth ${fmtWhole(EN.stoneWorth)} against the level you are reaching for. Stake up to ${EN.maxStones}; a charm of the band multiplies what they come to by ×${EN.charmMult}. Every level is worth ${+(EN.gainPerLevel * 100).toFixed(1)}% more of everything the piece carries.`,
+        table: {
+          head: ["To", "1", "2", "3"],
+          rows: Array.from({ length: EN.max }, (_, i) => ({
+            className: i + 1 === me ? "is-me" : null,
+            cells: [`+${i + 1}`, ...[1, 2, 3].map((n) => pct(enchantChance(i, n, false)))],
+          })),
+        },
+        foot: "A refusal costs the essence and nothing else.",
+      });
+    }
+
+    function tollTip() {
+      return tipBody({
+        title: "The toll",
+        text: `${fmtGold(EN.convert.goldPerLevelSq)} times the level squared, and ${EN.convert.essencePerLevel} essence a level of the new piece's band. Same slot, and the new piece must be unworked.`,
+        table: {
+          head: ["Carry", "Gold", "Essence"],
+          rows: [3, 6, 9, 12, 15].map((lv) => ({
+            cells: [`+${lv}`, fmtGold(EN.convert.goldPerLevelSq * lv * lv), String(EN.convert.essencePerLevel * lv)],
+          })),
+        },
+      });
+    }
+
+    /* Three rows of the table on the board itself: the one you are reaching for
+       between the one below and the one above, and the rest a scroll away. */
+    function paintOdds(plan) {
+      const me = plan && !plan.maxed ? plan.level + 1 : 0;
+      const sig = `${me}|${stones}|${charm ? 1 : 0}`;
+      if (sig === sigs.odds) return;
+      sigs.odds = sig;
+      const n = Math.max(1, stones);
+      oddsRows.replaceChildren(...Array.from({ length: EN.max }, (_, i) => {
+        const lv = i + 1;
+        const hl = haloOf(lv);
+        return h("div.odds-row", { class: lv === me && "is-me", role: "listitem" },
+          h("span.odds-lv", `+${lv}`),
+          hl && hl.at === lv ? haloTag(hl) : h("span"),
+          h("span.odds-n", pct(enchantChance(i, n, charm))));
+      }));
+      const row = oddsRows.children[me - 1];
+      if (row) oddsRows.scrollTop = Math.max(0, row.offsetTop - (oddsRows.clientHeight - row.offsetHeight) / 2);
+    }
+
+    /* ---------- the racks ---------- */
+
+    function pieceTile(p, { on: isOn, tag }) {
+      const d = itemDef(p.key);
+      const lv = level(p.key);
+      const node = h("button.slot.forge-tile", {
+        type: "button", draggable: "true",
+        dataset: { key: p.key, at: p.at, what: "piece" },
+        class: isOn && "is-on",
+        title: `${bareName(p.key)} +${lv}`,
+        "aria-pressed": !!isOn,
+        "aria-label": `${bareName(p.key)}, +${lv}, ${p.worn ? "worn" : poolName(p.at)}`,
+      },
+        lv > 0 ? plusPlate(lv, "slot-plus") : null,
+        h("span.slot-art", { "data-rarity": d.rarity || "common" }, iconEl(d.icon)),
+        h("span.slot-name", bareName(p.key)),
+        tag ? h("span.slot-tag", { class: tag.cls }, tag.text) : p.worn ? h("span.slot-tag", "Worn") : null);
+      paintMini(node.querySelector(".slot-art"), lv, d.slot);
+      return node;
+    }
+
+    function stockTile(row) {
+      const d = itemDef(row.key);
+      const wanted = !!socketFor(row);
+      return h("button.slot.forge-tile", {
+        type: "button", draggable: row.qty > 0 ? "true" : null,
+        dataset: { key: row.key, what: "stock", kind: row.kind },
+        class: [row.qty < 1 && "is-spent", wanted && "is-wanted"],
+        title: itemName(row.key),
+        "aria-label": `${itemName(row.key)}, ${fmtWhole(row.qty)} held`,
+      },
+        h("span.slot-qty", row.qty > 0 ? fmt(row.qty) : "0"),
+        h("span.slot-art", { class: hasArt(d) && "art-paint" }, artEl(d, { variant: "cut" })),
+        h("span.slot-name", itemName(row.key)));
+    }
+
+    function paintPieces(state, list) {
+      const sig = [mode, list.map((p) => `${p.key}@${p.at}`).join(","), sel && `${sel.key}@${sel.at}`,
+        cv.from && `${cv.from.key}@${cv.from.at}`, cv.to && `${cv.to.key}@${cv.to.at}`].join("|");
+      if (sig === sigs.pieces) return;
+      sigs.pieces = sig;
+      if (!list.length) {
+        piecesGrid.replaceChildren(h("p.small.muted.rack-none", "No amulet and no ring. Armour and weapons never take the Veil."));
+        return;
+      }
+      piecesGrid.replaceChildren(...list.map((p) => (mode === "fortify"
+        ? pieceTile(p, { on: samePiece(p, sel) })
+        : pieceTile(p, {
+          on: samePiece(p, cv.from) || samePiece(p, cv.to),
+          tag: samePiece(p, cv.from) ? { cls: "tag-gold", text: "From" } : samePiece(p, cv.to) ? { cls: "tag-good", text: "To" } : null,
+        }))));
+    }
+
+    function paintStock(state) {
+      const rows = stock(state);
+      const sig = rows.map((r) => `${r.key}:${r.qty}:${socketFor(r) ? 1 : 0}`).join(",");
+      if (sig === sigs.stock) return;
+      sigs.stock = sig;
+      stockGrid.replaceChildren(...rows.map(stockTile));
+    }
+
+    /* ---------- the anvil ---------- */
 
     function coreArt(core, key) {
       const d = key ? itemDef(key) : null;
@@ -497,53 +637,17 @@ export default {
       art.replaceChildren(d ? iconEl(d.icon) : iconEl("band"));
       setAttr(core, "data-rarity", d ? d.rarity || "common" : null);
       toggleClass(core, "is-empty", !d);
-      setAttr(core, "aria-label", d ? `${itemName(key)}: about this piece` : "Nothing on the anvil");
-      core.disabled = !d;
+      setAttr(core, "aria-label", d ? bareName(key) : "Nothing on the anvil");
     }
 
-    function pieceRow(p, { selected, role = null, tag = null }) {
-      const d = itemDef(p.key);
-      const lv = level(p.key);
-      const art = h("span.art.art-sm", { "data-rarity": d.rarity || "common", "aria-hidden": "true" }, iconEl(d.icon));
-      paintMini(art, lv, d.slot);
-      const where = p.worn ? "Worn" : poolName(p.at);
-      const sub = [`${rarityWord(p.key)} ${slotWord(d)}`, where, p.qty > 1 ? `×${fmtWhole(p.qty)}` : null].filter(Boolean).join(" · ");
-      return h("button.pick-row", {
-        type: "button", dataset: { key: p.key, at: p.at, role }, "aria-selected": !!selected,
-        "aria-label": `${bareName(p.key)}, +${lv}, ${where}`,
-      },
-        art,
-        h("span.lr-main", h("span.lr-title", bareName(p.key)), h("span.lr-sub", sub)),
-        h("span.lr-end",
-          tag ? h("span.tag", { class: tag.cls }, tag.text) : null,
-          plusPlate(lv)));
-    }
-
-    function paintPieces(state, list) {
-      const sig = [mode, list.map((p) => `${p.key}@${p.at}:${p.qty}`).join(","), sel && `${sel.key}@${sel.at}`,
-        cv.from && `${cv.from.key}@${cv.from.at}`, cv.to && `${cv.to.key}@${cv.to.at}`].join("|");
-      if (sig === sigs.pieces) return;
-      sigs.pieces = sig;
-      setText(chipPieces.lastChild, `${list.length} ${list.length === 1 ? "piece" : "pieces"}`);
-
-      if (mode === "fortify") {
-        setText(piecesSub, "Amulets and rings only, worn or carried. Armour and weapons are never worked.");
-        piecesList.replaceChildren(...list.map((p) => pieceRow(p, { selected: samePiece(p, sel) })));
-        return;
-      }
-      const worked = list.filter((p) => level(p.key) >= 1);
-      const fromDef = cv.from ? itemDef(cv.from.key) : null;
-      const bare = list.filter((p) => level(p.key) < 1 && (!fromDef || itemDef(p.key).slot === fromDef.slot) && !samePiece(p, cv.from));
-      setText(piecesSub, "Pick a worked piece, then an unworked one of the same slot to carry its level onto.");
-      piecesList.replaceChildren(
-        h("div.pieces-group", h("div.eyebrow", "Worked"),
-          worked.length
-            ? worked.map((p) => pieceRow(p, { selected: samePiece(p, cv.from), role: "from", tag: samePiece(p, cv.from) ? { cls: "tag-gold", text: "From" } : null }))
-            : h("p.small.muted.pieces-none", "Nothing is worked yet. Fortify a piece first.")),
-        h("div.pieces-group", h("div.eyebrow", fromDef ? `Unworked ${slotWord(fromDef)}s` : "Unworked"),
-          bare.length
-            ? bare.map((p) => pieceRow(p, { selected: samePiece(p, cv.to), role: "to", tag: samePiece(p, cv.to) ? { cls: "tag-good", text: "To" } : null }))
-            : h("p.small.muted.pieces-none", fromDef ? `No unworked ${slotWord(fromDef)} to carry it onto.` : "Nothing unworked to carry a level onto.")));
+    function socketArt(node, key) {
+      const art = node.querySelector(".socket-art");
+      const sig = key || "";
+      if (node.dataset.sig === sig) return;
+      node.dataset.sig = sig;
+      const d = key ? itemDef(key) : null;
+      art.replaceChildren(d ? artEl(d, { variant: "cut" }) : iconEl("plus"));
+      toggleClass(art, "art-paint", !!(d && hasArt(d)));
     }
 
     function paintFortify(state, plan) {
@@ -553,72 +657,60 @@ export default {
       setAttr(fRiteNode, "data-rarity", d ? d.rarity || "common" : null);
       paintPlate(fPlate, plan ? plan.level : 0);
       paintHalo(fHalo, plan ? plan.level : 0, d ? d.slot : null);
-      fPlate.hidden = !plan;
+      fPlate.hidden = !plan || plan.level < 1;
 
       const have = plan ? plan.have : 0;
       const charms = plan ? plan.charms : 0;
-      if (plan && !plan.maxed) stones = Math.max(1, Math.min(EN.maxStones, Math.min(stones, Math.max(1, have))));
+      if (plan && stones > have) stones = have;
       if (charm && charms < 1 && idle) charm = false;
 
       sockets.forEach((s, i) => {
-        const filled = !!plan && !plan.maxed && stones >= i + 1;
+        const filled = !!plan && stones >= i + 1;
         toggleClass(s, "is-filled", filled);
         toggleClass(s, "is-empty", !filled);
         setAttr(s, "aria-pressed", filled);
         s.disabled = !plan || plan.maxed || !idle;
+        socketArt(s, filled ? plan.stone : null);
         setAttr(s, "aria-label", `Essence socket ${i + 1}${filled ? ", filled" : ", empty"}`);
       });
       toggleClass(socketCharm, "is-filled", charm);
       toggleClass(socketCharm, "is-empty", !charm);
       setAttr(socketCharm, "aria-pressed", charm);
       socketCharm.disabled = !plan || plan.maxed || !idle;
-      setAttr(socketCharm, "aria-label", charm ? "Charm socket, filled" : charms >= 1 ? "Charm socket, empty" : "Charm socket, empty: buy a charm");
+      socketArt(socketCharm, charm && plan ? plan.charm : null);
+      setAttr(socketCharm, "aria-label", charm ? "Charm socket, filled" : "Charm socket, empty");
 
       if (!plan) {
-        setText(riteSub, "Pick an amulet or a ring from the Pieces.");
-        setText(riteTag, "Nothing on the anvil");
+        setText(riteSub, "An amulet or a ring on the anvil, then the essence.");
         setText(oddsV, "0%");
         oddsV.className = "odds-v";
-        setText(oddsSub, "");
-        [rowStaked, rowCharm, rowTakes, rowFails].forEach((r) => r.replaceChildren("None"));
-        stakeChips.forEach((c) => { c.disabled = true; setAttr(c, "aria-pressed", false); });
+        setText(oddsSub, "Nothing on the anvil");
         goBtn.disabled = true;
         setText(goBtn, "Fortify");
+        paintOdds(null);
         return;
       }
 
-      setText(riteSub, `${bareName(plan.key)} · ${rarityWord(plan.key)} ${slotWord(d)} · Tier ${d.tier} · ${whereWord(sel.at)}`);
-      setText(riteTag, plan.maxed ? `Complete · +${plan.max}` : `Next · +${plan.level + 1}`);
+      setText(riteSub, `${bareName(plan.key)} · ${rarityName(plan.key)} ${slotWord(d)} · ${plan.maxed ? `+${plan.max}, as far as it goes` : `reaching +${plan.level + 1}`}`);
 
-      const share = plan.maxed ? 0 : enchantChance(plan.level, stones, charm);
-      const base = plan.maxed ? 0 : enchantChance(plan.level, stones, false);
+      const share = plan.maxed || stones < 1 ? 0 : enchantChance(plan.level, stones, charm);
       if (plan.maxed) {
         setText(oddsV, "Done");
         oddsV.className = "odds-v t-gold";
         setText(oddsSub, `+${plan.max} is the top of the rite`);
+      } else if (stones < 1) {
+        setText(oddsV, "0%");
+        oddsV.className = "odds-v";
+        setText(oddsSub, have < 1 ? `No ${itemName(plan.stone)} held` : "Socket an essence");
       } else {
         setText(oddsV, pct(share));
         oddsV.className = `odds-v ${oddsTone(share)}`;
-        setText(oddsSub, have < 1
-          ? `No ${itemName(plan.stone)} to stake`
-          : charm ? `${stones} essence · ${pct(base)} · charm ×${EN.charmMult}` : `${stones} essence, no charm`);
+        setText(oddsSub, `${stones} of ${fmt(have)} ${itemName(plan.stone)}${charm ? ` · charm ×${EN.charmMult}` : ""}`);
       }
 
-      stakeChips.forEach((c, i) => {
-        const n = i + 1;
-        c.disabled = plan.maxed || !idle || have < n;
-        setAttr(c, "aria-pressed", !plan.maxed && stones === n);
-      });
-
-      rowStaked.replaceChildren(String(plan.maxed ? 0 : stones), h("small", `of ${fmt(have)} ${itemName(plan.stone)} held`));
-      rowCharm.className = `v${charm ? " t-gold" : ""}`;
-      rowCharm.replaceChildren(charm ? `×${EN.charmMult}` : "None", h("small", `${fmt(charms)} ${itemName(plan.charm)} held`));
-      rowTakes.replaceChildren(plan.maxed ? "Nothing more" : `+${plan.level + 1}`, h("small", plan.maxed ? "" : `every stat +${gainPct(plan.level + 1)}`));
-      rowFails.replaceChildren(plan.maxed ? "Nothing" : `${stones} essence lost`, h("small", plan.maxed ? "" : `keeps +${plan.level}`));
-
-      goBtn.disabled = !idle || plan.maxed || have < stones || (charm && charms < 1);
-      setText(goBtn, phase === "strike" ? "The Veil stirs" : phase === "took" ? "It took" : phase === "refused" ? "It failed"
-        : plan.maxed ? "Nothing more to work" : have < 1 ? `No ${itemName(plan.stone)} to stake` : `Fortify · ${stones} essence${charm ? " and a charm" : ""}`);
+      goBtn.disabled = !idle || plan.maxed || stones < 1 || have < stones || (charm && charms < 1);
+      setText(goBtn, phase === "strike" ? "The Veil stirs" : phase === "took" ? "It took" : phase === "refused" ? "It failed" : "Fortify");
+      paintOdds(plan);
     }
 
     function paintConvert(state) {
@@ -631,95 +723,45 @@ export default {
       coreArt(cTo, to ? to.key : null);
       paintPlate(cFromPlate, fromLv);
       paintPlate(cToPlate, toLv);
-      cFromPlate.hidden = !from;
-      cToPlate.hidden = !to;
+      cFromPlate.hidden = !from || fromLv < 1;
+      cToPlate.hidden = !to || toLv < 1;
       paintHalo(cFromHalo, cphase === "flow" ? 0 : fromLv, from ? from.key : null);
       paintHalo(cToHalo, toLv, to ? to.key : null);
 
       const plan = from && to ? convertPlan(state, from.key, to.key) : null;
       cIdle.hidden = !(idle && plan && plan.ok);
-      riteCard.dataset.tone = "gold";
 
       if (!from) {
-        setText(riteSub, "Pick a worked piece to carry a level from.");
-        setText(riteTag, "Nothing to carry");
+        setText(riteSub, "A worked piece, then an unworked one of the same slot.");
         setText(tollV, "0g");
         setText(tollSub, "");
-        [cRowFrom, cRowTo, cRowEss, cRowAfter].forEach((r) => r.replaceChildren("None"));
         cBtn.disabled = true;
         setText(cBtn, "Convert");
         return;
       }
       const fd = itemDef(from.key);
-      setText(riteTag, `Carries · +${fromLv}`);
-      cRowFrom.replaceChildren(bareName(from.key), h("small", `+${fromLv} · ${whereWord(from.at)}`));
       if (!to) {
         const toll = convertToll(fromLv, from.key);
-        setText(riteSub, `${bareName(from.key)} +${fromLv} · ${rarityWord(from.key)} ${slotWord(fd)} · pick an unworked ${slotWord(fd)} to carry it onto`);
+        setText(riteSub, `${bareName(from.key)} +${fromLv} · an unworked ${slotWord(fd)} to carry it onto`);
         setText(tollV, toll ? fmtGold(toll.gold) : "0g");
-        setText(tollSub, toll ? `${fmtGold(EN.convert.goldPerLevelSq)} × ${fromLv}² · and ${toll.essence} essence of the new piece's band` : "");
-        cRowTo.replaceChildren("None", h("small", "not picked yet"));
-        cRowEss.replaceChildren(String(toll ? toll.essence : 0), h("small", "of the new piece's band"));
-        cRowAfter.replaceChildren("None");
+        setText(tollSub, toll ? `and ${toll.essence} essence of the new piece's band` : "");
         cBtn.disabled = true;
         setText(cBtn, "Pick the new piece");
         return;
       }
-      const td = itemDef(to.key);
-      setText(riteSub, `${bareName(from.key)} +${fromLv} · ${rarityWord(from.key)} ${slotWord(fd)} · Tier ${fd.tier} · to ${bareName(to.key)} · ${rarityWord(to.key)} ${slotWord(td)} · Tier ${td.tier}`);
-      cRowTo.replaceChildren(bareName(to.key), h("small", `+${toLv} · ${whereWord(to.at)}`));
+      setText(riteSub, `${bareName(from.key)} +${fromLv} onto ${bareName(to.key)}`);
       if (!plan.ok) {
         setText(tollV, "0g");
         setText(tollSub, plan.why);
-        cRowEss.replaceChildren("None");
-        cRowAfter.replaceChildren("None");
         cBtn.disabled = true;
         setText(cBtn, "Convert");
         return;
       }
       setText(tollV, fmtGold(plan.toll.gold));
-      setText(tollSub, `${fmtGold(EN.convert.goldPerLevelSq)} × ${plan.level}² · and ${plan.toll.essence} ${itemName(plan.toll.stone)}`);
-      toggleClass(tollV, "is-short", plan.have.gold < plan.toll.gold);
-      cRowEss.className = `v${plan.have.essence < plan.toll.essence ? " t-bad" : ""}`;
-      cRowEss.replaceChildren(String(plan.toll.essence), h("small", `of ${fmt(plan.have.essence)} ${itemName(plan.toll.stone)} held`));
-      cRowAfter.replaceChildren(`${bareName(to.key)} +${plan.level}`, h("small", `${bareName(from.key)} +0`));
+      setText(tollSub, `and ${plan.toll.essence} of ${fmt(plan.have.essence)} ${itemName(plan.toll.stone)}`);
+      toggleClass(tollV, "is-short", !plan.afford);
       cBtn.disabled = !idle || !plan.afford;
-      setText(cBtn, cphase === "flow" ? "The level crosses" : cphase === "done" ? "Carried"
-        : plan.have.gold < plan.toll.gold ? `Short by ${fmtGold(plan.toll.gold - plan.have.gold)}`
-          : plan.have.essence < plan.toll.essence ? `Needs ${plan.toll.essence - plan.have.essence} more ${itemName(plan.toll.stone)}`
-            : `Convert · ${fmtGold(plan.toll.gold)}`);
-    }
-
-    function paintOdds(plan) {
-      const me = plan && !plan.maxed ? plan.level + 1 : 0;
-      if (sigs.odds === me) return;
-      sigs.odds = me;
-      oddsBody.replaceChildren(...Array.from({ length: EN.max }, (_, i) => {
-        const lv = i + 1;
-        const hl = haloOf(lv);
-        return h("tr", { class: lv === me && "is-me" },
-          h("td.strong", `+${lv}`),
-          [1, 2, 3].map((n) => {
-            const share = enchantChance(lv - 1, n, false);
-            return h("td.num", { class: share < 1 && "dimv" }, pct(share));
-          }),
-          h("td", hl && hl.at === lv ? haloTag(hl) : null));
-      }));
-    }
-
-    function paintToll() {
-      const me = cv.from ? level(cv.from.key) : 0;
-      if (sigs.toll === me) return;
-      sigs.toll = me;
-      tollBody.replaceChildren(...Array.from({ length: EN.max }, (_, i) => {
-        const lv = i + 1;
-        const hl = haloOf(lv);
-        return h("tr", { class: lv === me && "is-me" },
-          h("td.strong", `+${lv}`),
-          h("td.num", fmtGold(EN.convert.goldPerLevelSq * lv * lv)),
-          h("td.num", String(EN.convert.essencePerLevel * lv)),
-          h("td", hl && hl.at === lv ? haloTag(hl) : null));
-      }));
+      setText(cBtn, cphase === "flow" ? "The level crosses" : cphase === "done" ? "Carried" : !plan.afford ? "Not enough" : "Convert");
     }
 
     // Takes and carryings out of the camp log, and this visit's refusals, newest first.
@@ -736,10 +778,10 @@ export default {
           const m = String(l.m);
           const took = /took \+(\d+)/.exec(m);
           const lv = took ? Number(took[1]) : 0;
-          const tone = !took ? "ember" : haloOf(lv) ? haloTagClass(haloOf(lv)).replace("tag-", "") : "good";
+          const tone = !took ? "ember" : haloOf(lv) ? haloTagClass(haloOf(lv)).replace("tag-", "").replace("bone", "gold") : "good";
           const time = h("time", fmtAgo(t - l.t));
           logTimes.push({ node: time, t: l.t });
-          return h("li.log-line", { "data-tone": tone === "bone" ? "gold" : tone }, time, h("span.log-msg", m));
+          return h("li.log-line", { "data-tone": tone }, time, h("span.log-msg", m));
         }));
         logEmpty.hidden = lines.length > 0;
       } else if (t - sigs.logAt > 30 * 1000) {
@@ -752,42 +794,19 @@ export default {
       const state = ctx.state;
       const list = pieces(state);
 
-      // What the link asked for, then the worn ring, the worn amulet, the first spare.
-      if (wanted) {
-        const hit = list.find((p) => p.key === wanted);
-        if (hit) sel = { key: hit.key, at: hit.at };
-        wanted = null;
-      }
       if (sel && !findPiece(list, sel) && phase === "idle") sel = null;
-      if (!sel && list.length && phase === "idle") {
-        const pick = list.find((p) => p.worn && itemDef(p.key).slot === "ring") || list.find((p) => p.worn) || list[0];
-        sel = { key: pick.key, at: pick.at };
-        stones = 1;
-      }
       if (cphase === "idle") {
         if (cv.from && !findPiece(list, cv.from)) cv = { from: null, to: null };
         if (cv.to && !findPiece(list, cv.to)) cv.to = null;
       }
 
-      empty.hidden = list.length > 0;
       const plan = sel ? enchantPlan(state, sel.key) : null;
-      const bandKey = plan ? plan.key : list.length ? list[0].key : null;
-      const stone = bandKey ? stoneFor(bandKey) : null;
-      const charmKey = bandKey ? charmFor(bandKey) : null;
-      setText(chipEssence.lastChild, stone ? `${fmt(haveQty(state, stone))} ${itemName(stone)}` : "No piece on the anvil");
-      setText(chipCharm.lastChild, charmKey ? `${fmt(haveQty(state, charmKey))} ${itemName(charmKey)}` : "");
-      chipCharm.hidden = !charmKey;
-      setText(pageSub, mode === "fortify"
-        ? "Work Veil Essence into an amulet or a ring. Stake one to three essences and the Veil decides. A failed rite takes the essence and nothing else: no level is ever lost."
-        : "Carry a worked piece's level onto a new one of the same slot. Nothing is rolled: the toll is paid and it always takes. The old piece goes back to +0.");
-
       paintPieces(state, list);
       if (mode === "fortify") {
         paintFortify(state, plan);
-        paintOdds(plan);
+        paintStock(state);
       } else {
         paintConvert(state);
-        paintToll();
       }
       paintLog(state);
     }

@@ -1863,13 +1863,17 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
 
 .listings { display: flex; flex-direction: column; }
 
+/* Two columns: what it is, and what it costs. Everything else the board used to
+   carry is on the item's own page, a press away, and the whole row is that press. */
 .listing-head,
 .listing {
   display: grid;
-  grid-template-columns: minmax(0, 2.4fr) minmax(64px, .6fr) minmax(90px, .8fr) minmax(0, 1fr) 96px;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, auto);
   align-items: center;
   gap: var(--sp-4);
   padding: 12px var(--card-pad);
+  width: 100%;
+  text-align: left;
 }
 
 .listing-head {
@@ -1888,9 +1892,12 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
 }
 
 .listing + .listing { border-top: 1px solid var(--line-soft); }
+button.listing { cursor: pointer; transition: background var(--dur-1); }
+button.listing:disabled { opacity: .5; cursor: default; }
 
 @media (hover: hover) {
-  .listing:hover { background: var(--wash); }
+  button.listing:hover:not(:disabled) { background: var(--wash); }
+  button.listing:hover:not(:disabled) .listing-name { text-decoration: underline; }
 }
 
 .listing-item {
@@ -1900,8 +1907,25 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
   min-width: 0;
 }
 
+.listing-price {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  min-width: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--gold-hi);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.listing-price small { font-size: var(--text-xs); font-weight: 500; color: var(--bone-faint); }
+
+/* .listing-qty, .listing-seller and .listing-depth are the kit's sample rows; the
+   board itself has not used them since the columns went. */
 .listing-qty,
-.listing-price,
 .listing-seller,
 .listing-depth {
   min-width: 0;
@@ -1913,14 +1937,11 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
   text-overflow: ellipsis;
 }
 
-.listing-price { font-weight: 600; color: var(--gold-hi); }
-/* The market names nobody, so the column that held the seller holds the pool's price
-   bands instead ("40 at 12g · 15 at 13g"). .listing-seller stays for the kit's sample. */
 .listing-seller,
 .listing-depth { display: flex; align-items: center; gap: 6px; }
-.listing-depth { font-size: var(--text-sm); }
 .listing-buy { display: flex; justify-content: flex-end; }
 .listing-l { display: none; }
+
 /* Your own listing: a tint and a thin left accent, in place of the old "Yours" pill.
    The same on a row of a shelf sheet, where your own lots stand beside everyone else's. */
 .listing.is-mine,
@@ -1929,34 +1950,79 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
   box-shadow: inset 2px 0 0 var(--violet-hi);
 }
 
-.listing-head .num,
-.listing-qty,
-.listing-price { text-align: right; }
+.listing-head .num { text-align: right; }
 
 @media (max-width: 767px) {
   .listing-head { display: none; }
-  .listing {
-    grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto;
-    grid-template-areas:
-      "item item price"
-      "qty seller buy";
-    gap: 10px var(--sp-3);
-    padding: 14px var(--card-pad);
-  }
-  .listing-item { grid-area: item; }
-  .listing-price { grid-area: price; align-self: start; font-size: var(--text-lg); }
-  .listing-qty { grid-area: qty; text-align: left; font-size: var(--text-sm); }
-  .listing-seller,
-  .listing-depth { grid-area: seller; font-size: var(--text-sm); }
-  .listing-buy { grid-area: buy; }
-  .listing-l {
-    display: inline;
-    margin-right: 4px;
-    font-size: var(--text-xs);
-    font-weight: 500;
-    color: var(--bone-faint);
-  }
-  .listing-price .listing-l { display: none; }
+  .listing { padding: 14px var(--card-pad); gap: var(--sp-3); }
+  .listing-price { font-size: var(--text-md); }
+}
+
+/* ---- the shelf sheet: the book of what stands on it ---- */
+
+.book-head,
+.book-row {
+  display: grid;
+  grid-template-columns: minmax(84px, auto) minmax(0, 1fr) minmax(56px, auto);
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 10px 12px;
+  width: 100%;
+  text-align: left;
+}
+
+.book-head {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.book-head > * {
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--bone-faint);
+  white-space: nowrap;
+}
+
+.book { display: flex; flex-direction: column; }
+.book-row { position: relative; border-radius: var(--r-md); cursor: pointer; transition: background var(--dur-1); }
+.book-row + .book-row { box-shadow: inset 0 1px 0 var(--line-soft); }
+.book-row:disabled { opacity: .45; cursor: default; }
+
+@media (hover: hover) {
+  .book-row:hover:not(:disabled) { background: var(--wash); }
+}
+
+.book-price {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--gold-hi);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.book-what { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.book-name { font-size: var(--text-md); font-weight: 600; color: var(--bone); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.book-sub { font-size: var(--text-xs); color: var(--bone-faint); font-variant-numeric: tabular-nums; }
+.book-qty { font-size: var(--text-md); font-weight: 600; color: var(--bone-dim); font-variant-numeric: tabular-nums; text-align: right; }
+.book-head .num { text-align: right; }
+
+.book-act {
+  position: absolute;
+  right: 12px;
+  bottom: 6px;
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--violet-hi);
+}
+
+.book-row.is-mine {
+  background: linear-gradient(90deg, rgba(157, 130, 224, .07), transparent 50%);
+  box-shadow: inset 2px 0 0 var(--violet-hi);
 }
 
 .fee {
@@ -3094,15 +3160,13 @@ button.member-look:hover { text-decoration: underline; }
   .forge { grid-template-columns: minmax(0, 1fr) 372px; }
 }
 
+/* The circle, then the odds, then the press, in that order down the card: the
+   shape of a forge, and it reads the same on a phone as on a desk. */
 .rite-wrap {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--sp-4);
+  display: flex;
+  flex-direction: column;
   align-items: center;
-}
-
-@media (min-width: 900px) {
-  .rite-wrap { grid-template-columns: minmax(300px, 440px) minmax(0, 1fr); gap: var(--sp-5); }
+  gap: var(--sp-4);
 }
 
 .rite-scale {
@@ -3114,16 +3178,18 @@ button.member-look:hover { text-decoration: underline; }
   --rite-k: 1;
 }
 
-.rite-ledger {
+.rite-under {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  min-width: 0;
+  gap: 12px;
+  width: 100%;
+  max-width: 440px;
 }
 
-.rite-ledger .stat .l { white-space: nowrap; }
+.rite-under[hidden] { display: none; }
 
-.odds { display: flex; flex-direction: column; gap: 2px; }
+.odds-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-3); }
+.odds { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 
 .odds-v,
 .toll-v {
@@ -3139,9 +3205,37 @@ button.member-look:hover { text-decoration: underline; }
 .toll-v { color: var(--gold-hi); }
 .toll-v.is-short { color: var(--ember-hi); }
 .odds-sub { font-size: var(--text-xs); color: var(--bone-faint); font-variant-numeric: tabular-nums; }
-.stake { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.stake .eyebrow { margin-right: 2px; }
-.rite-note { font-size: var(--text-xs); line-height: 1.5; color: var(--bone-faint); }
+
+/* Three rows of the table, the one you are reaching for in the middle, the rest
+   a scroll away. Enough to see where you stand without the whole ladder on the board. */
+.odds-strip {
+  position: relative;   /* offsetTop inside it is what centres the row you are on */
+  height: 96px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  border-radius: var(--r-md);
+  background: var(--surface-sunk);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+}
+
+.odds-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-2);
+  height: 32px;
+  padding: 0 12px;
+  font-size: var(--text-sm);
+  color: var(--bone-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.odds-row + .odds-row { box-shadow: inset 0 1px 0 var(--line-soft); }
+.odds-lv { font-family: var(--font-display); font-weight: 700; }
+.odds-n { font-weight: 600; }
+.odds-row.is-me { background: var(--violet-soft); color: var(--bone); box-shadow: inset 3px 0 0 var(--violet); }
+.odds-row .tag { justify-self: start; height: 17px; padding: 0 5px; font-size: 9.5px; letter-spacing: .06em; }
+.odds-row .tag .ico { display: none; }
 
 /* ---- the circle ---- */
 
@@ -3319,7 +3413,11 @@ button.rite-core:disabled { cursor: default; }
 }
 
 .socket:disabled { cursor: default; }
-.socket .ico { width: 30px; height: 30px; }
+.socket-art { display: grid; place-items: center; width: 34px; height: 34px; }
+.socket-art .ico { width: 20px; height: 20px; }
+.socket-art .mat-art { width: 34px; height: 34px; object-fit: contain; filter: drop-shadow(0 0 6px rgba(157, 130, 224, .7)); }
+.socket.is-over { box-shadow: inset 0 0 0 2px var(--violet-hi), 0 0 22px rgba(157, 130, 224, .6); }
+.rite-core.is-over { box-shadow: inset 0 0 0 2px var(--violet-hi), 0 0 26px rgba(157, 130, 224, .5), 0 10px 30px -10px rgba(0, 0, 0, .9); }
 
 .socket.is-empty {
   background: transparent;
@@ -3329,8 +3427,7 @@ button.rite-core:disabled { cursor: default; }
   color: var(--bone-ghost);
 }
 
-.socket.is-empty .ico { width: 18px; height: 18px; }
-.socket.is-filled .ico { filter: drop-shadow(0 0 6px rgba(157, 130, 224, .7)); }
+.socket.is-empty .socket-art .ico { width: 16px; height: 16px; opacity: .7; }
 .socket.is-filled { background: radial-gradient(70% 70% at 50% 40%, rgba(157, 130, 224, .28), transparent 75%), var(--surface-2); }
 
 @media (hover: hover) {
@@ -3352,9 +3449,9 @@ button.rite-core:disabled { cursor: default; }
 }
 
 .socket-charm { width: 48px; height: 48px; color: var(--gold-hi); box-shadow: inset 0 0 0 1px var(--gold-edge), 0 6px 16px -8px rgba(0, 0, 0, .9); }
-.socket-charm .ico { width: 24px; height: 24px; }
+.socket-charm .socket-art { width: 28px; height: 28px; }
+.socket-charm .socket-art .mat-art { width: 28px; height: 28px; filter: drop-shadow(0 0 6px rgba(217, 181, 102, .7)); }
 .socket-charm.is-filled { background: radial-gradient(70% 70% at 50% 40%, rgba(217, 181, 102, .26), transparent 75%), var(--surface-2); }
-.socket-charm.is-filled .ico { filter: drop-shadow(0 0 6px rgba(217, 181, 102, .7)); }
 .socket-charm .socket-l { top: auto; bottom: 100%; translate: -50% -6px; }
 .s1 { left: 190px; top: 370px; }
 .s2 { left: 34px; top: 100px; }
@@ -3645,27 +3742,46 @@ button.rite-core:disabled { cursor: default; }
   100% { filter: brightness(.6) saturate(.6); }
 }
 
-/* ---- the side cards ---- */
+/* ---- the racks: two grids of stock down the side ---- */
 
-.pieces .lr-title,
-.pieces .lr-sub { display: block; }
-.pieces .lr-sub { margin-top: 2px; font-size: var(--text-xs); }
-.pieces .lr-end { display: flex; align-items: center; gap: 8px; }
-.pieces-group + .pieces-group { margin-top: var(--sp-3); }
-.pieces-group > .eyebrow { padding: 0 12px 6px; }
-.pieces-none { padding: 4px 12px 8px; }
+.forge-rack .card-head { margin-bottom: 12px; }
+.forge-grid { grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 6px; }
+.rack-none { padding: 2px 0 6px; }
 
-.odds-table { padding: 0 var(--sp-3) var(--sp-3); }
-.table-tight { font-size: var(--text-sm); }
-.table-tight th { padding: 0 6px 8px; }
-.table-tight td { padding: 6px; font-size: 12.5px; }
-.table-tight .tag { height: 18px; padding: 0 5px; font-size: 9.5px; letter-spacing: .06em; }
-.table td.dimv { color: var(--bone-faint); }
-.tag-bone { --tag-fg: var(--bone); --tag-line: rgba(232, 225, 213, .4); background: rgba(232, 225, 213, .1); }
+.forge-tile { position: relative; aspect-ratio: 1 / 1.1; padding: 8px 6px 7px; gap: 3px; justify-content: center; align-items: center; cursor: pointer; }
+.forge-tile .slot-art { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; }
+.forge-tile .slot-art .ico { width: 26px; height: 26px; color: var(--rar, var(--bone-dim)); }
+.forge-tile .slot-art .mat-art { width: 32px; height: 32px; object-fit: contain; }
+.forge-tile .slot-name { font-size: 10px; line-height: 1.2; text-align: center; -webkit-line-clamp: 2; }
+.forge-tile .slot-qty { position: absolute; left: 6px; top: 5px; font-size: var(--text-2xs); font-weight: 700; color: var(--bone); font-variant-numeric: tabular-nums; }
+.forge-tile .slot-plus { position: absolute; right: -5px; top: -6px; z-index: 2; min-width: 28px; height: 18px; padding: 0 5px; font-size: 11px; box-shadow: 0 2px 6px rgba(0, 0, 0, .6); }
+
+.slot-tag {
+  height: 15px;
+  padding: 0 5px;
+  border-radius: 3px;
+  border: 1px solid var(--line-strong);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  line-height: 13px;
+  color: var(--bone-faint);
+  white-space: nowrap;
+}
+
+.slot-tag.tag-gold { border-color: var(--gold-edge); background: var(--gold-soft); color: var(--gold-hi); }
+.slot-tag.tag-good { border-color: var(--good-edge); background: var(--good-soft); color: var(--good); }
+
+.forge-tile.is-on { border-color: var(--violet); background: radial-gradient(80% 60% at 50% 40%, var(--violet-soft), transparent 75%), var(--surface-2); }
+.forge-tile.is-on::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 0 3px 3px 0; background: var(--violet); }
+.forge-tile.is-spent { opacity: .38; cursor: default; }
+.forge-tile.is-wanted { box-shadow: var(--hi), inset 0 0 0 1px var(--violet-edge); }
+.forge-tile:active { transform: scale(.97); }
 
 @media (max-width: 599px) {
   .odds-v, .toll-v { font-size: 38px; }
-  .table-tight th, .table-tight td { padding-left: 4px; padding-right: 4px; }
+  .forge-grid { grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); }
 }
 
 /* ================= THE HALOS (ui/halo.js) ================= */
@@ -3948,9 +4064,23 @@ button.rite-core:disabled { cursor: default; }
   container-type: inline-size;
 }
 
+/* The commander stands in front of everything the Veil does. The aura is taken
+   out of the flow and pinned to the same box, under the art, so the floor ring
+   passes behind the boots instead of eating them and nothing reads as a decal
+   sitting on top of the figure. */
 .figure-wrap > .portrait { position: relative; z-index: 1; }
 
-.aura { position: absolute; inset: 0; pointer-events: none; --gl: var(--violet); --gl-hi: var(--violet-hi); --gl-soft: rgba(157, 130, 224, .62); --rg: var(--violet); --rg-hi: var(--violet-hi); --rg-soft: rgba(157, 130, 224, .45); }
+.aura {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.aura { --gl: var(--violet); --gl-hi: var(--violet-hi); --gl-soft: rgba(157, 130, 224, .62); --rg: var(--violet); --rg-hi: var(--violet-hi); --rg-soft: rgba(157, 130, 224, .45); }
 .aura[hidden] { display: none; }
 .aura[data-glow="12"] { --gl: var(--gold); --gl-hi: var(--gold-hi); --gl-soft: rgba(217, 181, 102, .62); }
 .aura[data-glow="15"] { --gl: #fffaf0; --gl-hi: #fffaf0; --gl-soft: rgba(255, 250, 240, .4); }
@@ -3988,7 +4118,7 @@ button.rite-core:disabled { cursor: default; }
   animation: rainbow-spin 14s linear infinite;
 }
 
-.aura-motes { position: absolute; left: 50%; bottom: 8%; width: 0; height: 0; z-index: 2; }
+.aura-motes { position: absolute; left: 50%; bottom: 8%; width: 0; height: 0; z-index: 0; }
 
 .aura-motes i {
   position: absolute;
@@ -4026,14 +4156,16 @@ button.rite-core:disabled { cursor: default; }
 .aura[data-ring="12"] .aura-orbit { display: block; }
 .aura[data-ring="15"] .aura-runes { display: block; }
 
+/* Bottom-aligned on the figure's own box: the ring is centred on the feet, and
+   it reaches below them the way a ring drawn on the ground would. */
 .aura-floor {
   position: absolute;
   left: 50%;
-  bottom: 2%;
+  bottom: 0;
   width: 132%;
   aspect-ratio: 1;
-  translate: -50% 50%;
-  z-index: 2;
+  translate: -50% 42%;
+  z-index: 0;
 }
 
 .aura-floor::before {
@@ -4079,7 +4211,7 @@ button.rite-core:disabled { cursor: default; }
   to { transform: scaleY(.3) rotate(360deg); }
 }
 
-.aura-orbit { position: absolute; left: 50%; bottom: 2%; width: 0; height: 0; translate: -50% 0; z-index: 2; transform: scaleY(.3); }
+.aura-orbit { position: absolute; left: 50%; bottom: 0; width: 0; height: 0; translate: -50% -4%; z-index: 0; transform: scaleY(.3); }
 .aura-orbit > span { position: absolute; left: 0; top: 0; width: 0; height: 0; animation: rite-spin 9s linear infinite; }
 
 .aura-orbit i {
@@ -4103,14 +4235,14 @@ button.rite-core:disabled { cursor: default; }
 .aura-orbit i:nth-child(2n) { width: 4px; height: 4px; margin: -2px 0 0 -2px; background: var(--violet-hi); box-shadow: 0 0 8px var(--violet); }
 
 /* Hallowed ring: the marks stand round the figure at shoulder height. */
-.aura-runes { position: absolute; left: 50%; top: 42%; width: 0; height: 0; z-index: 2; transform: scaleY(.45); }
+.aura-runes { position: absolute; left: 50%; top: 42%; width: 0; height: 0; z-index: 0; transform: scaleY(.45); }
 .aura-runes .runes { display: block; --rr: 58cqw; --rs: 18px; animation: rite-spin 60s linear infinite reverse; }
 .aura-runes .rune:nth-child(3n) { --rs: 14px; }
 .aura-runes .rune:nth-child(4n) { --rs: 22px; }
 
-/* The floor ring reaches below the feet: the name steps down out of it. */
-.doll-figure .figure-wrap:has(> .aura:not([hidden])) { margin-bottom: 26px; }
-.doll-figure .doll-name { position: relative; z-index: 3; }
+/* The ring reaches a little below the art's box; the name clears it. */
+.doll-figure .figure-wrap:has(> .aura:not([hidden])) { margin-bottom: 34px; }
+.doll-figure .doll-name { position: relative; z-index: 2; }
 
 /* ---- round an avatar: the Character hero, a commander's page, the profile card ---- */
 

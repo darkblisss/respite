@@ -48,10 +48,15 @@ const DEAD_MS = 1400;
 // the one bit of hit feedback that's left.
 const STRUCK = new Set(["hit", "crit", "strike", "ambush", "volley", "empowered", "hurt", "ambushed", "block", "kill"]);
 
-const WORDS = { 1: "one", 2: "two", 3: "three" };
-const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : "");
-// "Two or three", from the zone's "2 or 3".
-const atOnce = (zone) => cap(zone.foesText.replace(/\d/g, (d) => WORDS[d] || d));
+/* What a ground is worth saying about: only where it differs from the plain
+   one. A line reading "one at once, x1 XP" says the same as no line at all. */
+function zoneNotes(z) {
+  return [
+    z.foesText === "1" ? null : `${z.foesText} at once`,
+    z.xp === 1 ? null : `×${z.xp} XP`,
+    z.power === 1 ? null : `×${z.power} foes`,
+  ].filter(Boolean);
+}
 const huntKey = (c) => (c.id != null ? c.id : c.startedAt);
 const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 const sameId = (a, b) => a != null && b != null && String(a).toLowerCase() === String(b).toLowerCase();
@@ -245,7 +250,7 @@ export default {
         const tag = h("span");
         const node = h("button.zone-card", { type: "button", dataset: { tier: String(tier), zone: z.id } },
           h("span.art", { "data-tone": "ember", "aria-hidden": "true" }, iconEl(ZONE_ICONS[z.id])),
-          h("span.zone-main", h("span.zone-name", z.name), h("span.zone-sub", `${z.foesText} at once · ×${z.xp} XP · ×${z.power} foes`)),
+          h("span.zone-main", h("span.zone-name", z.name), h("span.zone-sub", zoneNotes(z).join(" · "))),
           tag);
         zoneRefs.set(z.id, { node, tag });
         return node;
@@ -434,7 +439,9 @@ export default {
       setAttr(huntHead, "hidden", !c);
       if (c) {
         setText(huntTitle, `The ${zone.name} of ${regionOfTier(c.tier).name}`);
-        setText(huntSub, `${atOnce(zone)} at once · ×${zone.xp} XP per kill`);
+        const notes = zoneNotes(zone).join(" · ");
+        setText(huntSub, notes);
+        setAttr(huntSub, "hidden", !notes);
         const line = companyLine(partyHere(ctx, c.tier, c.zone).names);
         if (line !== sigs.company) {
           sigs.company = line;
