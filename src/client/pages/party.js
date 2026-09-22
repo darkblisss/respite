@@ -8,12 +8,15 @@
    while the page is open.
 
    The party is a room of four squares. A square holds whoever is
-   sitting in it (face, name, total level, ready mark), stands
-   open and says Waiting, or carries the leader's cross. Anyone
-   may put a ground up, everyone marks ready for it, and the
-   leader's press sends the whole room out at once. Squares are
-   rebuilt when the roster, the seats or the marks change and
-   repainted in place every second for what each of them is at.
+   sitting in it (a bar with the crown, the name, the Hunt level
+   and the host's remove; the face under it; what they are at
+   along the bottom), stands open and says Waiting, or carries the
+   host's cross. Anyone may put a ground up, everyone marks ready
+   for it, and the host's press sends the whole room out at once.
+   Squares are rebuilt when the roster, the seats or the marks
+   change and repainted in place every second for what each of
+   them is at. Opening and closing a square flips it under the
+   press and the realm's answer confirms it.
 
    The bonus is the rules' own: partyMult() over the others' hunt
    presence, read against your hunt right now. Chat appends what
@@ -37,7 +40,7 @@ import { openPopup, portraitImg } from "../ui/widgets.js";
 import { CONFIG } from "../../shared/config.js";
 import { GameData, findAction, getSkill, getZone, regionOfTier } from "../../shared/registry.js";
 import { partyMult } from "../../shared/progression.js";
-import { recovering, totalLevel } from "../../shared/stats.js";
+import { recovering, skillLevel } from "../../shared/stats.js";
 import { currentRegion } from "../../shared/world.js";
 import { markRead, newestMessage } from "../partyRead.js";
 
@@ -472,7 +475,10 @@ function partyBody(ctx, page) {
     const squares = h("div.room-grid");
     const groundSel = h("select.select.grow", { "aria-label": "Ground" },
       GameData.ZONES.map((z) => h("option", { value: z.id }, z.name)));
-    const putUp = h("button.btn.btn-sm", { type: "button" }, "Put it up");
+    const putUp = h("button.btn.btn-sm", {
+      type: "button",
+      "data-tip": "Sets the ground for the whole room. Everyone's ready mark clears.",
+    }, "Propose");
     const readyBtn = h("button.btn.grow", { type: "button" });
     const goBtn = h("button.btn.btn-ember.grow", { type: "button" }, iconEl("swords"), "Start");
     const hint = h("span.field-hint.t-bad", { hidden: true, role: "alert" });
@@ -491,6 +497,7 @@ function partyBody(ctx, page) {
     let outSig = null;
     let sending = false;
     let picked = null;       // the zone in the select, kept across repaints
+    let wantSlots = null;    // the seat count a press asked for, until the realm says so too
 
     groundSel.addEventListener("change", () => { picked = groundSel.value; });
 
@@ -527,25 +534,30 @@ function partyBody(ctx, page) {
 
     /* ---------- a square ---------- */
 
+    /* A square: a bar across the top with the crown, the name, the Hunt level
+       and the host's remove in the corner, the face below it, and what they are
+       at along the bottom. The level is the Hunt level, because the only reason
+       to read it off a party square is to know what they can fight. */
     function memberSeat(m, isLeader, amLeader, isReady) {
       const mine = sameId(m.user_id, meId());
       const doing = h("span.seat-doing");
       const face = h("div.seat-face", { "aria-hidden": "true" });
       face.append(portraitImg(m.skin || null));
-      const seat = h("div.seat.seat-taken", { class: [mine && "is-me", isReady && "is-ready"] },
-        face,
-        h("span.seat-lv", fmtWhole(mine ? totalLevel(ctx.state) : m.total_level || 0)),
-        h("div.seat-foot",
-          h("button.seat-name", { type: "button", onClick: () => openPopup("profile", ctx, String(m.username || "")) },
-            isLeader ? iconEl("crown") : null, display(m.username)),
-          doing),
-        isReady ? h("span.seat-ready", iconEl("check"), "Ready") : null,
-        isLeader ? h("span.seat-host", "Host") : null);
+      const lv = mine ? skillLevel(ctx.state, "warfare") : Math.max(1, Number(m.levels && m.levels.warfare) || 1);
+      const bar = h("div.seat-bar",
+        h("button.seat-name", { type: "button", onClick: () => openPopup("profile", ctx, String(m.username || "")) },
+          isLeader ? iconEl("crown") : null, display(m.username)),
+        h("span.seat-lv", { "data-tip": "Hunt level" }, fmtWhole(lv)));
       if (amLeader && !mine) {
         const kick = h("button.seat-x", { type: "button", "aria-label": `Remove ${display(m.username)}` }, iconEl("close"));
         kick.addEventListener("click", () => kickMember(m, kick));
-        seat.append(kick);
+        bar.append(kick);
       }
+      const seat = h("div.seat.seat-taken", { class: [mine && "is-me", isReady && "is-ready"] },
+        bar,
+        face,
+        h("div.seat-foot", doing),
+        isReady ? h("span.seat-ready", iconEl("check"), "Ready") : null);
       return { node: seat, doing, id: String(m.user_id) };
     }
 
@@ -559,8 +571,15 @@ function partyBody(ctx, page) {
       const inner = open ? h("span.seat-wait", "Waiting") : h("span.seat-shut", { "aria-hidden": "true" }, iconEl("close"));
       if (!amLeader) return { node: h("div.seat", { class: open ? "seat-open" : "seat-shut-box", "aria-label": label }, inner), doing: null, id: null };
       const btn = h("button.seat", { type: "button", class: open ? "seat-open" : "seat-shut-box", "aria-label": label, "data-tip": label }, inner);
-      // Closing takes the last square away; opening gives one back.
-      btn.addEventListener("click", () => call(() => ctx.net.party.setSlots(open ? index : index + 1), btn));
+      /* Closing takes the last square away; opening gives one back. The square
+         flips under the press and the realm's answer confirms it, so a press
+         never looks like it did nothing while the round trip is in the air. */
+      btn.addEventListener("click", () => {
+        wantSlots = open ? index : index + 1;
+        seatSig = null;
+        paint(true);   // partyBody's, which repaints this card with the seat count just asked for
+        call(() => ctx.net.party.setSlots(wantSlots), btn);
+      });
       return { node: btn, doing: null, id: null };
     }
 
@@ -591,7 +610,9 @@ function partyBody(ctx, page) {
         const leaderId = st.party ? st.party.leader_id : null;
         const amLeader = sameId(leaderId, me);
         const members = list(st.members).slice().sort((a, b) => (sameId(a.user_id, me) ? -1 : sameId(b.user_id, me) ? 1 : 0));
-        const slots = Math.max(members.length, Math.min(P.maxSize, Number(st.party && st.party.slots) || P.maxSize));
+        const said = Math.max(members.length, Math.min(P.maxSize, Number(st.party && st.party.slots) || P.maxSize));
+        if (wantSlots != null && (wantSlots === said || !amLeader)) wantSlots = null;
+        const slots = wantSlots == null ? said : Math.max(members.length, Math.min(P.maxSize, wantSlots));
         const mine = outOn(fight);
 
         /* ---- the squares ---- */

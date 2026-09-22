@@ -2080,47 +2080,33 @@ button.seat { cursor: pointer; transition: border-color var(--dur-1), background
   button.seat-shut-box:hover { border-color: var(--line-strong); color: var(--bone-faint); background: var(--surface-2); }
 }
 
-/* A taken square: the face fills it, the level rides the top corner, and the
-   name and what they are at sit on a wash along the bottom. */
+/* A taken square: a bar across the top carrying the crown, the name, the Hunt
+   level and the host's remove in the corner; the face below it, sitting low
+   enough that the bar never crosses it; what they are at along the bottom. */
 .seat-taken { display: block; background: var(--surface-2); }
 
-.seat-face { position: absolute; inset: 0; }
-.seat-face img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 12%; }
-.seat-taken.is-offline .seat-face { filter: grayscale(.7); opacity: .55; }
-
-.seat-lv {
+.seat-bar {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  z-index: 2;
-  min-width: 26px;
-  height: 22px;
-  padding: 0 6px;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  background: rgba(10, 9, 12, .78);
-  box-shadow: inset 0 0 0 1px var(--gold-edge);
-  color: var(--gold-hi);
-  font-family: var(--font-display);
-  font-size: 12px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.seat-foot {
-  position: absolute;
+  top: 0;
   left: 0;
   right: 0;
-  bottom: 0;
-  z-index: 2;
-  display: grid;
-  gap: 1px;
-  padding: 18px 8px 8px;
-  background: linear-gradient(to top, rgba(10, 9, 12, .92), transparent);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 4px 0 7px;
+  background: rgba(10, 9, 12, .82);
+  box-shadow: inset 0 -1px 0 var(--line-soft);
 }
 
+.seat-face { position: absolute; inset: 26px 0 0; }
+.seat-face img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 10%; }
+.seat-taken.is-offline .seat-face { filter: grayscale(.7); opacity: .55; }
+
 button.seat-name {
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -2133,32 +2119,65 @@ button.seat-name {
   color: var(--bone);
   text-align: left;
   cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 button.seat-name:hover { text-decoration: underline; }
 .seat-name .ico { width: 13px; height: 13px; color: var(--gold); flex-shrink: 0; }
-.seat-doing { font-size: 11px; color: var(--bone-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.seat-host {
-  position: absolute;
-  top: 6px;
-  left: 6px;
-  z-index: 2;
-  padding: 2px 7px;
-  border-radius: var(--r-sm);
-  background: rgba(10, 9, 12, .78);
+.seat-lv {
+  flex-shrink: 0;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 6px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
   box-shadow: inset 0 0 0 1px var(--gold-edge);
   color: var(--gold-hi);
-  font-size: 10px;
+  font-family: var(--font-display);
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: .07em;
-  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
 }
+
+/* The host's remove, in the corner the eye goes to last. */
+.seat-x {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--bone-ghost);
+  cursor: pointer;
+  transition: color var(--dur-1), background var(--dur-1);
+}
+
+.seat-x .ico { width: 13px; height: 13px; }
+.seat-x:hover { color: var(--ember-hi); background: rgba(180, 82, 74, .18); }
+
+.seat-foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  padding: 18px 8px 7px;
+  background: linear-gradient(to top, rgba(10, 9, 12, .92), transparent);
+}
+
+.seat-doing { font-size: 11px; color: var(--bone-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 
 .seat-ready {
   position: absolute;
   left: 50%;
-  top: 44%;
+  top: 48%;
   z-index: 2;
   translate: -50% -50%;
   display: flex;
@@ -2178,31 +2197,6 @@ button.seat-name:hover { text-decoration: underline; }
 .seat-ready .ico { width: 13px; height: 13px; }
 .seat-taken.is-ready { border-color: var(--good, var(--violet-edge)); }
 .seat-taken.is-me { border-color: var(--violet-edge); }
-
-/* The leader's remove, out of the way in the corner until it is wanted. */
-.seat-x {
-  position: absolute;
-  top: 6px;
-  right: 38px;
-  z-index: 3;
-  width: 22px;
-  height: 22px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: rgba(10, 9, 12, .7);
-  color: var(--bone-faint);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity var(--dur-1), color var(--dur-1);
-}
-
-.seat-x .ico { width: 13px; height: 13px; }
-.seat-taken:hover .seat-x,
-.seat-x:focus-visible { opacity: 1; }
-.seat-x:hover { color: var(--ember-hi); }
 
 /* Under the squares: the ground somebody put up, the marks, and the press. */
 .room-bar { display: grid; gap: var(--sp-3); }

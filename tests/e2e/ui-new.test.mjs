@@ -390,6 +390,29 @@ await run(async () => {
     check("Party sits under the Vanguard now", nav.length === 1 && /^navVanguard/.test(nav[0].group || ""), nav);
   }
 
+  /* The page a signed-in hunter is most often on, in the state they are most
+     often in. A guest never reaches commanderName's own branch (no username, so
+     it answers "Commander" and returns early), which is exactly how a helper it
+     needed went missing for a whole release without a test noticing. */
+  section("the Hunt page, signed in and out on a hunt");
+  {
+    await dispatch(app.page, "startHunt", { tier: 1, zone: "outer" });
+    await app.page.waitForTimeout(600);
+    await go("#/skill/warfare");
+    await app.page.waitForTimeout(600);
+    const arena = await live(app, () => ({
+      fell: document.querySelector(".empty-title") ? document.querySelector(".empty-title").textContent : null,
+      name: document.querySelector(".arena-name") ? document.querySelector(".arena-name").textContent : null,
+      foes: document.querySelectorAll(".arena-foes .foe-card").length,
+    }));
+    check("it mounts rather than falling over", arena.fell === null, arena);
+    check("and the arena carries the commander's own name, capitalised", arena.name === "Uinew_a", arena);
+    const pageErrs = errs().filter((e) => /hunt\.js/.test(String(e.stack || e.message || e)));
+    check("and nothing in it threw", pageErrs.length === 0, pageErrs.map((e) => String(e.message || e)));
+    await dispatch(app.page, "pullBack", {});
+    await app.page.waitForTimeout(400);
+  }
+
   section("the anvil");
   {
     await go("#/stockpile");
