@@ -1063,13 +1063,13 @@ PAGES.market = () => h("div.page",
    host has closed. The face is a plate here because the kit ships no portraits. */
 function seat({ name, lv, host, ready, me, doing, offline }) {
   return h("div.seat.seat-taken", { class: { "is-me": me, "is-ready": ready, "is-offline": offline } },
-    h("div.seat-face", { "aria-hidden": "true" }, avatar(name, { size: "lg" })),
-    h("span.seat-lv", String(lv)),
-    h("div.seat-foot",
+    h("div.seat-bar",
       h("button.seat-name", { type: "button" }, host ? ic("crown") : null, name),
-      h("span.seat-doing", doing)),
-    ready ? h("span.seat-ready", ic("check"), "Ready") : null,
-    host ? h("span.seat-host", "Host") : null);
+      h("span.seat-lv", { "data-tip": "Hunt level" }, String(lv)),
+      host ? null : h("button.seat-x", { type: "button", "aria-label": `Remove ${name}` }, ic("close"))),
+    h("div.seat-face", { "aria-hidden": "true" }, avatar(name, { size: "lg" })),
+    h("div.seat-foot", h("span.seat-doing", doing)),
+    ready ? h("span.seat-ready", ic("check"), "Ready") : null);
 }
 
 const openSeat = () => h("button.seat.seat-open", { type: "button", "aria-label": "Close this square" }, h("span.seat-wait", "Waiting"));
@@ -1087,14 +1087,14 @@ PAGES.party = () => h("div.page",
   h("section.card", { "data-tone": "ember" },
     cardHead("The room", { sub: "The Inner of Gallowmoor, when everyone is ready", actions: chip("2 out · 4m 12s", "ember", "swords") }),
     h("div.room-grid",
-      seat({ name: "Morwen", lv: 187, me: true, host: true, ready: true, doing: "Inner of Gallowmoor" }),
-      seat({ name: "Thane", lv: 164, ready: true, doing: "At camp" }),
+      seat({ name: "Morwen", lv: 29, me: true, host: true, ready: true, doing: "the Inner of Gallowmoor" }),
+      seat({ name: "Thane", lv: 24, ready: true, doing: "At camp" }),
       openSeat(),
       shutSeat()),
     h("div.room-bar",
       h("div.hstack.gap-2",
         h("select.select.grow", { "aria-label": "Ground" }, h("option", "Inner")),
-        h("button.btn.btn-sm", { type: "button" }, "Put it up")),
+        h("button.btn.btn-sm", { type: "button" }, "Propose")),
       h("div.room-press",
         h("button.btn.btn-good.grow", { type: "button" }, "Stand down"),
         h("button.btn.btn-ember.grow", { type: "button" }, ic("swords"), "Start")))),

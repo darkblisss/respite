@@ -48,6 +48,9 @@ const DEAD_MS = 1400;
 // the one bit of hit feedback that's left.
 const STRUCK = new Set(["hit", "crit", "strike", "ambush", "volley", "empowered", "hurt", "ambushed", "block", "kill"]);
 
+const WORDS = { 1: "one", 2: "two", 3: "three" };
+const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : "");
+
 /* What a ground is worth saying about: only where it differs from the plain
    one. A line reading "one at once, x1 XP" says the same as no line at all. */
 function zoneNotes(z) {
