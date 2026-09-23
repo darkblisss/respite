@@ -17,7 +17,7 @@
    ============================================================ */
 
 import { h, el, on, setText, setWidth, setAttr, toggleClass } from "../ui/dom.js";
-import { iconEl, artEl } from "../ui/icons.js";
+import { iconEl, artEl, hasArt } from "../ui/icons.js";
 import { hideTip } from "../ui/overlay.js";
 import { fmt, fmtWhole, fmtGold } from "../ui/format.js";
 import { openPopup } from "../ui/widgets.js";
@@ -444,7 +444,7 @@ function rackRow(state, g) {
   const name = itemName(tool.id);
   // The chip is a fact, not a control, so the row keeps one line on phones.
   return h("div.list-row",
-    h("div.art.art-sm", { "aria-hidden": "true" }, iconEl(tool.icon)),
+    h("div.art.art-sm", { class: { "art-paint": hasArt(tool) }, "aria-hidden": "true" }, artEl(tool, { variant: "cut" })),
     h("div.lr-main", h("div.lr-title", name), h("div.lr-sub", g.name)),
     h("div.lr-end",
       h("span.chip.chip-good", `+${Math.round(tool.speed * 100)}% speed`),
