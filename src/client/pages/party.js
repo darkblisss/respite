@@ -43,6 +43,7 @@ import { partyMult } from "../../shared/progression.js";
 import { recovering, skillLevel } from "../../shared/stats.js";
 import { currentRegion } from "../../shared/world.js";
 import { markRead, newestMessage } from "../partyRead.js";
+import { dropdownOf } from "../ui/dropdown.js";
 import { refreshTitles, saintTag } from "../titles.js";
 
 const P = CONFIG.party;
@@ -476,14 +477,14 @@ function partyBody(ctx, page) {
     const sub = h("p.card-sub");
     const chipBox = h("div.card-actions");
     const squares = h("div.room-grid");
-    const groundSel = h("select.select.grow", { "aria-label": "Ground" },
-      GameData.ZONES.map((z) => h("option", { value: z.id }, z.name)));
+    // The game's own list, not the operating system's sheet: the room is one card.
+    const groundSel = dropdownOf(GameData.ZONES.map((z) => ({ value: z.id, label: z.name })), { label: "Ground", className: "grow" });
     const putUp = h("button.btn.btn-sm", { type: "button" }, "Propose");
     const readyBtn = h("button.btn.grow", { type: "button" });
     const goBtn = h("button.btn.btn-ember.grow", { type: "button" }, iconEl("swords"), "Start");
     const hint = h("span.field-hint.t-bad", { hidden: true, role: "alert" });
     const bar = h("div.room-bar",
-      h("div.hstack.gap-2", groundSel, putUp),
+      h("div.hstack.gap-2", groundSel.node, putUp),
       h("div.btn-row.room-press", readyBtn, goBtn),
       hint);
     const outRow = h("div.btn-row.room-out", { hidden: true });
@@ -499,7 +500,7 @@ function partyBody(ctx, page) {
     let picked = null;       // the zone in the select, kept across repaints
     let wantSlots = null;    // the seat count a press asked for, until the realm says so too
 
-    groundSel.addEventListener("change", () => { picked = groundSel.value; });
+    groundSel.onChange = (v) => { picked = v; };
 
     async function call(fn, btn) {
       sending = true;

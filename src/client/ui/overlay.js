@@ -155,7 +155,9 @@ function bindKeys() {
   document.addEventListener("focusin", (e) => {
     const top = layers[layers.length - 1];
     if (!top || !(e.target instanceof Element)) return;
-    if (top.focusRoot.contains(e.target) || e.target.closest(".toasts, .tip-layer")) return;
+    // A dropdown's list hangs off the body so a scrolling modal cannot clip it; it belongs
+    // to the field that opened it, so focus landing in it is not focus wandering off.
+    if (top.focusRoot.contains(e.target) || e.target.closest(".toasts, .tip-layer, .drop-panel")) return;
     top.focusRoot.focus({ preventScroll: true });
   });
 }

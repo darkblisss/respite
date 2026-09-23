@@ -503,6 +503,97 @@ await run(async () => {
     check("dragged off the circle it leaves the anvil", gone.every((x) => /empty$/.test(x)), gone);
   }
 
+  section("Requisitions, and the list the game draws");
+  {
+    /* The deploy dialog is the one screen that reads an agent and an item together,
+       and it is behind a tier 2 region, so nothing opened it until now. That is how
+       a helper deleted out of this page went unnoticed: the modal threw on open and
+       no suite ever pressed the button. */
+    await editSave(stack, "uinew_a", (s2) => {
+      if (!s2.travel.unlocked.includes("region_2")) s2.travel.unlocked.push("region_2");
+      s2.player.gold = 5000;
+    });
+    await live(app, () => window.__respite.store.sync());
+    await app.page.waitForTimeout(1200);
+    await dispatch(app.page, "hireAgent", {});
+    await app.page.waitForTimeout(400);
+
+    await go("#/requisitions");
+    await app.page.waitForTimeout(600);
+    const roster = await live(app, () => ({
+      title: (document.querySelector(".page-title") || {}).textContent,
+      cards: document.querySelectorAll(".agent-card").length,
+      learn: !!document.querySelector(".agent-learn .bar"),
+      deploy: !!document.querySelector(".agent-deploy .btn"),
+      resign: [...document.querySelectorAll(".agent-card .btn")].some((b) => /Let them go/.test(b.textContent)),
+    }));
+    check("the Requisitions page opens with the hire on the books",
+      roster.title === "Requisitions" && roster.cards === 1, roster);
+    check("an agent carries its own learning, and a way to let it go",
+      roster.learn && roster.deploy && roster.resign, roster);
+
+    await live(app, () => document.querySelector(".agent-deploy .btn").click());
+    await app.page.waitForTimeout(500);
+    const dialog = await live(app, () => ({
+      title: (document.querySelector(".modal-title") || {}).textContent,
+      drops: document.querySelectorAll(".drop-btn").length,
+      selects: document.querySelectorAll(".modal select").length,
+      plan: (document.querySelector(".ap-plan") || {}).textContent,
+      panel: document.querySelectorAll(".drop-panel").length,
+    }));
+    check("the deploy dialog opens rather than throwing",
+      /Send an Agent out/.test(dialog.title || ""), dialog);
+    check("both lists are the game's own, and no native select is left",
+      dialog.drops === 2 && dialog.selects === 0 && dialog.panel === 0, dialog);
+    check("and the plan reads a count of something, not NaN of undefined",
+      /^\d[\d,]* × \S/.test((dialog.plan || "").trim()), dialog);
+
+    // The list opens on the body so a scrolling modal cannot clip it, and picking closes it.
+    await live(app, () => document.querySelectorAll(".drop-btn")[1].click());
+    await app.page.waitForTimeout(250);
+    const opened = await live(app, () => ({
+      onBody: !!document.body.querySelector(":scope > .drop-panel"),
+      opts: document.querySelectorAll(".drop-opt").length,
+      groups: document.querySelectorAll(".drop-group").length,
+      marked: document.querySelectorAll(".drop-opt.is-on").length,
+      expanded: document.querySelectorAll('.drop-btn[aria-expanded="true"]').length,
+    }));
+    check("the list hangs off the body, grouped, with one option marked",
+      opened.onBody && opened.opts > 1 && opened.groups >= 1 && opened.marked === 1 && opened.expanded === 1, opened);
+
+    const before = await live(app, () => document.querySelectorAll(".drop-btn")[1].textContent.trim());
+    await live(app, () => {
+      const opts = [...document.querySelectorAll(".drop-opt")];
+      (opts.find((o) => o.getAttribute("aria-selected") !== "true") || opts[0]).click();
+    });
+    await app.page.waitForTimeout(300);
+    const picked = await live(app, () => ({
+      face: document.querySelectorAll(".drop-btn")[1].textContent.trim(),
+      panels: document.querySelectorAll(".drop-panel").length,
+      plan: (document.querySelector(".ap-plan") || {}).textContent,
+    }));
+    check("picking shuts the list and writes the choice onto the field",
+      picked.panels === 0 && picked.face !== before, { before, ...picked });
+    check("and the plan follows what was picked", /^\d[\d,]* × \S/.test((picked.plan || "").trim()), picked);
+
+    /* Escape belongs to the open list, not to the dialog under it: the first one
+       shuts the list, the second shuts the dialog. */
+    await live(app, () => document.querySelectorAll(".drop-btn")[0].click());
+    await app.page.waitForTimeout(250);
+    await app.page.keyboard.press("Escape");
+    await app.page.waitForTimeout(250);
+    const afterFirst = await live(app, () => ({
+      panels: document.querySelectorAll(".drop-panel").length,
+      modal: !!document.querySelector(".modal-title"),
+    }));
+    check("Escape shuts the list and leaves the dialog standing",
+      afterFirst.panels === 0 && afterFirst.modal, afterFirst);
+    await app.page.keyboard.press("Escape");
+    await app.page.waitForTimeout(350);
+    check("a second Escape shuts the dialog",
+      !(await live(app, () => !!document.querySelector(".modal-title"))));
+  }
+
   section("nothing went wrong");
   check("no page or popup errors in any of it", errs().length === 0, errs().slice(0, 4));
 
