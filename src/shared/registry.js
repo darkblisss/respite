@@ -82,6 +82,11 @@ const MAT_ART = {
   gaunt_flay: "gaunt", slough_flay: "slough", stag_flay: "stag",
   drake_flay: "drake", leviathan_flay: "leviathan", demon_flay: "demon",
 
+  // What the Tanner cures it into. Cut only.
+  mangy_leather: "mangy-leather", bristle_leather: "bristle-leather", dire_leather: "dire-leather",
+  gaunt_leather: "gaunt-leather", slough_leather: "slough-leather", stag_leather: "stag-leather",
+  drake_leather: "drake-leather", leviathan_leather: "leviathan-leather", demon_leather: "demon-leather",
+
   // The five reagents, which never had a tier and so never moved.
   coal: "coal", resin: "resin", pulp: "pulp", tallow: "tallow", veil_shard: "veil-shard",
 };
@@ -89,6 +94,7 @@ const MAT_ART = {
 /* The reagents are cut by hand and have no fade of their own: a cutout sits on
    any surface, so asking for a fade that is not there simply gets the cut. */
 const CUT_ONLY = new Set(["coal", "resin", "pulp", "tallow", "veil_shard",
+  "mangy_leather", "bristle_leather", "dire_leather", "gaunt_leather", "slough_leather", "stag_leather", "drake_leather", "leviathan_leather", "demon_leather",
   "mangy_flay", "bristle_flay", "dire_flay", "gaunt_flay", "slough_flay", "stag_flay", "drake_flay", "leviathan_flay", "demon_flay",
   "lesser_veil_fragment", "veiled_fragment", "sovereign_fragment", "lesser_veil_essence", "veiled_essence", "sovereign_essence",
   "mud_inlay", "bog_inlay", "chalk_inlay", "mourning_inlay", "ghost_inlay", "amber_inlay", "hoard_inlay", "sunken_inlay", "idol_inlay",
