@@ -63,13 +63,19 @@ const MAT_ART = {
   corpse_weave: "corpse-weave", widow_weave: "widow-weave", lantern_weave: "lantern-weave",
   moon_weave: "moon-weave", fade_weave: "fade-weave", godsbane_weave: "godsbane-weave",
 
+  // What a dredging crew pulls from the silt. Cut only, like the reagents.
+  mud_dredge: "mud", bog_dredge: "bog", chalk_dredge: "chalk",
+  mourning_dredge: "mourning", ghost_dredge: "ghost", amber_dredge: "amber",
+  hoard_dredge: "hoard", sunken_dredge: "sunken", idol_dredge: "idol",
+
   // The five reagents, which never had a tier and so never moved.
   coal: "coal", resin: "resin", pulp: "pulp", tallow: "tallow", veil_shard: "veil-shard",
 };
 
 /* The reagents are cut by hand and have no fade of their own: a cutout sits on
    any surface, so asking for a fade that is not there simply gets the cut. */
-const CUT_ONLY = new Set(["coal", "resin", "pulp", "tallow", "veil_shard"]);
+const CUT_ONLY = new Set(["coal", "resin", "pulp", "tallow", "veil_shard",
+  "mud_dredge", "bog_dredge", "chalk_dredge", "mourning_dredge", "ghost_dredge", "amber_dredge", "hoard_dredge", "sunken_dredge", "idol_dredge"]);
 
 export const matArt = (id) => {
   const file = MAT_ART[id];
