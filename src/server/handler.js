@@ -31,7 +31,7 @@ import { makeRng } from "../shared/rng.js";
 import { maxHp, recovering, skillLevel, statsOf, totalLevel } from "../shared/stats.js";
 import { applyMail, applyPurchase, applyReturn, fillPool, marketFee, prepareListing, remintKey } from "../shared/market.js";
 import {
-  clearOwed, makeHunter, newSession, nextSessionDue, owedFor, sessionView, stepSession,
+  clearOwed, fellIn, makeHunter, newSession, nextSessionDue, owedFor, sessionView, stepSession,
 } from "../shared/partyHunt.js";
 import { addMastery } from "../shared/mastery.js";
 
@@ -924,7 +924,15 @@ async function partyHuntStart(ctx, args) {
 
   const at = ctx.state.clock;
   const { plan, hunter } = muster(ctx, at);
-  const session = newSession({ partyId, tier, zone, seed: freshSeed(), hunters: [hunter] });
+  /* Everyone else marked ready walks on under their own next request (fallIn), a moment
+     behind the host. The first walk is held for them, so they fight encounter one too. */
+  const ready = await ctx.q(
+    `select user_id::text as id from public.party_members
+     where party_id = $1::uuid and ready and user_id <> $2::uuid`,
+    [partyId, ctx.userId],
+  );
+  const expecting = ready.map((r) => String(r.id).toLowerCase());
+  const session = newSession({ partyId, tier, zone, seed: freshSeed(), hunters: [hunter], expecting });
   const [ins] = await ctx.q(
     `insert into public.party_hunts (party_id, tier, zone, members, session, view, clock, started_at, next_due)
      values ($1::uuid, $2::int, $3, array[$4::uuid], $5::text::jsonb, $6::text::jsonb, $7::bigint, $7::bigint, $8::bigint)
@@ -980,6 +988,8 @@ async function partyHuntJoin(ctx) {
   setOut(ctx, plan);
   row.session.hunters.push(hunter);
   row.members.push(ctx.uid);
+  // One of the ready ones: if they were the last the first walk was held for, it ends now.
+  fellIn(row.session, ctx.uid);
   row.dirty = true;
   ctx.party.live = row;
   return { ok: true, data: { tier: row.tier, zone: row.zone } };

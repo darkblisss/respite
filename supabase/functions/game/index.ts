@@ -31,7 +31,11 @@ async function getUser(authorization: string): Promise<{ id: string; email: stri
   });
   if (res.status !== 200) {
     await res.body?.cancel();
-    return null;
+    /* Only Auth saying no is a signed-out player. Auth being slow, busy or down (a 429, a
+       5xx) throws instead, which the handler answers as a server error: the browser backs off
+       and tries again rather than halting the camp under a Signed out banner it cannot clear. */
+    if (res.status === 401 || res.status === 403) return null;
+    throw new Error(`auth answered ${res.status}`);
   }
   const user = await res.json();
   if (!user || typeof user.id !== "string") return null;

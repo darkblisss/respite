@@ -567,7 +567,8 @@ export function encounterView(e) {
       const shares = contributionMap(e);
       return e.hunters.map((u) => ({
         userId: u.userId, down: u.down,
-        hp: Math.max(0, Math.ceil(u.hp)), max: u.stats.maxHp,
+        // Both rounded the same way, so a hunter at full health never reads 7,300 / 7,299.
+      hp: Math.max(0, Math.min(Math.ceil(u.hp), Math.ceil(u.stats.maxHp))), max: Math.ceil(u.stats.maxHp),
         dmg: Math.round(u.dmg), taken: Math.round(u.taken),
         share: Math.round((shares[u.userId] || 0) * 100),
       }));
@@ -604,7 +605,13 @@ export function hunterFrom(userId, state, statsOf, heals) {
    The session's own dice mint each encounter's seed, so the whole session
    replays from its stored row exactly as one encounter does. */
 
-export function newSession({ partyId, tier, zone, seed, hunters }) {
+export function newSession({ partyId, tier, zone, seed, hunters, expecting = [] }) {
+  /* Whoever marked ready and is not on the ground yet. The first walk waits for them, so
+     a party that set out together fights encounter one together; see fellIn. */
+  const on = new Set(hunters.map((u) => String(u.userId).toLowerCase()));
+  const waiting = [...new Set((Array.isArray(expecting) ? expecting : [])
+    .map((id) => String(id).toLowerCase())
+    .filter((id) => id && !on.has(id)))];
   return {
     partyId, tier, zone,
     seed: seed >>> 0,
@@ -616,8 +623,25 @@ export function newSession({ partyId, tier, zone, seed, hunters }) {
     enc: null,
     // The warband, kept across encounters: health and remedies carry over, as they do alone.
     hunters: hunters.slice(),
+    muster: waiting.length ? { waiting, left: CONFIG.party.musterMs } : null,
     over: null,               // null while it runs: "wiped", "empty"
   };
+}
+
+// Held for somebody who marked ready and is not on the ground yet.
+const mustering = (s) => !!(s.muster && Array.isArray(s.muster.waiting) && s.muster.waiting.length);
+
+/* One of the ready ones has walked on. When they were the last, the walk that was being
+   held for them ends here and now if it had already run its length, so encounter one is
+   drawn with every one of them in it rather than a moment later with one short. */
+export function fellIn(s, userId) {
+  if (!s.muster) return false;
+  const id = String(userId).toLowerCase();
+  s.muster.waiting = s.muster.waiting.filter((x) => x !== id);
+  if (s.muster.waiting.length) return false;
+  s.muster = null;
+  if (!s.over && s.phase === "search" && s.wait <= EPS) nextEncounter(s);
+  return true;
 }
 
 /* Health and remedies carry from one encounter to the next, so a warband is worn
@@ -663,12 +687,19 @@ export function stepSession(s, dt, hooks = {}) {
   let guard = 0;
   while (!s.over && left > EPS && guard++ < 10000) {
     if (s.phase === "search") {
-      const step = Math.min(left, Math.max(EPS, s.wait));
+      // A walk held for the ready ones lasts until the last is on or the muster runs out.
+      const hold = mustering(s) ? s.muster.left : 0;
+      const step = Math.min(left, Math.max(EPS, s.wait, hold));
       s.wait -= step;
+      if (s.muster) s.muster.left -= step;
       s.elapsed += step;
       left -= step;
       played += step;
-      if (s.wait <= EPS) nextEncounter(s);
+      if (s.wait <= EPS && !(mustering(s) && s.muster.left > EPS)) {
+        // Whoever never came is late now, and comes in on a later walk like anyone else.
+        s.muster = null;
+        nextEncounter(s);
+      }
       continue;
     }
     const ran = stepEncounter(s.enc, left, hooks);
@@ -693,7 +724,7 @@ export function stepSession(s, dt, hooks = {}) {
 // Milliseconds until the session's next event, for the scheduler that ticks it.
 export function nextSessionDue(s) {
   if (!s || s.over) return Infinity;
-  if (s.phase === "search") return Math.max(0, s.wait);
+  if (s.phase === "search") return Math.max(0, s.wait, mustering(s) ? s.muster.left : 0);
   return nextEncounterDue(s.enc);
 }
 
@@ -710,17 +741,26 @@ export function clearOwed(s, userId) {
   u.owed = { xp: 0, gold: 0, mastery: 0, kills: 0, slain: [], drops: [], died: null, remedies: 0 };
 }
 
-// What a watcher sees of the whole session.
+/* What a watcher sees of the whole session. A hunter's share is the payout's own formula
+   (contributionMap) laid over the whole session's damage dealt and taken, which is what
+   the Hunt page's "Your share" means: a percent, 0 to 100, of everything the party has
+   done since it set out. */
 export function sessionView(s) {
+  const shares = contributionMap(s);
+  const held = mustering(s);
   return {
     partyId: s.partyId, tier: s.tier, zone: s.zone,
-    phase: s.phase, wait: Math.max(0, Math.round(s.wait)),
+    phase: s.phase, wait: Math.max(0, Math.round(held ? Math.max(s.wait, s.muster.left) : s.wait)),
+    // How many of the ready ones the first walk is still being held for.
+    muster: held ? s.muster.waiting.length : 0,
     elapsed: Math.round(s.elapsed), encounters: s.encounters, over: s.over,
     enc: s.enc ? encounterView(s.enc) : null,
     hunters: s.hunters.map((u) => ({
       userId: u.userId, down: u.down,
-      hp: Math.max(0, Math.ceil(u.hp)), max: u.stats.maxHp,
+      // Both rounded the same way, so a hunter at full health never reads 7,300 / 7,299.
+      hp: Math.max(0, Math.min(Math.ceil(u.hp), Math.ceil(u.stats.maxHp))), max: Math.ceil(u.stats.maxHp),
       dmg: Math.round(u.dmg),
+      share: Math.round((shares[u.userId] || 0) * 1000) / 10,
     })),
   };
 }

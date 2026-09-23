@@ -127,8 +127,11 @@ export function createNet({
         if (event === "SIGNED_OUT") current = null;
         else if (s) current = s;
         // Later, never inside the callback: supabase-js holds a lock there, and a listener that
-        // reads the session again would wait on itself.
-        if (event === "SIGNED_IN" || event === "SIGNED_OUT") setTimeout(() => tell(event === "SIGNED_IN" ? "signed_in" : "signed_out", s, "auth"), 0);
+        // reads the session again would wait on itself. A renewed token is told as a sign in:
+        // a camp halted as signed out picks up on it, and one that is not ignores it.
+        const said = event === "SIGNED_OUT" ? "signed_out"
+          : (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && s ? "signed_in" : null;
+        if (said) setTimeout(() => tell(said, s, "auth"), 0);
       });
     } catch (err) {
       console.error("net: onAuthStateChange failed", err);

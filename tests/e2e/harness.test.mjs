@@ -398,6 +398,7 @@ await run(async () => {
     const out = await call(A, "game", [cmd("partyHuntStart", ground)]);
     check("A sets out", out.body.results[0].ok === true, out.body.results);
     check("A is on the ground alone for the moment", out.body.party && out.body.party.hunters.length === 1, out.body.party);
+    same("and the first walk is held for the one still to come", out.body.party.muster, 1);
     same("and the host's own mark is spent", (await call(A, "rpc", "party_state")).data.members.find((m) => m.username === "ashen").ready, false);
 
     const fell = await call(B, "game", []);
@@ -407,6 +408,13 @@ await run(async () => {
     same("and B is told, since nobody pressed anything", told && [told.tier, told.zone], [ground.tier, ground.zone]);
     same("B's mark comes down once it has been acted on",
       (await call(A, "rpc", "party_state")).data.members.find((m) => m.username === "bram").ready, false);
+
+    // However late inside the hold B's request landed, encounter one is drawn for both.
+    await advanceServer(stack, 5000);
+    const first = (await call(A, "game", [])).body.party;
+    check("encounter one is fought by both of them, nobody waiting on the next",
+      !!first && first.encounters >= 1 && first.muster === 0 && !!first.enc && first.encounters === 1 && first.enc.hunters.length === 2,
+      first && { encounters: first.encounters, muster: first.muster, fight: first.enc && first.enc.hunters.map((u) => u.userId) });
 
     // A mark that is down is not a standing instruction: breaking away stays broken.
     const broke = await call(B, "game", [cmd("partyHuntLeave")]);

@@ -37,7 +37,8 @@ export const TIMING = Object.freeze({
   maxHoldMs: 4000,            // and no command waits longer (the server moves one older than 10 s)
   batchMax: 25,
   cadenceMs: 5 * 60 * 1000,   // an idle, visible camp checks in this often
-  partyHuntMs: 4000,          // and this often while out with the party (see setPartyHunt)
+  partyHuntMs: 4000,          // and this often while out with the party, or marked ready to go
+  healMs: 60 * 1000,          // a camp told it is signed out asks again this often, in case it is not
   heartbeatMs: 60 * 1000,
   onlineMs: 60 * 1000,
   partyMs: 30 * 1000,
@@ -208,6 +209,7 @@ export function createStore({
   let backoff = 0;
   let authTries = 0;
   let halted = null;            // null | "outdated" | "unauthorized"
+  let healAt = 0;               // when a signed-out camp next checks whether it still is
   let sendSeq = 0;
   let syncWaiters = [];         // { seq, resolve }
   let idleWaiters = [];
@@ -479,7 +481,7 @@ export function createStore({
       /* A party's fight is the server's to play, and it only moves when a member's request
          asks it to (docs/SERVER.md 3). While this camp is out on one, checking in often is
          what makes the fight it is watching go on at all. */
-      nextCadenceAt = lastSuccessAt + (partyHunt ? T.partyHuntMs : T.cadenceMs);
+      nextCadenceAt = lastSuccessAt + (partyHunt || markedReady() ? T.partyHuntMs : T.cadenceMs);
       setStatus({ conn: "online", error: null, lastSyncAt: Number(res.now), catchingUp: behind });
       // The server stopped partway through a long absence: straight back for the rest.
       if (behind) syncWanted = true;
@@ -503,6 +505,7 @@ export function createStore({
 
     if (error === "unauthorized") {
       halted = "unauthorized";
+      healAt = wall() + T.healMs;
       putBack(batch);
       failServerOnly(batch, ERR.signedOut);
       failServerOnly(queue, ERR.signedOut);
@@ -635,20 +638,53 @@ export function createStore({
   }
 
   // After signing in again as the same player: pick up where the queue left off.
-  function resume(nextSession = null) {
+  /* `quiet` is the camp asking on its own (heal): the banner stays up until the answer
+     says otherwise, rather than blinking away and back once a minute. */
+  function resume(nextSession = null, { quiet = false } = {}) {
     if (kind !== "account" || destroyed) return;
     if (nextSession) session = nextSession;
     halted = null;
     authTries = 0;
     retryAt = 0;
-    setStatus({ conn: state ? "syncing" : "connecting", error: null });
+    if (!quiet) setStatus({ conn: state ? "syncing" : "connecting", error: null });
     syncWanted = true;
     kick();
   }
 
   /* ---------- the realm around the camp ---------- */
 
+  /* Marked ready in the party room. The host's Start opens the ground and this camp walks on
+     under its own next request, so while the mark is up that request is never five minutes
+     away: the first walk is held for it (CONFIG.party.musterMs), and it has to land inside. */
+  function markedReady() {
+    const me = session && session.userId ? String(session.userId).toLowerCase() : null;
+    const members = partyState && Array.isArray(partyState.members) ? partyState.members : [];
+    return !!me && members.some((m) => m && m.ready === true && String(m.user_id).toLowerCase() === me);
+  }
+
+  /* Told it is signed out, a camp stops. But the server says "unauthorized" for more than a
+     dead session, and supabase-js can renew a token without saying so to anyone listening
+     for a sign in, so a camp that halts on the first answer can sit under a Signed out
+     banner while holding a perfectly good session. Once a minute while it can be seen, it
+     asks again: a renewed token, then one more try. Two requests a minute is the whole cost
+     of being wrong about it. */
+  async function heal() {
+    try {
+      if (net.refresh) await net.refresh();
+    } catch (err) {
+      report("refresh", err);
+    }
+    if (halted === "unauthorized" && !destroyed) resume(null, { quiet: true });
+  }
+
   function pulse(w) {
+    if (halted === "unauthorized") {
+      if (visible && w >= healAt) {
+        healAt = w + T.healMs;
+        heal();
+      }
+      return;
+    }
     if (halted) return;
     kick();
     if (!state || !visible) return;
@@ -723,6 +759,14 @@ export function createStore({
   function setParty(data) {
     partyState = data;
     party.intervals = partyIntervals(data, session && session.userId);
+    /* Marked ready, and somebody in the party is out: the host has pressed Start. Check in now
+       rather than on the next beat, so this camp is on the ground for encounter one. */
+    if (markedReady()) {
+      const me = String(session.userId).toLowerCase();
+      const out = (Array.isArray(data.members) ? data.members : [])
+        .some((m) => m && m.hunt && String(m.user_id).toLowerCase() !== me);
+      nextCadenceAt = Math.min(nextCadenceAt, out ? 0 : lastSuccessAt + T.partyHuntMs);
+    }
     const id = data.party && data.party.id ? data.party.id : null;
     if (id !== subscribedTo || !unsubscribe) {
       if (unsubscribe) unsubscribe();
@@ -755,6 +799,7 @@ export function createStore({
     } else {
       nextBeatAt = 0;
       nextOnlineAt = 0;
+      healAt = 0;
       sync({ soft: true });
     }
   }

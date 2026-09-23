@@ -607,13 +607,33 @@ async function main() {
     await run(w, 1500);
     check("a second 401 in a row stops the store", store.halted === "unauthorized" && store.status.error === "unauthorized" && srv.refreshes === 2, { halted: store.halted, refreshes: srv.refreshes });
     const calls = srv.calls.length;
+    await run(w, 50 * 1000, 1000);
+    check("and it does not ask again inside the minute", srv.calls.length === calls, srv.calls.length - calls);
+    /* "unauthorized" is also what an Auth hiccup looked like, and supabase-js renews tokens
+       without a sign in anyone hears, so a halted camp asks again once a minute rather than
+       sitting under a banner it cannot clear. Once a minute, not a storm. */
     await run(w, 6 * MIN, 1000);
-    check("and it stops asking", srv.calls.length === calls);
+    const asked = srv.calls.length - calls;
+    check("then asks again about once a minute, and no oftener", asked >= 5 && asked <= 14, asked);
+    check("with the Signed out banner held steady meanwhile, not blinking", store.status.error === "unauthorized" && store.halted === "unauthorized", store.status);
     check("the command waits for a sign in", store.status.pending === 1);
     srv.reply = null;
     store.resume();
     await run(w, 1000);
     check("resume() after signing in carries on with the queue", store.status.conn === "online" && store.status.pending === 0 && srv.state.settings.hideSovereign === false, store.status);
+  }
+  {
+    // The case that stranded a real camp: told it was signed out, and it was not.
+    const w = await boot();
+    const { store, srv } = w;
+    srv.reply = () => ({ ok: false, error: "unauthorized" });
+    await store.dispatch("setHide", { on: true });
+    await run(w, 1500);
+    check("halted as signed out", store.halted === "unauthorized", store.halted);
+    srv.reply = null;
+    await run(w, 61 * 1000, 1000);
+    check("a camp wrongly told it is signed out picks up again on its own",
+      store.halted === null && store.status.conn === "online" && store.status.pending === 0 && srv.state.settings.hideSovereign === true, store.status);
   }
 
   section("Server time and a clock that never runs back");
@@ -973,6 +993,45 @@ async function main() {
     await run(w, 13 * 1000, 250);
     check("nothing is said while there is nothing to say", seen.length === quiet, seen.length - quiet);
     check("and a camp not out goes back to the slow cadence", srv.calls.length === idle, srv.calls.length - idle);
+  }
+
+  section("Marked ready, a camp is never five minutes from its party");
+  {
+    /* The host's Start walks everyone marked ready on under their own next request, and the
+       first walk is held for them only so long (CONFIG.party.musterMs). An idle camp checks
+       in every five minutes, which is how a ready member used to miss encounter one. */
+    const w = await boot();
+    const { store, srv } = w;
+    const room = (hostOut) => ({
+      party: { id: "p1", name: "The Lantern Watch", leader_id: "u2" },
+      members: [
+        { user_id: USER, username: "morwen", ready: true, hunt: null },
+        { user_id: "u2", username: "thane", ready: false, hunt: hostOut ? { tier: 1, zone: "outer" } : null },
+      ],
+      invites_in: [], invites_out: [], messages: [],
+    });
+    srv.partyState = room(false);
+    await store.refreshParty();
+    await until(w, store.sync());
+    const before = srv.calls.length;
+    await run(w, 13 * 1000, 250);
+    const readyCalls = srv.calls.length - before;
+    check("marked ready, the camp checks in every few seconds", readyCalls >= 2 && readyCalls <= 5, readyCalls);
+
+    // The host has pressed Start: their hunt shows on the roster, and this camp goes now.
+    const atStart = srv.calls.length;
+    srv.partyState = room(true);
+    await store.refreshParty();
+    await run(w, 600, 100);
+    check("the moment the host is out, a ready camp checks in at once", srv.calls.length > atStart, srv.calls.length - atStart);
+
+    // The mark comes down once it has walked on; a camp not ready waits its turn again.
+    srv.partyState = { ...room(false), members: room(false).members.map((m) => ({ ...m, ready: false })) };
+    await store.refreshParty();
+    await until(w, store.sync());
+    const settled = srv.calls.length;
+    await run(w, 13 * 1000, 250);
+    check("and with the mark down it goes back to the slow cadence", srv.calls.length === settled, srv.calls.length - settled);
   }
 }
 

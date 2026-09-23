@@ -89,6 +89,14 @@ registerPopup("settings", (ctx) => {
   const paint = () => {
     const [text, tone] = connectionText(ctx);
     setText(status, text);
+    /* The account line and the connection line say the same thing: a camp the server has
+       turned away is not "Signed in" in green two rows above "Signed out" in red. */
+    if (!guest) {
+      const ended = ctx.store.status.error === "unauthorized";
+      setText(accountNote, ended ? "Session ended" : "Signed in");
+      toggleClass(accountNote, "t-good", !ended);
+      toggleClass(accountNote, "t-bad", ended);
+    }
     for (const t of ["good", "bad", "violet"]) toggleClass(status, `t-${t}`, tone === t);
     toggleClass(status, "muted", tone === "muted");
     if (!guest) {
