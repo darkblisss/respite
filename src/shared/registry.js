@@ -87,6 +87,9 @@ const MAT_ART = {
   gaunt_leather: "gaunt-leather", slough_leather: "slough-leather", stag_leather: "stag-leather",
   drake_leather: "drake-leather", leviathan_leather: "leviathan-leather", demon_leather: "demon-leather",
 
+  // Felling axes. Tools, not materials, but drawn and looked up the same way.
+  bitter_axe: "bitter-axe", blood_axe: "blood-axe", gnarl_axe: "gnarl-axe",
+
   // The five reagents, which never had a tier and so never moved.
   coal: "coal", resin: "resin", pulp: "pulp", tallow: "tallow", veil_shard: "veil-shard",
 };
@@ -94,6 +97,7 @@ const MAT_ART = {
 /* The reagents are cut by hand and have no fade of their own: a cutout sits on
    any surface, so asking for a fade that is not there simply gets the cut. */
 const CUT_ONLY = new Set(["coal", "resin", "pulp", "tallow", "veil_shard",
+  "bitter_axe", "blood_axe", "gnarl_axe",
   "mangy_leather", "bristle_leather", "dire_leather", "gaunt_leather", "slough_leather", "stag_leather", "drake_leather", "leviathan_leather", "demon_leather",
   "mangy_flay", "bristle_flay", "dire_flay", "gaunt_flay", "slough_flay", "stag_flay", "drake_flay", "leviathan_flay", "demon_flay",
   "lesser_veil_fragment", "veiled_fragment", "sovereign_fragment", "lesser_veil_essence", "veiled_essence", "sovereign_essence",
@@ -392,7 +396,8 @@ function buildRegistry() {
   function addCraft(prof, id, name, icon, tier, time, xpScale, cost, isGear) {
     // A bench recipe wears the face of what it makes, the same as a gather node.
     // Gear is rolled rather than minted, so it has no material to take one from.
-    const face = !isGear && MATERIALS[id] && MATERIALS[id].art ? { art: MATERIALS[id].art } : null;
+    const drawn = !isGear && (MATERIALS[id] || TOOLS[id]);
+    const face = drawn && drawn.art ? { art: drawn.art } : null;
     CRAFT_ACTIONS[prof].push({
       id: `craft_${id}`, skillId: prof, tier, name, icon, ...face,
       level: TIERS[tier - 1].level, time, xp: Math.round(TIERS[tier - 1].xp * xpScale) + 1,
@@ -609,6 +614,8 @@ function buildRegistry() {
 
     const mTool = (id, name, icon, skill, prof, cost) => {
       TOOLS[id] = { id, name, icon, kind: "tool", forSkill: skill, tier, speed: tier * B.toolSpeedPerTier, value: 1 };
+      const art = matArt(id);
+      if (art) TOOLS[id].art = art;
       addCraft(prof, id, name, icon, tier, gTime, 2.5, cost);
     };
 
