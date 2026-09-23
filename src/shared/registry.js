@@ -73,6 +73,10 @@ const MAT_ART = {
   mourning_inlay: "mourning-inlay", ghost_inlay: "ghost-inlay", amber_inlay: "amber-inlay",
   hoard_inlay: "hoard-inlay", sunken_inlay: "sunken-inlay", idol_inlay: "idol-inlay",
 
+  // What the Veil gives up. Cut only.
+  lesser_veil_fragment: "lesser-veil-fragment", veiled_fragment: "veiled-fragment", sovereign_fragment: "sovereign-fragment",
+  lesser_veil_essence: "lesser-veil-essence", veiled_essence: "veiled-essence", sovereign_essence: "sovereign-essence",
+
   // The five reagents, which never had a tier and so never moved.
   coal: "coal", resin: "resin", pulp: "pulp", tallow: "tallow", veil_shard: "veil-shard",
 };
@@ -80,6 +84,7 @@ const MAT_ART = {
 /* The reagents are cut by hand and have no fade of their own: a cutout sits on
    any surface, so asking for a fade that is not there simply gets the cut. */
 const CUT_ONLY = new Set(["coal", "resin", "pulp", "tallow", "veil_shard",
+  "lesser_veil_fragment", "veiled_fragment", "sovereign_fragment", "lesser_veil_essence", "veiled_essence", "sovereign_essence",
   "mud_inlay", "bog_inlay", "chalk_inlay", "mourning_inlay", "ghost_inlay", "amber_inlay", "hoard_inlay", "sunken_inlay", "idol_inlay",
   "mud_dredge", "bog_dredge", "chalk_dredge", "mourning_dredge", "ghost_dredge", "amber_dredge", "hoard_dredge", "sunken_dredge", "idol_dredge"]);
 
@@ -298,6 +303,8 @@ function buildRegistry() {
        them alone. */
     MATERIALS[b.charm] = { id: b.charm, name: `${b.name} Charm`, icon: "charm", kind: "material",
       category: "Veil", value: Math.round(b.essValue * CONFIG.enchant.charmValue), tier: b.tiers[0], band: b.key, charm: true };
+    // The Veil is built here rather than through addMat, so it asks for its paintings itself.
+    [b.fragment, b.essence, b.charm].forEach((id) => { const art = matArt(id); if (art) MATERIALS[id].art = art; });
     // Twenty Fragments, one Essence. The Artificer already works the Veil.
     CRAFT_ACTIONS.artificer.push({
       id: `merge_${b.essence}`, skillId: "artificer", tier: b.tiers[0], name: `${b.name} Essence`, icon: "gem",
