@@ -310,6 +310,79 @@ await run(async () => {
       { encounters: s.encounters, fight: s.enc && s.enc.hunters.map((u) => u.userId) });
   }
 
+  section("Setting out together");
+  {
+    /* The host's press opens the ground; everyone else marked ready walks on under their own
+       next request, a second or two behind. The first walk is held for them, so a party that
+       set out together fights encounter one together, and nobody waits a whole encounter for
+       a request that happened to land after the walk ran out. */
+    const MUSTER = CONFIG.party.musterMs;
+    const opened = () => P.newSession({ partyId: "p1", tier: 2, zone: "outer", seed: 4040, hunters: band(1, 45), expecting: ["U1", "u0"] });
+
+    const s = opened();
+    same("expecting the others, not the host, and by lowercased id", s.muster && s.muster.waiting, ["u1"]);
+    P.stepSession(s, CONFIG.hunt.searchMinMs + 2000);
+    check("the first walk is held past its length while one of them is still to come",
+      s.phase === "search" && s.encounters === 0 && s.enc === null, { phase: s.phase, encounters: s.encounters });
+    same("and the view says who it is being held for", P.sessionView(s).muster, 1);
+    check("and the scheduler is told when the hold runs out, not that it is due now",
+      P.nextSessionDue(s) > 0 && P.nextSessionDue(s) <= MUSTER, P.nextSessionDue(s));
+
+    // The last of them walks on: the server pushes them, then says so.
+    s.hunters.push(P.makeHunter("u1", statsAt(45), {}));
+    const last = P.fellIn(s, "U1");
+    check("the last one in ends the hold", last === true && s.muster === null);
+    check("and encounter one is drawn there and then, with both of them in it",
+      s.phase === "fight" && s.encounters === 1 && s.enc.hunters.map((u) => u.userId).sort().join() === "u0,u1",
+      { phase: s.phase, fight: s.enc && s.enc.hunters.map((u) => u.userId) });
+
+    // Arriving inside the walk's own length changes nothing about the walk.
+    const early = opened();
+    P.stepSession(early, 1000);
+    early.hunters.push(P.makeHunter("u1", statsAt(45), {}));
+    P.fellIn(early, "u1");
+    check("one who is on before the walk is out just walks the rest of it",
+      early.phase === "search" && early.muster === null && early.wait > 0);
+    P.stepSession(early, CONFIG.hunt.searchMinMs);
+    check("and is in encounter one when it comes", early.encounters === 1 && early.enc.hunters.length === 2);
+
+    // A closed tab holds the party so long and no longer.
+    const lonely = opened();
+    P.stepSession(lonely, MUSTER - 1000);
+    check("a muster nobody answers still holds just short of its length", lonely.encounters === 0 && !!lonely.muster);
+    P.stepSession(lonely, 2000);
+    check("then lets go, and encounter one is drawn for whoever is there",
+      lonely.encounters === 1 && lonely.muster === null && lonely.enc.hunters.length === 1);
+
+    // Held or not, it is the same fight however the time is cut.
+    const whole = opened();
+    P.stepSession(whole, 60 * 1000);
+    const bits = opened();
+    for (let i = 0; i < 240; i++) P.stepSession(bits, 250);
+    same("a held walk sliced two hundred ways is the same session",
+      clone({ e: bits.encounters, el: Math.round(bits.elapsed), d: bits.dice, p: bits.phase }),
+      clone({ e: whole.encounters, el: Math.round(whole.elapsed), d: whole.dice, p: whole.phase }));
+
+    // Nobody else ready: nothing held, exactly the old walk.
+    const alone = P.newSession({ partyId: "p1", tier: 2, zone: "outer", seed: 4040, hunters: band(1, 45) });
+    check("a host who sets out alone opens with nothing held", alone.muster === null);
+    P.stepSession(alone, CONFIG.hunt.searchMinMs + 1);
+    check("and walks straight into encounter one", alone.encounters === 1);
+  }
+
+  section("A share, as the page reads it");
+  {
+    const s = P.newSession({ partyId: "p1", tier: 2, zone: "outer", seed: 77, hunters: band(2, 45) });
+    same("before a blow nobody has a share", P.sessionView(s).hunters.map((u) => u.share), [0, 0]);
+    P.stepSession(s, 5 * 60 * 1000);
+    const shares = P.sessionView(s).hunters.map((u) => u.share);
+    check("every hunter who fought has one, as a percent", shares.every((x) => x > 0 && x <= 100), shares);
+    check("and between them they come to the whole", Math.abs(shares.reduce((a, b) => a + b, 0) - 100) <= 0.2, shares);
+    const solo = P.newSession({ partyId: "p1", tier: 2, zone: "outer", seed: 77, hunters: band(1, 45) });
+    P.stepSession(solo, 2 * 60 * 1000);
+    same("one hunter alone holds all of it, not none of it", P.sessionView(solo).hunters[0].share, 100);
+  }
+
   section("A session that lives in a database");
   {
     /* The bug this guards: in memory the session's hunters and the live

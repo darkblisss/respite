@@ -591,6 +591,16 @@ function toastStack() {
  */
 export function toast(text, { kind = "info", icon: iconName = null, ms = 3200, action = null } = {}) {
   const stack = toastStack();
+  /* The same words already on screen are not said again underneath: four presses that each
+     came back "Sign in again first" are one toast held a little longer, not four stacked. */
+  const key = typeof text === "string" && !action ? `${kind}|${text}` : null;
+  if (key) {
+    const same = Array.from(stack.children).find((c) => c._toast && c._toast.key === key && !c.classList.contains("is-leaving"));
+    if (same) {
+      same._toast.again();
+      return { el: same, close: same._toast.close };
+    }
+  }
   let remaining = Math.max(0, Number(ms) || 0);
   let started = 0;
   let timer = 0;
@@ -635,6 +645,21 @@ export function toast(text, { kind = "info", icon: iconName = null, ms = 3200, a
     node.classList.add("is-paused");
   }
 
+  // Said again while still up: the clock starts over, and the bar with it.
+  function again() {
+    if (leaving || !(Number(ms) > 0)) return;
+    clearTimeout(timer);
+    remaining = Math.max(0, Number(ms) || 0);
+    const bar = node.querySelector(".toast-timer");
+    if (bar) bar.replaceWith(h("span.toast-timer", { style: { animationDuration: remaining + "ms" }, "aria-hidden": "true" }));
+    if (stackHeld) {
+      started = performance.now();
+      node.classList.add("is-paused");
+    } else {
+      run();
+    }
+  }
+
   const control = { pause, resume: run };
   liveToasts.add(control);
   node.addEventListener("click", dismiss);
@@ -645,7 +670,7 @@ export function toast(text, { kind = "info", icon: iconName = null, ms = 3200, a
     if (old._toast) old._toast.close();
     old.remove();
   });
-  node._toast = { close: dismiss };
+  node._toast = { close: dismiss, key, again };
 
   if (stackHeld) {
     started = performance.now();

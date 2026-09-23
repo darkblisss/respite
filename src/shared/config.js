@@ -236,6 +236,13 @@ const party = {
   takenCap: 0.5,
   contribFloor: 0.05,
 
+  /* Setting out together. Everyone marked ready when the host presses Start walks onto
+     the ground under their own next request, a second or two behind the host, so the
+     first walk is held until the last of them is on, and encounter one is drawn for
+     all of them at once. A camp that never comes (a closed tab) holds it this long and
+     no longer, then comes in on the next walk like anyone late. */
+  musterMs: 20 * 1000,
+
   /* An encounter's XP pool rides the same scale its foes do, so a fair four-way split
      of a foe built for four pays each of them what one built for one would have. The
      party bonus above is then laid on top: partying is worth a little, never a lot. */

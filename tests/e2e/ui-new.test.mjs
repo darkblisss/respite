@@ -5,7 +5,7 @@
 
      node tests/e2e/ui-new.test.mjs */
 
-import { run, check, same, section, startStack, launch, openApp, signUp, waitForSync, dispatch, editSave, put, sql } from "./lib.mjs";
+import { run, check, same, section, startStack, launch, openApp, signUp, waitForSync, dispatch, editSave, put, sql, advanceServer } from "./lib.mjs";
 
 const live = (app, fn, arg) => app.page.evaluate(fn, arg);
 const PAGE_CODE = /src\/client\/(pages|ui\/popups)\//;
@@ -477,6 +477,50 @@ await run(async () => {
     check("with the warband in it, this camp first", band.mates[0] === "You" && band.mates.length === 2, band);
     const huntErrs = errs().filter((e) => /hunt\.js/.test(String(e.stack || e.message || e)));
     check("and nothing in hunt.js threw", huntErrs.length === 0, huntErrs.map((e) => String(e.message || e)));
+
+    // A share is the payout's own figure over the session, so a hunter who has fought has one.
+    await advanceServer(stack, 90 * 1000);
+    await bParty(() => window.__respite.store.sync());
+    await live(app, () => window.__respite.store.sync());
+    await app.page.waitForTimeout(1000);
+    const kpiOf = (label) => live(app, (l) => {
+      const k = [...document.querySelectorAll(".hunt-card .kpi")].find((n) => n.querySelector(".l").textContent === l);
+      return k ? k.querySelector(".v").textContent : null;
+    }, label);
+    const share = await kpiOf("Your share");
+    const view = await live(app, () => {
+      const v = window.__respite.store.partyHunt;
+      const me = window.__respite.ctx.account.userId;
+      return v ? { mine: v.hunters.find((u) => u.userId === me), all: v.hunters.map((u) => [u.dmg, u.share]) } : null;
+    });
+    const dealt = view ? view.all.filter(([dmg]) => dmg > 0) : [];
+    check("the party's shares come to the whole once anyone has fought (never 0% all round)",
+      dealt.length > 0 && Math.abs(view.all.reduce((n, [, sh]) => n + sh, 0) - 100) <= 0.2, view);
+    same("and the page shows this camp's own", share, view && view.mine ? `${Math.round(view.mine.share)}%` : null);
+
+    /* A fall, as the page hears it: the death is settled in the answer that takes the camp off
+       the roster. The arena stays on the party's fight, with this camp in it as Fallen. */
+    await live(app, () => window.__respite.store.bus.emit("store:news", { type: "hunt:death", monsterId: "ash_stalker" }));
+    await dispatch(app.page, "partyHuntLeave", {});
+    await app.page.waitForTimeout(1500);
+    const watched = await live(app, () => ({
+      party: !!document.querySelector(".arena.is-party"),
+      band: [...document.querySelectorAll(".band-mate")].map((n) => [n.querySelector(".band-name").textContent, n.querySelector(".hpbar span").textContent]),
+      sub: (document.querySelector(".hunt-card .card-sub") || {}).textContent,
+      go: [...document.querySelectorAll(".hunt-actions .btn")].filter((b) => !b.hidden).map((b) => b.textContent.trim()),
+    }));
+    check("a fallen camp still sees its party fighting, not an empty arena", watched.party && watched.band.length === 2, watched);
+    same("and itself in the band, marked Fallen", watched.band[0], ["You", "Fallen"]);
+    check("with the fall said plainly, and the way back offered", /You fell/.test(watched.sub || "") && watched.go.includes("Join your party"), watched);
+    same("and the rest of the party's numbers, not its own zeroes", [await kpiOf("You"), (await kpiOf("Standing") || "").replace(/\d/g, "n")], ["Fallen", "n of n"]);
+
+    await live(app, () => [...document.querySelectorAll(".hunt-actions .btn")].find((b) => /Join your party/.test(b.textContent)).click());
+    await app.page.waitForTimeout(1500);
+    const back = await live(app, () => ({
+      mates: [...document.querySelectorAll(".band-mate .band-name")].map((n) => n.textContent),
+      pull: [...document.querySelectorAll(".hunt-actions .btn")].filter((b) => !b.hidden).map((b) => b.textContent.trim()),
+    }));
+    check("Join your party puts the camp back on the fight", back.mates[0] === "You" && back.pull.includes("Break away"), back);
 
     /* A square in the room opens the other camp's card, and the card knows they are already
        standing in this party: nobody is invited into a party they are in. */

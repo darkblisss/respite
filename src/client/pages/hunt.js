@@ -133,6 +133,20 @@ export default {
     let dispDps = null;
     const mates = new Map();   // the party's other hunters, by user id
     let wasParty = false;      // which fight the arena was last drawn for
+    /* The party's fight while this camp is not on it: after a fall, after breaking away, or
+       before ever joining. The server stops sending a camp the fight the moment it is off
+       the roster, so this is asked for on its own (party_hunt_view), as the Party page does. */
+    let watch = null;
+    let watchAt = 0;
+    let watchAsking = false;
+    let onFight = false;       // drawn on the party's fight last time round
+    let fell = false;          // and went down in it: the camp is watching because it fell
+    let joinMode = false;      // the arena's main press is "Join your party"
+    const WATCH_MS = 4000;
+    const offNews = ctx.on("store:news", (e) => {
+      // The death is settled in the same answer that takes the camp off the roster.
+      if (e && e.type === "hunt:death" && onFight) fell = true;
+    });
 
     /* ================= HERO ================= */
 
@@ -379,6 +393,13 @@ export default {
       ctx.dispatch("pullBack");
     });
     goBtn.addEventListener("click", () => {
+      /* Back onto the party's ground. The server puts them on the session and the rules keep
+         them out of the encounter already drawn, so they come in on the walk after it. */
+      if (joinMode) {
+        goBtn.disabled = true;
+        Promise.resolve(ctx.dispatch("partyHuntJoin")).finally(() => { goBtn.disabled = false; });
+        return;
+      }
       const state = ctx.state;
       const c = state.tasks.combat;
       if (c) openPopup("zone", ctx, c.tier, c.zone);
@@ -438,6 +459,7 @@ export default {
     function paintArena(ctx, region, c, kls, down) {
       const state = ctx.state;
       const zone = c ? getZone(c.zone) : null;
+      joinMode = false;
 
       /* A hunt on ground this build has never heard of belongs to a newer engine:
          name what can be named and carry on, rather than taking the page down. */
@@ -562,20 +584,28 @@ export default {
        merely unlikely. There is no float or shake layer either, because those come off
        hunt:fx events raised by a local simulation, and for a shared fight there is no local
        simulation to raise them. The arena is quieter for it, and that is the right trade. */
-    function paintParty(ctx, view) {
+    function paintParty(ctx, view, { watching = false, fell = false } = {}) {
       const zone = getZone(view.zone);
       const region = regionOfTier(view.tier);
       const me = ctx.account ? ctx.account.userId : null;
       const names = namesOf(ctx);
       const skins = skinsOf(ctx);
       const hunters = Array.isArray(view.hunters) ? view.hunters : [];
-      const mine = hunters.find((u) => sameId(u.userId, me)) || null;
+      const mine = watching ? null : hunters.find((u) => sameId(u.userId, me)) || null;
       const e = view.phase === "fight" ? view.enc : null;
       const enc = e && Array.isArray(e.foes) && Array.isArray(e.hunters) ? e : null;
+      joinMode = watching;
 
       setAttr(huntHead, "hidden", false);
       setText(huntTitle, `The ${zone.name} of ${region.name}`);
-      setText(huntSub, "The party's hunt · XP by your share, gold and drops the same for everyone");
+      /* Watching is either a fall or never having gone. A fall is said plainly, because the
+         arena going quiet on somebody who was fighting a second ago reads as the game losing
+         them; the party is still out, and the camp can see it and walk back on. */
+      setText(huntSub, !watching
+        ? "The party's hunt · XP by your share, gold and drops the same for everyone"
+        : fell
+          ? "You fell. Your party fights on, and you can rejoin on their next walk"
+          : "Your party is out without you. Join them and you come in on their next walk");
       const chip = `${hunters.length} out together`;
       if (chip !== sigs.company) {
         sigs.company = chip;
@@ -598,7 +628,11 @@ export default {
       const fighting = !!(enc && mine && inEnc(mine));
 
       // ---- the warband, you first ----
+      /* A camp watching is not on the session, so it is not in the view either; it is put
+         back in the band where it stood, fallen or at camp, so the squares still read as
+         the party it belongs to rather than a party of strangers. */
       const band4 = hunters.slice().sort((a, b) => (sameId(a.userId, me) ? -1 : sameId(b.userId, me) ? 1 : 0));
+      if (watching && me) band4.unshift({ userId: me, down: fell, hp: 0, max: 1, note: fell ? "Fallen" : "At camp" });
       syncBand(band4, names, skins, inEnc, me);
 
       // ---- what is happening ----
@@ -606,7 +640,13 @@ export default {
       let tm = `Next encounter in ${fmtTime(view.wait)}`;
       let et = `Searching the ${zone.name}`;
       let es = "The party walks on to the next one.";
-      if (enc && !fighting) {
+      if (!enc && view.muster > 0) {
+        // The first walk, held until everyone who marked ready is on the ground.
+        st = "Mustering";
+        tm = `Waiting on ${fmtWhole(view.muster)} more`;
+        et = `Gathering at the ${zone.name}`;
+        es = "Everyone who marked ready walks in together.";
+      } else if (enc && !watching && !fighting) {
         st = "Waiting";
         tm = "In on the next encounter";
         et = `The ${zone.name} lies quiet`;
@@ -627,31 +667,46 @@ export default {
       toggleClass(arena, "is-party", true);
 
       // ---- the numbers ----
-      /* A share is the damage you dealt over the damage the party dealt, which is the one
-         figure worth watching in a fight whose spoils are split that way. */
       const total = hunters.reduce((n, u) => n + (u.dmg || 0), 0);
-      // The server's own figure: 70% of damage dealt, 30% of damage taken.
-      const share = mine && mine.share != null ? mine.share : 0;
       setAttr(kpis, "hidden", false);
       setAttr(hint, "hidden", true);
+      setAttr(dropsList, "hidden", true);
       setText(kKills.l, "Encounters");
       setText(kKills.v, fmtWhole(view.encounters));
-      setText(kRate.l, "Your damage");
-      setText(kRate.v, fmt(Math.round(mine ? mine.dmg : 0)));
       setText(kDps.l, "Party damage");
       setText(kDps.v, fmt(Math.round(total)));
-      setText(kSov.l, "Your share");
-      setAttr(kSov.v, "hidden", false);
-      setAttr(kSovBar, "hidden", false);
-      setAttr(dropsList, "hidden", true);
-      setText(kSov.v, `${Math.round(share)}%`);
-      setWidth(kSov.fill, share);
       setText(kLeft.l, "Time out");
       setText(kLeft.v, fmtTime(view.elapsed));
+      if (watching) {
+        // Nothing of this is yours any more: what you did was paid when you fell.
+        const standing = hunters.filter((u) => !u.down).length;
+        setText(kRate.l, "Standing");
+        setText(kRate.v, `${fmtWhole(standing)} of ${fmtWhole(hunters.length)}`);
+        setText(kSov.l, "You");
+        setAttr(kSov.v, "hidden", false);
+        setAttr(kSovBar, "hidden", true);
+        setText(kSov.v, fell ? "Fallen" : "At camp");
+      } else {
+        /* A share is the payout's own formula over the whole session's damage dealt and
+           taken (sessionView), the one figure worth watching in a fight whose spoils are
+           split that way. The server sends it as a percent. */
+        const share = mine && Number.isFinite(mine.share) ? mine.share : 0;
+        setText(kRate.l, "Your damage");
+        setText(kRate.v, fmt(Math.round(mine ? mine.dmg : 0)));
+        setText(kSov.l, "Your share");
+        setAttr(kSov.v, "hidden", false);
+        setAttr(kSovBar, "hidden", false);
+        setText(kSov.v, `${Math.round(share)}%`);
+        setWidth(kSov.fill, share);
+      }
 
-      setAttr(pullBtn, "hidden", false);
+      setAttr(pullBtn, "hidden", watching);
       setText(pullBtn, "Break away");
-      setAttr(goBtn, "hidden", true);
+      setAttr(goBtn, "hidden", !watching);
+      if (watching) {
+        setText(goBtn, "Join your party");
+        setAttr(goBtn, "disabled", recovering(ctx.state) || hunters.length >= CONFIG.party.maxSize);
+      }
     }
 
     // One row a member: their name, their health, and a mark on whoever has fallen or is waiting.
@@ -660,7 +715,7 @@ export default {
    of hunting together, and a square each is the only shape that stays readable at
    four. `data-n` is what the grid reads to lay them out. */
     function syncBand(all, names, skins, inEnc, me) {
-      const sig = all.map((u) => `${u.userId}:${u.down ? 1 : 0}`).join("|");
+      const sig = all.map((u) => `${u.userId}:${u.down ? 1 : 0}:${u.note || ""}`).join("|");
       if (sig !== sigs.band) {
         sigs.band = sig;
         mates.clear();
@@ -686,7 +741,7 @@ export default {
         if (!row) return;
         const max = u.max > 0 ? u.max : 1;
         setWidth(row.fill, (Math.max(0, u.hp) / max) * 100);
-        setText(row.text, u.down ? "Fallen" : inEnc(u) ? `${fmt(Math.max(0, u.hp))} / ${fmt(max)}` : "Waiting");
+        setText(row.text, u.note || (u.down ? "Fallen" : inEnc(u) ? `${fmt(Math.max(0, u.hp))} / ${fmt(max)}` : "Waiting"));
       });
       setAttr(band, "hidden", !all.length);
     }
@@ -731,6 +786,35 @@ export default {
       }
     }
 
+    // In a party, signed in, and a realm that can say whether the party is out.
+    const canWatch = (ctx) => !!(ctx.account && ctx.account.mode === "account" && ctx.party && ctx.party.party
+      && ctx.net && ctx.net.party && typeof ctx.net.party.huntView === "function");
+
+    function askWatch(ctx) {
+      if (watchAsking) return;
+      watchAsking = true;
+      watchAt = Date.now();
+      Promise.resolve()
+        .then(() => ctx.net.party.huntView())
+        .then((res) => {
+          const v = res && !res.error && res.data && typeof res.data === "object" ? res.data : null;
+          watch = v && !v.over && Array.isArray(v.hunters) && regionOfTier(v.tier) ? v : null;
+          // The realm says the party is not out: whatever this camp fell in is over.
+          if (!watch) fell = false;
+        })
+        .catch(() => {})
+        .finally(() => { watchAsking = false; });
+    }
+
+    /* The fight this camp is watching rather than on. The answer that settled a fall still
+       carries the view (without this camp in it), so that is drawn straight away; after
+       that the realm is asked every few seconds. */
+    function watchedFight(ctx) {
+      const v = ctx.store ? ctx.store.partyHunt : null;
+      if (v && !v.over && Array.isArray(v.hunters) && regionOfTier(v.tier)) return v;
+      return watch;
+    }
+
     function update(ctx) {
       const state = ctx.state;
       const region = currentRegion(state);
@@ -741,6 +825,20 @@ export default {
       const party = c ? null : partyFight(ctx);
       if (c) lastZone = c.zone;
       if (party) lastZone = party.zone;
+
+      // A hunt of your own, or back on the party's: nothing is being watched.
+      if (c || party) {
+        watch = null;
+        fell = false;
+      }
+      onFight = !!party;
+      if (!c && !party && canWatch(ctx)) {
+        if (Date.now() - watchAt >= WATCH_MS) askWatch(ctx);
+      } else if (!party && !c) {
+        watch = null;
+        fell = false;
+      }
+      const watching = !c && !party ? watchedFight(ctx) : null;
 
       paintHero(ctx, region, c, kls, party);
 
@@ -754,8 +852,9 @@ export default {
       }
 
       // Cards outlive neither fight: a change of ground clears the roster the other built.
-      if (!!party !== wasParty) {
-        wasParty = !!party;
+      const shown = party || watching;
+      if (!!shown !== wasParty) {
+        wasParty = !!shown;
         sigs.band = null;
         sigs.company = null;
         cards.forEach((card) => card.node.remove());
@@ -764,9 +863,10 @@ export default {
         fxQueue.length = 0;
       }
       if (party) paintParty(ctx, party);
+      else if (watching) paintParty(ctx, watching, { watching: true, fell });
       else paintArena(ctx, region, c, kls, down);
       // Both fights hold a tier and a zone, so the ground below marks either one.
-      paintGround(ctx, region, c || party);
+      paintGround(ctx, region, c || shown);
     }
 
     update(ctx);
@@ -775,6 +875,7 @@ export default {
       unmount() {
         timers.forEach((t) => clearTimeout(t));
         timers.clear();
+        offNews();
       },
     };
   },
