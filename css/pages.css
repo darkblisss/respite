@@ -2201,7 +2201,9 @@ button.seat-name:hover { text-decoration: underline; }
 .room-bar[hidden] { display: none; }
 .room-press { display: flex; gap: var(--sp-2); }
 .room-out[hidden] { display: none; }
-.room-out { margin-top: var(--sp-3); }
+.room-out { margin-top: var(--sp-3); align-items: center; }
+/* The line beside "Join your party" wraps under it once the row runs out of width. */
+.room-out .field-hint { flex: 1 1 200px; min-width: 0; margin: 0; }
 
 .chat {
   display: flex;

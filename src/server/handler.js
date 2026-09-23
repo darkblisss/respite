@@ -70,12 +70,14 @@ const TICK_BUDGET_MS = 1000;                        // rules time a tick spends,
 export const CATCHING_UP = "The camp is still catching up.";
 export const START_OVER_ALONE = "Start over on its own.";
 export const PARTY_OUT = "You're out with your party.";
+// A moment, not an answer: fallIn leaves a ready mark up when a join hits this.
+const CATCHING_UP_FIGHT = "Your party's fight is still catching up.";
 const GONE = Object.freeze({ ok: false, error: "That listing is gone." });
 const UNREADABLE = "Your old save could not be read.";
 const refuse = (error) => ({ ok: false, error });
 
 // News the browser could not have predicted, sent back with the save so it can say so.
-const NEWS = new Set(["mail:claimed", "mail:unknown", "away", "party:spoils"]);
+const NEWS = new Set(["mail:claimed", "mail:unknown", "away", "party:spoils", "party:fellin"]);
 
 const JSON_HEADERS = Object.freeze({
   "content-type": "application/json; charset=utf-8",
@@ -288,6 +290,11 @@ async function play(q, user, commands, t, opts) {
 
   // 6. Now.
   advanceTo(ctx, t);
+
+  /* 6a. Marked ready while the party went out: fall in behind them. The save has to be at now
+     first, or a camp that was away for an hour would walk onto the ground an hour behind the
+     fight it is joining. */
+  await fallIn(ctx);
 
   /* 6b. The party's share, after the catch-up and not before it: the save's clock is now, so the
      multipliers a share is paid with are the ones the player is actually under, and a bounty buff
@@ -929,6 +936,9 @@ async function partyHuntStart(ctx, args) {
   // The partial unique index refused it: somebody else in the party set out in the same instant.
   if (!ins) return refuse("Your party is already out.");
   setOut(ctx, plan);
+  /* The host is on the ground, so their own mark has been spent. Everyone else's stands until
+     their next request walks them on (fallIn), which is what sets a ready party out together. */
+  await ctx.q("update public.party_members set ready = false where user_id = $1::uuid", [ctx.userId]);
 
   const row = {
     id: Number(ins.id), partyId, tier, zone, members: [ctx.uid], session,
@@ -960,7 +970,7 @@ async function partyHuntJoin(ctx) {
   /* The fight has to be at this moment before anyone is added to it, or a session nobody has
      watched for an hour would pay its newest member for the hour they were not there. */
   const at = ctx.state.clock;
-  if (!playSafely(ctx, row, at) || row.clock < at) return refuse("Your party's fight is still catching up.");
+  if (!playSafely(ctx, row, at) || row.clock < at) return refuse(CATCHING_UP_FIGHT);
   if (row.session.over) return refuse("Your party isn't out.");
 
   /* Whoever joins comes in on the walk, not into the middle of the encounter: the roster of foes
@@ -973,6 +983,35 @@ async function partyHuntJoin(ctx) {
   row.dirty = true;
   ctx.party.live = row;
   return { ok: true, data: { tier: row.tier, zone: row.zone } };
+}
+
+/* Setting out is the whole party's, not the host's. The press cannot reach into four other saves
+   to do it -- each of them has its own catch-up, its own health and its own lock, and one request
+   holding five save rows is how two members of one party deadlock each other. So the host's press
+   opens the ground and everybody who marked ready walks on under their own request, which is the
+   next one their browser makes: a second or two, and every check is done in the camp it is about.
+
+   The mark is the standing instruction. It is taken down the moment it is acted on, so breaking
+   away is breaking away rather than a camp that keeps rejoining the fight it just left. */
+async function fallIn(ctx) {
+  if (ctx.party.live) return;              // already out with them
+  if (readyToSetOut(ctx)) return;          // laid up, or on a hunt of their own
+  const [m] = await ctx.q(
+    `select p.id
+     from public.party_members m
+     join public.party_hunts p on p.party_id = m.party_id and not p.over
+     where m.user_id = $1::uuid and m.ready
+     limit 1`,
+    [ctx.userId],
+  );
+  if (!m) return;
+  const res = await partyHuntJoin(ctx);
+  /* The mark comes down once it has been acted on, and stays up only while the answer is "not
+     yet": a fight still catching up is a moment, a full party is not, and a mark nobody ever
+     takes down locks a row on every request this camp makes for the rest of the session. */
+  if (!res.ok && res.error === CATCHING_UP_FIGHT) return;
+  await ctx.q("update public.party_members set ready = false where user_id = $1::uuid", [ctx.userId]);
+  if (res.ok) announce(ctx, "party:fellin", { tier: res.data.tier, zone: res.data.zone });
 }
 
 async function partyHuntLeave(ctx) {

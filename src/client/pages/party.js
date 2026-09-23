@@ -687,11 +687,14 @@ function partyBody(ctx, page) {
             }));
             outRow.replaceChildren(watch, away);
           } else {
-            const join = h("button.btn.btn-ember", { type: "button" }, iconEl("party"), "Join them");
+            /* Everyone who marked ready is walked on by the realm; this is for whoever did not.
+               They come in on the walk, never into the middle of an encounter, so the press says
+               so rather than letting it look like a press that did nothing. */
+            const join = h("button.btn.btn-ember", { type: "button" }, iconEl("party"), "Join your party");
             join.addEventListener("click", () => send("partyHuntJoin", {}, join, () => {
               toast("You fall in with the party", { kind: "good", icon: "party" });
             }));
-            outRow.replaceChildren(join);
+            outRow.replaceChildren(join, h("span.field-hint", "You come in on the next walk, once the encounter they are in is over."));
           }
         }
         setAttr(outRow, "hidden", !outKind);

@@ -282,6 +282,34 @@ await run(async () => {
     check("nextSessionDue agrees", P.nextSessionDue(doomed) === Infinity);
   }
 
+  section("Falling in with a fight already under way");
+  {
+    /* Whoever joins comes in on the walk, never into the middle of an encounter: the roster of
+       foes was drawn for the party that walked into it, so dropping a hunter in mid fight would
+       either hand them a free kill or hand the others a free pair of hands. The server pushes
+       them onto the session and the rules are what make them wait. */
+    const s = P.newSession({ partyId: "p1", tier: 2, zone: "outer", seed: 909, hunters: band(1, 45) });
+    let guard = 0;
+    while (s.phase !== "fight" && guard++ < 200) P.stepSession(s, 1000);
+    check("the party is in an encounter", s.phase === "fight" && !!s.enc, s.phase);
+
+    const late = P.makeHunter("late", statsAt(45), {});
+    s.hunters.push(late);
+    const encounterNow = s.encounters;
+    P.stepSession(s, 500);
+    check("a hunter added mid encounter is on the session but not in the fight",
+      s.hunters.some((u) => u.userId === "late") && !s.enc.hunters.some((u) => u.userId === "late"),
+      { session: s.hunters.map((u) => u.userId), fight: s.enc && s.enc.hunters.map((u) => u.userId) });
+    check("and is paid nothing out of an encounter they were not in", late.owed.xp === 0, late.owed);
+
+    // The next one is drawn for everybody standing, so the wait is exactly one encounter long.
+    guard = 0;
+    while (s.encounters <= encounterNow && !s.over && guard++ < 600) P.stepSession(s, 1000);
+    check("the encounter after it is drawn for them too",
+      !!s.enc && s.enc.hunters.some((u) => u.userId === "late"),
+      { encounters: s.encounters, fight: s.enc && s.enc.hunters.map((u) => u.userId) });
+  }
+
   section("A session that lives in a database");
   {
     /* The bug this guards: in memory the session's hunters and the live
