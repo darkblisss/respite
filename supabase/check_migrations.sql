@@ -71,7 +71,10 @@ with probes(ord, migration, what, present) as (
                      from pg_proc p
                      join pg_namespace n on n.oid = p.pronamespace
                     where n.nspname = 'public' and p.proname = 'party_propose'
-                    limit 1), false))
+                    limit 1), false)),
+
+    (17, '017_mastery_saints',   'mastery_saints()',
+         to_regproc('public.mastery_saints') is not null)
 )
 select migration,
        case when present then 'in' else 'MISSING' end as status,

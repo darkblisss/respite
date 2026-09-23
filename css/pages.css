@@ -2169,6 +2169,8 @@ button.seat-name {
 button.seat-name:hover { text-decoration: underline; }
 .seat-name .ico { width: 13px; height: 13px; color: var(--gold); flex-shrink: 0; }
 .seat-doing { font-size: 11px; color: var(--bone-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seat-foot .saint { font-size: 9px; letter-spacing: .06em; gap: 4px; }
+.seat-foot .saint::before { width: 4px; height: 4px; }
 
 .seat-ready {
   position: absolute;

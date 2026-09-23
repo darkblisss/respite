@@ -460,6 +460,33 @@ button.chip:disabled { opacity: .45; }
 .tag[data-rarity] { --tag-fg: var(--rar); --tag-line: var(--rar-soft); background: var(--rar-soft); }
 .tag[data-rarity="common"] { --tag-line: var(--line-strong); background: transparent; }
 
+/* The five saints. One commander in the whole realm holds each weapon line, so
+   the mark is not another status pill: gold small caps behind a lozenge, no
+   box, no fill. It sits beside a name and reads as an honorific. */
+.saint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--gold-hi);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.saint::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  rotate: 45deg;
+  background: var(--gold);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--gold) 55%, transparent);
+}
+
 .badge {
   display: inline-grid;
   place-items: center;

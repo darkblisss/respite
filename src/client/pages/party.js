@@ -43,6 +43,7 @@ import { partyMult } from "../../shared/progression.js";
 import { recovering, skillLevel } from "../../shared/stats.js";
 import { currentRegion } from "../../shared/world.js";
 import { markRead, newestMessage } from "../partyRead.js";
+import { refreshTitles, saintTag } from "../titles.js";
 
 const P = CONFIG.party;
 const ONLINE_MS = 3 * 60 * 1000;   // last_seen this recent counts as online, as online_count() does
@@ -188,6 +189,8 @@ export default {
         page.replaceChildren(pageHead({ eyebrow: "The Realm", title: "Party", sub: RULE }), signInCard(ctx));
       } else {
         body = partyBody(ctx, page);
+        // The five saints, so a square can wear one. Late is fine: the next repaint takes it.
+        refreshTitles(ctx);
       }
     }
 
@@ -547,6 +550,7 @@ function partyBody(ctx, page) {
         h("div.seat-foot",
           h("button.seat-name", { type: "button", onClick: () => openPopup("profile", ctx, String(m.username || "")) },
             isLeader ? iconEl("crown") : null, display(m.username)),
+          saintTag(m.username),
           doing),
         isReady ? h("span.seat-ready", iconEl("check"), "Ready") : null);
       if (amLeader && !mine) {

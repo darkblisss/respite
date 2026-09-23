@@ -30,6 +30,7 @@ import { collectionPanel, bestiaryFound, BESTIARY_COUNT } from "../ui/collection
 import { hasPopup, openPopup, portraitImg, paintPortrait } from "../ui/widgets.js";
 import { dollCard, standingCard } from "./armaments.js";
 import { avatarHaloNode, paintAvatarHalo } from "../ui/halo.js";
+import { refreshTitles, saintTag, titleFor } from "../titles.js";
 import { wornHalos } from "../../shared/items.js";
 import { CONFIG } from "../../shared/config.js";
 import {
@@ -87,12 +88,14 @@ function heroView() {
          the figure, the bounty has a page, the companion walks beside you on it:
          a row of every fact about a commander is a row nobody reads. */
       const sig = [skin ? skin.id : "-", klass ? klass.id : "-",
-        halos.neck ? halos.neck.id : "-", halos.ring ? halos.ring.id : "-"].join("|");
+        halos.neck ? halos.neck.id : "-", halos.ring ? halos.ring.id : "-",
+        titleFor(ctx.account && ctx.account.username) || "-"].join("|");
       if (sig === tagSig) return;
       tagSig = sig;
       paintAvatarHalo(avatarHalo, halos);
       // replaceChildren would write a null out as text, so the absent ones are filtered first.
       tags.replaceChildren(...[
+        saintTag(ctx.account && ctx.account.username),
         skin ? h("span.tag", skin.name) : null,
         klass ? h("span.tag.tag-violet", klass.name) : null,
       ].filter(Boolean));
@@ -529,6 +532,9 @@ export default {
        page every camp opens on. One ask per mount -- the popup itself refuses to
        stack, and closes the moment the answer lands. */
     let asked = false;
+
+    // The five saints. If this camp holds a line, the hero wears it on the next update.
+    refreshTitles(ctx);
 
     const handle = {
       update(next) {
