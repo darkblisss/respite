@@ -76,14 +76,12 @@ function pieces(state) {
   return out;
 }
 
-// The stock rack: every band's essence and charm, held or not, strongest last.
+// The stock rack: the three essences on one row, the three charms under them,
+// held or not, weakest band first.
 function stock(state) {
-  const out = [];
-  GameData.VEIL_BANDS.forEach((band) => {
-    out.push({ key: band.essence, kind: "essence", band: band.key, qty: haveQty(state, band.essence) });
-    out.push({ key: band.charm, kind: "charm", band: band.key, qty: haveQty(state, band.charm) });
-  });
-  return out;
+  const bands = GameData.VEIL_BANDS;
+  return bands.map((band) => ({ key: band.essence, kind: "essence", band: band.key, qty: haveQty(state, band.essence) }))
+    .concat(bands.map((band) => ({ key: band.charm, kind: "charm", band: band.key, qty: haveQty(state, band.charm) })));
 }
 
 const samePiece = (a, b) => !!(a && b && a.key === b.key && a.at === b.at);
@@ -211,7 +209,7 @@ export default {
       h("div.card-head", h("div", h("h2.card-title", "Pieces"))),
       piecesGrid);
 
-    const stockGrid = h("div.slot-grid.forge-grid");
+    const stockGrid = h("div.slot-grid.forge-grid.forge-stock");
     const stockCard = h("section.card.forge-rack",
       h("div.card-head", h("div", h("h2.card-title", "Essence"))),
       stockGrid);
