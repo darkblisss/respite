@@ -48,6 +48,11 @@ const MAT_ART = {
   barrow_fell: "barrow", sallow_fell: "sallow", elder_fell: "elder",
   ember_fell: "ember", wither_fell: "wither", marrow_fell: "marrow",
 
+  // What the Woodwright saws it into.
+  bitter_plank: "bitter-plank", blood_plank: "blood-plank", gnarl_plank: "gnarl-plank",
+  barrow_plank: "barrow-plank", sallow_plank: "sallow-plank", elder_plank: "elder-plank",
+  ember_plank: "ember-plank", wither_plank: "wither-plank", marrow_plank: "marrow-plank",
+
   // The five reagents, which never had a tier and so never moved.
   coal: "coal", resin: "resin", pulp: "pulp", tallow: "tallow", veil_shard: "veil-shard",
 };
