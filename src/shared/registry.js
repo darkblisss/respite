@@ -53,6 +53,16 @@ const MAT_ART = {
   barrow_plank: "barrow-plank", sallow_plank: "sallow-plank", elder_plank: "elder-plank",
   ember_plank: "ember-plank", wither_plank: "wither-plank", marrow_plank: "marrow-plank",
 
+  // What a harvesting crew brings in.
+  stink_harvest: "stink", noose_harvest: "noose", pale_harvest: "pale",
+  corpse_harvest: "corpse", widow_harvest: "widow", lantern_harvest: "lantern",
+  moon_harvest: "moon", fade_harvest: "fade", godsbane_harvest: "godsbane",
+
+  // What the Weaver makes of it.
+  stink_weave: "stink-weave", noose_weave: "noose-weave", pale_weave: "pale-weave",
+  corpse_weave: "corpse-weave", widow_weave: "widow-weave", lantern_weave: "lantern-weave",
+  moon_weave: "moon-weave", fade_weave: "fade-weave", godsbane_weave: "godsbane-weave",
+
   // The five reagents, which never had a tier and so never moved.
   coal: "coal", resin: "resin", pulp: "pulp", tallow: "tallow", veil_shard: "veil-shard",
 };
