@@ -43,6 +43,11 @@ const MAT_ART = {
   cairn_bar: "cairn-bar", crucible_bar: "crucible-bar", starfall_bar: "starfall-bar",
   wyrmheart_bar: "wyrmheart-bar", hollow_bar: "hollow-bar", titan_bar: "titan-bar",
 
+  // The timber a felling crew drags out.
+  bitter_fell: "bitter", blood_fell: "blood", gnarl_fell: "gnarl",
+  barrow_fell: "barrow", sallow_fell: "sallow", elder_fell: "elder",
+  ember_fell: "ember", wither_fell: "wither", marrow_fell: "marrow",
+
   // The five reagents, which never had a tier and so never moved.
   coal: "coal", resin: "resin", pulp: "pulp", tallow: "tallow", veil_shard: "veil-shard",
 };
