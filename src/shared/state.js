@@ -937,7 +937,9 @@ function normaliseAgents(s, src, ledger) {
     const name = text(a.name, 60);
     if (!name || !GameData.AGENT_RARITIES.some((r) => r.key === a.rarity)) continue;
     seen.add(a.id);
-    s.agents.push({ id: a.id, name, rarity: a.rarity });
+    // What an agent has learned, kept across loads. An older save has none and starts at one.
+    const xp = finite(a.xp) && a.xp > 0 ? Math.floor(a.xp) : 0;
+    s.agents.push({ id: a.id, name, rarity: a.rarity, xp: Math.min(xp, CONFIG.xpTable[CONFIG.progression.maxLevel]) });
   }
 
   // Errands the roster really runs: an agent on the roster, out once, three a day at most,
@@ -952,7 +954,7 @@ function normaliseAgents(s, src, ledger) {
       ledger.fixed++;
       return;
     }
-    const qty = requisitionQty(agent);
+    const qty = requisitionQty(agent, r.itemKey);
     if (r.qty !== qty) ledger.fixed++;
     out.add(agent.id);
     s.requisitions.push({ agentId: agent.id, agentName: agent.name, itemKey: r.itemKey, qty, day: Math.floor(r.day), resolved: false });

@@ -363,13 +363,15 @@ await run(async () => {
     refused("something agents can't find", s, "deployAgent", { agentId: "agent_1", itemKey: "slag_sword|common" }, "Agents can't bring that in.");
     cmd(s, "hireAgent", {});
     cmd(s, "hireAgent", {});
-    cmd(s, "hireAgent", {});
+    /* The roster is three and each of them goes out once, so the roster is what
+       binds: a fourth hire is refused before a fourth deployment can be asked for. */
+    refused("a fourth agent", s, "hireAgent", {}, "The roster is full.");
     cmd(s, "deployAgent", { agentId: s.agents[1].id, itemKey: "resin" });
     cmd(s, "deployAgent", { agentId: s.agents[2].id, itemKey: "pulp" });
-    refused("a fourth deployment in a day", s, "deployAgent", { agentId: s.agents[3].id, itemKey: "coal" }, "Only 3 deployments a day.");
+    check("three out is the whole roster", s.requisitions.filter((r) => !r.resolved).length === 3 && s.agents.length === 3);
     E.advance(s, (Math.floor(T0 / 86400000) + 1) * 86400000 + 5, w.env);
     check("requisitions come back at the daily reset", s.requisitions.length === 0 && S.haveQty(s, "coal") > 0 && s.log.some((l) => /^Requisitions returned: /.test(l.m)));
-    while (s.agents.length < 12) s.agents.push({ id: `agent_${100 + s.agents.length}`, name: "Silt", rarity: "common" });
+    while (s.agents.length < CONFIG.agents.rosterMax) s.agents.push({ id: `agent_${100 + s.agents.length}`, name: "Silt", rarity: "common", xp: 0 });
     refused("a full roster", s, "hireAgent", {}, "The roster is full.");
     s.player.gold = 10;
     s.agents.pop();

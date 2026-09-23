@@ -978,13 +978,17 @@ function buildRegistry() {
      a day, resolved at the daily reset. A supplement to gathering, never a
      replacement for it. */
 
+  /* `top` is the hours an agent of this rarity brings back at level 99; every
+     rarity starts at CONFIG.agents.baseHours. `xpRate` is how quickly it gets
+     there. A relic is not a better agent on the day you hire it: it is one that
+     ends up half again as good and reaches that in about a third of the time. */
   const AGENT_RARITIES = [
-    { key: "common",    name: "Common",    mult: 1.0,  chance: 0.50 },
-    { key: "uncommon",  name: "Uncommon",  mult: 1.6,  chance: 0.26 },
-    { key: "rare",      name: "Rare",      mult: 2.5,  chance: 0.14 },
-    { key: "epic",      name: "Epic",      mult: 4.0,  chance: 0.07 },
-    { key: "legendary", name: "Legendary", mult: 6.5,  chance: 0.025 },
-    { key: "relic",     name: "Relic",     mult: 10.0, chance: 0.005 },
+    { key: "common",    name: "Common",    top: 4.0, xpRate: 1.00, chance: 0.50 },
+    { key: "uncommon",  name: "Uncommon",  top: 4.4, xpRate: 1.15, chance: 0.26 },
+    { key: "rare",      name: "Rare",      top: 4.8, xpRate: 1.35, chance: 0.14 },
+    { key: "epic",      name: "Epic",      top: 5.2, xpRate: 1.60, chance: 0.07 },
+    { key: "legendary", name: "Legendary", top: 5.6, xpRate: 1.90, chance: 0.025 },
+    { key: "relic",     name: "Relic",     top: 6.0, xpRate: 2.25, chance: 0.005 },
   ];
 
   const AGENT_NAMES = [

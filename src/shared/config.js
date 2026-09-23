@@ -168,10 +168,22 @@ const companions = {
 
 /* ================= 7. REQUISITION AGENTS ================= */
 
+/* An Agent is paid in hours of your own gathering. At level 1 every one of them,
+   common or relic, comes back with an hour of whatever you sent them for, read
+   off that material's own gather rate: an hour of Slag Ore is 300, an hour of
+   Titan Core is 50. What rarity buys is the ceiling they climb to and how fast
+   they climb it, not a multiplier on day one.
+
+   They learn from the work, which is why the roster is three: an agent you keep
+   is one you have taught, and a fourth would only ever sit idle behind three
+   deployments a day. Resigning one frees the seat and loses everything it knew. */
 const agents = {
   hireCost: 250,
-  rosterMax: 12,
+  rosterMax: 3,
   requisitionsPerDay: 3,   // deployments, resolved at the daily reset
+  baseHours: 1,            // what a level 1 agent brings back, in hours of your gathering
+  xpPerHour: 1400,         // what an hour out teaches one, against tier 1 work
+  xpTierStep: 0.35,        // and how much more each tier up teaches
 };
 
 /* ================= 8. WEATHER ================= */

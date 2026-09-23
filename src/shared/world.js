@@ -19,7 +19,7 @@ import { itemDef, itemName, parseKey, validKey, agentRarityFromRoll, remedyTooWe
 import {
   ORDER, canHold, isPool, poolName, qtyIn, haveQty, placeFor, orderedKeys, transact,
 } from "./storage.js";
-import { skillLevel, maxHp, canPickClass, statsOf, classCanHold, heldWrongly } from "./stats.js";
+import { skillLevel, levelFromXp, maxHp, canPickClass, statsOf, classCanHold, heldWrongly } from "./stats.js";
 import { dayIndex, windowIndex } from "./weather.js";
 import { makeRng, randIntWith, seedFrom, roll, SALT } from "./rng.js";
 import { emit } from "./events.js";
@@ -420,7 +420,7 @@ export function hireAgent(state, _args, env) {
 
   transact(state, (tx) => {
     tx.gold(-A.hireCost);
-    tx.push(state.agents, { id, name, rarity });
+    tx.push(state.agents, { id, name, rarity, xp: 0 });
     tx.set(state, "serial", state.serial + 1);
     tx.set(state.rng, "world", box.s);
   });
@@ -428,9 +428,52 @@ export function hireAgent(state, _args, env) {
   return { ok: true, data: { id, name, rarity } };
 }
 
-// How much an agent brings back: a dozen, scaled by the agent's rarity.
-export function requisitionQty(agent) {
-  return Math.max(1, Math.round(12 * agentRarityDef(agent.rarity).mult));
+/* ---------- what an agent is worth ----------
+   All of it is denominated in hours of your own gathering, so asking for Titan
+   Core and asking for Slag Ore both come back as "an afternoon of it" rather
+   than a flat dozen that was worth 36g at tier 1 and 37,440g at tier 9. */
+
+export const agentLevel = (agent) => levelFromXp(Math.max(0, Number(agent && agent.xp) || 0));
+
+// The hours an agent works: baseHours at level 1, its rarity's ceiling at 99.
+export function agentHours(agent) {
+  const def = agentRarityDef(agent.rarity);
+  const span = Math.max(1, CONFIG.progression.maxLevel - 1);
+  return A.baseHours + (def.top - A.baseHours) * ((agentLevel(agent) - 1) / span);
+}
+
+// What an hour of your own gathering of that material comes to, in units.
+export function unitsPerHour(itemKey) {
+  const d = itemDef(itemKey);
+  const tier = d && Number.isFinite(d.tier) ? Math.min(GameData.TIERS.length, Math.max(1, d.tier)) : 1;
+  return 3600000 / GameData.TIERS[tier - 1].time;
+}
+
+export function requisitionQty(agent, itemKey) {
+  return Math.max(1, Math.round(agentHours(agent) * unitsPerHour(itemKey)));
+}
+
+/* What the trip teaches. It rides on the hours worked and the tier of the work,
+   not on the pile brought home: a tier 1 agent hauls six times the units of a
+   tier 9 one and should not out-learn it six to one for doing the easier job. */
+export function agentXpFor(agent, itemKey) {
+  const d = itemDef(itemKey);
+  const tier = d && Number.isFinite(d.tier) ? Math.min(GameData.TIERS.length, Math.max(1, d.tier)) : 1;
+  const def = agentRarityDef(agent.rarity);
+  return Math.max(1, Math.round(agentHours(agent) * A.xpPerHour * (1 + (tier - 1) * A.xpTierStep) * def.xpRate));
+}
+
+/* An agent can be let go, which is the only way to try the roll again with a
+   roster of three. Everything it learned goes with it, and nothing comes back:
+   the seat is the cost of the reroll. */
+export function resignAgent(state, { agentId } = {}, env) {
+  const i = typeof agentId === "string" ? state.agents.findIndex((a) => a.id === agentId) : -1;
+  if (i < 0) return refuse("No such agent.");
+  if (state.requisitions.some((r) => !r.resolved && r.agentId === agentId)) return refuse("They are out. Wait for them to come home.");
+  const agent = state.agents[i];
+  transact(state, (tx) => tx.splice(state.agents, i, 1));
+  emit(state, env, "agent:resigned", { id: agent.id, name: agent.name, rarity: agent.rarity, level: agentLevel(agent) });
+  return OK();
 }
 
 // A requisition is a promise for tomorrow, not an instant reward.
@@ -443,7 +486,7 @@ export function deployAgent(state, { agentId, itemKey } = {}, env) {
   if (pending.length >= A.requisitionsPerDay) return refuse(`Only ${A.requisitionsPerDay} deployments a day.`);
   if (pending.some((r) => r.agentId === agentId)) return refuse(`${agent.name} is already out.`);
 
-  const qty = requisitionQty(agent);
+  const qty = requisitionQty(agent, itemKey);
   state.requisitions.push({ agentId, agentName: agent.name, itemKey, qty, day: dayIndex(state.clock), resolved: false });
   emit(state, env, "agent:deployed", { agentId, name: agent.name, itemKey, qty });
   return OK();
@@ -458,7 +501,17 @@ export function resolveRequisitions(state, env, at) {
     const lines = pending.map((r) => {
       r.resolved = true;
       const placed = transact(state, (tx) => tx.stash(r.itemKey, r.qty, ORDER.material)).ok;
-      return { key: r.itemKey, qty: r.qty, placed };
+      /* The trip teaches whether or not there was anywhere to put the goods:
+         the agent did the work either way. One still on the roster, at least. */
+      const agent = state.agents.find((a) => a.id === r.agentId);
+      let grew = null;
+      if (agent) {
+        const was = agentLevel(agent);
+        agent.xp = Math.max(0, Number(agent.xp) || 0) + agentXpFor(agent, r.itemKey);
+        const now = agentLevel(agent);
+        if (now > was) grew = { id: agent.id, name: agent.name, from: was, to: now };
+      }
+      return { key: r.itemKey, qty: r.qty, placed, grew };
     });
     emit(state, env, "requisitions:returned", { lines, at: at == null ? state.clock : at });
   }

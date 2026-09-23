@@ -24,7 +24,7 @@ import { startSkill, stopSkill, nextSkillDue, resolveSkilling } from "./skills.j
 import { startHunt, pullBack, setHide, huntStep } from "./combat.js";
 import { walkPath, resetPath } from "./path.js";
 import {
-  refreshBounty, resolveRequisitions, claimBounty, hireAgent, deployAgent, buyRemedy, buySmuggler,
+  refreshBounty, resolveRequisitions, claimBounty, hireAgent, resignAgent, deployAgent, buyRemedy, buySmuggler,
   travel, equip, unequip, unequipTool, moveItem, sellItem, useChest, useRemedy, reorder, pickClass,
   setSkin, enchant, convert, debugGive,
 } from "./world.js";
@@ -130,6 +130,7 @@ export const COMMANDS = Object.freeze({
   travel:       { run: travel, predict: true },
   claimBounty:  { run: claimBounty, predict: true },
   hireAgent:    { run: hireAgent, predict: true },
+  resignAgent:  { run: resignAgent, predict: true },
   deployAgent:  { run: deployAgent, predict: true },
   buyCompanion: { run: buyCompanion, predict: true },
   setCompanion: { run: setCompanion, predict: true },
