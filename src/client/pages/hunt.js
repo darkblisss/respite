@@ -599,7 +599,7 @@ export default {
 
       // ---- the warband, you first ----
       const band4 = hunters.slice().sort((a, b) => (sameId(a.userId, me) ? -1 : sameId(b.userId, me) ? 1 : 0));
-      syncBand(band4, names, inEnc, me);
+      syncBand(band4, names, skins, inEnc, me);
 
       // ---- what is happening ----
       let st = "Walking";
@@ -659,7 +659,7 @@ export default {
    a three, two by two for a four. Everyone is on screen at once, which is the point
    of hunting together, and a square each is the only shape that stays readable at
    four. `data-n` is what the grid reads to lay them out. */
-    function syncBand(all, names, inEnc, me) {
+    function syncBand(all, names, skins, inEnc, me) {
       const sig = all.map((u) => `${u.userId}:${u.down ? 1 : 0}`).join("|");
       if (sig !== sigs.band) {
         sigs.band = sig;

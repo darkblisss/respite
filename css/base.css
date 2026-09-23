@@ -34,6 +34,30 @@ body {
 }
 
 /* A faint glow from above, a darker rim, and a little grain. Fixed, so it never repaints on scroll. */
+/* The camp is a game, not a document. A drag across it was picking up page titles,
+   chips, seat names and the sidebar as though they were prose, which no other game
+   does and which makes every mis-drag look like a bug. Selection is off by default
+   and given back only where there is something worth taking away: what somebody
+   typed, what the camp wrote down, and anything marked for it. */
+body {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.input,
+.textarea,
+input,
+textarea,
+[contenteditable],
+.msg-text,
+.msg-meta,
+.log-line,
+.selectable,
+.selectable * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 body::before,
 body::after {
   content: "";

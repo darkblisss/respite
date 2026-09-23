@@ -5,7 +5,7 @@
 
      node tests/e2e/ui-new.test.mjs */
 
-import { run, check, same, section, startStack, launch, openApp, signUp, waitForSync, dispatch, editSave, put } from "./lib.mjs";
+import { run, check, same, section, startStack, launch, openApp, signUp, waitForSync, dispatch, editSave, put, sql } from "./lib.mjs";
 
 const live = (app, fn, arg) => app.page.evaluate(fn, arg);
 const PAGE_CODE = /src\/client\/(pages|ui\/popups)\//;
@@ -424,6 +424,107 @@ await run(async () => {
     check("and nothing in it threw", pageErrs.length === 0, pageErrs.map((e) => String(e.message || e)));
     await dispatch(app.page, "pullBack", {});
     await app.page.waitForTimeout(400);
+  }
+
+  section("the Hunt page while the party is out");
+  {
+    /* Two real camps, a real party, a real shared fight, and then the Hunt page opened on
+       it. Nothing before this had ever drawn the warband, which is how `syncBand` came to
+       read a `skins` that only existed inside `paintParty` and take the whole page down. */
+    const B = await openApp(browser, { url: stack.url });
+    await B.page.waitForFunction(() => !!(window.__respite && window.__respite.store && window.__respite.ctx), null, { timeout: 20000 });
+    await signUp(B.page, "uinew_b", "hunter-pass-1");
+    await B.page.waitForTimeout(2500);
+    await B.page.keyboard.press("Escape");
+    const bParty = (fn, arg) => B.page.evaluate(fn, arg);
+
+    // A discipline, so the card has one to put the title in place of. The Veil opens at a level.
+    await editSave(stack, "uinew_b", (s) => { s.skills.warfare = 1e7; });
+    await bParty(() => window.__respite.store.sync());
+    await B.page.waitForTimeout(1500);
+    await dispatch(B.page, "pickClass", { id: "rogue" });
+    await bParty(() => window.__respite.store.sync());
+    await B.page.waitForTimeout(1500);
+
+    await live(app, () => window.__respite.ctx.net.party.create("The Proving"));
+    await live(app, () => window.__respite.ctx.net.party.invite("uinew_b"));
+    const took = await bParty(async () => {
+      const st = await window.__respite.ctx.net.party.state();
+      const inv = st.data.invites_in[0];
+      return (await window.__respite.ctx.net.party.respond(inv.id, true)).error;
+    });
+    check("the second camp accepts the invite", took === null || took === undefined, took);
+
+    // Marked ready, so the host's press walks them on: the muster and the page in one go.
+    await live(app, () => window.__respite.ctx.net.party.propose(1, "outer"));
+    await bParty(() => window.__respite.ctx.net.party.ready(true));
+    await dispatch(app.page, "partyHuntStart", { tier: 1, zone: "outer" });
+    await app.page.waitForTimeout(800);
+    await bParty(() => window.__respite.store.sync());
+    await B.page.waitForTimeout(2500);
+
+    await go("#/skill/warfare");
+    await app.page.waitForTimeout(1200);
+    const band = await live(app, () => ({
+      fell: document.querySelector(".empty-title") ? document.querySelector(".empty-title").textContent : null,
+      party: !!document.querySelector(".arena.is-party"),
+      mates: [...document.querySelectorAll(".band-mate .band-name")].map((n) => n.textContent),
+      title: (document.querySelector(".hunt-title") || {}).textContent,
+      you: !!document.querySelector(".band-mate.is-me"),
+    }));
+    check("the Hunt page draws the party's fight instead of falling over",
+      band.fell !== "This page fell over" && band.party, band);
+    check("with the warband in it, this camp first", band.mates[0] === "You" && band.mates.length === 2, band);
+    const huntErrs = errs().filter((e) => /hunt\.js/.test(String(e.stack || e.message || e)));
+    check("and nothing in hunt.js threw", huntErrs.length === 0, huntErrs.map((e) => String(e.message || e)));
+
+    /* A square in the room opens the other camp's card, and the card knows they are already
+       standing in this party: nobody is invited into a party they are in. */
+    await go("#/party");
+    await app.page.waitForTimeout(1200);
+    const openMate = () => live(app, async () => {
+      const seat = [...document.querySelectorAll(".seat-name")].find((b) => /uinew_b/i.test(b.textContent));
+      if (seat) seat.click();
+      await new Promise((ok) => setTimeout(ok, 900));
+      return {
+        title: (document.querySelector(".modal-profile .modal-title") || {}).textContent,
+        sub: (document.querySelector(".modal-profile .modal-sub") || {}).textContent,
+        chips: [...document.querySelectorAll(".profile-tags > *")].map((n) => n.textContent.trim()),
+        actions: [...document.querySelectorAll(".modal-profile .modal-foot .btn")].map((b) => b.textContent.trim()),
+      };
+    });
+    const card = await openMate();
+    check("a party mate's card offers no invite into the party they are in",
+      !card.actions.some((l) => /Invite/.test(l)) && card.actions.includes("Close"), card);
+    same("and says what they are at before what they are",
+      [/Online|Last about|Not seen/.test(card.chips[0]), card.chips[1], card.chips[2]],
+      [true, "Hunting the Outer", "Rogue"]);
+    await app.page.keyboard.press("Escape");
+    await app.page.waitForTimeout(400);
+
+    /* A title stands in place of the discipline, on the card and in its subtitle both: one
+       commander in the realm holds each line, and next to that "Rogue" is noise. */
+    await sql(stack, `update public.profiles set mastery = '{"bow": 900}'::jsonb where username = 'uinew_b'`);
+    await live(app, async () => {
+      const t = await import("/src/client/titles.js");
+      t.clearTitles();
+      await t.refreshTitles(window.__respite.ctx, { force: true });
+    });
+    const crowned = await openMate();
+    same("a saint's card wears the title where the discipline was",
+      [crowned.chips[1], crowned.chips[2], crowned.chips.some((c) => /Rogue/i.test(c))],
+      ["Hunting the Outer", "Sun Piercer", false]);
+    check("and the subtitle says it instead of the discipline too",
+      /Sun Piercer/i.test(crowned.sub || "") && !/Rogue/i.test(crowned.sub || ""), crowned.sub);
+    await app.page.keyboard.press("Escape");
+    await app.page.waitForTimeout(400);
+
+    await dispatch(app.page, "partyHuntLeave", {});
+    await app.page.waitForTimeout(600);
+    await live(app, () => window.__respite.ctx.net.party.leave());
+    await bParty(() => window.__respite.ctx.net.party.leave());
+    await app.page.waitForTimeout(400);
+    await B.page.close();
   }
 
   section("the anvil");

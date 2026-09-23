@@ -24,7 +24,7 @@ import { getClass, getRegion, getZone } from "../../../shared/registry.js";
 import { itemDef, itemName, parseKey, canFortify, wornHalos } from "../../../shared/items.js";
 import { CONFIG } from "../../../shared/config.js";
 import { avatarHaloNode, paintAvatarHalo, haloTags, plusPlate, paintMini } from "../halo.js";
-import { refreshTitles, saintTag } from "../../titles.js";
+import { refreshTitles, saintTag, titleFor } from "../../titles.js";
 
 const ASK_MS = 15 * 1000;
 const ONLINE_MS = 3 * 60 * 1000;   // as the Party tab and online_count() count it
@@ -81,7 +81,11 @@ registerPopup("profile", (ctx, username) => {
   let alive = true;
 
   const me = ctx.account.username && ctx.account.username.toLowerCase() === who;
-  const canInvite = !me && ctx.net && ctx.net.party && typeof ctx.net.party.invite === "function";
+  /* Nobody is invited into a party they are already standing in. The roster on the shell is
+     the same one the Party page draws, so a square opened from there never offers it. */
+  const mates = ctx.party && Array.isArray(ctx.party.members) ? ctx.party.members : [];
+  const withMe = mates.some((m) => m && String(m.username || "").toLowerCase() === who);
+  const canInvite = !me && !withMe && ctx.net && ctx.net.party && typeof ctx.net.party.invite === "function";
 
   const m = openModal({
     title: display(who),
@@ -125,8 +129,11 @@ registerPopup("profile", (ctx, username) => {
     setText(lvPip, fmtWhole(num(levels, "warfare") || 1));
     lvPip.hidden = false;
     paintAvatarHalo(halo, halos);
+    /* A title stands in place of the discipline wherever the discipline would be said.
+       One commander in the realm holds each line, so next to that "Rogue" is noise. */
+    const title = titleFor(row.username || who);
     m.setTitle(display(row.username || who), [
-      klass ? klass.name : "Undisciplined",
+      title || (klass ? klass.name : "Undisciplined"),
       `Total level ${fmtWhole(row.total_level || 0)}`,
       region ? `In ${region.name}` : null,
     ].filter(Boolean).join(" · "));
@@ -136,10 +143,10 @@ registerPopup("profile", (ctx, username) => {
         h("span.chip", { class: online ? "chip-good" : null },
           h("span.dot", { class: online ? "dot-online" : "dot-offline", "aria-hidden": "true" }),
           online ? "Online" : seen ? `Last about ${fmtAgo(Date.now() - seen)}` : "Not seen yet"),
-        saintTag(row.username || who),
-        klass ? h("span.tag.tag-violet", klass.name) : null,
-        ...haloTags(halos),
-        hunting ? h("span.chip.chip-ember", iconEl("swords"), `Hunting the ${getZone(hunting.zone).name}`) : null),
+        // What they are doing before what they are: the ground moves, the discipline does not.
+        hunting ? h("span.chip.chip-ember", iconEl("swords"), `Hunting the ${getZone(hunting.zone).name}`) : null,
+        title ? saintTag(row.username || who) : (klass ? h("span.tag.tag-violet", klass.name) : null),
+        ...haloTags(halos)),
       h("div.kpis",
         h("div.kpi", h("span.l", "Kills"), h("span.v", fmtWhole(num(st, "kills")))),
         h("div.kpi", h("span.l", "Sovereigns"), h("span.v", fmtWhole(num(st, "bosses")))),
