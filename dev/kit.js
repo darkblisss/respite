@@ -31,11 +31,11 @@ if (SHOT) document.documentElement.dataset.shot = "1";
 const ME = { name: "Morwen", klass: "Warrior", region: "Gallowmoor", tier: 2, total: 187, gold: 1234, hp: 87, maxHp: 112 };
 
 const SKILLS = [
-  { id: "felling", name: "Felling", icon: "axe", kind: "gather", lv: 12, xp: 2733, next: 3287, base: 2410 },
-  { id: "delving", name: "Delving", icon: "pick", kind: "gather", lv: 24, xp: 58210, next: 66904, base: 51300, working: true },
-  { id: "harvesting", name: "Harvesting", icon: "sickle", kind: "gather", lv: 9, xp: 1940, next: 2280, base: 1680 },
-  { id: "flaying", name: "Flaying", icon: "knife", kind: "gather", lv: 15, xp: 5102, next: 6010, base: 4420 },
-  { id: "dredging", name: "Dredging", icon: "net", kind: "gather", lv: 7, xp: 1180, next: 1440, base: 1030 },
+  { id: "felling", name: "Felling", icon: "felling", kind: "gather", lv: 12, xp: 2733, next: 3287, base: 2410 },
+  { id: "delving", name: "Delving", icon: "delving", kind: "gather", lv: 24, xp: 58210, next: 66904, base: 51300, working: true },
+  { id: "harvesting", name: "Harvesting", icon: "harvesting", kind: "gather", lv: 9, xp: 1940, next: 2280, base: 1680 },
+  { id: "flaying", name: "Flaying", icon: "flaying", kind: "gather", lv: 15, xp: 5102, next: 6010, base: 4420 },
+  { id: "dredging", name: "Dredging", icon: "dredging", kind: "gather", lv: 7, xp: 1180, next: 1440, base: 1030 },
   { id: "forgemaster", name: "Forgemaster", icon: "plate", kind: "craft", lv: 21, xp: 41880, next: 47020, base: 37100 },
   { id: "woodwright", name: "Woodwright", icon: "ward", kind: "craft", lv: 11, xp: 2240, next: 2732, base: 2010 },
   { id: "tanner", name: "Tanner", icon: "treads", kind: "craft", lv: 14, xp: 4390, next: 5102, base: 3914 },
@@ -473,7 +473,7 @@ PAGES.character = () => h("div.page",
   h("div.grid-cards.max-2",
     h("article.card.act-card", { "data-tone": "violet" },
       h("div.act-card-top",
-        art("pick"),
+        art("delving"),
         h("div.grow", h("div.eyebrow", "The crews · Delving"), h("h2.card-title", "Bog Ore")),
         h("button.btn.btn-sm.btn-quiet", { type: "button" }, "Stop")),
       bar(36),
@@ -510,7 +510,7 @@ PAGES.gather = () => {
   const s = skill("delving");
   return h("div.page",
     h("section.hero",
-      art("pick", { size: "xl" }),
+      art("delving", { size: "xl" }),
       h("div.hero-main",
         h("div.eyebrow.hero-eyebrow", "Trades · Gallowmoor"),
         h("h1.hero-title", "Delving")),
@@ -528,7 +528,7 @@ PAGES.gather = () => {
         h("div.hero-xp-meta", h("span", "Ore and coal, hauled up by lamplight."), h("span", h("b", fmtWhole(s.next - s.xp)), " to Lv 25")))),
 
     h("section.section",
-      sectionHead("The seams of Gallowmoor", "Pick one to set the crews to it.", chip("Bog Pick · +12% speed", null, "pick")),
+      sectionHead("The seams of Gallowmoor", "Pick one to set the crews to it.", chip("Bog Pick · +12% speed", null, "delving")),
       h("div.pills",
         itemPill({
           name: "Bog Ore", iconName: "ore", state: "working", pct: 36, tip: nodeTip("Bog Ore"),
@@ -658,7 +658,7 @@ PAGES.storage = () => h("div.page",
       h("section.card",
         cardHead("Tools in hand", { sub: "One for each trade. Stow one to swap it." }),
         h("div.list",
-          [["Delving", "Bog Pick", "pick", "+12% speed", 72], ["Felling", "Blood Ash Axe", "axe", "+12% speed", 31], ["Harvesting", "Bare hands", "sickle", null, null], ["Flaying", "Slag Knife", "knife", "+6% speed", 88], ["Dredging", "Bare hands", "net", null, null]]
+          [["Delving", "Bog Pick", "pick", "+12% speed", 72], ["Felling", "Blood Ash Axe", "axe", "+12% speed", 31], ["Harvesting", "Bare hands", "harvesting", null, null], ["Flaying", "Slag Knife", "knife", "+6% speed", 88], ["Dredging", "Bare hands", "dredging", null, null]]
             .map(([skillName, tool, iconName, speed, wear]) => h("div.list-row",
               art(iconName, { size: "sm", tone: tool === "Bare hands" ? "neutral" : "violet" }),
               h("div.lr-main", h("div.lr-title", tool), h("div.lr-sub", skillName)),
@@ -1931,7 +1931,7 @@ function galleryData() {
 
 function galleryPages() {
   const list = [
-    ["character", "person", "Character"], ["gather", "pick", "Gathering: Delving"], ["bench", "plate", "Artisan: Forgemaster"],
+    ["character", "person", "Character"], ["gather", "delving", "Gathering: Delving"], ["bench", "plate", "Artisan: Forgemaster"],
     ["storage", "stockpile", "Stockpile"], ["armaments", "plate", "Armaments"], ["hunt", "swords", "Hunt"], ["atlas", "atlas", "Atlas"],
     ["shop", "shop", "Shop"], ["bounties", "scroll", "Bounties"], ["requisitions", "crate", "Requisitions"], ["companions", "paw", "Companions"],
     ["sky", "sky", "Sky"], ["market", "market", "Market"], ["party", "party", "Party"], ["hiscores", "trophy", "Hiscores"], ["states", "cloud", "States"],

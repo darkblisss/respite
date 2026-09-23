@@ -298,7 +298,7 @@ function paintBench(plan) {
 
 - Current row: `aria-current="page"` (or `.is-active`). It gets a violet wash, a 3px violet bar on the left and a violet icon.
 - Badge tones: `.badge` (violet, party), `.badge-gold` (a bounty ready), `.badge-ember` (something wrong), `.badge-good`.
-- Groups and rows by the information architecture: **The Vanguard** (Character `person`, Armaments `plate`, Companions `paw`), **The Camp** (Stockpile `stockpile`, Bounties `scroll`, Requisitions `crate` only from tier 2, Shop `shop`, Sky `sky`), **Trades** (Felling `axe`, Delving `pick`, Harvesting `sickle`, Flaying `knife`, Dredging `net`), **Artisans** (Forgemaster `plate`, Woodwright `ward`, Tanner `treads`, Weaver `cowl`, Artificer `charm`), **The Field** (Hunt `swords`), **The Realm** (Atlas `atlas`, Market `market`, Party `party`, Hiscores `trophy`).
+- Groups and rows by the information architecture: **The Vanguard** (Character `person`, Armaments `plate`, Companions `paw`), **The Camp** (Stockpile `stockpile`, Bounties `scroll`, Requisitions `crate` only from tier 2, Shop `shop`, Sky `sky`), **Trades** (Felling `felling`, Delving `delving`, Harvesting `harvesting`, Flaying `flaying`, Dredging `dredging`), **Artisans** (Forgemaster `plate`, Woodwright `ward`, Tanner `treads`, Weaver `cowl`, Artificer `charm`), **The Field** (Hunt `swords`), **The Realm** (Atlas `atlas`, Market `market`, Party `party`, Hiscores `trophy`).
 - In the drawer rows are 44px tall with 15px text.
 
 ### Weather card
@@ -383,7 +383,7 @@ const off = on(el("view"), "click", ".item-pill .pill-hit", (e, btn) => {
 
 ### 6.2 icons.js
 
-- `ICONS`: `{ name: svgInnerMarkup }`, 109 hand-drawn 24 by 24 stroke icons (1.5 stroke, round caps).
+- `ICONS`: `{ name: svgInnerMarkup }`, 114 icons on a 24 by 24 grid: 109 hand-drawn stroke icons (1.5 stroke, round caps) and five solid ones for the Trades, which fill with `currentColor` instead.
 - `icon(name, cls?) -> string`: `<svg class="ico cls" width="24" height="24" viewBox="0 0 24 24" ... aria-hidden="true" focusable="false">`. Unknown names draw `unknown`.
 - `iconEl(name, cls?) -> SVGElement`: a fresh element each call (parsed once per name and class, then cloned).
 
@@ -394,6 +394,7 @@ The `width` and `height` attributes are the icon's own size, and they are not op
 Names (all v4 names are kept, unchanged):
 
 - Gathering tools: `pick`, `axe`, `sickle`, `knife`, `net`
+- Trade skills (solid): `delving`, `felling`, `flaying`, `harvesting`, `dredging`
 - Materials: `ore`, `log`, `fibre`, `hide`, `gem`, `ration`, `crate`; reagents: `coalIco`, `resinIco`, `pulpIco`, `tallowIco`, `shardIco`
 - Gear: `blade`, `greatblade`, `stave`, `ward`, `plate`, `greaves`, `treads`, `gauntlets`, `cowl`, `shroud`, `band`, `charm`, `book`
 - Foes: `beast`, `man`, `golemMob`, `horror`, `drakeMob`, `skull`

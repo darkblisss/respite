@@ -200,35 +200,35 @@ function buildRegistry() {
      `note` is the quiet caption under the skill's XP bar.
      `lore` is the bullet list in the Mastery tooltip on gathering pages. */
   const GATHER_SKILLS = [
-    { id: "delving",    name: "Delving",    verb: "Delve",   icon: "pick",   mat: "delve",   resource: "Ore",    reagent: "coal",       matIcon: "ore",
+    { id: "delving",    name: "Delving",    verb: "Delve",   icon: "delving",    mat: "delve",   resource: "Ore",    reagent: "coal",       matIcon: "ore",
       note: "Ore and coal, hauled up by lamplight.",
       lore: [
         "Gather ore and coal for Delving XP.",
         "The Forgemaster smelts ore into bars for plate, blades and tools.",
         "Pickaxes from the Forgemaster make crews faster.",
       ] },
-    { id: "felling",    name: "Felling",    verb: "Fell",    icon: "axe",    mat: "fell",    resource: "Timber", reagent: "resin",      matIcon: "log",
+    { id: "felling",    name: "Felling",    verb: "Fell",    icon: "felling",    mat: "fell",    resource: "Timber", reagent: "resin",      matIcon: "log",
       note: "Timber and resin from trees that fought back.",
       lore: [
         "Gather timber and resin for Felling XP.",
         "The Woodwright cuts timber into planks for bows, shields and hafts.",
         "Axes from the Woodwright make crews faster.",
       ] },
-    { id: "harvesting", name: "Harvesting", verb: "Harvest", icon: "sickle", mat: "harvest", resource: "Fibre",  reagent: "pulp",       matIcon: "fibre",
+    { id: "harvesting", name: "Harvesting", verb: "Harvest", icon: "harvesting", mat: "harvest", resource: "Fibre",  reagent: "pulp",       matIcon: "fibre",
       note: "Fibre and pulp from ground that grows too well.",
       lore: [
         "Gather fibre and pulp for Harvesting XP.",
         "The Weaver spins fibre into weave for robes, bowstrings and tomes.",
         "Sickles from the Weaver make crews faster.",
       ] },
-    { id: "flaying",    name: "Flaying",    verb: "Flay",    icon: "knife",  mat: "flay",    resource: "Hides",  reagent: "tallow",     matIcon: "hide",
+    { id: "flaying",    name: "Flaying",    verb: "Flay",    icon: "flaying",    mat: "flay",    resource: "Hides",  reagent: "tallow",     matIcon: "hide",
       note: "Hides and tallow. Nothing is wasted.",
       lore: [
         "Gather hides and tallow for Flaying XP.",
         "The Tanner cures hides into leather for jackets, grips and bindings.",
         "Knives from the Tanner make crews faster.",
       ] },
-    { id: "dredging",   name: "Dredging",   verb: "Dredge",  icon: "net",    mat: "dredge",  resource: "Finds",  reagent: "veil_shard", matIcon: "gem",
+    { id: "dredging",   name: "Dredging",   verb: "Dredge",  icon: "dredging",   mat: "dredge",  resource: "Finds",  reagent: "veil_shard", matIcon: "gem",
       note: "Finds and veil shards, pulled from black water.",
       lore: [
         "Gather finds and veil shards for Dredging XP.",
