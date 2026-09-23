@@ -28,6 +28,7 @@ import { h, setText, setAttr, toggleClass, on } from "../ui/dom.js";
 import { iconEl } from "../ui/icons.js";
 import { fmt, fmtWhole } from "../ui/format.js";
 import { openPopup, portraitImg } from "../ui/widgets.js";
+import { refreshTitles, saintTag } from "../titles.js";
 import { GameData, TRADE_ORDER, ARTISAN_ORDER, getSkill } from "../../shared/registry.js";
 import { CONFIG } from "../../shared/config.js";
 import { masteryLevel } from "../../shared/mastery.js";
@@ -460,6 +461,7 @@ function boardBody(ctx, page) {
             h("td.strong", h("a.hs-name.hs-link", { href: `#/player/${encodeURIComponent(r.username)}` },
               h("span.portrait.portrait-bust.hs-face", { "aria-hidden": "true" }, portraitImg(r.skin || null)),
               h("span.truncate", display(r.username)),
+              saintTag(r.username),
               loose ? h("span.tag.hs-hide-sm", "Undisciplined") : null)),
             h("td.num", b.oneFigure ? fmtWhole(xp) : fmtWhole(level)),
             b.oneFigure ? null : h("td.num.hs-hide-sm", { title: `${fmtWhole(xp)} XP` }, fmt(xp)));
@@ -482,6 +484,10 @@ function boardBody(ctx, page) {
   tabPick.fill(TABS, openTab);
   fillSub();
   show();
+
+  /* The five saints, once per visit at most. They arrive after the board does and
+     only a handful of rows ever change, so the board is simply drawn again. */
+  refreshTitles(ctx).then((changed) => { if (alive && changed) paint(); });
 
   return {
     destroy() {

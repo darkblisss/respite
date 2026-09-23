@@ -690,15 +690,15 @@ function buildRegistry() {
      nothing about a hammer. Mastery levels and the curve live in CONFIG.mastery;
      the track itself is mastery.js. */
   const WEAPON_LINES = [
-    { line: "sword", name: "Sword", icon: "blade", slot: "weapon", stat: "attack",
+    { line: "sword", title: "Sword Saint", name: "Sword", icon: "blade", slot: "weapon", stat: "attack",
       ranks: ["Swordhand", "Swordsman", "Blademaster", "Duellist", "Swordmaster"] },
-    { line: "shield", name: "Shield", icon: "ward", slot: "offhand", stat: "defence",
+    { line: "shield", title: "Aegis", name: "Shield", icon: "ward", slot: "offhand", stat: "defence",
       ranks: ["Shieldbearer", "Warder", "Bulwark", "Aegis", "Shieldmaster"] },
-    { line: "dagger", name: "Dagger", icon: "knife", slot: "weapon", stat: "attack",
+    { line: "dagger", title: "Shadow", name: "Dagger", icon: "knife", slot: "weapon", stat: "attack",
       ranks: ["Cutpurse", "Knifehand", "Shadeblade", "Assassin", "Daggermaster"] },
-    { line: "bow", name: "Bow", icon: "stave", slot: "weapon", stat: "attack",
+    { line: "bow", title: "Sun Piercer", name: "Bow", icon: "stave", slot: "weapon", stat: "attack",
       ranks: ["Bowhand", "Archer", "Marksman", "Deadeye", "Bowmaster"] },
-    { line: "staff", name: "Staff", icon: "stave", slot: "weapon", stat: "attack",
+    { line: "staff", title: "Supreme Magus", name: "Staff", icon: "stave", slot: "weapon", stat: "attack",
       ranks: ["Channeller", "Adept", "Conduit", "Archmage", "Staffmaster"] },
     /* `released: false` keeps a line out of the world entirely: its recipes are
        pruned off the benches below, no discipline may hold it, and the Mastery

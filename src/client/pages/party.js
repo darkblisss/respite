@@ -43,6 +43,8 @@ import { partyMult } from "../../shared/progression.js";
 import { recovering, skillLevel } from "../../shared/stats.js";
 import { currentRegion } from "../../shared/world.js";
 import { markRead, newestMessage } from "../partyRead.js";
+import { dropdownOf } from "../ui/dropdown.js";
+import { refreshTitles, saintTag } from "../titles.js";
 
 const P = CONFIG.party;
 const ONLINE_MS = 3 * 60 * 1000;   // last_seen this recent counts as online, as online_count() does
@@ -188,6 +190,8 @@ export default {
         page.replaceChildren(pageHead({ eyebrow: "The Realm", title: "Party", sub: RULE }), signInCard(ctx));
       } else {
         body = partyBody(ctx, page);
+        // The five saints, so a square can wear one. Late is fine: the next repaint takes it.
+        refreshTitles(ctx);
       }
     }
 
@@ -473,14 +477,14 @@ function partyBody(ctx, page) {
     const sub = h("p.card-sub");
     const chipBox = h("div.card-actions");
     const squares = h("div.room-grid");
-    const groundSel = h("select.select.grow", { "aria-label": "Ground" },
-      GameData.ZONES.map((z) => h("option", { value: z.id }, z.name)));
+    // The game's own list, not the operating system's sheet: the room is one card.
+    const groundSel = dropdownOf(GameData.ZONES.map((z) => ({ value: z.id, label: z.name })), { label: "Ground", className: "grow" });
     const putUp = h("button.btn.btn-sm", { type: "button" }, "Propose");
     const readyBtn = h("button.btn.grow", { type: "button" });
     const goBtn = h("button.btn.btn-ember.grow", { type: "button" }, iconEl("swords"), "Start");
     const hint = h("span.field-hint.t-bad", { hidden: true, role: "alert" });
     const bar = h("div.room-bar",
-      h("div.hstack.gap-2", groundSel, putUp),
+      h("div.hstack.gap-2", groundSel.node, putUp),
       h("div.btn-row.room-press", readyBtn, goBtn),
       hint);
     const outRow = h("div.btn-row.room-out", { hidden: true });
@@ -496,7 +500,7 @@ function partyBody(ctx, page) {
     let picked = null;       // the zone in the select, kept across repaints
     let wantSlots = null;    // the seat count a press asked for, until the realm says so too
 
-    groundSel.addEventListener("change", () => { picked = groundSel.value; });
+    groundSel.onChange = (v) => { picked = v; };
 
     async function call(fn, btn) {
       sending = true;
@@ -547,6 +551,7 @@ function partyBody(ctx, page) {
         h("div.seat-foot",
           h("button.seat-name", { type: "button", onClick: () => openPopup("profile", ctx, String(m.username || "")) },
             isLeader ? iconEl("crown") : null, display(m.username)),
+          saintTag(m.username),
           doing),
         isReady ? h("span.seat-ready", iconEl("check"), "Ready") : null);
       if (amLeader && !mine) {
@@ -682,11 +687,14 @@ function partyBody(ctx, page) {
             }));
             outRow.replaceChildren(watch, away);
           } else {
-            const join = h("button.btn.btn-ember", { type: "button" }, iconEl("party"), "Join them");
+            /* Everyone who marked ready is walked on by the realm; this is for whoever did not.
+               They come in on the walk, never into the middle of an encounter, so the press says
+               so rather than letting it look like a press that did nothing. */
+            const join = h("button.btn.btn-ember", { type: "button" }, iconEl("party"), "Join your party");
             join.addEventListener("click", () => send("partyHuntJoin", {}, join, () => {
               toast("You fall in with the party", { kind: "good", icon: "party" });
             }));
-            outRow.replaceChildren(join);
+            outRow.replaceChildren(join, h("span.field-hint", "You come in on the next walk, once the encounter they are in is over."));
           }
         }
         setAttr(outRow, "hidden", !outKind);

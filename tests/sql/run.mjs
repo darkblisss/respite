@@ -1025,6 +1025,59 @@ async function partyRoom() {
   same('and the new ground is what is up', await upOf(), { proposed_tier: 3, proposed_zone: 'core' });
 }
 
+/* The five saints. mastery_saints() lives in migration 017 and reads the mastery
+   column migration 008 adds, so both are applied here first: schema.sql is the
+   core and neither one is part of it. 008 replaces the trigger 004 owns, so 004
+   goes in ahead of it. Running 017 twice proves it is safe to paste again,
+   which is how migrations reach a realm. */
+async function masterySaints() {
+  await server();
+  const sql = async (file) => readFile(join(REPO, 'supabase', 'migrations', file), 'utf8');
+  try {
+    await db.exec(await sql('004_leaderboard_boards.sql'));
+    await db.exec(await sql('008_mastery_boards.sql'));
+    await db.exec(await sql('017_mastery_saints.sql'));
+    await db.exec(await sql('017_mastery_saints.sql'));
+    check('017 applies over 004 and 008, twice', true);
+  } catch (e) {
+    check('017 applies over 004 and 008, twice', false, e.message);
+    return;
+  }
+
+  const wears = async (name, mastery) => {
+    const id = await makeUser(name);
+    await db.query('update public.profiles set mastery = $2::jsonb where user_id = $1', [id, JSON.stringify(mastery)]);
+    return id;
+  };
+
+  // Two on the sword line, one clearly ahead; a shield line with a single name on it.
+  await wears('saint_a', { mastery_sword: 900, mastery_shield: 40 });
+  await wears('saint_b', { mastery_sword: 1200, mastery_bow: 0 });
+  await wears('saint_c', { mastery_sword: 'lots', mastery_staff: null });
+
+  const saints = async (who = U.ash) =>
+    (await as(who, 'select * from public.mastery_saints() order by line')).map((r) => [r.line, r.username, Number(r.points)]);
+
+  same('mastery_saints: one holder a line, the highest points',
+    await saints(), [['mastery_shield', 'saint_a', 40], ['mastery_sword', 'saint_b', 1200]]);
+
+  // A tie has to settle the same way every time, or the title changes hands on a refresh.
+  await wears('saint_d', { mastery_dagger: 500 });
+  await wears('saint_e', { mastery_dagger: 500 });
+  const twice = [await saints(), await saints()];
+  same('mastery_saints: a tie breaks on the name, and stays broken', twice[0], twice[1]);
+  same('mastery_saints: the tie goes to the first name',
+    twice[0].find((r) => r[0] === 'mastery_dagger'), ['mastery_dagger', 'saint_d', 500]);
+
+  // A line taken off a commander leaves it to whoever is next, not to nobody.
+  await db.exec(`update public.profiles set mastery = '{}'::jsonb where username = 'saint_b'`);
+  same('mastery_saints: the line passes to the next name',
+    (await saints()).find((r) => r[0] === 'mastery_sword'), ['mastery_sword', 'saint_a', 900]);
+
+  await refuses('mastery_saints refuses a caller who is not signed in',
+    () => as(ANON, 'select * from public.mastery_saints()'), /Not signed in|permission denied/);
+}
+
 async function rerun(schemaSql) {
   await server();
   const counts = () => q1(`select ${TABLES.map((t) => `(select count(*)::int from public.${t}) as ${t}`).join(', ')}`);
@@ -1096,6 +1149,7 @@ async function main() {
   await section('party_say', partySay);
   await section('party_state', partyState);
   await section('the party room', partyRoom);
+  await section('the five saints', masterySaints);
   await section('re-running the schema', () => rerun(schemaSql));
 }
 

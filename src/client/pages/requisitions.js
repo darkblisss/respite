@@ -15,6 +15,7 @@ import { iconEl } from "../ui/icons.js";
 import { confirm, openModal } from "../ui/overlay.js";
 import { fmtGold, fmtTime, fmtWhole } from "../ui/format.js";
 import { confirmSpend } from "../ui/widgets.js";
+import { dropdown } from "../ui/dropdown.js";
 import { CONFIG } from "../../shared/config.js";
 import { agentRarityDef, regionOfTier, tierLabel } from "../../shared/registry.js";
 import { requisitionsOpen, requisitionsLeft, requisitionTargets, requisitionQty, agentLevel, agentHours } from "../../shared/world.js";
@@ -219,9 +220,21 @@ export default {
       const left = requisitionsLeft(state);
       if (!free.length || left <= 0 || modal) return;
 
-      const agentSel = h("select.select#reqAgent", free.map((a) =>
-        h("option", { value: a.id }, `${a.name} · ${agentRarityDef(a.rarity).name} · about ${fmtWhole(bringsBack(a))}`)));
-      agentSel.value = free.some((a) => a.id === agentId) ? agentId : free[0].id;
+      /* The game draws both lists rather than handing them to the operating system:
+         a rarity and a haul are worth showing beside a name, and a native option
+         cannot carry either. */
+      const agentSel = dropdown({
+        id: "reqAgent",
+        label: "Agent",
+        groups: [{ label: null, options: free.map((a) => ({
+          value: a.id,
+          label: `${a.name} · ${agentRarityDef(a.rarity).name}`,
+          // Hours, not a count: what they bring back depends on what is asked for.
+          note: hoursWord(a),
+        })) }],
+        value: free.some((a) => a.id === agentId) ? agentId : free[0].id,
+        onChange: () => paintPlan(),
+      });
 
       // Reagents first, then each tier's raw materials under the region they come from.
       const targets = requisitionTargets(state);
@@ -230,13 +243,20 @@ export default {
         const d = itemDef(key);
         const label = d.reagent ? "Reagents" : `${tierLabel(d.tier)} · ${regionOfTier(d.tier).name}`;
         if (!groups.has(label)) groups.set(label, []);
-        groups.get(label).push(h("option", { value: key }, d.name));
+        // What you already hold, where you hold any: a column of zeroes tells nobody anything.
+        const held = haveQty(state, key);
+        groups.get(label).push({ value: key, label: d.name, note: held > 0 ? `${fmtWhole(held)} held` : null });
       });
-      const targetSel = h("select.select#reqTarget", [...groups].map(([label, options]) => h("optgroup", { label }, options)));
       // Remembered, or the first raw material of the deepest tier you can ask for.
       const raw = targets.filter((k) => !itemDef(k).reagent);
       const deepest = raw.reduce((best, k) => (!best || itemDef(k).tier > itemDef(best).tier ? k : best), null);
-      targetSel.value = targets.includes(lastTarget) ? lastTarget : deepest || targets[0];
+      const targetSel = dropdown({
+        id: "reqTarget",
+        label: "Bring back",
+        groups: [...groups].map(([label, options]) => ({ label, options })),
+        value: targets.includes(lastTarget) ? lastTarget : deepest || targets[0],
+        onChange: () => paintPlan(),
+      });
 
       const plan = h("p.ap-plan");
       const paintPlan = () => {
@@ -246,11 +266,9 @@ export default {
         if (!agent || !key) return;
         const w = placeFor(s, key, ORDER.material);
         plan.replaceChildren(
-          h("span", h("b", `${fmtWhole(bringsBack(agent))} × ${itemName(key)}`), ` back in ${fmtTime(nextDayAt(ctx.now) - ctx.now)}`),
+          h("span", h("b", `${fmtWhole(requisitionQty(agent, key))} × ${itemName(key)}`), ` back in ${fmtTime(nextDayAt(ctx.now) - ctx.now)}`),
           h("span", { class: { "t-warn": !w } }, w ? `Into ${INTO[w]} · ${fmtWhole(haveQty(s, key))} held` : "Nowhere to put it right now"));
       };
-      agentSel.addEventListener("change", paintPlan);
-      targetSel.addEventListener("change", paintPlan);
       paintPlan();
 
       modal = openModal({
@@ -259,8 +277,8 @@ export default {
         art: "crate",
         size: "sm",
         body: [
-          h("div.field", h("label.field-label", { for: "reqAgent" }, "Agent"), agentSel),
-          h("div.field", h("label.field-label", { for: "reqTarget" }, "Bring back"), targetSel),
+          h("div.field", h("label.field-label", { for: "reqAgent" }, "Agent"), agentSel.node),
+          h("div.field", h("label.field-label", { for: "reqTarget" }, "Bring back"), targetSel.node),
           plan,
         ],
         actions: [
@@ -277,8 +295,8 @@ export default {
             },
           },
         ],
-        initialFocus: targetSel,
-        onClose: () => { modal = null; },
+        initialFocus: targetSel.button,
+        onClose: () => { agentSel.destroy(); targetSel.destroy(); modal = null; },
       });
     }
 

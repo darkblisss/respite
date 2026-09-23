@@ -15,7 +15,7 @@ import { toast } from "./ui/overlay.js";
 import { hasPopup, openPopup } from "./ui/widgets.js";
 import { fmt, fmtGold, fmtTime, plural } from "./ui/format.js";
 import { CONFIG } from "../shared/config.js";
-import { GameData, getCompanion, getMonster, getRegion, rarityDef, skillName } from "../shared/registry.js";
+import { GameData, getCompanion, getMonster, getRegion, getZone, rarityDef, regionOfTier, skillName } from "../shared/registry.js";
 import { itemDef, itemName, parseKey, haloName } from "../shared/items.js";
 
 const BURST_MS = 4000;       // a kind of news gets this many toasts...
@@ -136,6 +136,13 @@ const TABLE = {
        writes no camp line for it, so the toast is the only word the player gets. A member out
        with their party is paid several times a minute, so the share is spaced like any other
        trickle; a fall is told every time, because falling is not a trickle. */
+    /* The party went out while this camp was marked ready, so the realm walked it on without
+       being asked. It is told, because nobody pressed anything to make it happen. */
+    if (p.type === "party:fellin") {
+      const zone = getZone(p.zone);
+      const region = getRegion(regionOfTier(p.tier).id);
+      return [`You set out with your party for the ${zone.name} of ${region.name}`, { kind: "good", icon: "party" }];
+    }
     if (p.type === "party:spoils") {
       const parts = [];
       if (p.kills > 0) parts.push(plural(Math.round(p.kills), "kill"));

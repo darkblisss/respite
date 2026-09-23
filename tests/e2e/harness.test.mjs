@@ -384,6 +384,37 @@ await run(async () => {
       "Could not find the function public.hiscores(skill) in the schema cache");
 
     /* ---------------------------------------------------------- */
+    section("the party sets out together");
+
+    /* The host's press cannot reach into another camp's save, so it opens the ground and every
+       member who marked ready walks on under their own next request. B marks ready, A presses,
+       and B's next call to the game finds itself out with the party. */
+    const ground = { tier: 1, zone: "outer" };
+    same("a mark with no ground up is refused", (await call(B, "rpc", "party_ready", { p_ready: true })).error.message, "Nobody has put a ground up yet.");
+    same("A puts the Outer up", (await call(A, "rpc", "party_propose", { p_tier: ground.tier, p_zone: ground.zone })).error, null);
+    same("B marks ready", (await call(B, "rpc", "party_ready", { p_ready: true })).error, null);
+    same("and the mark is in the room", (await call(A, "rpc", "party_state")).data.members.find((m) => m.username === "bram").ready, true);
+
+    const out = await call(A, "game", [cmd("partyHuntStart", ground)]);
+    check("A sets out", out.body.results[0].ok === true, out.body.results);
+    check("A is on the ground alone for the moment", out.body.party && out.body.party.hunters.length === 1, out.body.party);
+    same("and the host's own mark is spent", (await call(A, "rpc", "party_state")).data.members.find((m) => m.username === "ashen").ready, false);
+
+    const fell = await call(B, "game", []);
+    check("B's next call walks them on without being asked",
+      !!fell.body.party && fell.body.party.hunters.length === 2, fell.body.party);
+    const told = fell.body.events.find((e) => e.type === "party:fellin");
+    same("and B is told, since nobody pressed anything", told && [told.tier, told.zone], [ground.tier, ground.zone]);
+    same("B's mark comes down once it has been acted on",
+      (await call(A, "rpc", "party_state")).data.members.find((m) => m.username === "bram").ready, false);
+
+    // A mark that is down is not a standing instruction: breaking away stays broken.
+    const broke = await call(B, "game", [cmd("partyHuntLeave")]);
+    check("B breaks away", broke.body.results[0].ok === true, broke.body.results);
+    const stayed = await call(B, "game", []);
+    check("and is not walked back on by the mark they already spent", !stayed.body.party, stayed.body.party);
+
+    /* ---------------------------------------------------------- */
     section("the stage clock");
 
     const started = await call(B, "game", [cmd("startSkill", { skillId: "delving", actionId: "delving_t1_raw", limit: null })]);

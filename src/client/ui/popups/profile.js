@@ -24,6 +24,7 @@ import { getClass, getRegion, getZone } from "../../../shared/registry.js";
 import { itemDef, itemName, parseKey, canFortify, wornHalos } from "../../../shared/items.js";
 import { CONFIG } from "../../../shared/config.js";
 import { avatarHaloNode, paintAvatarHalo, haloTags, plusPlate, paintMini } from "../halo.js";
+import { refreshTitles, saintTag } from "../../titles.js";
 
 const ASK_MS = 15 * 1000;
 const ONLINE_MS = 3 * 60 * 1000;   // as the Party tab and online_count() count it
@@ -135,6 +136,7 @@ registerPopup("profile", (ctx, username) => {
         h("span.chip", { class: online ? "chip-good" : null },
           h("span.dot", { class: online ? "dot-online" : "dot-offline", "aria-hidden": "true" }),
           online ? "Online" : seen ? `Last about ${fmtAgo(Date.now() - seen)}` : "Not seen yet"),
+        saintTag(row.username || who),
         klass ? h("span.tag.tag-violet", klass.name) : null,
         ...haloTags(halos),
         hunting ? h("span.chip.chip-ember", iconEl("swords"), `Hunting the ${getZone(hunting.zone).name}`) : null),
@@ -153,6 +155,8 @@ registerPopup("profile", (ctx, username) => {
       return;
     }
     state(`Asking the realm about ${display(who)}.`);
+    // Asked alongside the page, so a saint's card carries the title the first time it opens.
+    const titles = refreshTitles(ctx);
     let res;
     try {
       res = await Promise.race([
@@ -175,6 +179,8 @@ registerPopup("profile", (ctx, username) => {
       state(`Nobody in the realm answers to ${display(who)}.`);
       return;
     }
+    await titles.catch(() => false);
+    if (!alive || m.closed) return;
     show(res.row);
   }
 

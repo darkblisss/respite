@@ -493,6 +493,18 @@ export function createNet({
      such function, and the Mastery page goes quiet about ranks rather than
      pretending nobody has any. A board ranks on raw points; the level beside a
      rank is worked out here in JS from the one curve in CONFIG. */
+  /* Who holds each line, realm-wide: [{ line, username, points }], five rows at
+     most. mastery_ranks() answers about the caller alone, which is no use for a
+     title that has to read on somebody else's board row or party square. */
+  async function masterySaints() {
+    const { data, error, code } = await rpc("mastery_saints");
+    if (error) {
+      const missing = code === "PGRST202" || /could not find the function|does not exist/i.test(error);
+      return { rows: [], error, missing };
+    }
+    return { rows: Array.isArray(data) ? data : [], error: null, missing: false };
+  }
+
   async function masteryBoard(line, limit = 50) {
     const { data, error, code } = await rpc("mastery_board", { p_line: String(line || ""), p_limit: limit });
     if (error) {
@@ -562,6 +574,7 @@ export function createNet({
     leaderboard,
     masteryBoard,
     masteryRanks,
+    masterySaints,
     playerProfile,
     onlineCount,
     heartbeat,
