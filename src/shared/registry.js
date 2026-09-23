@@ -77,6 +77,11 @@ const MAT_ART = {
   lesser_veil_fragment: "lesser-veil-fragment", veiled_fragment: "veiled-fragment", sovereign_fragment: "sovereign-fragment",
   lesser_veil_essence: "lesser-veil-essence", veiled_essence: "veiled-essence", sovereign_essence: "sovereign-essence",
 
+  // What a flaying crew peels off the kill. Cut only.
+  mangy_flay: "mangy", bristle_flay: "bristle", dire_flay: "dire",
+  gaunt_flay: "gaunt", slough_flay: "slough", stag_flay: "stag",
+  drake_flay: "drake", leviathan_flay: "leviathan", demon_flay: "demon",
+
   // The five reagents, which never had a tier and so never moved.
   coal: "coal", resin: "resin", pulp: "pulp", tallow: "tallow", veil_shard: "veil-shard",
 };
@@ -84,6 +89,7 @@ const MAT_ART = {
 /* The reagents are cut by hand and have no fade of their own: a cutout sits on
    any surface, so asking for a fade that is not there simply gets the cut. */
 const CUT_ONLY = new Set(["coal", "resin", "pulp", "tallow", "veil_shard",
+  "mangy_flay", "bristle_flay", "dire_flay", "gaunt_flay", "slough_flay", "stag_flay", "drake_flay", "leviathan_flay", "demon_flay",
   "lesser_veil_fragment", "veiled_fragment", "sovereign_fragment", "lesser_veil_essence", "veiled_essence", "sovereign_essence",
   "mud_inlay", "bog_inlay", "chalk_inlay", "mourning_inlay", "ghost_inlay", "amber_inlay", "hoard_inlay", "sunken_inlay", "idol_inlay",
   "mud_dredge", "bog_dredge", "chalk_dredge", "mourning_dredge", "ghost_dredge", "amber_dredge", "hoard_dredge", "sunken_dredge", "idol_dredge"]);
