@@ -68,6 +68,11 @@ const MAT_ART = {
   mourning_dredge: "mourning", ghost_dredge: "ghost", amber_dredge: "amber",
   hoard_dredge: "hoard", sunken_dredge: "sunken", idol_dredge: "idol",
 
+  // What the Artificer sets them into. Cut only.
+  mud_inlay: "mud-inlay", bog_inlay: "bog-inlay", chalk_inlay: "chalk-inlay",
+  mourning_inlay: "mourning-inlay", ghost_inlay: "ghost-inlay", amber_inlay: "amber-inlay",
+  hoard_inlay: "hoard-inlay", sunken_inlay: "sunken-inlay", idol_inlay: "idol-inlay",
+
   // The five reagents, which never had a tier and so never moved.
   coal: "coal", resin: "resin", pulp: "pulp", tallow: "tallow", veil_shard: "veil-shard",
 };
@@ -75,6 +80,7 @@ const MAT_ART = {
 /* The reagents are cut by hand and have no fade of their own: a cutout sits on
    any surface, so asking for a fade that is not there simply gets the cut. */
 const CUT_ONLY = new Set(["coal", "resin", "pulp", "tallow", "veil_shard",
+  "mud_inlay", "bog_inlay", "chalk_inlay", "mourning_inlay", "ghost_inlay", "amber_inlay", "hoard_inlay", "sunken_inlay", "idol_inlay",
   "mud_dredge", "bog_dredge", "chalk_dredge", "mourning_dredge", "ghost_dredge", "amber_dredge", "hoard_dredge", "sunken_dredge", "idol_dredge"]);
 
 export const matArt = (id) => {
