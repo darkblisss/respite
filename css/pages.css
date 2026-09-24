@@ -30,6 +30,10 @@
   aspect-ratio: 1 / 1;
   height: auto;
   border-radius: 16px;
+  /* Framed as the profile card frames it (character.css .prof-portrait). */
+  border: 1px solid var(--line);
+  background: radial-gradient(circle at 50% 40%, var(--surface-3), var(--surface-2));
+  overflow: hidden;
 }
 
 /* Room for the halo ring round the portrait (ui/halo.js), when there is one. */
@@ -56,6 +60,9 @@
   padding-left: var(--sp-6);
   border-left: 1px solid var(--line-soft);
 }
+
+/* The label is the profile card's: gold, as its Total level is. */
+.char-total .eyebrow { color: var(--gold); }
 
 .char-total-v {
   font-family: var(--font-display);

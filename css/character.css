@@ -69,7 +69,98 @@
   .char-stack .standing { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-/* ================= 5. THE PROFILE CARD ================= */
+/* ================= 5. THE COLLECTION ================= */
+/* Three rows narrowing one grid: what kind of thing, what sort of it, and which
+   ground it comes off. Each chip carries how much of itself is in hand, so what
+   is left to find reads off the rows without opening anything. */
+
+.coll-tabs { margin: var(--sp-3) 0 var(--sp-2); }
+
+.coll-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+
+.coll-row[hidden] { display: none; }
+.coll-groups { padding-top: var(--sp-2); box-shadow: inset 0 1px 0 var(--line-soft); }
+
+button.coll-chip { cursor: pointer; gap: 7px; }
+.coll-chip[aria-selected="true"] { background: var(--violet-soft); box-shadow: inset 0 0 0 1px var(--violet-edge); color: var(--bone); }
+
+.coll-n {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--surface-sunk);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--bone-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.coll-chip[aria-selected="true"] .coll-n { background: rgba(10, 9, 12, .45); color: var(--bone-dim); }
+
+/* The grid itself: as many squares as fit, art first and the name under it. */
+.coll-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+
+.coll-cell {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: center;
+}
+
+button.coll-cell { cursor: pointer; }
+
+.coll-box {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+  color: var(--bone-dim);
+  overflow: hidden;
+  transition: box-shadow var(--dur-1), background var(--dur-1);
+}
+
+.coll-box .ico { width: 26px; height: 26px; }
+.coll-box .mat-art,
+.coll-box img,
+.coll-box svg:not(.ico) { width: 100%; height: 100%; object-fit: contain; }
+
+.coll-name {
+  font-size: 10.5px;
+  line-height: 1.25;
+  color: var(--bone-faint);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+button.coll-cell:hover .coll-box { background: var(--surface-3); box-shadow: inset 0 0 0 1px var(--line-strong); }
+button.coll-cell:hover .coll-name { color: var(--bone); }
+
+/* Never met: the box stays, the art does not. A collection is mostly the shape
+   of what is missing, so the empties have to hold their places in the grid. */
+.coll-cell.is-locked .coll-box { background: var(--surface-sunk); color: var(--bone-ghost); }
+.coll-cell.is-locked .coll-box .ico { width: 18px; height: 18px; opacity: .6; }
+.coll-cell.is-locked .coll-name { color: var(--bone-ghost); }
+
+.coll-cell.is-sovereign .coll-box { box-shadow: inset 0 0 0 1px var(--violet-edge); }
+
+/* ================= 6. THE PROFILE CARD ================= */
 /* ui/profile.js: one card, the side and the main. The side is who they are
    and their numbers (or the Collection's kinds); the main is the tabs and what
    each holds. One column until there is room for both. */
@@ -302,15 +393,15 @@ a.prof-skill:hover { border-color: var(--line-strong); background: var(--surface
   .prof-pair-l { display: none; }
 }
 
-/* ================= 6. THE COLLECTION ================= */
-/* ui/collection.js. The kinds sit in the side column; the album is one row per
+/* ================= 7. THE PROFILE'S COLLECTION ================= */
+/* ui/album.js. The kinds sit in the side column; the album is one row per
    ground, a square per piece, and the row picked opens its ground below. */
 
-.coll-filters { display: flex; flex-direction: column; gap: var(--sp-3); }
-.coll-filters[hidden], .coll-kinds[hidden], .coll-foe-note[hidden] { display: none; }
-.coll-kinds { display: flex; flex-direction: column; gap: 4px; }
+.alb-filters { display: flex; flex-direction: column; gap: var(--sp-3); }
+.alb-filters[hidden], .alb-kinds[hidden], .alb-foe-note[hidden] { display: none; }
+.alb-kinds { display: flex; flex-direction: column; gap: 4px; }
 
-.coll-kind {
+.alb-kind {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -324,35 +415,35 @@ a.prof-skill:hover { border-color: var(--line-strong); background: var(--surface
   transition: background var(--dur-1), border-color var(--dur-1);
 }
 
-.coll-kind:hover { background: var(--wash); }
-.coll-kind[aria-selected="true"] { background: var(--violet-soft); border-color: var(--violet-edge); }
-.coll-kind-top { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
-.coll-kind-name { font-size: var(--text-sm); color: var(--bone-dim); }
-.coll-kind[aria-selected="true"] .coll-kind-name { color: var(--bone); }
-.coll-kind-n { font-size: var(--text-xs); color: var(--bone-faint); font-variant-numeric: tabular-nums; }
-.coll-foe-note { display: flex; flex-direction: column; gap: 8px; padding: 4px 2px; }
-.coll-foe-copy { font-size: var(--text-xs); color: var(--bone-faint); }
+.alb-kind:hover { background: var(--wash); }
+.alb-kind[aria-selected="true"] { background: var(--violet-soft); border-color: var(--violet-edge); }
+.alb-kind-top { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.alb-kind-name { font-size: var(--text-sm); color: var(--bone-dim); }
+.alb-kind[aria-selected="true"] .alb-kind-name { color: var(--bone); }
+.alb-kind-n { font-size: var(--text-xs); color: var(--bone-faint); font-variant-numeric: tabular-nums; }
+.alb-foe-note { display: flex; flex-direction: column; gap: 8px; padding: 4px 2px; }
+.alb-foe-copy { font-size: var(--text-xs); color: var(--bone-faint); }
 
-.coll { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
-.coll-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-4); }
+.alb { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+.alb-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-4); }
 
-.coll-title {
+.alb-title {
   font-family: var(--font-display);
   font-size: var(--text-2xl);
   font-weight: 600;
   color: var(--bone);
 }
 
-.coll-sum { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; min-width: 180px; }
-.coll-sum .bar { width: 180px; }
-.coll-total { font-size: var(--text-sm); color: var(--bone-dim); font-variant-numeric: tabular-nums; }
-.coll-total b { color: var(--bone); font-weight: 600; }
-.coll-sub { font-size: var(--text-xs); color: var(--bone-faint); }
+.alb-sum { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; min-width: 180px; }
+.alb-sum .bar { width: 180px; }
+.alb-total { font-size: var(--text-sm); color: var(--bone-dim); font-variant-numeric: tabular-nums; }
+.alb-total b { color: var(--bone); font-weight: 600; }
+.alb-sub { font-size: var(--text-xs); color: var(--bone-faint); }
 
-.coll-album { display: flex; flex-direction: column; gap: 2px; }
-.coll-album[hidden] { display: none; }
+.alb-album { display: flex; flex-direction: column; gap: 2px; }
+.alb-album[hidden] { display: none; }
 
-.coll-row {
+.alb-row {
   display: grid;
   grid-template-columns: 170px minmax(0, 1fr) 44px;
   align-items: center;
@@ -367,24 +458,24 @@ a.prof-skill:hover { border-color: var(--line-strong); background: var(--surface
   cursor: pointer;
 }
 
-.coll-album.is-foes .coll-row { min-height: 44px; }
-.coll-row:hover { background: var(--wash); }
-.coll-row[aria-pressed="true"] { background: var(--surface-3); border-color: var(--line); }
-.coll-row-name { font-size: var(--text-sm); color: var(--bone); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.coll-row-name.is-none { color: var(--bone-faint); }
-.coll-row[aria-pressed="true"] .coll-row-name { font-weight: 600; }
-.coll-row-n { font-size: var(--text-xs); color: var(--bone-faint); text-align: right; font-variant-numeric: tabular-nums; }
+.alb-album.is-foes .alb-row { min-height: 44px; }
+.alb-row:hover { background: var(--wash); }
+.alb-row[aria-pressed="true"] { background: var(--surface-3); border-color: var(--line); }
+.alb-row-name { font-size: var(--text-sm); color: var(--bone); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.alb-row-name.is-none { color: var(--bone-faint); }
+.alb-row[aria-pressed="true"] .alb-row-name { font-weight: 600; }
+.alb-row-n { font-size: var(--text-xs); color: var(--bone-faint); text-align: right; font-variant-numeric: tabular-nums; }
 
-.coll-sqs {
+.alb-sqs {
   display: grid;
   grid-template-columns: repeat(var(--n), minmax(0, 18px));
   gap: 3px;
   min-width: 0;
 }
 
-.coll-album.is-foes .coll-sqs { grid-template-columns: repeat(var(--n), 30px); gap: 8px; }
+.alb-album.is-foes .alb-sqs { grid-template-columns: repeat(var(--n), 30px); gap: 8px; }
 
-.coll-sq {
+.alb-sq {
   display: grid;
   place-items: center;
   aspect-ratio: 1;
@@ -394,33 +485,33 @@ a.prof-skill:hover { border-color: var(--line-strong); background: var(--surface
   color: var(--bone-ghost);
 }
 
-.coll-sq.is-seen { background: rgba(185, 164, 242, .45); box-shadow: inset 0 0 0 1px var(--violet-edge); color: var(--bone); }
-.coll-album.is-foes .coll-sq { border-radius: 7px; }
-.coll-album.is-foes .coll-sq.is-seen { background: var(--violet-soft); }
-.coll-album.is-foes .coll-sq.is-seen[data-sov] { color: var(--gold-hi); }
-.coll-sq .ico { width: 16px; height: 16px; }
+.alb-sq.is-seen { background: rgba(185, 164, 242, .45); box-shadow: inset 0 0 0 1px var(--violet-edge); color: var(--bone); }
+.alb-album.is-foes .alb-sq { border-radius: 7px; }
+.alb-album.is-foes .alb-sq.is-seen { background: var(--violet-soft); }
+.alb-album.is-foes .alb-sq.is-seen[data-sov] { color: var(--gold-hi); }
+.alb-sq .ico { width: 16px; height: 16px; }
 
-.coll-open { display: flex; flex-direction: column; gap: var(--sp-4); padding-top: var(--sp-4); border-top: 1px solid var(--line-soft); }
-.coll-album[hidden] + .coll-open { padding-top: 0; border-top: 0; }
-.coll-open-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-3); }
+.alb-open { display: flex; flex-direction: column; gap: var(--sp-4); padding-top: var(--sp-4); border-top: 1px solid var(--line-soft); }
+.alb-album[hidden] + .alb-open { padding-top: 0; border-top: 0; }
+.alb-open-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-3); }
 
-.coll-open-title {
+.alb-open-title {
   font-family: var(--font-display);
   font-size: var(--text-lg);
   font-weight: 600;
   color: var(--bone);
 }
 
-.coll-open-n { font-size: var(--text-xs); color: var(--bone-faint); }
+.alb-open-n { font-size: var(--text-xs); color: var(--bone-faint); }
 
 /* No names under the tiles: a press opens the entry, and the name is its title. */
-.coll-tiles {
+.alb-tiles {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
   gap: 12px;
 }
 
-.coll-tile {
+.alb-tile {
   display: grid;
   place-items: center;
   aspect-ratio: 1;
@@ -435,12 +526,12 @@ a.prof-skill:hover { border-color: var(--line-strong); background: var(--surface
   transition: border-color var(--dur-1), transform var(--dur-1);
 }
 
-button.coll-tile:hover { border-color: var(--violet-edge); transform: translateY(-1px); }
-.coll-tile-art { display: grid; place-items: center; width: 100%; height: 100%; }
-.coll-tile-art .ico { width: 24px; height: 24px; }
-.coll-tile-art.art-paint img, .coll-tile-art .mat-art { width: 82%; height: 82%; object-fit: contain; }
+button.alb-tile:hover { border-color: var(--violet-edge); transform: translateY(-1px); }
+.alb-tile-art { display: grid; place-items: center; width: 100%; height: 100%; }
+.alb-tile-art .ico { width: 24px; height: 24px; }
+.alb-tile-art.art-paint img, .alb-tile-art .mat-art { width: 82%; height: 82%; object-fit: contain; }
 
-.coll-tile.is-locked {
+.alb-tile.is-locked {
   border: 1px dashed var(--line);
   background: var(--surface-sunk);
   box-shadow: none;
@@ -449,9 +540,9 @@ button.coll-tile:hover { border-color: var(--violet-edge); transform: translateY
 }
 
 /* Foes: a card each, the Sovereign in gold. */
-.coll-tiles.is-foes { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.alb-tiles.is-foes { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 
-.coll-foe {
+.alb-foe {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -465,24 +556,24 @@ button.coll-tile:hover { border-color: var(--violet-edge); transform: translateY
   text-align: center;
 }
 
-button.coll-foe:hover { border-color: var(--violet-edge); }
-.coll-foe.is-sovereign:not(.is-locked) { border-color: var(--gold-edge); background: linear-gradient(to top, var(--gold-soft), transparent 60%), var(--surface-2); }
-.coll-foe-art { display: grid; place-items: center; width: 72px; height: 72px; }
-.coll-foe-art svg { width: 100%; height: 100%; }
-.coll-foe-art .ico { width: 34px; height: 34px; }
-.coll-foe-name { font-size: var(--text-sm); color: var(--bone); }
-.coll-foe-n { font-size: var(--text-xs); color: var(--bone-faint); }
-.coll-foe.is-locked { border-style: dashed; border-color: var(--line); background: var(--surface-sunk); color: #2e2836; cursor: default; }
-.coll-foe.is-locked .coll-foe-name { color: var(--bone-ghost); }
+button.alb-foe:hover { border-color: var(--violet-edge); }
+.alb-foe.is-sovereign:not(.is-locked) { border-color: var(--gold-edge); background: linear-gradient(to top, var(--gold-soft), transparent 60%), var(--surface-2); }
+.alb-foe-art { display: grid; place-items: center; width: 72px; height: 72px; }
+.alb-foe-art svg { width: 100%; height: 100%; }
+.alb-foe-art .ico { width: 34px; height: 34px; }
+.alb-foe-name { font-size: var(--text-sm); color: var(--bone); }
+.alb-foe-n { font-size: var(--text-xs); color: var(--bone-faint); }
+.alb-foe.is-locked { border-style: dashed; border-color: var(--line); background: var(--surface-sunk); color: #2e2836; cursor: default; }
+.alb-foe.is-locked .alb-foe-name { color: var(--bone-ghost); }
 
 @media (max-width: 599px) {
-  .coll-row { grid-template-columns: minmax(0, 1fr) 40px; }
-  .coll-sqs { grid-column: 1 / -1; grid-row: 2; }
-  .coll-head { flex-direction: column; }
-  .coll-sum { align-items: flex-start; }
+  .alb-row { grid-template-columns: minmax(0, 1fr) 40px; }
+  .alb-sqs { grid-column: 1 / -1; grid-row: 2; }
+  .alb-head { flex-direction: column; }
+  .alb-sum { align-items: flex-start; }
 }
 
-/* ================= 7. ONE ENTRY (popups/entry.js) ================= */
+/* ================= 8. ONE ENTRY (popups/entry.js) ================= */
 
 .entry { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: var(--sp-5); align-items: start; }
 

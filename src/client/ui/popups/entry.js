@@ -1,13 +1,13 @@
 /* ============================================================
    Respite · popups/entry.js · One Entry in the Collection
    ------------------------------------------------------------
-   What opens when a seen square in the Collection is pressed:
+   What opens when a seen square in a profile's Collection is pressed:
    the thing's face, what it is, when it was first met (once the
    save keeps that), a line on it, and three plain facts. Built
    from the registry alone, so a stranger's collection opens the
    same card as your own.
 
-   An entry never met does not open at all: the Collection keeps
+   An entry never met does not open at all: the album keeps
    those dark, and there is nothing here to say about them.
 
    The full sheets are one press further: the item popup for a

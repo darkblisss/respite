@@ -13,9 +13,8 @@
      Skills     every skill at a glance, and the total
      Collection what they have met of the world
 
-   All of it is the card the Character page draws too
-   (ui/profile.js); this page only turns the realm's row into the
-   card's model. Looking yourself up reads your own save for the
+   All of it is the profile card (ui/profile.js); this page only
+   turns the realm's row into the card's model. Looking yourself up reads your own save for the
    skills and the collection, which the realm only has a copy of.
 
    Everything comes off player_profile() in one call (migration

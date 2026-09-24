@@ -1,9 +1,11 @@
 /* ============================================================
    Respite · ui/profile.js · A Commander, Laid Out
    ------------------------------------------------------------
-   The one card both the Character page (your own camp, off the
-   save) and a commander's page (anyone, off player_profile())
-   draw. Callers hand it a plain model; it never reads a save.
+   The profile card: what anyone sees of a commander on
+   #/player/<name>, off player_profile() (or your own save, when
+   the name is yours). Callers hand it a plain model; it never
+   reads a save itself. The Character page is yours alone and is
+   drawn separately (pages/character.js).
 
      the side   face, name, discipline and ground, the total level
                 and the Hunt level side by side at one size; under
@@ -18,8 +20,8 @@
    segmented row. Nothing today has that many, so the row is
    there for later and draws nothing now.
 
-   Extra tabs (the Record, on your own page) come in as
-   { id, name, icon, node, update } and sit after the three.
+   Extra tabs come in as { id, name, icon, node, update } and
+   sit after the three.
    ============================================================ */
 
 import { h, on, setText, setAttr, setWidth, toggleClass } from "./dom.js";
@@ -27,7 +29,7 @@ import { iconEl } from "./icons.js";
 import { fmt, fmtWhole } from "./format.js";
 import { portraitImg, paintPortrait } from "./widgets.js";
 import { auraNode, paintAura, avatarHaloNode, paintAvatarHalo, haloTags } from "./halo.js";
-import { collectionPanel } from "./collection.js";
+import { albumPanel } from "./album.js";
 import { paintDoll } from "../pages/armaments.js";
 import { ARTISAN_ORDER, TRADE_ORDER, getSkill } from "../../shared/registry.js";
 
@@ -265,7 +267,7 @@ const LAST = {};
 export function profileView({ key = "self", onSlot = null, onEntry = null, links = false, extraTabs = [] } = {}) {
   const top = sideTop();
   const sheet = sheetView();
-  const coll = collectionPanel({ onEntry });
+  const coll = albumPanel({ onEntry });
   const standing = standingView({ onSlot });
   const skills = skillsView({ links });
   const tabs = TABS.concat(extraTabs.map((t) => ({ id: t.id, name: t.name, icon: t.icon, extra: t })));

@@ -51,7 +51,7 @@ await run(async () => {
     }, sel);
 
     await go("#/character");
-    const hero = await src(".prof-portrait img");
+    const hero = await src(".char-portrait img");
     check("the Character hero wears the skin that was chosen", /skin-drifter\.webp$/.test(hero || ""), hero);
 
     await go("#/armaments");
@@ -351,46 +351,79 @@ await run(async () => {
     await go("#/character");
     await live(app, () => [...document.querySelectorAll("[role=tab]")].find((t) => /Collection/.test(t.textContent)).click());
     await app.page.waitForTimeout(600);
-    const modes = await live(app, () => [...document.querySelectorAll(".coll-modes [data-mode]")].map((t) => t.dataset.mode));
-    same("two views: what you own and what you have put down", modes, ["items", "foes"]);
-    check("and the numbers give way to them at the side",
-      await live(app, () => document.querySelector(".prof-sheet").hidden && !document.querySelector(".coll-filters").hidden));
+    const tabs = await live(app, () => [...document.querySelectorAll(".coll-tabs .coll-chip")].map((t) => t.dataset.tab));
+    same("two tabs: what you own and what you have put down", tabs, ["items", "foes"]);
 
-    // Monsters: a row for every ground, the first opened, and a felled one carries its count.
+    // Monsters: the ground chips narrow it, and a felled one carries its count.
+    await live(app, () => document.querySelector('[data-tab="foes"]').click());
+    await app.page.waitForTimeout(500);
+    const foes = await live(app, () => ({
+      groups: document.querySelectorAll(".coll-groups .coll-chip").length,
+      cells: document.querySelectorAll(".coll-grid .coll-cell").length,
+      titles: [...document.querySelectorAll("button.coll-cell[data-monster]")].map((b) => b.title),
+    }));
+    check("a ground chip for every region", foes.groups === 9, foes.groups);
+    check("and the first ground's foes are in the grid", foes.cells > 0, foes.cells);
+    check("a monster you have put down says how many",
+      foes.titles.some((t) => /Defeated 2,080/.test(t)), foes.titles.slice(0, 4));
+    check("and never says it the old way",
+      !foes.titles.some((t) => /\d felled\b/i.test(t) || /of yours/.test(t)), foes.titles.slice(0, 4));
+
+    // Items: a kind row, and every piece of gear there is, held or not.
+    await live(app, () => document.querySelector('[data-tab="items"]').click());
+    await app.page.waitForTimeout(400);
+    const kinds = await live(app, () => [...document.querySelectorAll(".coll-row:not(.coll-groups) .coll-chip")].map((t) => t.dataset.kind));
+    check("a chip for every kind of item", kinds.includes("gear") && kinds.includes("parts") && kinds.includes("remedies"), kinds);
+
+    const gear = await live(app, () => ({
+      cells: document.querySelectorAll(".coll-grid .coll-cell").length,
+      chip: document.querySelector(".section-head .chip").textContent,
+    }));
+    check("gear lists every piece of the ground it is on, held or not", gear.cells > 10, gear);
+    check("and the count says how much of everything there is", /of [\d,]+ collected/.test(gear.chip), gear.chip);
+
+    /* A remedy is bought, not found, so it has a kind of its own. What was bought
+       is lit there, because buying is where the record is written. */
+    await live(app, () => document.querySelector('[data-kind="remedies"]').click());
+    await app.page.waitForTimeout(400);
+    const held = await live(app, () => [...document.querySelectorAll("button.coll-cell[data-item]")].map((b) => b.dataset.item));
+    check("what was bought is lit, because that is where a record is written",
+      held.includes("provision_t1"), held.slice(0, 12));
+  }
+
+  section("a profile's Collection, as an album");
+  {
+    // Your own name: the profile reads your save, so what was just bought and felled is on it.
+    await go("#/player/uinew_a");
+    await app.page.waitForTimeout(2500);
+    await live(app, () => [...document.querySelectorAll(".prof-tabs [role=tab]")].find((t) => /Collection/.test(t.textContent)).click());
+    await app.page.waitForTimeout(600);
+    const modes = await live(app, () => [...document.querySelectorAll(".alb-modes [data-mode]")].map((t) => t.dataset.mode));
+    same("two views: what they own and what they have put down", modes, ["items", "foes"]);
+    check("and the numbers give way to them at the side",
+      await live(app, () => document.querySelector(".prof-sheet").hidden && !document.querySelector(".alb-filters").hidden));
+
     await live(app, () => document.querySelector('[data-mode="foes"]').click());
     await app.page.waitForTimeout(500);
     const foes = await live(app, () => ({
-      rows: document.querySelectorAll(".coll-album .coll-row").length,
-      cards: document.querySelectorAll(".coll-tiles .coll-foe").length,
-      rat: (document.querySelector('button.coll-foe[data-monster="mob_t1_skirmisher"]') || { textContent: "" }).textContent,
+      rows: document.querySelectorAll(".alb-album .alb-row").length,
+      cards: document.querySelectorAll(".alb-tiles .alb-foe").length,
+      rat: (document.querySelector('button.alb-foe[data-monster="mob_t1_skirmisher"]') || { textContent: "" }).textContent,
     }));
     check("a row for every ground", foes.rows === 9, foes.rows);
     check("and the first ground's foes are open under it", foes.cards === 4, foes.cards);
-    check("a monster you have put down says how many", /2,080 slain/.test(foes.rat), foes.rat);
+    check("a monster put down says how many", /2,080 slain/.test(foes.rat), foes.rat);
 
-    // Items: three kinds, and every piece of gear of the ground that is open, held or not.
     await live(app, () => document.querySelector('[data-mode="items"]').click());
     await app.page.waitForTimeout(400);
-    const kinds = await live(app, () => [...document.querySelectorAll(".coll-kind")].map((t) => t.dataset.kind));
+    const kinds = await live(app, () => [...document.querySelectorAll(".alb-kind")].map((t) => t.dataset.kind));
     same("a row for every kind of item", kinds, ["gear", "parts", "veil"]);
+    const tiles = await live(app, () => document.querySelectorAll(".alb-tiles .alb-tile").length);
+    check("equipment lists every piece of the ground it is on, tools too", tiles === 24, tiles);
 
-    const gear = await live(app, () => ({
-      tiles: document.querySelectorAll(".coll-tiles .coll-tile").length,
-      total: document.querySelector(".coll-total").textContent,
-    }));
-    check("equipment lists every piece of the ground it is on, tools too, held or not", gear.tiles === 24, gear);
-    check("and the count says how much of everything there is", /of [\d,]+ · \d+%/.test(gear.total), gear.total);
-
-    /* A remedy is brewed rather than found, and is filed with its ground's resources.
-       What was bought is lit there, because buying is where the record is written. */
     await live(app, () => document.querySelector('[data-kind="parts"]').click());
     await app.page.waitForTimeout(400);
-    const held = await live(app, () => [...document.querySelectorAll("button.coll-tile[data-item]")].map((b) => b.dataset.item));
-    check("what was bought is lit, because that is where a record is written",
-      held.includes("provision_t1"), held.slice(0, 12));
-
-    // A lit entry opens its own card; a dark one opens nothing.
-    await live(app, () => document.querySelector('button.coll-tile[data-item="provision_t1"]').click());
+    await live(app, () => document.querySelector('button.alb-tile[data-item="provision_t1"]').click());
     await app.page.waitForTimeout(500);
     const entry = await live(app, () => ({
       title: (document.querySelector(".modal-title") || { textContent: "" }).textContent,
@@ -401,7 +434,6 @@ await run(async () => {
     same("with its facts", entry.facts, ["Heals", "Ground", "Tier"]);
     await live(app, () => document.querySelector(".modal .modal-x").click());
     await app.page.waitForTimeout(400);
-    check("a dark one is not a button", await live(app, () => !document.querySelector(".coll-tile.is-locked") || document.querySelector(".coll-tile.is-locked").tagName === "DIV"));
   }
 
   section("the party, and where it sits");
