@@ -325,8 +325,12 @@
 .camp-scene svg .cs-spin,
 .camp-scene svg .cs-sail,
 .camp-scene svg .cs-hang,
-.camp-scene svg .cs-flap { transform-box: view-box; transform-origin: 0 0; }
-.camp-scene svg .cs-lean { transform-box: view-box; transform-origin: 0 -10px; }
+.camp-scene svg .cs-flap,
+.camp-scene svg .cs-chop,
+.camp-scene svg .cs-chip,
+.camp-scene svg .cs-shiver { transform-box: view-box; transform-origin: 0 0; }
+.camp-scene svg .cs-lean,
+.camp-scene svg .cs-chopb { transform-box: view-box; transform-origin: 0 -10px; }
 .camp-scene svg .cs-spark,
 .camp-scene svg .cs-sway { transform-box: view-box; }
 
@@ -414,6 +418,67 @@
 @keyframes cs-scrape { 0%, 100% { transform: translate(0, 0) rotate(-10deg); } 50% { transform: translate(1.4px, 3px) rotate(14deg); } }
 @keyframes cs-pole { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(3px, 2.4px); } }
 @keyframes cs-saw { 0%, 100% { transform: translateX(-2.2px); } 50% { transform: translateX(3px); } }
+
+/* Felling's notch work: a cut down from over the shoulder (21%), a flat cut
+   under it (54%), then a breath. The arm is scaled as well as turned: a
+   negative x is the axe behind the body, a small one the axe coming round
+   towards us, so the swing reads as coming round, not down like the pick.
+   The body (cs-chopb), the chips (cs-chip) and the tree (cs-shiver) run on
+   the worker's --t and bite on the same two beats. */
+.cs-chop { animation: cs-chop var(--t, 3.6s) linear var(--dl, 0s) infinite; }
+.cs-chopb { animation: cs-chopb var(--t, 3.6s) linear var(--dl, 0s) infinite; }
+.cs-chip { opacity: 0; animation: cs-chip var(--t, 3.6s) linear var(--dl, 0s) infinite; }
+.cs-shiver { animation: cs-shiver var(--t, 3.6s) ease-in-out var(--dl, 0s) infinite; }
+
+@keyframes cs-chop {
+  0% { transform: rotate(60deg) scale(1, 1); animation-timing-function: ease-in-out; }
+  12% { transform: rotate(-155deg) scale(1, 1); animation-timing-function: cubic-bezier(.6, 0, 1, .7); }
+  17% { transform: rotate(-80deg) scale(.55, 1); animation-timing-function: cubic-bezier(0, .4, .6, 1); }
+  21% { transform: rotate(19deg) scale(1, 1); animation-timing-function: linear; }
+  27% { transform: rotate(19.5deg) scale(1, 1); animation-timing-function: ease-in-out; }
+  33% { transform: rotate(16deg) scale(.9, 1); animation-timing-function: ease-in-out; }
+  45% { transform: rotate(20deg) scale(-1, 1); animation-timing-function: cubic-bezier(.6, 0, 1, .7); }
+  51% { transform: rotate(18deg) scale(.1, .6); animation-timing-function: cubic-bezier(0, .4, .6, 1); }
+  54% { transform: rotate(27deg) scale(1, 1); animation-timing-function: linear; }
+  60% { transform: rotate(27.5deg) scale(1, 1); animation-timing-function: ease-in-out; }
+  68% { transform: rotate(22deg) scale(.92, 1); animation-timing-function: ease-in-out; }
+  80%, 100% { transform: rotate(60deg) scale(1, 1); animation-timing-function: ease-in-out; }
+}
+@keyframes cs-chopb {
+  0% { transform: rotate(-2deg); animation-timing-function: ease-in-out; }
+  12% { transform: rotate(-10deg); animation-timing-function: cubic-bezier(.6, 0, 1, .7); }
+  21% { transform: rotate(9deg); animation-timing-function: linear; }
+  27% { transform: rotate(9.5deg); animation-timing-function: ease-in-out; }
+  33% { transform: rotate(5deg); animation-timing-function: ease-in-out; }
+  45% { transform: rotate(-7deg); animation-timing-function: cubic-bezier(.6, 0, 1, .7); }
+  54% { transform: rotate(8deg); animation-timing-function: linear; }
+  60% { transform: rotate(8.5deg); animation-timing-function: ease-in-out; }
+  68% { transform: rotate(5deg); animation-timing-function: ease-in-out; }
+  80% { transform: rotate(-2deg); animation-timing-function: ease-in-out; }
+  90% { transform: rotate(-1deg); animation-timing-function: ease-in-out; }
+  100% { transform: rotate(-2deg); }
+}
+@keyframes cs-chip {
+  0%, 20.9% { transform: translate(0, 0); opacity: 0; }
+  21% { transform: translate(0, 0); opacity: 1; animation-timing-function: ease-out; }
+  25.8% { transform: translate(calc(var(--dx) * .55), var(--h)); opacity: 1; animation-timing-function: ease-in; }
+  33% { transform: translate(var(--dx), var(--dy)); opacity: 0; }
+  53.9% { transform: translate(0, 0); opacity: 0; }
+  54% { transform: translate(0, 0); opacity: 1; animation-timing-function: ease-out; }
+  58.8% { transform: translate(calc(var(--dx) * .55), var(--h)); opacity: 1; animation-timing-function: ease-in; }
+  66%, 100% { transform: translate(var(--dx), var(--dy)); opacity: 0; }
+}
+@keyframes cs-shiver {
+  0%, 21% { transform: rotate(0); }
+  24.1% { transform: rotate(.8deg); }
+  28% { transform: rotate(-.5deg); }
+  32.9% { transform: rotate(.22deg); }
+  38%, 54% { transform: rotate(0); }
+  57.1% { transform: rotate(.8deg); }
+  61% { transform: rotate(-.5deg); }
+  65.9% { transform: rotate(.22deg); }
+  71%, 100% { transform: rotate(0); }
+}
 
 /* machines, birds and growing things */
 .cs-spin { animation: cs-spin var(--t, 14s) linear infinite; }
