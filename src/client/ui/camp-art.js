@@ -894,7 +894,8 @@ function watchtower(S, x, y, { h = 96, z = y, flag = false, lamp = true } = {}) 
 /* ================= THE CREW ================= */
 
 // One cloaked worker. Poses: swing (pick or axe), reap, scrape, pole, push, carry, saw, stand.
-const LEGS = "M-4.2 0L-3.1-9.4L2.8-9.4L4.2 0H2.3L.3-5.6-1.7 0ZM-5.3 0h3.5l.3-1.7h-3.3ZM1.9 0h3.9l-.4-1.7H2.2Z";
+// Both boots point the way the worker faces: heel under the back of each leg, toe ahead of it.
+const LEGS = "M-4.2 0L-3.1-9.4L2.8-9.4L4.2 0H2.3L.3-5.6-1.7 0ZM-4.6 0H-.8L-1.2-1.7H-4.3ZM1.9 0h3.9l-.4-1.7H2.2Z";
 const CLOAK = "M-3.6-21.4C-5.8-18-7.4-13.6-8-8.2L-5.8-9.2-4-7.8-1.8-9.4.4-8 2.6-9.4 4.6-8 5.8-8.8C5.2-13.4 4.6-17.6 3.4-21.4Z";
 const HOOD = "M2.2-20.8C3.4-21.3 3.9-22.3 3.5-23.3C4.1-24.2 4.4-25.3 4.1-26.4C3.7-27.9 2.4-29 .6-29.3C-1.2-29.6-2.8-29.1-4-28.2C-5-27.5-6.2-27.3-7.4-27.6C-6.2-26.6-5.4-25.4-5.1-24C-4.9-22.8-4.5-21.7-3.7-21Z";
 
@@ -922,7 +923,7 @@ function figureParts(o) {
   return { arm, tl };
 }
 
-// Builds one pass of the figure (the dark body, or a rim copy) in one colour.
+// Builds the figure in one colour. The rim light is a filter over it (rimFilter).
 function figurePass(o, col) {
   const { arm, tl } = figureParts(o);
   const pose = o.pose;
@@ -952,17 +953,33 @@ function figurePass(o, col) {
   return `<g fill="${col}" color="${col}">${body}</g>`;
 }
 
-// Draws a worker at (x, y) facing `dir` (1 right, -1 left), scaled by s, rim-lit by the fire.
+/* The rim light sits INSIDE the silhouette, on the edges that face a light.
+   Two offset copies drawn behind the body used to do it, which put a lit
+   outline beside the figure rather than on it: the worker looked shifted off
+   its own body, most of all at the boots. A filter does it now: the figure's
+   own shape, less that shape nudged away from the light, is the edge that
+   light catches. The nudge is in the figure's own units, so a worker turned
+   round (dir -1) is still lit from the fire's side. */
+function rimFilter(S, toFire, dir, L) {
+  const id = S.uid("k");
+  const fx = toFire * dir; // the fire's side, in the figure's own x
+  const warm = `rgb(255,${Math.round(150 + L * 40)},${Math.round(80 + L * 30)})`;
+  S.def(`<filter id="${id}" x="-.2" y="-.2" width="1.4" height="1.4" color-interpolation-filters="sRGB">` +
+    `<feOffset in="SourceAlpha" dx="${f2(-fx * 0.62)}" dy=".08" result="w0"/><feComposite in="SourceAlpha" in2="w0" operator="out" result="w1"/>` +
+    `<feFlood flood-color="${warm}" flood-opacity="${f2(0.3 + L * 0.7)}"/><feComposite in2="w1" operator="in" result="w"/>` +
+    `<feOffset in="SourceAlpha" dx="${f2(fx * 0.4)}" dy=".48" result="m0"/><feComposite in="SourceAlpha" in2="m0" operator="out" result="m1"/>` +
+    `<feFlood flood-color="rgb(150,128,212)" flood-opacity=".6"/><feComposite in2="m1" operator="in" result="m"/>` +
+    `<feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="m"/><feMergeNode in="w"/></feMerge></filter>`);
+  return `url(#${id})`;
+}
+
+// Draws a worker at (x, y) facing `dir` (1 right, -1 left), scaled by s, rim-lit by the fire and the moon.
 function worker(S, x, y, { pose = "swing", tool: tk = "pick", dir = 1, s = 1.28, z = y + 0.5, t = 2.8, dl = 0, layer = "camp" } = {}) {
   const o = { pose, tool: tk, t, dl };
   const L = S.lit(x, y - 14);
   const toFire = S.fireX == null ? -1 : (S.fireX < x ? -1 : 1);
-  const tr = (ox, oy) => `translate(${f(x + ox)} ${f(y + oy)}) scale(${f2(s * dir)} ${f2(s)})`;
-  const warm = `rgba(255,${Math.round(150 + L * 40)},${Math.round(80 + L * 30)},${f2(0.25 + L * 0.7)})`;
   S.add(layer, z,
-    `<g transform="${tr(-toFire * 0.45 * s, -0.55 * s)}">${figurePass(o, "rgba(135,115,190,.55)")}</g>` +
-    `<g transform="${tr(toFire * 0.75 * s, -0.1 * s)}">${figurePass(o, warm)}</g>` +
-    `<g transform="${tr(0, 0)}">${figurePass(o, "#0a080d")}</g>`);
+    `<g transform="translate(${f(x)} ${f(y)}) scale(${f2(s * dir)} ${f2(s)})" filter="${rimFilter(S, toFire, dir, L)}">${figurePass(o, "#0a080d")}</g>`);
   shadow(S, x - 5 * s, x + 5 * s, 26 * s, y);
 }
 
