@@ -572,8 +572,8 @@ button.ap-link:hover span { text-decoration: underline; text-decoration-color: v
   place-items: center;
   padding: 0;
   border-radius: var(--r-md);
-  border: 1px solid var(--rar, var(--line));
-  background: radial-gradient(80% 70% at 50% 45%, var(--rar-soft, transparent), transparent 75%), var(--surface-2);
+  border: 1px solid var(--rar-edge, var(--line));
+  background: var(--rar-lit, none), var(--surface-2);
   box-shadow: var(--hi);
   text-align: center;
   transition: border-color var(--dur-1), background var(--dur-1), transform var(--dur-1);
@@ -583,7 +583,8 @@ button.ap-link:hover span { text-decoration: underline; text-decoration-color: v
 
 button.doll-slot { cursor: pointer; }
 
-.doll-slot:not([data-rarity="common"])[data-rarity] { box-shadow: var(--hi), inset 0 -2px 0 var(--rar); }
+/* Worn gear lights from the bottom edge like a storage slot (components.css). */
+.doll-slot:not([data-rarity="common"])[data-rarity] { box-shadow: var(--hi), inset 0 -14px 20px -10px var(--rar-glow); }
 
 @media (hover: hover) {
   button.doll-slot:hover { border-color: var(--line-strong); }

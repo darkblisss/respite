@@ -21,7 +21,7 @@
 
 import { CONFIG } from "./config.js";
 import { moveKey } from "./renames.js";
-import { GameData, findAction, getSkill, getMonster, getCompanion, getClass, getSkin, getTool, pathOf, regionOfTier } from "./registry.js";
+import { GameData, findAction, getSkill, getMonster, getCompanion, getClass, getSkin, pathOf, regionOfTier } from "./registry.js";
 import { itemDef, parseKey, stacks, validKey, canFortify, makeKey } from "./items.js";
 import { canHold, unstacked } from "./storage.js";
 import { combatStats, levelFromXp, skillLevel, maxHp } from "./stats.js";
@@ -679,11 +679,12 @@ function normalise(src, opts) {
     s.equipment.offhand = null;
     ledger.fixed++;
   }
+  // A racked tool is its bare base, or a rolled piece with its rarity and uid.
   const tools = obj(src.tools);
   GameData.GATHER_SKILLS.forEach((g) => {
     const id = tools[g.id];
-    const t = typeof id === "string" ? getTool(id) : null;
-    if (t && t.forSkill === g.id) s.tools[g.id] = id;
+    const t = typeof id === "string" && validKey(id) ? itemDef(id) : null;
+    if (t && t.kind === "tool" && t.forSkill === g.id && !forged(id, ledger)) s.tools[g.id] = id;
   });
 
   normalisePools(s, src, ledger);
@@ -868,6 +869,7 @@ function normalisePools(s, src, ledger) {
   const stackMax = ledger.legacy ? LEGACY_STACK_MAX : QTY_MAX;
   const taken = new Set();
   Object.values(s.equipment).forEach((k) => { if (k && !stacks(k)) taken.add(k); });
+  Object.values(s.tools).forEach((k) => { if (k && !stacks(k)) taken.add(k); });
 
   // A save from before the Satchel packs one here, out of what the pools hold.
   const virgin = !isObj(src.satchel);

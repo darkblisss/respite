@@ -391,8 +391,10 @@ function buildRegistry() {
   }
 
   // A recipe's level is its tier's level. Gear recipes produce a rolled item
-  // (craftGear); everything else produces one of `id` (out). Gear and tools
-  // are worth a quarter more than what went into them.
+  // (craftGear); everything else produces one of `id` (out). A tool recipe keeps
+  // `out` so every screen still reads what it makes, and carries `rollsRarity`:
+  // the bench rolls the tool's rarity the way it rolls a piece of gear's. Gear
+  // and tools are worth a quarter more than what went into them.
   function addCraft(prof, id, name, icon, tier, time, xpScale, cost, isGear) {
     // A bench recipe wears the face of what it makes, the same as a gather node.
     // Gear is rolled rather than minted, so it has no material to take one from.
@@ -402,6 +404,7 @@ function buildRegistry() {
       id: `craft_${id}`, skillId: prof, tier, name, icon, ...face,
       level: TIERS[tier - 1].level, time, xp: Math.round(TIERS[tier - 1].xp * xpScale) + 1,
       cost, [isGear ? "craftGear" : "out"]: isGear ? id : { [id]: 1 },
+      ...(!isGear && TOOLS[id] ? { rollsRarity: true } : null),
     });
     const made = GEAR[id] || TOOLS[id];
     if (made) made.value = Math.max(1, Math.round(costValue(cost) * B.valueMarkup));

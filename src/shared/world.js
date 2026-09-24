@@ -676,7 +676,8 @@ export function equip(state, { key, from } = {}, env) {
         if (!placeFor(state, old, stowOrderFor(old, from))) tx.fail("Nowhere to stow the old tool.");
         tx.stash(old, 1, stowOrderFor(old, from));
       }
-      tx.set(state.tools, d.forSkill, d.base);
+      // A Common tool racks as its bare base; a finer one keeps its whole key, rarity and all.
+      tx.set(state.tools, d.forSkill, d.rarity && d.rarity !== "common" ? key : d.base);
     });
     if (!res.ok) return res;
     emit(state, env, "tool:equipped", { key });

@@ -9,6 +9,7 @@
 
 import { CONFIG } from "./config.js";
 import { GameData, isTrade, getTool } from "./registry.js";
+import { itemDef } from "./items.js";
 import { skillLevel, maxHp, canPickClass } from "./stats.js";
 import { weatherAt } from "./weather.js";
 import { companionBonus } from "./companions.js";
@@ -99,10 +100,16 @@ export function mastery(state, skillId) {
   return { double: dbl };
 }
 
+/* The tool in hand. A Common one is racked as its bare base and read straight
+   from the registry, as it always was; a rolled one is read through itemDef,
+   rarity and all, so a Rare axe is quicker than a Common one. */
 export function toolFor(state, skillId) {
   const tools = state.tools;
   const id = tools && Object.hasOwn(tools, skillId) ? tools[skillId] : null;
-  return id ? getTool(id) : null;
+  if (!id) return null;
+  if (id.indexOf("|") < 0) return getTool(id);
+  const d = itemDef(id);
+  return d && d.kind === "tool" ? d : null;
 }
 
 // Speed comes from tools and companions.

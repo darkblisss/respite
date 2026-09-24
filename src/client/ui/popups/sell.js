@@ -280,7 +280,7 @@ function openChooser(ctx) {
     const rarity = d.kind !== "material" && d.rarity ? d.rarity : "common";
     const name = itemName(key);
     return h("div.list-row",
-      h("div.art.art-sm", { class: { "art-paint": hasArt(d) }, "data-rarity": hasArt(d) ? null : rarity, "aria-hidden": "true" }, artEl(d)),
+      h("div.art.art-sm", { class: { "art-paint": hasArt(d) }, "data-rarity": hasArt(d) && rarity === "common" ? null : rarity, "aria-hidden": "true" }, artEl(d)),
       h("div.lr-main",
         h("div.lr-title", { class: rarity !== "common" && `rar-${rarity}` }, name),
         h("div.lr-sub", stacks(key)

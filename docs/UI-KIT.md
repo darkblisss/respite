@@ -123,6 +123,8 @@ Also: `--focus: #b9a4f2`, `--focus-ring` (a 3px violet halo for inputs), `--hp`,
 
 Any element with `data-rarity="common|uncommon|rare|epic|legendary|relic"` gets `--rar` (the colour) and `--rar-soft` (a tint; transparent for common). Components read these.
 
+Item tiles (`.slot`, `.doll-slot`, `.art`) show rarity as **bottom light**: `--rar-lit` (a background layer, colour rising from the lower edge), `--rar-glow` (the inset glow along that edge) and `--rar-edge` (the 1px line), each a step stronger per tier. Common, and anything without a rarity (materials, reagents, remedies), stays a plain tile. The gilded frame on Legendary/Relic and the corner gem on storage slots are kept in components.css but switched off; `class="gilded-frames"` or `class="rarity-gems"` on `<html>` turns them back on.
+
 Any element with `data-tone="violet|ember|gold|good"` gets `--tone`, `--tone-hi`, `--tone-soft`, `--tone-edge`, `--tone-deep`. These inherit: an `.art` tile inside a `data-tone="ember"` card is ember unless the tile sets its own `data-tone`.
 
 ### Type

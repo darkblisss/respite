@@ -27,13 +27,17 @@
 .ico-xl { width: 32px; height: 32px; }
 .ico-2xl { width: 44px; height: 44px; }
 
-/* Rarity and tone for any component: set once, read as --rar and --tone. */
-[data-rarity] { --rar: var(--r-common); --rar-soft: transparent; }
-[data-rarity="uncommon"] { --rar: var(--r-uncommon); --rar-soft: rgba(124, 191, 164, .13); }
-[data-rarity="rare"] { --rar: var(--r-rare); --rar-soft: rgba(122, 162, 220, .14); }
-[data-rarity="epic"] { --rar: var(--r-epic); --rar-soft: rgba(184, 139, 219, .15); }
-[data-rarity="legendary"] { --rar: var(--r-legendary); --rar-soft: rgba(220, 180, 98, .15); }
-[data-rarity="relic"] { --rar: var(--r-relic); --rar-soft: rgba(224, 122, 76, .16); }
+/* Rarity and tone for any component: set once, read as --rar and --tone.
+   The bottom light an item tile wears is three more: --rar-lit (colour rising
+   from the lower edge, a background layer), --rar-glow (the inset glow along
+   that edge) and --rar-edge (the 1px line). Each tier is a step stronger than
+   the last. Common has none of it: a plain line and no light. */
+[data-rarity] { --rar: var(--r-common); --rar-soft: transparent; --rar-lit: linear-gradient(transparent, transparent); --rar-glow: transparent; --rar-edge: var(--line); }
+[data-rarity="uncommon"] { --rar: var(--r-uncommon); --rar-soft: rgba(124, 191, 164, .13); --rar-lit: linear-gradient(to top, rgba(124, 191, 164, .16), rgba(124, 191, 164, .048) 38%, transparent 64%); --rar-glow: rgba(124, 191, 164, .45); --rar-edge: rgba(124, 191, 164, .3); }
+[data-rarity="rare"] { --rar: var(--r-rare); --rar-soft: rgba(122, 162, 220, .14); --rar-lit: linear-gradient(to top, rgba(122, 162, 220, .2), rgba(122, 162, 220, .06) 38%, transparent 64%); --rar-glow: rgba(122, 162, 220, .5); --rar-edge: rgba(122, 162, 220, .34); }
+[data-rarity="epic"] { --rar: var(--r-epic); --rar-soft: rgba(184, 139, 219, .15); --rar-lit: linear-gradient(to top, rgba(184, 139, 219, .24), rgba(184, 139, 219, .072) 38%, transparent 64%); --rar-glow: rgba(184, 139, 219, .56); --rar-edge: rgba(184, 139, 219, .38); }
+[data-rarity="legendary"] { --rar: var(--r-legendary); --rar-soft: rgba(220, 180, 98, .15); --rar-lit: linear-gradient(to top, rgba(220, 180, 98, .3), rgba(220, 180, 98, .09) 38%, transparent 64%); --rar-glow: rgba(220, 180, 98, .62); --rar-edge: rgba(220, 180, 98, .44); }
+[data-rarity="relic"] { --rar: var(--r-relic); --rar-soft: rgba(224, 122, 76, .16); --rar-lit: linear-gradient(to top, rgba(224, 122, 76, .36), rgba(224, 122, 76, .108) 38%, transparent 64%); --rar-glow: rgba(224, 122, 76, .72); --rar-edge: rgba(224, 122, 76, .52); }
 
 [data-tone="violet"] { --tone: var(--violet); --tone-hi: var(--violet-hi); --tone-soft: var(--violet-soft); --tone-edge: var(--violet-edge); --tone-deep: var(--violet-deep); }
 [data-tone="ember"] { --tone: var(--ember); --tone-hi: var(--ember-hi); --tone-soft: var(--ember-soft); --tone-edge: var(--ember-edge); --tone-deep: var(--ember-deep); }
@@ -63,11 +67,15 @@
 .art-xl { width: 72px; height: 72px; border-radius: 18px; }
 .art-xl .ico { width: 56px; height: 56px; }
 
+/* The bottom light, its glow scaled to the tile. */
 .art[data-rarity] {
   color: var(--rar);
-  background: radial-gradient(80% 80% at 50% 35%, var(--rar-soft), transparent 75%), var(--surface-2);
-  box-shadow: inset 0 0 0 1px var(--line), inset 0 -2px 0 var(--rar-soft);
+  background: var(--rar-lit), var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--rar-edge), inset 0 -9px 13px -6px var(--rar-glow);
 }
+
+.art-lg[data-rarity] { box-shadow: inset 0 0 0 1px var(--rar-edge), inset 0 -11px 16px -8px var(--rar-glow); }
+.art-xl[data-rarity] { box-shadow: inset 0 0 0 1px var(--rar-edge), inset 0 -14px 20px -10px var(--rar-glow); }
 
 .art[data-rarity="common"] { color: var(--bone-dim); }
 
@@ -87,6 +95,13 @@
   background: none;
   box-shadow: none;
   border-radius: 0;
+}
+
+/* A painting with a rarity (a rolled tool) keeps the lit plate under it. */
+.art.art-paint:not([data-rarity="common"])[data-rarity] {
+  background: var(--rar-lit), var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--rar-edge), inset 0 -9px 13px -6px var(--rar-glow);
+  border-radius: 10px;
 }
 
 /* A painting stands in for a glyph wherever one would have gone, so by default
@@ -2031,23 +2046,22 @@ button.chip:disabled { opacity: .45; }
 }
 
 /* ---- what a rarity looks like ----
-   A strip of colour along the bottom edge said "rare" the way a progress bar
-   says it, and it was the third thing on screen using a flat accent line. A
-   piece carries its rarity the way a piece would: the metal of the frame goes
-   up with it, the light behind the glyph warms, and from Epic a cut corner
-   catches it. Legendary and Relic wear the gilded frame over the top. */
+   Bottom light: the piece's colour rises from the lower edge of the tile and
+   gets a step stronger each tier, with the edge line tinted to match. No beam,
+   no frame, no mark in the corner. Common, and anything that carries no rarity
+   (materials, reagents, remedies), stays a plain tile. The variables live with
+   [data-rarity] at the top of this file, so .art and .doll-slot light the same. */
 .slot:not([data-rarity="common"])[data-rarity] {
-  border-color: color-mix(in srgb, var(--rar) 42%, var(--line-strong));
-  box-shadow: var(--hi), inset 0 0 0 1px color-mix(in srgb, var(--rar) 22%, transparent);
-  background:
-    radial-gradient(78% 62% at 50% 34%, var(--rar-soft), transparent 74%),
-    var(--surface-2);
+  border-color: var(--rar-edge);
+  box-shadow: var(--hi), inset 0 -24px 34px -18px var(--rar-glow);
+  background: var(--rar-lit), var(--surface-2);
 }
 
 /* The mark: a cut gem in the corner, in the piece's own colour, lit from the
-   top left and throwing a little of itself onto the tile. A wedge in the corner
-   was quiet enough to miss; this reads down a whole grid at a glance. */
-.slot:not([data-rarity="common"])[data-rarity]::before {
+   top left and throwing a little of itself onto the tile.
+   OFF while the bottom light carries rarity. Kept so it can come back: put
+   class="rarity-gems" on <html> and it shows again. */
+html.rarity-gems .slot:not([data-rarity="common"])[data-rarity]::before {
   content: "";
   position: absolute;
   top: 7px;
@@ -2062,7 +2076,7 @@ button.chip:disabled { opacity: .45; }
 }
 
 /* Uncommon is a chip of stone, not a gem: no shine, no throw. */
-.slot[data-rarity="uncommon"]::before { background: var(--rar); box-shadow: none; }
+html.rarity-gems .slot[data-rarity="uncommon"]::before { background: var(--rar); box-shadow: none; }
 
 /* The frame is a FRAME, so it is drawn as one. The art is 500px square with its
    rail about 130px deep and nothing in the middle; painting it as a background
@@ -2071,11 +2085,14 @@ button.chip:disabled { opacity: .45; }
    whatever thickness the border asks for, leaving the middle untouched.
 
    It rides on the overlay rather than the tile's own border so a 15px rail
-   costs the contents nothing, and it never eats a press: these are buttons. */
-.slot[data-rarity="legendary"]::after,
-.slot[data-rarity="relic"]::after,
-.doll-slot[data-rarity="legendary"]::after,
-.doll-slot[data-rarity="relic"]::after {
+   costs the contents nothing, and it never eats a press: these are buttons.
+
+   OFF for now: no rarity wears a frame. Kept so it can come back: put
+   class="gilded-frames" on <html> and Legendary and Relic wear it again. */
+html.gilded-frames .slot[data-rarity="legendary"]::after,
+html.gilded-frames .slot[data-rarity="relic"]::after,
+html.gilded-frames .doll-slot[data-rarity="legendary"]::after,
+html.gilded-frames .doll-slot[data-rarity="relic"]::after {
   content: "";
   position: absolute;
   inset: -7px;
@@ -2086,18 +2103,18 @@ button.chip:disabled { opacity: .45; }
 }
 
 /* The paperdoll's slots are smaller, so the rail comes down with them. */
-.doll-slot[data-rarity="legendary"]::after,
-.doll-slot[data-rarity="relic"]::after {
+html.gilded-frames .doll-slot[data-rarity="legendary"]::after,
+html.gilded-frames .doll-slot[data-rarity="relic"]::after {
   inset: -6px;
   border-width: 13px;
 }
 
 /* Relic is the hotter metal: the same frame, pushed toward its own colour. */
-.slot[data-rarity="relic"]::after,
-.doll-slot[data-rarity="relic"]::after { filter: hue-rotate(-28deg) saturate(1.25); }
+html.gilded-frames .slot[data-rarity="relic"]::after,
+html.gilded-frames .doll-slot[data-rarity="relic"]::after { filter: hue-rotate(-28deg) saturate(1.25); }
 
 @media (hover: hover) {
-  .slot:not(.is-empty):hover { border-color: var(--line-strong); background: radial-gradient(80% 60% at 50% 40%, var(--rar-soft, transparent), transparent 75%), #211b29; }
+  .slot:not(.is-empty):hover { border-color: var(--line-strong); background: var(--rar-lit, none), #211b29; }
 }
 
 .slot:active:not(.is-empty) { transform: scale(.98); }

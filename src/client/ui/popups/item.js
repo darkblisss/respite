@@ -68,7 +68,10 @@ function kindLabel(d) {
 
 // The equipment slot (or tool skill) this key is worn in, or null.
 function wornSlot(state, key, d) {
-  if (d.kind === "tool") return Object.hasOwn(state.tools, d.forSkill) && state.tools[d.forSkill] === d.base ? d.forSkill : null;
+  if (d.kind === "tool") {
+    const racked = Object.hasOwn(state.tools, d.forSkill) ? state.tools[d.forSkill] : null;
+    return racked && (racked === key || (racked === d.base && stacks(key))) ? d.forSkill : null;
+  }
   return GameData.EQUIP_SLOTS.find((s) => state.equipment[s] === key) || null;
 }
 
@@ -293,11 +296,11 @@ function openItem(ctx, key, opts, extra) {
   let off = null;
   const m = openModal({
     title: itemName(key),
-    // A drawn material shows itself; a rarity frame belongs to gear, which is
-    // never drawn, so the two never argue over the same plate.
+    // A drawn material shows itself on no plate. A drawn tool finer than Common
+    // keeps a plate lit for its rarity, as gear's is.
     art: hasArt(d) ? artEl(d) : d.icon,
     artClass: hasArt(d) ? "art-paint" : "",
-    artRarity: hasArt(d) ? null : d.heal ? null : gearArt ? d.rarity || "common" : "common",
+    artRarity: hasArt(d) ? (gearArt && d.rarity && d.rarity !== "common" ? d.rarity : null) : d.heal ? null : gearArt ? d.rarity || "common" : "common",
     artTone: d.heal ? "good" : "violet",
     size: "md",
     body: [],

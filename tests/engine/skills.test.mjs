@@ -246,6 +246,49 @@ await run(async () => {
     check("craftIndex is the place in all benches' lists", Object.values(GameData.CRAFT_ACTIONS).flat()[idx].id === def.id && I.craftIndex("nope") === -1);
     check("rare outcomes only reach the log when Legendary or better", s.log.filter((l) => /comes off the bench/.test(l.m)).length === crafted.filter((e) => e.rarity === "legendary" || e.rarity === "relic").length);
   }
+  {
+    /* Tools are rolled like gear. A Common one is its bare base and stacks with
+       the tools already held; anything finer is its own piece, racked whole. */
+    const s = fresh(91);
+    const def = findAction("woodwright", "craft_gnarl_axe");
+    const base = Object.keys(def.out)[0];
+    check("a tool recipe rolls its rarity and still says what it makes", def.rollsRarity === true && base === "gnarl_axe" && !def.craftGear);
+    Object.keys(def.cost).forEach((k) => put(s, "vault", k, 5000));
+    s.skills.woodwright = CONFIG.xpTable[99];
+    s.bank.slots = 200;
+    const { env, of } = await listening();
+    // As many as the twelve-hour cap lets one task make.
+    const N = Math.min(120, Math.floor(CAP / def.time));
+    check(`start: ${N} Gnarl Axes`, start(s, env, "woodwright", "craft_gnarl_axe", N).ok);
+    advance(s, T0 + N * def.time, env);
+    const idx = I.craftIndex(def.id);
+    const expected = [];
+    for (let n = 0; n < N; n++) {
+      const rarity = I.rarityFromRoll(roll(s.rng.seed, `a:${def.id}`, n, SALT.rarity));
+      const prefix = rarity === "relic" ? I.prefixFromRoll(base, roll(s.rng.seed, `a:${def.id}`, n, SALT.prefix)) : null;
+      expected.push(rarity === "common" ? base : I.makeKey(base, rarity, `c${idx}.${n}`, prefix));
+    }
+    const crafted = of("item:crafted");
+    same(`${N} crafted axes: rarity, uid and prefix from the counter`, crafted.map((e) => e.key), expected);
+    check("every crafted tool key is valid, and Common ones stack as the bare base",
+      crafted.every((e) => I.validKey(e.key)) && S.haveQty(s, base) === expected.filter((k) => k === base).length);
+    const fine = expected.find((k) => k !== base && !k.includes("|relic|"));
+    check("at least one axe came out finer than Common", !!fine);
+    const d = I.itemDef(fine);
+    check("a finer tool is quicker and worth more", d.speed > GameData.TOOLS[base].speed && d.value >= GameData.TOOLS[base].value);
+    const from = S.POOLS.find((w) => (s[w].items[fine] || 0) > 0);
+    check("equip the finer axe", applyCommand(s, { type: "equip", args: { key: fine, from } }, env).ok);
+    check("the rack holds it whole, and it left the pool", s.tools.felling === fine && !S.POOLS.some((w) => s[w].items[fine]));
+    check("toolFor reads its rarity", Math.abs(P.toolFor(s, "felling").speed - d.speed) < 1e-12);
+    const chop = findAction("felling", GameData.GATHER_ACTIONS.felling[0].id);
+    const plainTime = Math.max(1000, Math.round(chop.time * (1 - GameData.TOOLS[base].speed)));
+    check("and the crews work quicker for it", P.actionTime(s, chop) <= plainTime);
+    const { migrateSave } = await shared("state.js");
+    const again = migrateSave(clone(s), { now: s.clock, seed: s.rng.seed });
+    check("a save keeps the racked piece, and holds it once", again.tools.felling === fine && !S.POOLS.some((w) => again[w].items[fine]));
+    check("unequipTool puts the whole piece back", applyCommand(s, { type: "unequipTool", args: { skillId: "felling" } }, env).ok && !s.tools.felling && s.bank.items[fine] === 1);
+    check("equip a Common axe racks the bare base", applyCommand(s, { type: "equip", args: { key: base, from: S.POOLS.find((w) => s[w].items[base]) } }, env).ok && s.tools.felling === base);
+  }
 
   section("XP across a weather day boundary");
   {

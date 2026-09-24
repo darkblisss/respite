@@ -153,11 +153,13 @@ function rarityOf(row) {
 
 function itemArt(key, rarity, cls = "art-sm") {
   const d = itemDef(key);
-  // A drawn material shows itself and drops the plate; gear keeps both.
+  // A drawn material shows itself and drops the plate; gear keeps both. A drawn
+  // tool finer than Common gets its plate back, lit for its rarity.
   const paint = hasArt(d);
+  const fine = rarity && rarity !== "common";
   return h("div.art", {
     class: paint ? [cls, "art-paint"] : cls,
-    "data-rarity": paint ? null : rarity || "common",
+    "data-rarity": paint ? (fine ? rarity : null) : rarity || "common",
     "aria-hidden": "true",
   }, d ? artEl(d) : iconEl("unknown"));
 }

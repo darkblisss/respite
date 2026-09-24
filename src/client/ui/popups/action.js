@@ -139,8 +139,8 @@ function toolRows(state, d) {
 }
 
 /* What a recipe makes, for the (i) on its pill: gear by rarity, a tool's
-   speed (tools come off the bench plain, so there is one number), or a
-   material's value and what it goes into. */
+   speed by rarity (the bench rolls a tool as it rolls gear), or a material's
+   value and what it goes into. */
 export function makesTip(state, def) {
   const outKey = actionOutput(def);
   if (def.craftGear) {
@@ -150,10 +150,16 @@ export function makesTip(state, def) {
   const d = itemDef(outKey);
   const held = fmt(haveQty(state, outKey));
   if (d.kind === "tool") {
+    const inHand = toolFor(state, d.forSkill);
+    const table = {
+      head: ["Rarity", `${skillName(d.forSkill)} speed`],
+      rows: GameData.RARITIES.map((r) => ({ rarity: r.key, cells: [r.name, `${pct(d.speed * r.mult)} quicker`] })),
+    };
     return tipBody({
       title: d.name,
-      sub: `${skillName(d.forSkill)} tool · ${tierLabel(d.tier)}`,
-      rows: [...toolRows(state, d), ["Value", fmtGold(d.value)], ["Held", held]],
+      sub: `${skillName(d.forSkill)} tool · ${tierLabel(d.tier)} · Rarity is rolled when it is made`,
+      table,
+      rows: [["In hand", inHand ? `${inHand.name} · ${pct(inHand.speed)}` : "Bare hands"], ["Value", `${fmtGold(d.value)} at Common`], ["Held", held]],
     });
   }
   return tipBody({

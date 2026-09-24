@@ -36,10 +36,11 @@ const isWorkSkill = (skillId) => {
 
 /* ================= STARTING AND STOPPING ================= */
 
-// Whether what an action makes has somewhere to go. Rolled gear always
-// needs a free slot, because it might not stack.
+// Whether what an action makes has somewhere to go. Rolled gear and rolled
+// tools always need a free slot, because they might not stack.
 function roomFor(state, def) {
   if (def.craftGear) return ORDER.gear.some((w) => !isFull(state, w));
+  if (def.rollsRarity) return ORDER.tool.some((w) => !isFull(state, w));
   return Object.keys(def.out || {}).every((k) => placeFor(state, k, orderFor(k)) !== null);
 }
 
@@ -99,7 +100,7 @@ function completeAction(state, task, def, env, at) {
   const res = transact(state, (tx) => {
     if (!canPay(state, def.cost)) tx.fail(STOCK);
     tx.pay(def.cost);
-    if (def.out) {
+    if (def.out && !def.rollsRarity) {
       const dbl = gathering && roll(seed, rollKey, n, SALT.double) < doubleChance(state, def.skillId);
       Object.keys(def.out).forEach((k) => {
         const qty = dbl ? def.out[k] * 2 : def.out[k];
@@ -115,6 +116,20 @@ function completeAction(state, task, def, env, at) {
       const key = makeKey(def.craftGear, rarity, uid, prefix);
       if (!placeFor(state, key, ORDER.gear)) tx.fail("storage");
       tx.stash(key, 1, ORDER.gear);
+      crafted = { key, rarity };
+    }
+    /* A tool is rolled like gear, on the same dice. A Common one is the bare
+       base, the way every tool was made before, so it joins the stack already
+       held; anything finer is its own piece. A Relic's prefix comes from the
+       armour pool, as validKey expects of a tool. */
+    if (def.rollsRarity) {
+      const base = Object.keys(def.out)[0];
+      const rarity = rarityFromRoll(roll(seed, rollKey, n, SALT.rarity));
+      const uid = `c${craftIndex(def.id)}.${n}`;
+      const prefix = rarity === "relic" ? prefixFromRoll(base, roll(seed, rollKey, n, SALT.prefix)) : null;
+      const key = rarity === "common" ? base : makeKey(base, rarity, uid, prefix);
+      if (!placeFor(state, key, ORDER.tool, 1, { grow: false })) tx.fail("storage");
+      tx.stash(key, 1, ORDER.tool, { grow: false });
       crafted = { key, rarity };
     }
   });

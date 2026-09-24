@@ -5,7 +5,8 @@
    its rarity, the instance it is and a relic's prefix:
 
      material            "slag_delve"
-     tool (as crafted)   "slag_pick"
+     common tool         "slag_pick"                      (stacks)
+     finer tool          "slag_pick|rare|c4.12"           (unique; rolled like gear)
      common gear         "slag_sword|common"               (stacks)
      uncommon and up     "slag_sword|rare|c17.42"          (unique)
      relic               "slag_sword|relic|f9.3|echoing"   (unique, prefixed)
@@ -145,7 +146,7 @@ function buildDef(base, rarity, prefix, plus) {
   const tool = getTool(base);
   if (tool) {
     const m = rarityDef(rarity || "common").mult;
-    return Object.assign({}, tool, { base, rarity: rarity || "common", speed: tool.speed * m, category: "Tool" });
+    return Object.assign({}, tool, { base, rarity: rarity || "common", speed: tool.speed * m, value: Math.round(tool.value * m), category: "Tool" });
   }
   const mat = getMaterial(base);
   return mat ? Object.assign({ base, rarity: null }, mat) : null;
@@ -200,8 +201,8 @@ const RARITY_KEYS = new Set(GameData.RARITIES.map((r) => r.key));
 const isRarity = (k) => RARITY_KEYS.has(k);
 
 /* The strict check for keys that arrive from outside (commands, market
-   rows, old saves). Tools are crafted and equipped as their bare base, so a
-   bare tool base is a valid key; a tool may also carry a rarity like gear.
+   rows, old saves). A Common tool is its bare base, so a bare tool base is a
+   valid key; a finer one carries its rarity and uid like gear.
    A relic's prefix must belong to its slot family (tools count as armour,
    as v4's prefix roll did). */
 export function validKey(key) {

@@ -185,7 +185,7 @@ export function partyMult(env, tier, zone, at)      // 1 + min(cap, perMember * 
 export function xpEach(state, skillId, amount, at)  // Math.max(1, Math.round(amount * xpMult))
 export function addXp(state, skillId, gain, env, at)// adds (fractions allowed); returns true on a level; emits skill:level {skillId, level}; gathering skills on a MASTERY_TRACK level also emit skill:mastery {skillId, level, label}; warfare levels set player.hp to maxHp and, if canPickClass, emit class:available {}
 export function mastery(state, skillId)             // { double }
-export function toolFor(state, skillId)             // tool def or null
+export function toolFor(state, skillId)             // tool def or null: getTool for a bare base, itemDef (speed and value by rarity) for a rolled key
 export function speedMod(state, skillId)
 export function actionTime(state, def)
 export function doubleChance(state, skillId)
@@ -240,7 +240,8 @@ Because speed can change mid-task (a companion Bond level with a speed unlock, a
 - Gathering output: `qty = out[k]`, doubled if `roll(a-key, n, SALT.double) < doubleChance`. Placed with `tx.stash(key, qty)`.
 - Reagent alongside: `roll(..., SALT.reagent) < reagentChance * (1 + reagentBonus)` then stash 1. Reagent node with a companion reagent bonus: `roll(..., SALT.reagentExtra) < reagentBonus` then stash 1. Reagents are placed after the action's transaction has gone through; one that can't be placed is skipped with a `storage:full { key }` event (not a task end), matching v4's "Nowhere to put".
 - Events inside an action are emitted only once it has gone through, so a rolled-back action never writes a log line.
-- Crafted material or tool: stash with its order.
+- Crafted material: stash with its order.
+- Crafted tool (the recipe carries `rollsRarity`): rarity from `SALT.rarity` and a Relic's prefix from `SALT.prefix`, exactly as gear, uid `c<craftIndex>.<n>`. A Common tool is its bare base and stacks; anything finer is unique. Placed with `ORDER.tool`, `grow: false`; counts in `stats.crafted` and emits `item:crafted`.
 - Crafted gear: rarity `rarityFromRoll(roll(..., SALT.rarity))`, relic prefix `prefixFromRoll(base, roll(..., SALT.prefix))`, key via `makeKey(base, rarity, uid, prefix)` with the derived uid; stash in ORDER.gear. `stats.crafted++`, epic and better `stats.epics++`, emit `item:crafted { key, rarity, skillId }`.
 - If the main output can't be placed the whole action rolls back and the task ends with `storage`.
 
@@ -411,7 +412,7 @@ export function migrateSave(raw, { now, seed, userId, account, legacy = false })
 - Always: clamp hp to maxHp, drop unknown pools' items whose key has no def, cap log at 60.
 - Every save, whatever its schema, is then rebuilt field by field from checked values (never by copying objects, so no `__proto__` key reaches a prototype), and the input object is never mutated. In detail: pool items need `validKey` (every key v4 ever minted passes) and a whole quantity of at least 1, capped at 1e12 (250,000 for a legacy save), order deduplicated and completed; gold a whole number 0..1e15 (0..5,000,000 for a legacy save); equipment keys must resolve to gear of that slot; tools must be tools of that skill; companions clamped and Bond snapped to the whole-millisecond grid; hunts are checked value by value (tier, zone, phase, kind, foes of that tier, marks, next mark just ahead) and dropped when unplayable; a skilling task needs its action and level; `serial` is raised above every task id and agent number so no id is handed out twice; `rng.hunt` kept when it is a uint32, otherwise from the seed; a missing bounty is posted. `userId` and `account` from the options replace the save's when given.
 - The invariants (engine 2). Every save, legacy or not, comes out holding what play itself never breaks:
-  - A unique key (one with a uid) is held once across equipment, tools and the three pools, with qty 1: what is worn wins, then Belongings, the Stockpile, the Vault. (Tools are racked as bare ids, so they never hold one.)
+  - A unique key (one with a uid) is held once across equipment, tools and the three pools, with qty 1: what is worn wins, then Belongings, the Stockpile, the Vault. (A racked tool is its bare base when Common, or its whole rolled key when finer, and a rolled one counts here like worn gear.)
   - A pool keeps at most its slot count of stacks (Belongings 10, the Stockpile `bank.slots`, the Vault `vault.slots`), in the player's order and then the save's; the rest is dropped. In a v4 save this happens after `settleBelongings` has moved what it can. A piece dropped as overflow is not held, so its copy in a later pool stays.
   - `wear` only for keys still held or worn. (Play keeps to this too: selling or salvaging the last copy, a break and a repair delete the entry.)
   - A two-handed weapon leaves no offhand.
