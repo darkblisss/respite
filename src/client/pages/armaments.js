@@ -25,6 +25,7 @@ import { iconEl } from "../ui/icons.js";
 import { fmtWhole, fmtStat } from "../ui/format.js";
 import { openPopup, portraitImg, paintPortrait } from "../ui/widgets.js";
 import { plusPlate, paintMini, auraNode, paintAura, haloTags } from "../ui/halo.js";
+import { dollLines } from "../ui/callouts.js";
 import { storageCard } from "./stockpile.js";
 import { CONFIG } from "../../shared/config.js";
 import { itemDef, itemName, parseKey, canFortify, wornHalos } from "../../shared/items.js";
@@ -35,10 +36,12 @@ import { currentRegion } from "../../shared/world.js";
 
 const { DOLL_ORDER, SLOT_LABELS, SLOT_GLYPHS } = GameData;
 
-// Armour down the left of the figure; hands and jewellery down the right, each in DOLL_ORDER.
+// Armour down the left of the figure, in DOLL_ORDER. Down the right: the amulet at
+// the top, level with the collarbone its line reaches; the weapon and offhand
+// together, so a two-hander can take both; the ring last.
 const ARMOUR = new Set(["head", "chest", "hands", "feet"]);
 const LEFT = DOLL_ORDER.filter((s) => ARMOUR.has(s));
-const RIGHT = DOLL_ORDER.filter((s) => !ARMOUR.has(s));
+const RIGHT = ["neck", "weapon", "offhand", "ring"];
 
 const pct = (x) => `${+((Number(x) || 0) * 100).toFixed(1)}%`;
 
@@ -60,7 +63,7 @@ function dollSlot(eq, slot) {
   const label = SLOT_LABELS[slot];
   const d = key ? itemDef(key) : null;
   if (!d) {
-    return h("div.doll-slot.is-empty", { role: "img", "aria-label": `${label}: empty` },
+    return h("div.doll-slot.is-empty", { role: "img", "aria-label": `${label}: empty`, dataset: { slot } },
       h("span.doll-slot-art", iconEl(SLOT_GLYPHS[slot])),
       h("span.doll-slot-name", label));
   }
@@ -83,7 +86,8 @@ function dollSlot(eq, slot) {
 
 /* Both columns of a paperdoll, filled from any equipment object -- your own save's, or a
    stranger's off player_profile(). A two-handed weapon takes the offhand's place as well.
-   Exported because the commander page wears the same doll. */
+   Exported because the commander page wears the same doll, callout lines and all:
+   whoever paints it calls dollLines(doll).update(skin) afterwards. */
 export function paintDoll(left, right, eq) {
   const weapon = eq.weapon ? itemDef(eq.weapon) : null;
   const twoHands = !!(weapon && weapon.twoHanded);
@@ -109,16 +113,20 @@ export function dollCard(ctx, { link = null } = {}) {
   const dollBust = h("div.portrait", portraitImg(null));
   const aura = auraNode();
   let dollSkinSig = null;
+  const doll = h("div.doll",
+    left,
+    h("div.doll-figure",
+      h("div.figure-wrap", aura, dollBust),
+      nameNode,
+      subNode,
+      tagsNode),
+    right);
   const node = h("section.card",
     h("div.card-head", h("div", h("h2.card-title", "Worn")), chips),
-    h("div.doll",
-      left,
-      h("div.doll-figure",
-        h("div.figure-wrap", aura, dollBust),
-        nameNode,
-        subNode,
-        tagsNode),
-      right));
+    doll);
+  // Each worn slot's line to where the piece sits on the figure.
+  const lines = dollLines(doll);
+  let linesSig = null;
 
   let sig = null;
   let classSig = null;
@@ -162,6 +170,12 @@ export function dollCard(ctx, { link = null } = {}) {
         chips.replaceChildren(...[k ? h("span.chip.chip-violet", k.name) : null, linkNode].filter(Boolean));
       }
       dollSkinSig = paintPortrait(dollBust, ctx.state.player.skin, dollSkinSig);
+      // The lines follow the slots and the skin; resizing redraws them by itself.
+      const nextLines = `${sig}|${dollSkinSig}`;
+      if (nextLines !== linesSig) {
+        linesSig = nextLines;
+        lines.update(ctx.state.player.skin);
+      }
       setText(nameNode, commanderName(ctx));
       setText(subNode, [k && k.name, region.name].filter(Boolean).join(" · "));
     },

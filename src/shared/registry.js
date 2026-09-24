@@ -998,12 +998,23 @@ function buildRegistry() {
      your square in a band, your row on a board. It changes nothing a fight can
      read: no stat, no roll, no drop. It is a face, and that is all it is.
 
-     Adding a third is this array plus assets/skin-<id>.webp. */
+     Adding a third is this array plus assets/skin-<id>.webp.
+
+     `anchors` are where the paperdoll's callout lines land on the art, as
+     fractions of the image [x, y]: the helm on the head, the amulet at the
+     collarbone, and so on (ui/callouts.js). They are set by eye. A skin
+     without them is measured from its own pixels the first time it is drawn,
+     which lands close; write them in when a pose fools it. handL is the hand
+     on the screen's left. */
   const SKINS = [
     { id: "drifter", name: "The Drifter",
-      note: "Hair tied back out of the way, and a coat cut short for moving through it." },
+      note: "Hair tied back out of the way, and a coat cut short for moving through it.",
+      anchors: { head: [0.554, 0.076], neck: [0.556, 0.203], chest: [0.5, 0.306],
+        handL: [0.43, 0.464], handR: [0.745, 0.503], feet: [0.325, 0.93] } },
     { id: "outrider", name: "The Outrider",
-      note: "A scarf against the ash and a long coat over everything, for the ground nobody walks twice." },
+      note: "A scarf against the ash and a long coat over everything, for the ground nobody walks twice.",
+      anchors: { head: [0.55, 0.082], neck: [0.54, 0.197], chest: [0.52, 0.283],
+        handL: [0.4, 0.488], handR: [0.724, 0.491], feet: [0.34, 0.925] } },
   ];
 
   const CLASSES = [

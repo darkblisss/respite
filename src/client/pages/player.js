@@ -29,6 +29,7 @@ import { iconEl } from "../ui/icons.js";
 import { fmtWhole, fmtAgo, fmtStat } from "../ui/format.js";
 import { openPopup, portraitImg, paintPortrait } from "../ui/widgets.js";
 import { paintDoll } from "./armaments.js";
+import { dollLines } from "../ui/callouts.js";
 import { auraNode, paintAura, haloTags, avatarHaloNode, paintAvatarHalo } from "../ui/halo.js";
 import { collectionPanel, rollsFromCollection } from "../ui/collection.js";
 import { CONFIG } from "../../shared/config.js";
@@ -124,9 +125,11 @@ function standingView(ctx) {
   let skinSig = null;
   let haloSig = null;
 
+  const dollGrid = h("div.doll", left, h("div.doll-figure", h("div.figure-wrap", aura, bust), dollName, dollSub, dollTags), right);
   const doll = h("section.card",
     h("div.card-head", h("div", h("h2.card-title", "Worn")), chips),
-    h("div.doll", left, h("div.doll-figure", h("div.figure-wrap", aura, bust), dollName, dollSub, dollTags), right));
+    dollGrid);
+  const lines = dollLines(dollGrid);
 
   const standing = h("section.card",
     h("div.card-head", h("div",
@@ -151,6 +154,7 @@ function standingView(ctx) {
         setAttr(b, "aria-label", `${b.dataset.label}: ${b.dataset.name}`);
       });
       skinSig = paintPortrait(bust, row.skin || null, skinSig);
+      lines.update(row.skin || null);
       const halos = wornHalos(eq);
       const haloNext = `${halos.neck ? halos.neck.id : ""}|${halos.ring ? halos.ring.id : ""}`;
       if (haloNext !== haloSig) {

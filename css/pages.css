@@ -546,8 +546,10 @@ button.ap-link:hover span { text-decoration: underline; text-decoration-color: v
   .storage-side { position: sticky; top: calc(var(--topbar-h) + 24px); }
 }
 
-/* The paperdoll: four slots either side of the figure. */
+/* The paperdoll: four slots either side of the figure, each with a dashed line
+   to where it sits on the body (ui/callouts.js draws them in .doll-lines). */
 .doll {
+  position: relative;
   display: grid;
   grid-template-columns: 72px minmax(0, 1fr) 72px;
   gap: 14px;
@@ -556,12 +558,40 @@ button.ap-link:hover span { text-decoration: underline; text-decoration-color: v
 }
 
 .doll-col {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: 8px;
   min-width: 0;
 }
+
+/* Over the figure, under the slots. A line takes its piece's rarity; an empty
+   slot's is the quiet line colour. */
+.doll-lines {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.doll-lines path {
+  fill: none;
+  stroke: color-mix(in srgb, var(--rar) 55%, transparent);
+  stroke-width: 1.25;
+  stroke-dasharray: 3 3;
+}
+
+.doll-lines path.is-empty { stroke: var(--line-strong); }
+.doll-lines .dot { fill: var(--rar); }
+.doll-lines .dot-ring { fill: none; stroke: var(--rar); stroke-opacity: .45; }
+.doll-lines .dot.is-empty { fill: var(--bone-faint); }
+.doll-lines .dot-ring.is-empty { stroke: var(--bone-faint); }
 
 .doll-slot {
   position: relative;
