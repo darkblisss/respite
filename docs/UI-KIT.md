@@ -181,7 +181,7 @@ Fixed: `--sidebar-w 232px`, `--content-max 1180px`. `--tap` is 32px, and 44px on
 | `max-width: 379px` | narrow phone | tighter topbar; gutter 12px; card padding 14px |
 | `pointer: coarse` | touch | `--tap: 44px`; chip buttons 44px tall; info buttons get a larger invisible hit area; tooltips open on tap |
 | `hover: hover` | | hover styles only apply on devices that can hover, so taps never leave things lit |
-| `prefers-reduced-motion: reduce` | | no transitions or loops; hit floats are not shown; bars jump straight to their value |
+| `prefers-reduced-motion: reduce` | | no transitions or loops, except the camp scene, which keeps moving; hit floats are not shown; bars jump straight to their value |
 
 The activity chip also measures itself with a container query: when it is narrower than 76px it keeps only the icon and the bar.
 
@@ -1287,7 +1287,7 @@ Idle activity card: `.act-card.is-idle` with a neutral art tile, a title ("No cr
 </section>
 ```
 
-The scene comes from `ui/camp-art.js`: `campScene(skillId, stage, prefix)` returns the SVG's inner markup for `CAMP_VIEWBOX` (`0 0 1000 200`), and `CAMP_STAGES[skillId]` holds each trade's nine names for the foot line. Every trade has its own ground (Delving a crag, Felling a pine clearing, Flaying a moor, Harvesting fields, Dredging a lake) and its own nine pieces; at most two workers show. The `prefix` keeps gradient ids unique when two scenes share a page. Whatever moves carries a `cs-*` class (fire, sparks, smoke, lamps, banners, the workers, the wheel and the sails) and the keyframes are in pages.css; reduced motion stills all of it. The workers are one dark silhouette lit on their own edges by an SVG filter (warm on the fire's side, violet from the moon); Felling's worker cuts a notch (`cs-chop` arm, `cs-chopb` body) while the tree shivers and throws chips (`cs-shiver`, `cs-chip`), all on the worker's `--t`. In a box narrower than 5:1 the page slides the viewBox to keep the fire and the work in frame.
+The scene comes from `ui/camp-art.js`: `campScene(skillId, stage, prefix)` returns the SVG's inner markup for `CAMP_VIEWBOX` (`0 0 1000 200`), and `CAMP_STAGES[skillId]` holds each trade's nine names for the foot line. Every trade has its own ground (Delving a crag, Felling a pine clearing, Flaying a moor, Harvesting fields, Dredging a lake) and its own nine pieces; at most two workers show. The `prefix` keeps gradient ids unique when two scenes share a page. Whatever moves carries a `cs-*` class (fire, sparks, smoke, lamps, banners, the workers, the wheel and the sails) and the keyframes are in pages.css. The camp keeps moving under reduced motion (base.css leaves `.camp-scene` out of its rule), by choice. The workers are one dark silhouette lit on their own edges by an SVG filter (warm on the fire's side, violet from the moon); Felling's worker cuts a notch (`cs-chop` arm, `cs-chopb` body) while the tree shivers and throws chips (`cs-shiver`, `cs-chip`); Flaying's works the pelt on its frame, two long strokes and then cuts and a pull (`cs-flay`, `cs-flayb`, `cs-shave`, the pelt giving with `cs-pelt`); each on the worker's `--t`. In a box narrower than 5:1 the page slides the viewBox to keep the fire and the work in frame.
 
 ### 8.3 Artisan bench (`?page=bench`)
 
@@ -1753,7 +1753,7 @@ Added with the live page (pages.css, Hiscores): the chip tabs carry `.hs-pick-ta
 - Dialogs, confirms and the drawer trap focus and restore it (the helpers do this). Route changes: call `closeModals()` and focus `#view`.
 - Text is 4.5:1 or better: `--bone-faint` is the quietest text allowed. `--bone-ghost` is for decoration only.
 - Touch targets are 44px on touch screens; do not shrink `.btn`, `.chip` buttons, `.tier`, `.seg-btn`, `.qty-btn` or nav rows below `--tap`.
-- Motion respects `prefers-reduced-motion` (the tokens and base.css handle it; do not add `!important` animations).
+- Motion respects `prefers-reduced-motion` (the tokens and base.css handle it; do not add `!important` animations). The camp scene is the one exception: it keeps moving.
 - Player text (names, chat, listing names) is always set as text, never as markup.
 - Announce things that happen off screen through toasts or `#srLive`, not only through colour changes.
 - Status dots and colour-only states carry words nearby or an `aria-label`.
