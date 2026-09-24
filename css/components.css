@@ -2745,7 +2745,7 @@ html.gilded-frames .doll-slot[data-rarity="relic"]::after { filter: hue-rotate(-
 .toasts {
   position: fixed;
   right: max(24px, env(safe-area-inset-right));
-  bottom: max(24px, env(safe-area-inset-bottom));
+  bottom: calc(var(--statusbar-h) + max(16px, env(safe-area-inset-bottom)));
   z-index: var(--z-toast);
   width: 360px;
   max-width: calc(100vw - 32px);

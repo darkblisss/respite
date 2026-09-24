@@ -45,7 +45,8 @@
       <span class="tb-word">Respite</span>
     </a>
 
-    <nav class="tb-crumbs" id="tbCrumbs" aria-label="Breadcrumb"></nav>
+    <!-- The search (ui/search.js) sits where the breadcrumb was. -->
+    <div class="tb-search" id="tbSearch"></div>
 
     <div class="tb-acts" id="tbActs">
       <div class="act" id="tbBench" data-kind="bench" data-state="idle">
@@ -84,10 +85,12 @@
         <span class="tb-hptext" id="tbHpText">20/20</span>
       </div>
 
-      <button type="button" class="conn" id="tbConn" data-state="guest">
-        <span class="conn-dot" aria-hidden="true"></span>
-        <span id="tbConnText">Guest</span>
-      </button>
+      <!-- What is waiting on you: bounties, invites, words from the party. ui/shell.js fills it. -->
+      <div class="tb-bell" id="tbBellWrap">
+        <button type="button" class="tb-icon-btn tb-bell-btn" id="tbBell" aria-label="Waiting on you" aria-haspopup="true" aria-expanded="false" aria-controls="tbBellPanel"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" overflow="visible" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15L6 16.5Z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/></svg><span class="tb-bell-n" id="tbBellN" hidden></span></button>
+        <div class="bell-panel" id="tbBellPanel" role="region" aria-label="Waiting on you" hidden></div>
+      </div>
+
 
       <button type="button" class="tb-icon-btn tb-settings" id="tbSettings" aria-label="Settings and account"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path fill="currentColor" stroke="none" fill-rule="evenodd" d="M9.2 3.7l.5-3.1c.1-.3 .4-.6 .8-.6h3c.4 0 .7 .3 .8 .6l.5 3.1c.4 .1 .8 .3 1.1 .4l2.5-1.7c.3-.2 .8-.2 1 .1l2.1 2.1c.3 .2 .3 .7 .1 1l-1.7 2.5c.1 .3 .3 .7 .4 1.1l3.1 .5c.3 .1 .6 .4 .6 .8v3c0 .4-.3 .7-.6 .8l-3.1 .5c-.1 .4-.3 .8-.4 1.1l1.7 2.5c.2 .3 .2 .8-.1 1l-2.1 2.1c-.2 .3-.7 .3-1 .1l-2.5-1.7c-.3 .1-.7 .3-1.1 .4l-.5 3.1c-.1 .3-.4 .6-.8 .6h-3c-.4 0-.7-.3-.8-.6l-.5-3.1c-.4-.1-.8-.3-1.1-.4l-2.5 1.7c-.3 .2-.8 .2-1-.1l-2.1-2.1c-.3-.2-.3-.7-.1-1l1.7-2.5c-.1-.3-.3-.7-.4-1.1l-3.1-.5c-.3-.1-.6-.4-.6-.8v-3c0-.4 .3-.7 .6-.8l3.1-.5c.1-.4 .3-.8 .4-1.1l-1.7-2.5c-.2-.3-.2-.8 .1-1l2.1-2.1c.2-.3 .7-.3 1-.1l2.5 1.7c.3-.1 .7-.3 1.1-.4zm2.8 11.9c2 0 3.6-1.6 3.6-3.6 0-2-1.6-3.6-3.6-3.6-2 0-3.6 1.6-3.6 3.6 0 2 1.6 3.6 3.6 3.6z"/></svg><span class="tb-dot" aria-hidden="true"></span></button>
     </div>
@@ -102,8 +105,15 @@
           <img class="tb-logo" src="assets/respite-logo.webp" alt="" width="28" height="28">
           <span class="tb-word">Respite</span>
         </a>
+        <span class="drawer-acts">
+        <button type="button" class="btn btn-quiet btn-icon" id="drawerSettings" aria-label="Settings and account"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path fill="currentColor" stroke="none" fill-rule="evenodd" d="M9.2 3.7l.5-3.1c.1-.3 .4-.6 .8-.6h3c.4 0 .7 .3 .8 .6l.5 3.1c.4 .1 .8 .3 1.1 .4l2.5-1.7c.3-.2 .8-.2 1 .1l2.1 2.1c.3 .2 .3 .7 .1 1l-1.7 2.5c.1 .3 .3 .7 .4 1.1l3.1 .5c.3 .1 .6 .4 .6 .8v3c0 .4-.3 .7-.6 .8l-3.1 .5c-.1 .4-.3 .8-.4 1.1l1.7 2.5c.2 .3 .2 .8-.1 1l-2.1 2.1c-.2 .3-.7 .3-1 .1l-2.5-1.7c-.3 .1-.7 .3-1.1 .4l-.5 3.1c-.1 .3-.4 .6-.8 .6h-3c-.4 0-.7-.3-.8-.6l-.5-3.1c-.4-.1-.8-.3-1.1-.4l-2.5 1.7c-.3 .2-.8 .2-1-.1l-2.1-2.1c-.3-.2-.3-.7-.1-1l1.7-2.5c-.1-.3-.3-.7-.4-1.1l-3.1-.5c-.3-.1-.6-.4-.6-.8v-3c0-.4 .3-.7 .6-.8l3.1-.5c.1-.4 .3-.8 .4-1.1l-1.7-2.5c-.2-.3-.2-.8 .1-1l2.1-2.1c.2-.3 .7-.3 1-.1l2.5 1.7c.3-.1 .7-.3 1.1-.4zm2.8 11.9c2 0 3.6-1.6 3.6-3.6 0-2-1.6-3.6-3.6-3.6-2 0-3.6 1.6-3.6 3.6 0 2 1.6 3.6 3.6 3.6z"/></svg></button>
         <button type="button" class="btn btn-quiet btn-icon" id="drawerClose" aria-label="Close navigation"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
+        </span>
       </div>
+
+      <!-- Phones and tablets: who you are, and the search, at the head of the drawer. -->
+      <div class="drawer-you" id="drawerYou"></div>
+      <div class="drawer-search" id="drawerSearch"></div>
 
       <nav class="nav" id="nav" aria-label="Main">
         <section class="nav-group" id="navVanguard" aria-labelledby="navVanguardHead">
@@ -149,6 +159,17 @@
       <section class="log-dock" id="logDock" aria-label="Camp log" hidden></section>
     </main>
   </div>
+
+  <!-- ================= STATUS BAR ================= -->
+  <!-- The realm's pulse along the foot: who is about, and the realm's clock. -->
+  <footer class="statusbar" id="statusBar">
+    <button type="button" class="conn" id="tbConn" data-state="guest">
+      <span class="conn-dot" aria-hidden="true"></span>
+      <span id="tbConnText">Guest</span>
+    </button>
+    <span class="sb-fill"></span>
+    <span class="sb-clock" id="sbClock" title="The realm keeps UTC: every day turns at midnight UTC"><span id="sbClockText">--:--</span> UTC</span>
+  </footer>
 </div>
 
 <!-- ================= FLOATING LAYERS ================= -->

@@ -164,6 +164,7 @@
   /* ---- the shell ---- */
   --topbar-h: 64px;
   --hpline-h: 0px;          /* the phone health line under the topbar */
+  --statusbar-h: 28px;      /* the status bar along the foot */
   --sidebar-w: 232px;
   --content-max: 1180px;
   --gutter: 32px;           /* page side padding */

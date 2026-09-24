@@ -1,9 +1,12 @@
 /* ============================================================
    Respite · shell.js · The Tent Poles
    ------------------------------------------------------------
-   Everything around the page: the topbar (the crews, the hunt,
-   gold, health, the connection), the sidebar and its rows, the
-   weather card, the banners and the camp log.
+   Everything around the page: the topbar (the search, the crews,
+   the hunt, gold, health, what is waiting on you), the sidebar
+   and its rows, the weather card, the status bar along the foot
+   (the connection and the realm's clock), the banners and the
+   camp log. On phones and tablets the drawer also carries who you
+   are and a second search.
 
    Built once and painted in place several times a second. A
    part is rebuilt only when its shape changes: a nav row comes
@@ -11,14 +14,16 @@
    raised. Numbers and bars never rebuild anything.
    ============================================================ */
 
-import { h, el, setText, setWidth, setAttr, toggleClass } from "./dom.js";
+import { h, el, on, setText, setWidth, setAttr, toggleClass } from "./dom.js";
 import { iconEl, artEl, artSrc, hasArt } from "./icons.js";
+import { portraitImg } from "./widgets.js";
+import { searchBox } from "./search.js";
 import { fmtAgo, fmtTime, fmtWhole, signedPct, titleCase } from "./format.js";
 import { CONFIG } from "../../shared/config.js";
 import { ARTISAN_ORDER, TRADE_ORDER, getSkill, getZone, regionOfTier, sovereignOf, skillName } from "../../shared/registry.js";
 import { skillPlan } from "../../shared/skills.js";
 import { campPlan, combatPlan } from "../../shared/combat.js";
-import { maxHp, myClass, recovering, skillLevel } from "../../shared/stats.js";
+import { maxHp, myClass, recovering, skillLevel, totalLevel } from "../../shared/stats.js";
 import { slotCap, slotsUsed } from "../../shared/storage.js";
 import { requisitionsLeft, requisitionsOpen } from "../../shared/world.js";
 import { unreadCount } from "../partyRead.js";
@@ -172,14 +177,19 @@ export function createShell(app) {
     hunt: el("tbHunt"), huntLink: el("tbHuntLink"), huntIcon: el("tbHuntIcon"), huntName: el("tbHuntName"),
     huntShort: el("tbHuntShort"), huntMeta: el("tbHuntMeta"), huntBar: el("tbHuntBar"), huntRestart: el("tbHuntRestart"),
     gold: el("tbGoldText"), hp: el("tbHp"), hpFill: el("tbHpFill"), hpText: el("tbHpText"),
-    conn: el("tbConn"), connText: el("tbConnText"), settings: el("tbSettings"), crumbs: el("tbCrumbs"),
+    conn: el("tbConn"), connText: el("tbConnText"), settings: el("tbSettings"),
     weather: el("weather"), banners: el("bannerDock"), log: el("logDock"),
+    bellWrap: el("tbBellWrap"), bell: el("tbBell"), bellN: el("tbBellN"), bellPanel: el("tbBellPanel"),
+    clock: el("sbClockText"), you: el("drawerYou"), drawerSettings: el("drawerSettings"),
   };
 
   const icons = { bench: "hammer", hunt: "swords" };
   let navSig = null;
   let navRefs = [];
-  let crumbSig = "";
+  let bellSig = null;
+  let clockSig = "";
+  let youSig = null;
+  let you = null;
   let weatherSig = "";
   let bannerSig = null;
   let logSig = null;
@@ -223,6 +233,51 @@ export function createShell(app) {
   });
   $.conn.addEventListener("click", () => app.openSettings());
   $.settings.addEventListener("click", () => app.openSettings());
+  if ($.drawerSettings) $.drawerSettings.addEventListener("click", () => { closeDrawer(); app.openSettings(); });
+
+  /* ---------- the search ---------- */
+
+  const closeDrawer = () => { if (app.drawer && app.drawer.isOpen()) app.drawer.close(); };
+  const topSearch = searchBox(() => app.ctx, { fold: true });
+  el("tbSearch").appendChild(topSearch.node);
+  const drawerSearch = searchBox(() => app.ctx, { onGo: closeDrawer });
+  el("drawerSearch").appendChild(drawerSearch.node);
+  // "/" or Ctrl/Cmd+K from anywhere that is not already taking typing. Phones have no topbar field: the drawer's is it.
+  document.addEventListener("keydown", (e) => {
+    const k = e.key && e.key.toLowerCase();
+    const slash = e.key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey;
+    if (!slash && !(k === "k" && (e.metaKey || e.ctrlKey))) return;
+    const t = e.target;
+    if (slash && t && (t.isContentEditable || /^(input|textarea|select)$/i.test(t.tagName))) return;
+    if (document.querySelector(".modal-wrap")) return;
+    e.preventDefault();
+    if (phone.matches && app.drawer) {
+      if (!app.drawer.isOpen()) app.drawer.toggle();
+      drawerSearch.focus();
+    } else {
+      topSearch.focus();
+    }
+  });
+
+  /* ---------- the bell ---------- */
+
+  function bellOpen(next) {
+    const open = !!next;
+    $.bellPanel.hidden = !open;
+    setAttr($.bell, "aria-expanded", open ? "true" : "false");
+  }
+  $.bell.addEventListener("click", () => bellOpen($.bellPanel.hidden));
+  // Anything picked in it, a press anywhere else, or Escape puts it away.
+  on($.bellPanel, "click", "a", () => bellOpen(false));
+  document.addEventListener("mousedown", (e) => {
+    if (!$.bellPanel.hidden && !$.bellWrap.contains(e.target)) bellOpen(false);
+  });
+  $.bellWrap.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || $.bellPanel.hidden) return;
+    e.stopPropagation();
+    bellOpen(false);
+    $.bell.focus();
+  });
 
   // The weather card opens the Sky: the week's forecast lives in a popup, as it does in the Atlas.
   setAttr($.weather, "role", "button");
@@ -387,16 +442,83 @@ export function createShell(app) {
     setAttr($.settings, "aria-label", `Settings and account (${text})`);
   }
 
-  /* ---------- breadcrumb ---------- */
+  /* ---------- the page's name ---------- */
 
+  /* The breadcrumb is gone from the topbar (the search took its place, and the page
+     title already says where you are). The router still reports the route; the
+     search's field names it for anyone reading the bar aloud. */
   function setCrumbs(group, title) {
-    const sig = `${group}|${title}`;
-    if (sig === crumbSig) return;
-    crumbSig = sig;
-    $.crumbs.replaceChildren(
-      h("span", group),
-      iconEl("chevron-right"),
-      h("span", { "aria-current": "page" }, title));
+    setAttr(topSearch.node, "aria-description", title ? `On ${title}` : null);
+  }
+
+  /* ---------- the bell ---------- */
+
+  /* What is waiting on you. `loud` rows are the ones you have to act on, and only
+     they count on the badge; the quiet ones are worth a glance but never nag. */
+  function bellItems(s, store) {
+    const out = [];
+    if (bountyReady(s)) out.push({ loud: true, tone: "gold", icon: "campBounties", text: "A bounty is ready to claim", href: "#/bounties", act: "Claim" });
+    const invites = store.party && Array.isArray(store.party.invites_in) ? store.party.invites_in.length : 0;
+    if (invites) out.push({ loud: true, tone: "violet", icon: "vanguardParty", text: invites === 1 ? "An invite to a party is waiting" : `${invites} invites to parties are waiting`, href: "#/party", act: "Open" });
+    const words = unreadCount(store.party);
+    if (words) out.push({ loud: true, tone: "violet", icon: "chat", text: words === 1 ? "A word from your party" : `${words} words from your party`, href: "#/party", act: "Read" });
+    if (!s.tasks.skilling) out.push({ loud: false, icon: "hammer", text: "Your crews are standing around", href: "#/skill/delving", act: "Set to work" });
+    if (requisitionsOpen(s) && requisitionsLeft(s) > 0) out.push({ loud: false, icon: "campRequisitions", text: `${requisitionsLeft(s)} requisitions still open today`, href: "#/requisitions", act: "Open" });
+    return out;
+  }
+
+  function paintBell(s, store) {
+    const items = bellItems(s, store);
+    const sig = items.map((x) => `${x.icon}:${x.text}`).join("|");
+    if (sig === bellSig) return;
+    bellSig = sig;
+    const loud = items.filter((x) => x.loud).length;
+    $.bellN.hidden = !loud;
+    setText($.bellN, String(loud));
+    setAttr($.bell, "aria-label", loud ? `Waiting on you: ${loud}` : "Waiting on you: nothing");
+    toggleClass($.bell, "is-loud", loud > 0);
+    $.bellPanel.replaceChildren(
+      h("div.bell-head", "Waiting on you"),
+      ...(items.length ? items.map((x) => h("a.bell-row", { href: x.href, class: !x.loud && "is-quiet", "data-tone": x.tone || null },
+        iconEl(x.icon, "bell-ico"), h("span.bell-text", x.text), h("span.bell-act", x.act)))
+        : [h("p.bell-none", "Nothing is waiting on you.")]));
+  }
+
+  /* ---------- the realm's clock ---------- */
+
+  function paintClock(now) {
+    const d = new Date(now);
+    const t = `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+    if (t === clockSig) return;
+    clockSig = t;
+    setText($.clock, t);
+  }
+
+  /* ---------- you, at the head of the drawer ---------- */
+
+  function paintYou(s) {
+    if (!$.you) return;
+    if (!you) {
+      you = { face: h("div.dy-face.portrait.portrait-bust"), name: h("span.dy-name"), lv: h("span.dy-lv"), fill: h("i"), hp: h("span.dy-hp") };
+      $.you.replaceChildren(h("a.dy-card", { href: "#/character" }, you.face,
+        h("span.dy-main", h("span.dy-top", you.name, you.lv), h("span.dy-bar", you.fill), you.hp)));
+    }
+    const acc = app.ctx && app.ctx.account;
+    const raw = (acc && acc.username) || s.meta.account || "";
+    const name = raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : "Commander";
+    const skin = s.player.skin || null;
+    const sig = `${name}|${skin}`;
+    if (sig !== youSig) {
+      youSig = sig;
+      you.face.replaceChildren(portraitImg(skin));
+      setText(you.name, name);
+    }
+    setText(you.lv, `Total ${fmtWhole(totalLevel(s))}`);
+    const camp = campPlan(s, s.clock);
+    const most = camp ? camp.maxHp : maxHp(s);
+    const hp = Math.max(0, Math.min(most, Math.ceil(camp ? camp.hp : s.player.hp)));
+    setWidth(you.fill, most > 0 ? (hp / most) * 100 : 0);
+    setText(you.hp, `${fmtWhole(hp)} / ${fmtWhole(most)}`);
   }
 
   /* ---------- sidebar ---------- */
@@ -616,9 +738,13 @@ export function createShell(app) {
     const s = store.state;
     if (!s) {
       paintNavBare(route);
+      paintClock(Date.now());
       return;
     }
     const now = s.clock;
+    paintClock(now);
+    paintBell(s, store);
+    paintYou(s);
     const current = app.router ? app.router.current : null;
     paintBench(s);
     paintHunt(s, store);
@@ -635,6 +761,8 @@ export function createShell(app) {
   function reset() {
     navSig = null;
     bannerSig = null;
+    bellSig = null;
+    youSig = null;
     logSig = null;
     shownConn = "";
     syncingSince = 0;
