@@ -893,7 +893,7 @@ function watchtower(S, x, y, { h = 96, z = y, flag = false, lamp = true } = {}) 
 
 /* ================= THE CREW ================= */
 
-// One cloaked worker. Poses: swing (pick or axe), reap, scrape, pole, push, carry, saw, stand.
+// One cloaked worker. Poses: swing (the pick), chop (the axe), flay, reap, pole, push, carry, saw, stand.
 // Both boots point the way the worker faces: heel under the back of each leg, toe ahead of it.
 const LEGS = "M-4.2 0L-3.1-9.4L2.8-9.4L4.2 0H2.3L.3-5.6-1.7 0ZM-4.6 0H-.8L-1.2-1.7H-4.3ZM1.9 0h3.9l-.4-1.7H2.2Z";
 // The hips, drawn between the legs and the cloak (see figurePass).
@@ -930,9 +930,9 @@ function figurePass(o, col) {
   const { arm, tl } = figureParts(o);
   const pose = o.pose;
   let body = "";
-  const lean = { swing: 8, chop: 10, reap: 34, scrape: 10, pole: 12, push: 26, carry: 4, saw: 14, stand: 0, sit: 0 }[pose] ?? 0;
-  const armAnim = { swing: "cs-swing", chop: `cs-chop${o.chop}`, reap: "cs-reap", scrape: "cs-scrape", pole: "cs-pole", saw: "cs-saw" }[pose];
-  const bodyAnim = { swing: "cs-lean", chop: `cs-chopb${o.chop}`, reap: "cs-bob", scrape: "cs-bob", pole: "cs-bob", push: "cs-bob", saw: "cs-bob" }[pose] || "";
+  const lean = { swing: 8, chop: 10, flay: 12, reap: 34, pole: 12, push: 26, carry: 4, saw: 14, stand: 0, sit: 0 }[pose] ?? 0;
+  const armAnim = { swing: "cs-swing", chop: `cs-chop${o.chop}`, flay: `cs-flay${o.flay}`, reap: "cs-reap", pole: "cs-pole", saw: "cs-saw" }[pose];
+  const bodyAnim = { swing: "cs-lean", chop: `cs-chopb${o.chop}`, flay: `cs-flayb${o.flay}`, reap: "cs-bob", pole: "cs-bob", push: "cs-bob", saw: "cs-bob" }[pose] || "";
   const sty = `style="--t:${f(o.t || 2.8)}s;--dl:${f(o.dl || 0)}s"`;
   if (pose === "sit") {
     body = `<path d="M-5 0L-4.2-4.6L4.6-4.6L6.8-.2L4.9 0L3.4-2.6L-2.4-2.6L-3 0Z"/>` +
@@ -946,7 +946,7 @@ function figurePass(o, col) {
   if (pose === "carry") armsInner = `<path d="M0 0L3 5.2" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><ellipse cx="-1" cy="-3.6" rx="6.4" ry="3.6" transform="rotate(-12)"/>`;
   if (pose === "pole") armsInner = `<path d="M0 0L6.6 3.2" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M-10-14L40 28" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>`;
   if (pose === "saw") armsInner = `<path d="M0 0L7 3.4" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M6 3.6L26 7.2" stroke="currentColor" stroke-width=".9"/><path d="M5.6 2.2V5.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>`;
-  const armRot = { swing: 0, chop: 0, reap: 40, scrape: 18, pole: 0, push: 0, carry: 0, saw: 0 }[pose] ?? 0;
+  const armRot = { swing: 0, chop: 0, flay: 0, reap: 40, pole: 0, push: 0, carry: 0, saw: 0 }[pose] ?? 0;
   // The seat: bent over, the cloak swings up off the back of the legs, so the hips go with it
   // half way and fill the join. Upright it sits inside the cloak and shows nothing.
   const seat = lean >= 6 ? `<g transform="translate(0 -10) rotate(${f(lean * 0.5)}) translate(0 10)"><path d="${SEAT}"/></g>` : "";
@@ -979,8 +979,8 @@ function rimFilter(S, toFire, dir, L) {
 }
 
 // Draws a worker at (x, y) facing `dir` (1 right, -1 left), scaled by s, rim-lit by the fire and the moon.
-function worker(S, x, y, { pose = "swing", tool: tk = "pick", dir = 1, s = 1.28, z = y + 0.5, t = 2.8, dl = 0, layer = "camp", chop = "" } = {}) {
-  const o = { pose, tool: tk, t, dl, chop };
+function worker(S, x, y, { pose = "swing", tool: tk = "pick", dir = 1, s = 1.28, z = y + 0.5, t = 2.8, dl = 0, layer = "camp", chop = "", flay = "" } = {}) {
+  const o = { pose, tool: tk, t, dl, chop, flay };
   const L = S.lit(x, y - 14);
   const toFire = S.fireX == null ? -1 : (S.fireX < x ? -1 : 1);
   S.add(layer, z,
@@ -1816,7 +1816,7 @@ const flaying = (() => {
   }
 
   // A stretching frame: two posts, two rails, a pelt laced in.
-  function frame(S, x, y, { w = 40, h = 38, z = y, tone = 0 } = {}) {
+  function frame(S, x, y, { w = 40, h = 38, z = y, tone = 0, give = null } = {}) {
     const L = S.lit(x + w / 2, y - h / 2);
     const post = mix("#15100e", "#5a3c29", L * 0.85);
     const cx = x + w / 2;
@@ -1827,6 +1827,11 @@ const flaying = (() => {
     let s = `<path d="M${f(x)} ${f(y)}V${f(y - h - 12)}M${f(x + w)} ${f(y)}V${f(y - h - 12)}" stroke="${post}" stroke-width="2.4" stroke-linecap="round"/>` +
       `<path d="M${f(x - 3)} ${f(y - h - 8)}H${f(x + w + 3)}M${f(x - 1)} ${f(y - 6)}H${f(x + w + 1)}" stroke="${post}" stroke-width="1.8" stroke-linecap="round"/>` +
       `<path d="${peltPath(cx, cy, pw, ph)}" fill="${hideCol}"/>`;
+    // a pelt that gives under a pull, anchored at its far edge
+    if (give) {
+      const pelt = `<path d="${peltPath(cx, cy, pw, ph)}" fill="${hideCol}"/>`;
+      s = s.replace(pelt, `<g transform="translate(${f(cx + pw / 2)} ${f(cy)})"><g class="${give.cls}" style="--t:${f(give.t)}s;--dl:0s"><g transform="translate(${f(-cx - pw / 2)} ${f(-cy)})">${pelt}</g></g></g>`);
+    }
     // lacing from the tabs to the frame
     const tabs = [[cx - pw / 2, cy - ph / 2], [cx + pw / 2, cy - ph / 2], [cx - pw / 2, cy + ph / 2], [cx + pw / 2, cy + ph / 2]];
     let lace = "";
@@ -1840,6 +1845,37 @@ const flaying = (() => {
     s += `<path d="M${f(x - 1)} ${f(y)}V${f(y - h - 12)}" stroke="${C.woodR}" stroke-opacity="${f2(L * 0.45)}" stroke-width=".6"/>`;
     S.add("camp", z, s);
     shadow(S, x, x + w, h, y);
+  }
+
+  /* How the hide is worked: two long strokes down the pelt, top to bottom,
+     bits falling from the knife, then three short cuts at its edge and a hard
+     pull the pelt gives to. The arm is solved so the knife stays on the hide;
+     the shavings and the pelt run on the worker's --t. Its classes carry no
+     letter (the kit draws other ways with a letter each). */
+  const FLAY = { work: "AB" };
+  const FLAYS = { AB: 7.6 };
+  const flayTag = (k) => (k === "AB" ? "" : k);
+
+  // Bits of flesh and fat off the knife, falling at each stroke, in step with the worker.
+  function shavingsAt(S, x, y, cls, t) {
+    const r = S.rnd("shavings");
+    let s = "";
+    for (let i = 0; i < 6; i++) {
+      const dx = -2 + r() * 4;
+      const dy = 7 + r() * 8;
+      s += `<g transform="translate(${f(x - 1 + r() * 2)} ${f(y - 2 + r() * 4)})"><g class="${cls}" style="--t:${f(t)}s;--dl:0s;--dx:${f(dx)}px;--dy:${f(dy)}px">` +
+        `<path transform="rotate(${Math.round(r() * 360)})" d="M-.7-.3L.8-.4L.4.5Z" fill="${mix("#8a5a48", "#e8c0a0", 0.3 + r() * 0.3)}"/></g></g>`;
+    }
+    S.add("camp", GY + 3, s);
+  }
+
+  // The worker at the frame, and what the work throws off.
+  function flayWork(S, work) {
+    const tag = flayTag(work);
+    const pulls = work === "AB";
+    frame(S, 646, GY + 1, { w: 40, h: 38, give: pulls ? { cls: `cs-pelt${tag}`, t: FLAYS[work] } : null });
+    worker(S, 636, GY + 1, { pose: "flay", flay: tag, tool: "knife", dir: 1, t: FLAYS[work] });
+    shavingsAt(S, 657, GY - 22, `cs-shave${tag}`, FLAYS[work]);
   }
 
   // A black cauldron on stones over its own fire, steam rising.
@@ -1994,8 +2030,7 @@ const flaying = (() => {
     heart(S, { barrels: 258 });
 
     // the work: one frame at first, three once it is a proper yard
-    frame(S, 646, GY + 1, { w: 40, h: 38 });
-    worker(S, 636, GY + 1, { pose: "scrape", tool: "knife", dir: 1, t: 1.9 });
+    flayWork(S, FLAY.work);
     if (s >= 4) {
       frame(S, 704, GY - 1, { w: 38, h: 36, tone: 1, z: GY - 1 });
       frame(S, 760, GY - 2, { w: 42, h: 40, z: GY - 2 });

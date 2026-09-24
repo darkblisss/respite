@@ -314,23 +314,27 @@
 /* The scene is drawn by ui/camp-art.js. Whatever moves in it carries a cs-*
    class; each element brings its own length and delay as --t and --dl, and a
    drift as --dx and --dy. Rotations and scales turn about the element's own
-   0,0, which the drawing puts at the pivot (a shoulder, a flame's foot). */
+   0,0, which the drawing puts at the pivot (a shoulder, a flame's foot).
+   The camp keeps moving under reduced motion: base.css leaves it out. */
 
 .camp-scene svg .cs-fl,
 .camp-scene svg .cs-smoke,
 .camp-scene svg .cs-banner,
 .camp-scene svg .cs-swing,
 .camp-scene svg .cs-reap,
-.camp-scene svg .cs-scrape,
 .camp-scene svg .cs-spin,
 .camp-scene svg .cs-sail,
 .camp-scene svg .cs-hang,
 .camp-scene svg .cs-flap,
 .camp-scene svg .cs-chop,
 .camp-scene svg .cs-chip,
-.camp-scene svg .cs-shiver { transform-box: view-box; transform-origin: 0 0; }
+.camp-scene svg .cs-shiver,
+.camp-scene svg .cs-flay,
+.camp-scene svg .cs-shave,
+.camp-scene svg .cs-pelt { transform-box: view-box; transform-origin: 0 0; }
 .camp-scene svg .cs-lean,
-.camp-scene svg .cs-chopb { transform-box: view-box; transform-origin: 0 -10px; }
+.camp-scene svg .cs-chopb,
+.camp-scene svg .cs-flayb { transform-box: view-box; transform-origin: 0 -10px; }
 .camp-scene svg .cs-spark,
 .camp-scene svg .cs-sway { transform-box: view-box; }
 
@@ -395,7 +399,6 @@
 .cs-lean { animation: cs-lean var(--t, 2.6s) linear var(--dl, 0s) infinite; }
 .cs-bob { animation: cs-bob var(--t, 2s) ease-in-out var(--dl, 0s) infinite alternate; }
 .cs-reap { animation: cs-reap var(--t, 2.4s) ease-in-out var(--dl, 0s) infinite; }
-.cs-scrape { animation: cs-scrape var(--t, 1.8s) ease-in-out var(--dl, 0s) infinite; }
 .cs-pole { animation: cs-pole var(--t, 3.2s) ease-in-out var(--dl, 0s) infinite; }
 .cs-saw { animation: cs-saw var(--t, 1.4s) ease-in-out var(--dl, 0s) infinite; }
 
@@ -415,7 +418,6 @@
 }
 @keyframes cs-bob { 0% { transform: translateY(0); } 100% { transform: translateY(.7px); } }
 @keyframes cs-reap { 0% { transform: rotate(-34deg); } 45% { transform: rotate(42deg); } 60% { transform: rotate(38deg); } 100% { transform: rotate(-34deg); } }
-@keyframes cs-scrape { 0%, 100% { transform: translate(0, 0) rotate(-10deg); } 50% { transform: translate(1.4px, 3px) rotate(14deg); } }
 @keyframes cs-pole { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(3px, 2.4px); } }
 @keyframes cs-saw { 0%, 100% { transform: translateX(-2.2px); } 50% { transform: translateX(3px); } }
 
@@ -480,6 +482,84 @@
   71%, 100% { transform: rotate(0); }
 }
 
+/* Flaying: two long strokes down the pelt, top to bottom (0 to 64%), then
+   three short cuts at its edge and a hard pull (64 to 100%). The arm's
+   angles and lengths are solved so the knife stays on the hide. Shavings
+   drop at each stroke (cs-shave) and the pelt gives to the pull from its far
+   edge (cs-pelt); both run on the worker's --t. */
+.cs-flay { animation: cs-flay var(--t, 7.6s) linear var(--dl, 0s) infinite; }
+.cs-flayb { animation: cs-flayb var(--t, 7.6s) linear var(--dl, 0s) infinite; }
+.cs-shave { opacity: 0; animation: cs-shave var(--t, 7.6s) linear var(--dl, 0s) infinite; }
+.cs-pelt { animation: cs-pelt var(--t, 7.6s) linear var(--dl, 0s) infinite; }
+
+@keyframes cs-flay {
+  0% { transform: rotate(-38deg) scale(1.11, 1); animation-timing-function: cubic-bezier(.45, 0, 1, 1); }
+  9% { transform: rotate(-18.6deg) scale(.955, 1); animation-timing-function: cubic-bezier(0, 0, .55, 1); }
+  17.6% { transform: rotate(5.3deg) scale(.926, 1); animation-timing-function: ease-in-out; }
+  19.8% { transform: rotate(11.7deg) scale(.658, 1); animation-timing-function: ease-in-out; }
+  25.6% { transform: rotate(-56.5deg) scale(.719, 1); animation-timing-function: ease-in-out; }
+  29.4% { transform: rotate(-39.3deg) scale(1.068, 1); animation-timing-function: ease-out; }
+  32% { transform: rotate(-38deg) scale(1.11, 1); animation-timing-function: cubic-bezier(.45, 0, 1, 1); }
+  41% { transform: rotate(-18.6deg) scale(.955, 1); animation-timing-function: cubic-bezier(0, 0, .55, 1); }
+  49.6% { transform: rotate(5.3deg) scale(.926, 1); animation-timing-function: ease-in-out; }
+  51.8% { transform: rotate(11.7deg) scale(.658, 1); animation-timing-function: ease-in-out; }
+  57.6% { transform: rotate(-56.5deg) scale(.719, 1); animation-timing-function: ease-in-out; }
+  64% { transform: rotate(-29deg) scale(.773, 1); animation-timing-function: ease-in-out; }
+  66.9% { transform: rotate(-10.5deg) scale(.729, 1); animation-timing-function: ease-in-out; }
+  69.8% { transform: rotate(-29deg) scale(.773, 1); animation-timing-function: ease-in-out; }
+  72.6% { transform: rotate(-10.5deg) scale(.729, 1); animation-timing-function: ease-in-out; }
+  75.5% { transform: rotate(-29deg) scale(.773, 1); animation-timing-function: ease-in-out; }
+  78.4% { transform: rotate(-20deg) scale(.75, 1); animation-timing-function: cubic-bezier(.3, 0, .2, 1); }
+  82.7% { transform: rotate(-4deg) scale(.384, 1); animation-timing-function: ease-in-out; }
+  87.8% { transform: rotate(-2deg) scale(.4, 1); animation-timing-function: ease-in-out; }
+  92.8% { transform: rotate(-25deg) scale(.7, 1); animation-timing-function: ease-in-out; }
+  100% { transform: rotate(-38deg) scale(1.11, 1); }
+}
+@keyframes cs-flayb {
+  0% { transform: rotate(-4deg); animation-timing-function: cubic-bezier(.45, 0, 1, 1); }
+  9% { transform: rotate(2deg); animation-timing-function: cubic-bezier(0, 0, .55, 1); }
+  17.6% { transform: rotate(8deg); animation-timing-function: ease-in-out; }
+  19.8% { transform: rotate(6deg); animation-timing-function: ease-in-out; }
+  25.6% { transform: rotate(-3deg); animation-timing-function: ease-in-out; }
+  29.4% { transform: rotate(-4deg); animation-timing-function: ease-out; }
+  32% { transform: rotate(-4deg); animation-timing-function: cubic-bezier(.45, 0, 1, 1); }
+  41% { transform: rotate(2deg); animation-timing-function: cubic-bezier(0, 0, .55, 1); }
+  49.6% { transform: rotate(8deg); animation-timing-function: ease-in-out; }
+  51.8% { transform: rotate(6deg); animation-timing-function: ease-in-out; }
+  57.6% { transform: rotate(-3deg); animation-timing-function: ease-in-out; }
+  64% { transform: rotate(0deg); animation-timing-function: ease-in-out; }
+  66.9% { transform: rotate(1deg); animation-timing-function: ease-in-out; }
+  69.8% { transform: rotate(0deg); animation-timing-function: ease-in-out; }
+  72.6% { transform: rotate(1deg); animation-timing-function: ease-in-out; }
+  75.5% { transform: rotate(0deg); animation-timing-function: ease-in-out; }
+  78.4% { transform: rotate(0deg); animation-timing-function: cubic-bezier(.3, 0, .2, 1); }
+  82.7% { transform: rotate(-8deg); animation-timing-function: ease-in-out; }
+  87.8% { transform: rotate(-7.5deg); animation-timing-function: ease-in-out; }
+  92.8% { transform: rotate(-1deg); animation-timing-function: ease-in-out; }
+  100% { transform: rotate(-4deg); }
+}
+@keyframes cs-shave {
+  0% { transform: translate(0, 0); opacity: 0; }
+  12.7% { transform: translate(0, 0); opacity: 0; }
+  12.8% { transform: translate(0, 0); opacity: 1; animation-timing-function: ease-in; }
+  24.8% { transform: translate(var(--dx), var(--dy)); opacity: 0; }
+  44.7% { transform: translate(0, 0); opacity: 0; }
+  44.8% { transform: translate(0, 0); opacity: 1; animation-timing-function: ease-in; }
+  56.8% { transform: translate(var(--dx), var(--dy)); opacity: 0; }
+  100% { transform: translate(var(--dx), var(--dy)); opacity: 0; }
+}
+@keyframes cs-pelt {
+  0% { transform: scaleX(1); }
+  64% { transform: scaleX(1); animation-timing-function: ease-in-out; }
+  78.4% { transform: scaleX(1); animation-timing-function: cubic-bezier(.3, 0, .2, 1); }
+  82.7% { transform: scaleX(1.035); animation-timing-function: ease-in-out; }
+  87.8% { transform: scaleX(1.03); animation-timing-function: ease-in; }
+  89.9% { transform: scaleX(.992); animation-timing-function: ease-in-out; }
+  92.1% { transform: scaleX(1.004); animation-timing-function: ease-in-out; }
+  94.2% { transform: scaleX(1); }
+  100% { transform: scaleX(1); }
+}
+
 /* machines, birds and growing things */
 .cs-spin { animation: cs-spin var(--t, 14s) linear infinite; }
 .cs-sail { animation: cs-spin var(--t, 22s) linear infinite; }
@@ -496,9 +576,6 @@
 @keyframes cs-orby { 0% { transform: translateY(calc(var(--ry) * -1)); } 100% { transform: translateY(var(--ry)); } }
 @keyframes cs-sway { 0% { transform: skewX(-2.6deg); } 100% { transform: skewX(2.6deg); } }
 
-@media (prefers-reduced-motion: reduce) {
-  .camp-scene svg * { animation: none !important; }
-}
 
 /* ================= 3. THE ACTION AND ITEM POPUPS ================= */
 

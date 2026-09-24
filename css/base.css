@@ -344,11 +344,18 @@ kbd, .kbd {
 }
 @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
 
+/* Everything but the camp scene, which keeps its slow loops going even when
+   the device asks for less motion: a choice, not an oversight. */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  *:not(.camp-scene *) {
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
     scroll-behavior: auto !important;
+  }
+  *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
   }
 }
