@@ -424,8 +424,8 @@ const NAV = [
   { id: "Artisans", items: SKILLS.filter((s) => s.kind === "craft").map((s) => ({ label: s.name, icon: s.icon, route: `#/skill/${s.id}`, meta: `Lv ${s.lv}` })) },
   { id: "Field", items: [{ label: "Hunt", icon: "swords", route: "#/skill/warfare", meta: "Lv 31", dot: "ember" }] },
   { id: "Realm", items: [
-    { label: "Atlas", icon: "atlas", route: "#/atlas" },
-    { label: "Market", icon: "market", route: "#/market" },
+    { label: "Atlas", icon: "realmAtlas", route: "#/atlas" },
+    { label: "Market", icon: "realmMarket", route: "#/market" },
     { label: "Party", icon: "party", route: "#/party", badge: "2", badgeLabel: "2 unread" },
     { label: "Hiscores", icon: "trophy", route: "#/hiscores" },
   ] },

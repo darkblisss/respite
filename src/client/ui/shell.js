@@ -68,9 +68,9 @@ const NAV = [
     // { route: { page: "companions" }, label: "Companions", icon: "paw" },
   ] },
   { id: "navRealm", rows: [
-    { route: { page: "atlas" }, label: "Atlas", icon: "atlas" },
-    { route: { page: "market" }, label: "Market", icon: "market" },
-    { route: { page: "hiscores" }, label: "Leaderboard", icon: "trophy" },
+    { route: { page: "atlas" }, label: "Atlas", icon: "realmAtlas" },
+    { route: { page: "market" }, label: "Market", icon: "realmMarket" },
+    { route: { page: "hiscores" }, label: "Leaderboard", icon: "realmLeaderboard" },
   ] },
   { id: "navCamp", rows: [
     { route: { page: "stockpile" }, label: "Stockpile", icon: "campStockpile", meta: (s) => `${slotsUsed(s, "bank")}/${slotCap(s, "bank")}` },
