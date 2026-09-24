@@ -396,6 +396,7 @@ Names (all v4 names are kept, unchanged):
 - Gathering tools: `pick`, `axe`, `sickle`, `knife`, `net`
 - Trade skills (solid): `delving`, `felling`, `flaying`, `harvesting`, `dredging`
 - Artisan skills (solid): `forgemaster`, `woodwright`, `tanner`, `weaver`, `artificer`
+- The Camp in the sidebar (solid): `campStockpile`, `campBounties`, `campRequisitions`, `campShop`, `campFortify`
 - Materials: `ore`, `log`, `fibre`, `hide`, `gem`, `ration`, `crate`; reagents: `coalIco`, `resinIco`, `pulpIco`, `tallowIco`, `shardIco`
 - Gear: `blade`, `greatblade`, `stave`, `ward`, `plate`, `greaves`, `treads`, `gauntlets`, `cowl`, `shroud`, `band`, `charm`, `book`
 - Foes: `beast`, `man`, `golemMob`, `horror`, `drakeMob`, `skull`
