@@ -47,15 +47,15 @@ function skillRow(id) {
 // lists come last: they are also one tap away on the Character page.
 const NAV = [
   { id: "navVanguard", rows: [
-    { route: { page: "character" }, label: "Character", icon: "person" },
+    { route: { page: "character" }, label: "Character", icon: "vanguardCharacter" },
     // Inventory sits above the Hunt: what you carry into a fight, then the fight.
-    { route: { page: "armaments" }, label: "Inventory", icon: "plate", meta: (s) => `${slotsUsed(s, "inv")}/${slotCap(s, "inv")}` },
-    { route: { page: "discipline" }, label: "Discipline", icon: "book", meta: (s) => (myClass(s) ? myClass(s).name : "-") },
-    { route: { page: "skill", arg: "warfare" }, label: "Hunt", icon: "swords",
+    { route: { page: "armaments" }, label: "Inventory", icon: "vanguardInventory", meta: (s) => `${slotsUsed(s, "inv")}/${slotCap(s, "inv")}` },
+    { route: { page: "discipline" }, label: "Discipline", icon: "vanguardDiscipline", meta: (s) => (myClass(s) ? myClass(s).name : "-") },
+    { route: { page: "skill", arg: "warfare" }, label: "Hunt", icon: "warfare",
       meta: (s) => `Lv ${skillLevel(s, "warfare")}`, dot: (s) => (s.tasks.combat ? "ember" : null) },
     /* Your band, which is a Vanguard thing rather than a place in the realm. The badge
        counts invites waiting; the dot says the party has said something since you looked. */
-    { route: { page: "party" }, label: "Party", icon: "party",
+    { route: { page: "party" }, label: "Party", icon: "vanguardParty",
       badge: (s, store) => {
         const n = store.party && Array.isArray(store.party.invites_in) ? store.party.invites_in.length : 0;
         return n ? { text: String(n), tone: null, label: n === 1 ? "An invite is waiting" : `${n} invites are waiting` } : null;
@@ -68,18 +68,18 @@ const NAV = [
     // { route: { page: "companions" }, label: "Companions", icon: "paw" },
   ] },
   { id: "navRealm", rows: [
-    { route: { page: "atlas" }, label: "Atlas", icon: "atlas" },
-    { route: { page: "market" }, label: "Market", icon: "market" },
-    { route: { page: "hiscores" }, label: "Leaderboard", icon: "trophy" },
+    { route: { page: "atlas" }, label: "Atlas", icon: "realmAtlas" },
+    { route: { page: "market" }, label: "Market", icon: "realmMarket" },
+    { route: { page: "hiscores" }, label: "Leaderboard", icon: "realmLeaderboard" },
   ] },
   { id: "navCamp", rows: [
-    { route: { page: "stockpile" }, label: "Stockpile", icon: "stockpile", meta: (s) => `${slotsUsed(s, "bank")}/${slotCap(s, "bank")}` },
-    { route: { page: "bounties" }, label: "Bounties", icon: "scroll",
+    { route: { page: "stockpile" }, label: "Stockpile", icon: "campStockpile", meta: (s) => `${slotsUsed(s, "bank")}/${slotCap(s, "bank")}` },
+    { route: { page: "bounties" }, label: "Bounties", icon: "campBounties",
       badge: (s) => (bountyReady(s) ? { text: "1", tone: "gold", label: "A bounty is ready to claim" } : null) },
-    { route: { page: "requisitions" }, label: "Requisitions", icon: "crate", shown: (s) => requisitionsOpen(s),
+    { route: { page: "requisitions" }, label: "Requisitions", icon: "campRequisitions", shown: (s) => requisitionsOpen(s),
       meta: (s) => `${requisitionsLeft(s)}/${CONFIG.agents.requisitionsPerDay}` },
-    { route: { page: "shop" }, label: "Shop", icon: "shop" },
-    { route: { page: "fortify" }, label: "Fortify", icon: "sparkle" },
+    { route: { page: "shop" }, label: "Shop", icon: "campShop" },
+    { route: { page: "fortify" }, label: "Fortify", icon: "campFortify" },
   ] },
   { id: "navTrades", rows: TRADES.map(skillRow) },
   { id: "navArtisans", rows: ARTISANS.map(skillRow) },

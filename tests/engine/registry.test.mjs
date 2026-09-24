@@ -89,6 +89,26 @@ const DIVERGED = {
   "getRecipe = craft action by id": { why: "the Greatsword and Grimoire lines are marked released: false in the registry, so their recipes and the components only they wanted are pruned off the benches; v4 shipped them all" },
   "CONFIG.hunt.hideMs = HIDE_MS": { why: "going to ground is a full hour now, not five minutes" },
   "CONFIG.hunt.xpMarkMs = XP_MARK_MS": { why: "the five-minute XP mark gave way to rateMarkMs, rateWindowMs and rateMinSpanMs" },
+  "GameData.GATHER_SKILLS": {
+    why: "the Trades draw their own solid glyphs now, not the tool icons v4 gave them",
+    at: ["icon"],
+  },
+  "GameData.PROFESSIONS": {
+    why: "the Artisans draw their own solid glyphs too, not the gear icons v4 gave them",
+    at: ["icon"],
+  },
+  "GameData.SKILLS": {
+    why: "the same Trades and Artisans icons, and the Hunt's own, in the full skill list",
+    at: ["icon"],
+  },
+  "getSkill = skillDef": {
+    why: "the same Trades, Artisans and Hunt icons, read back through the getter",
+    at: ["icon"],
+  },
+  gatherSkillDef: {
+    why: "the same Trades icons, read back through the getter",
+    at: ["icon"],
+  },
 };
 
 // Each listing, and how many comparisons it covered.
