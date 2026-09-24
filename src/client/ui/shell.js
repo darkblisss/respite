@@ -101,6 +101,38 @@ const isCurrent = (row, route) => (row.arg ? keyOf(row) === keyOf(route) : !!rou
 
 /* ================= 2. SMALL PIECES ================= */
 
+/* A plain reload can hand back the very scripts that are out of date: GitHub Pages
+   lets a browser keep any file for ten minutes, and a reload is allowed to use
+   them. So every script and sheet this page loaded is fetched again first with
+   cache "reload", which puts the new copies in the browser's cache, and only
+   then does the page reload, from files that are all new. */
+async function freshReload() {
+  try {
+    const own = (u) => u.startsWith(location.origin) && /\.(m?js|css)(\?|$)/.test(u);
+    const urls = performance.getEntriesByType("resource").map((e) => e.name).filter(own);
+    urls.push(location.href.split("#")[0]);
+    await Promise.all([...new Set(urls)].map((u) => fetch(u, { cache: "reload" }).catch(() => null)));
+  } catch {
+    // Nothing to refresh by hand: the reload below still goes.
+  }
+  location.reload();
+}
+
+/* The server said this copy is old. Once in five minutes at most (a server that is
+   the older one would otherwise have the page reloading forever), refresh by
+   ourselves rather than leave the player looking at a banner. */
+const HEAL_KEY = "respite:healedAt";
+function healOnce() {
+  try {
+    const at = Number(sessionStorage.getItem(HEAL_KEY)) || 0;
+    if (Date.now() - at < 5 * 60 * 1000) return;
+    sessionStorage.setItem(HEAL_KEY, String(Date.now()));
+  } catch {
+    return;
+  }
+  freshReload();
+}
+
 // A phone chip holds about nine letters. "Gravemoss Poultice" becomes "Poultice": the last word carries the meaning.
 function shortName(name) {
   let words = String(name).split(" ");
@@ -405,6 +437,21 @@ export function createShell(app) {
     }
   }
 
+  /* Before the camp wakes there is no save to count from, but the rows are the
+     rows: draw them at once, without their numbers, dots or badges, so the
+     sidebar is whole from the first paint instead of five bare headings that
+     open out a moment later. Rows that depend on the save (Requisitions) wait. */
+  function paintNavBare(route) {
+    if (navSig !== null) return;
+    navSig = "bare";
+    buildNav(NAV.map((g) => ({
+      id: g.id,
+      rows: g.rows.filter((r) => !r.shown).map((r) => ({
+        row: r, key: keyOf(r.route), current: isCurrent(r.route, route), dot: null, badge: null,
+      })),
+    })));
+  }
+
   function paintNav(s, store, route) {
     const model = navModel(s, store, route);
     const sig = model.map((g) => g.rows.map((m) => `${m.key}${m.current ? "*" : ""}:${m.dot ? `${m.dot.tone}${m.dot.label}` : ""}:${m.badge ? `${m.badge.tone}${m.badge.text}` : ""}`).join(",")).join("|");
@@ -464,6 +511,8 @@ export function createShell(app) {
 
   function paintBanners(store) {
     const st = store.status;
+    // Turned away as old: fetch the new files and reload, once, without waiting for a press.
+    if (st.conn === "outdated") healOnce();
     const list = [];
     if (store.mode === "guest") list.push("guest");
     if (st.conn === "outdated") list.push("outdated");
@@ -486,7 +535,7 @@ export function createShell(app) {
       if (kind === "outdated") {
         return banner({
           tone: "violet", icon: "sync", title: "A new version of the camp is out", text: "Reload to carry on.",
-          actions: [h("button.btn.btn-primary.btn-sm", { type: "button", onClick: () => location.reload() }, "Reload")],
+          actions: [h("button.btn.btn-primary.btn-sm", { type: "button", onClick: () => freshReload() }, "Reload")],
         });
       }
       if (kind === "signedout") {
@@ -557,11 +606,18 @@ export function createShell(app) {
 
   function update() {
     const store = app.store;
-    if (!store) return;
+    const route = app.router && app.router.current ? app.router.current.route : null;
+    if (!store) {
+      paintNavBare(route);
+      return;
+    }
     paintConn(store);
     paintBanners(store);
     const s = store.state;
-    if (!s) return;
+    if (!s) {
+      paintNavBare(route);
+      return;
+    }
     const now = s.clock;
     const current = app.router ? app.router.current : null;
     paintBench(s);
