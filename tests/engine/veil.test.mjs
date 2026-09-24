@@ -337,6 +337,67 @@ await run(async () => {
     })());
   }
 
+  section("The rite's dice survive the server");
+  {
+    /* Every server request loads the save through migrateSave. The normaliser used to keep only
+       prefixed roll keys, so rolls.ench was dropped on every load and every attempt rolled
+       attempt number 0: the same number each time. 37.5% of camps could never pass a 60%
+       attempt, however many they made. Each attempt here goes through a load, as it does live. */
+    const load = (x) => migrateSave(JSON.parse(JSON.stringify(x)), { now: x.clock + 1000, seed: 1 });
+    const ring = "slag_ring|rare|c1.2|+4";
+    const chance = W.enchantChance(4, 3);
+    same("the attempt in question: +4 to +5, three stones", Math.round(chance * 100), 60);
+
+    let passed = 0;
+    let tried = 0;
+    let worstRun = 0;
+    let neverPassed = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      let s = fresh(seed);
+      put(s, "vault", ring, 1);
+      put(s, "bank", "lesser_veil_essence", 3 * 30);
+      let won = 0;
+      let run = 0;
+      for (let i = 0; i < 30; i++) {
+        s = load(s);
+        const res = cmd(s, "enchant", { key: ring, from: "vault", stones: 3 });
+        if (!res.ok) break;
+        tried++;
+        if (res.data.won) {
+          won++;
+          run = 0;
+          // Put it back to +4 so every attempt is the same 60%.
+          s.vault.items = {};
+          put(s, "vault", ring, 1);
+        } else {
+          run++;
+          worstRun = Math.max(worstRun, run);
+        }
+      }
+      passed += won;
+      if (won === 0) neverPassed++;
+    }
+    const rate = passed / tried;
+    check("across loads, a 60% attempt passes about 60% of the time", rate > 0.52 && rate < 0.68, { rate, tried });
+    same("and no camp is shut out of it", neverPassed, 0);
+    check("nor fails twenty in a row", worstRun < 20, worstRun);
+
+    const s = fresh(9);
+    s.rolls.ench = 41;
+    same("the counter comes through a load", load(s).rolls.ench, 41);
+
+    // A camp that lost it starts past every worked Common it minted, and never at 0 again.
+    const lost = fresh(9);
+    put(lost, "vault", "slag_ring|common|e0|+3", 1);
+    put(lost, "vault", "slag_ring|common|e12|+1", 1);
+    delete lost.rolls.ench;
+    same("a camp that lost the counter picks up past its worked Commons", load(lost).rolls.ench, 13);
+    const rareOnly = fresh(9);
+    put(rareOnly, "vault", "slag_ring|rare|c1.2|+4", 1);
+    same("and a camp with only a worked rare starts at 1, not the 0 it was stuck on", load(rareOnly).rolls.ench, 1);
+    same("a camp that never worked anything is left as it was", load(fresh(9)).rolls.ench, undefined);
+  }
+
   section("Carried across: convert");
   {
     const s = fresh(12);
