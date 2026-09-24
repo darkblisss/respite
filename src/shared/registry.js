@@ -238,15 +238,15 @@ function buildRegistry() {
   ];
 
   const PROFESSIONS = [
-    { id: "forgemaster", name: "Forgemaster", verb: "Forge", icon: "plate",  weight: "Heavy",
+    { id: "forgemaster", name: "Forgemaster", verb: "Forge", icon: "forgemaster", weight: "Heavy",
       note: "Heavy plate and weapons from Delving. Slow, unglamorous, and holds a line." },
-    { id: "woodwright",  name: "Woodwright",  verb: "Carve", icon: "ward",   weight: "Heavy",
+    { id: "woodwright",  name: "Woodwright",  verb: "Carve", icon: "woodwright",  weight: "Heavy",
       note: "Bows, shields, and timber crafts from Felling." },
-    { id: "tanner",      name: "Tanner",      verb: "Tan",   icon: "treads", weight: "Medium",
+    { id: "tanner",      name: "Tanner",      verb: "Tan",   icon: "tanner",      weight: "Medium",
       note: "Medium leather and grips from Flaying. Quick, quiet, always wearing out." },
-    { id: "weaver",      name: "Weaver",      verb: "Weave", icon: "cowl",   weight: "Light",
+    { id: "weaver",      name: "Weaver",      verb: "Weave", icon: "weaver",      weight: "Light",
       note: "Light woven cloth from Harvesting. Almost no defence, carries the life in it." },
-    { id: "artificer",   name: "Artificer",   verb: "Craft", icon: "charm",  weight: "Relic",
+    { id: "artificer",   name: "Artificer",   verb: "Craft", icon: "artificer",   weight: "Relic",
       note: "Magical cores, staves, and tomes from Dredging." },
   ];
 

@@ -36,11 +36,11 @@ const SKILLS = [
   { id: "harvesting", name: "Harvesting", icon: "harvesting", kind: "gather", lv: 9, xp: 1940, next: 2280, base: 1680 },
   { id: "flaying", name: "Flaying", icon: "flaying", kind: "gather", lv: 15, xp: 5102, next: 6010, base: 4420 },
   { id: "dredging", name: "Dredging", icon: "dredging", kind: "gather", lv: 7, xp: 1180, next: 1440, base: 1030 },
-  { id: "forgemaster", name: "Forgemaster", icon: "plate", kind: "craft", lv: 21, xp: 41880, next: 47020, base: 37100 },
-  { id: "woodwright", name: "Woodwright", icon: "ward", kind: "craft", lv: 11, xp: 2240, next: 2732, base: 2010 },
-  { id: "tanner", name: "Tanner", icon: "treads", kind: "craft", lv: 14, xp: 4390, next: 5102, base: 3914 },
-  { id: "weaver", name: "Weaver", icon: "cowl", kind: "craft", lv: 6, xp: 812, next: 1030, base: 700 },
-  { id: "artificer", name: "Artificer", icon: "charm", kind: "craft", lv: 3, xp: 214, next: 330, base: 160 },
+  { id: "forgemaster", name: "Forgemaster", icon: "forgemaster", kind: "craft", lv: 21, xp: 41880, next: 47020, base: 37100 },
+  { id: "woodwright", name: "Woodwright", icon: "woodwright", kind: "craft", lv: 11, xp: 2240, next: 2732, base: 2010 },
+  { id: "tanner", name: "Tanner", icon: "tanner", kind: "craft", lv: 14, xp: 4390, next: 5102, base: 3914 },
+  { id: "weaver", name: "Weaver", icon: "weaver", kind: "craft", lv: 6, xp: 812, next: 1030, base: 700 },
+  { id: "artificer", name: "Artificer", icon: "artificer", kind: "craft", lv: 3, xp: 214, next: 330, base: 160 },
   { id: "warfare", name: "Hunt", icon: "swords", kind: "war", lv: 31, xp: 120450, next: 131600, base: 109800, hunting: true },
 ];
 

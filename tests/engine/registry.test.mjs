@@ -93,12 +93,16 @@ const DIVERGED = {
     why: "the Trades draw their own solid glyphs now, not the tool icons v4 gave them",
     at: ["icon"],
   },
+  "GameData.PROFESSIONS": {
+    why: "the Artisans draw their own solid glyphs too, not the gear icons v4 gave them",
+    at: ["icon"],
+  },
   "GameData.SKILLS": {
-    why: "the same Trades icons, in the full skill list",
+    why: "the same Trades and Artisans icons, in the full skill list",
     at: ["icon"],
   },
   "getSkill = skillDef": {
-    why: "the same Trades icons, read back through the getter",
+    why: "the same Trades and Artisans icons, read back through the getter",
     at: ["icon"],
   },
   gatherSkillDef: {
