@@ -294,6 +294,9 @@ await run(async () => {
         headers: { "cache-control": "no-store" },
         body: `export const ENGINE_VERSION = ${engine - 1};\n`,
       }));
+      /* The shell heals an outdated page once per session by reloading it past the cache
+         (ui/shell.js healOnce). Marked as already healed, so what is measured is the store. */
+      await live(O, () => sessionStorage.setItem("respite:healedAt", String(Date.now())));
       await O.page.reload();
       await booted(O);
       await O.page.waitForFunction(() => window.__respite.store.status.conn === "outdated", null, { timeout: 15000 })

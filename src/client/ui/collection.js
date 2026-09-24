@@ -1,31 +1,31 @@
 /* ============================================================
    Respite · ui/collection.js · What You Have Seen
    ------------------------------------------------------------
-   The Collection, in four views: the monsters, the gear, the
-   components, and everything at once. It is built from one map --
-   the save's roll counters -- so the same panel draws your own
-   camp's collection on the Character page and a stranger's on
+   The Collection: the ledger of things and the bestiary. It is
+   built from one map -- the save's roll counters -- so the same
+   panel draws your own camp's collection and a stranger's on
    their commander page, off whatever the realm publishes.
 
      m:<monster>   felled, and how many times
      i:<base>      an item that has been in these hands
 
-   Neither number means much on its own (an item's counts moves
-   between pools as well as arrivals), so only the monsters show a
-   count. Everything else is lit or locked, which is the whole
-   point of a collection.
+   Items come in three kinds: Equipment (the gear and the tools
+   a ground makes), Resources (what a ground yields, with the
+   reagents and each tier's remedy filed under their ground) and
+   the Veil. Each kind is an album: one row per ground, a square
+   per piece, lit once met. Picking a row opens that ground below.
 
-   An entry never seen is a name and a lock: no art, no numbers,
-   nothing to open. What is in the world is the registry's word,
-   so a line shelved behind `released: false` is not in here
-   either -- the registry has already pruned it.
+   An entry never seen stays dark: no art, no name, nothing to
+   open. A seen one opens its own card (popups/entry.js). What is
+   in the world is the registry's word, so a line shelved behind
+   `released: false` is not in here either.
    ============================================================ */
 
-import { h, on, setText, setAttr } from "./dom.js";
+import { h, on, setText, setAttr, setWidth } from "./dom.js";
 import { iconEl, artEl, hasArt } from "./icons.js";
-import { fmt, fmtWhole } from "./format.js";
+import { fmtWhole } from "./format.js";
 import { monsterArt } from "./popups/foe.js";
-import { GameData, foesOf, sovereignOf, tierLabel } from "../../shared/registry.js";
+import { GameData, foesOf, sovereignOf } from "../../shared/registry.js";
 
 /* ================= 1. WHAT THERE IS TO COLLECT ================= */
 
@@ -109,11 +109,10 @@ export function bestiaryFound(rolls) {
 }
 export const found = (rolls, base) => countOf(rolls, `i:${base}`) > 0;
 
-/* ================= 3. WHAT THE TABS HOLD ================= */
-
-/* Three rows narrow the grid: what kind of thing (items or monsters), what sort
-   of item, and which ground it comes off. Every row carries its own count, so
-   the shape of what is left to find is readable without opening anything. */
+/* ================= 3. THE THREE KINDS ================= */
+/* A ground's tools sit after its gear, and its remedy after what it yields;
+   the reagents belong to no ground, so they are filed under the first one,
+   where every camp starts. Only the Veil stands alone. */
 
 const MATS = Object.values(GameData.MATERIALS);
 const isVeil = (m) => m.category === "Veil";
@@ -121,175 +120,225 @@ const isRemedy = (m) => m.heal > 0;
 const isReagent = (m) => !!m.reagent && !isVeil(m) && !isRemedy(m);
 const plainMat = (m) => !isVeil(m) && !isRemedy(m) && !isReagent(m);
 
-const loose = (name, items, sort = byTier) => (items.length ? [{ name, items: items.slice().sort(sort) }] : []);
+const GEAR = Object.values(GameData.GEAR).filter((g) => !shelved(g));
+const TOOLS = Object.values(GameData.TOOLS);
+const PLAIN = MATS.filter(plainMat);
+const REAGENTS = MATS.filter(isReagent).sort(byTier);
+const REMEDIES = MATS.filter(isRemedy).sort(byTier);
+const VEIL = MATS.filter(isVeil).sort(byTier);
+
+// One row per ground that has anything on it, each ground's lists laid end to end.
+function perGround(...lists) {
+  const tiers = new Set(lists.flatMap((l) => l.items.map((d) => Number(d.tier) || 0)));
+  return [...tiers].sort((a, b) => a - b).map((tier) => ({
+    name: groundName(tier),
+    items: lists.flatMap((l) => l.items.filter((d) => (Number(d.tier) || 0) === tier).sort(l.sort)),
+  })).filter((g) => g.items.length);
+}
+
+const EQUIPMENT = perGround({ items: GEAR, sort: bySlot }, { items: TOOLS, sort: bySlot });
+const RESOURCES = perGround({ items: PLAIN, sort: byCategory }, { items: REMEDIES, sort: byTier });
+if (RESOURCES.length) RESOURCES[0].items.splice(RESOURCES[0].items.length - REMEDIES.filter((m) => (Number(m.tier) || 0) === 1).length, 0, ...REAGENTS);
 
 const KINDS = [
-  { id: "gear", name: "Equipment", icon: "plate",
-    groups: byGround(Object.values(GameData.GEAR).filter((g) => !shelved(g)), bySlot) },
-  { id: "parts", name: "Resources", icon: "ore",
-    groups: byGround(MATS.filter(plainMat), byCategory) },
-  { id: "reagents", name: "Reagents", icon: "flask",
-    groups: loose("Reagents", MATS.filter(isReagent)) },
-  { id: "veil", name: "The Veil", icon: "sparkle",
-    groups: loose("The Veil", MATS.filter(isVeil)) },
-  { id: "remedies", name: "Remedies", icon: "potion",
-    groups: loose("Remedies", MATS.filter(isRemedy)) },
-  { id: "tools", name: "Tools", icon: "pick",
-    groups: byGround(Object.values(GameData.TOOLS), bySlot) },
+  { id: "gear", name: "Equipment", sub: "Equipment and tools by ground.", groups: EQUIPMENT },
+  { id: "parts", name: "Resources", sub: "Resources, reagents and remedies by ground.", groups: RESOURCES },
+  { id: "veil", name: "The Veil", sub: "The Veil belongs to no one ground.", groups: VEIL.length ? [{ name: "The Veil", items: VEIL }] : [] },
 ].filter((k) => k.groups.length);
 
 KINDS.forEach((k) => { k.count = k.groups.reduce((n, g) => n + g.items.length, 0); });
 
 const ITEM_COUNT = KINDS.reduce((n, k) => n + k.count, 0);
-const GEAR_COUNT = (KINDS.find((k) => k.id === "gear") || { count: 0 }).count;
-const PART_COUNT = (KINDS.find((k) => k.id === "parts") || { count: 0 }).count;
+const GEAR_COUNT = GEAR.length;
+const PART_COUNT = PLAIN.length;
 
-// The bestiary in the same shape, so one drawing routine serves both tabs.
+// The bestiary in the same shape, so one drawing routine serves both.
 const FOE_GROUPS = BESTIARY.map(({ region, mobs }) => ({ name: region.name, items: mobs }));
 
-/* ================= 4. TILES ================= */
+/* ================= 4. THE PANEL ================= */
 
-// A square of art with its name under it: dense enough to read a whole ground at once.
-function tile(def, { have, kind, sub, sov }) {
-  const name = h("span.coll-name", def.name);
-  if (!have) {
-    return h("div.coll-cell.is-locked", { title: def.name },
-      h("span.coll-box", { "aria-hidden": "true" }, iconEl("lock")),
-      name,
-      h("span.sr-only", kind === "foe" ? "Not defeated yet" : "Never held"));
-  }
-  const art = kind === "foe"
-    ? h("span.coll-box", { html: monsterArt(def) })
-    : h("span.coll-box", { class: { "art-paint": hasArt(def) }, "aria-hidden": "true" }, artEl(def, { variant: "cut" }));
-  return h("button.coll-cell", {
-    type: "button",
-    title: sub ? `${def.name} · ${sub}` : def.name,
-    class: { "is-sovereign": !!sov },
-    dataset: kind === "foe" ? { monster: def.id } : { item: def.id },
-  }, art, name);
-}
-
-function foeCell(mob, kills, falls) {
-  const sov = mob.archetype === "sovereign";
-  const words = kills
-    ? [sov ? "Sovereign" : GameData.ARCHETYPES[mob.archetype].name, `Defeated ${fmt(kills)}`]
-      .concat(falls ? [`Defeated by ${fmt(falls)}`] : [])
-    : [];
-  return tile(mob, { have: kills > 0, kind: "foe", sub: words.join(" · "), sov });
-}
-
-function itemCell(def, have) {
-  const sub = [
-    def.kind === "gear" ? GameData.SLOT_LABELS[def.slot] : def.kind === "tool" ? "Tool" : def.category || "Material",
-    def.tier ? tierLabel(def.tier) : null,
-  ].filter(Boolean).join(" · ");
-  return tile(def, { have, kind: "item", sub });
-}
-
-/* ================= 5. THE PANEL ================= */
-
-const TABS = [
-  { id: "items", name: "Items", icon: "crate" },
-  { id: "foes", name: "Monsters", icon: "skull" },
+const MODES = [
+  { id: "items", name: "Items" },
+  { id: "foes", name: "Monsters" },
 ];
 
+// A foe's square in the album: its glyph, the Sovereign's crown.
+const foeGlyph = (mob) => (mob.archetype === "sovereign" ? "crown" : mob.icon || "skull");
+
 /**
- * collectionPanel({ onFoe, onItem, falls })
- *   onFoe(id)  a felled monster's tile was pressed (omit and tiles do not open)
- *   onItem(id) a held item's tile was pressed
- *   falls(id)  how many times that monster put YOU down, if the caller knows
- * Returns { node, paint(rolls), destroy() }.
+ * collectionPanel({ onEntry })
+ *   onEntry({ kind: "item"|"foe", id, def, count }) a seen entry was pressed
+ * Returns { node, filters, paint(rolls), destroy() }. `filters` is the kind list
+ * (Items or Monsters, then Equipment, Resources, the Veil); the page puts it
+ * wherever it keeps its side column.
  */
-export function collectionPanel({ onFoe = null, onItem = null, falls = null } = {}) {
-  let tab = TABS[0].id;
+export function collectionPanel({ onEntry = null } = {}) {
+  let mode = MODES[0].id;
   let kind = KINDS[0].id;
-  let group = 0;            // index into the current kind's groups
-  let rolls = null;
+  let group = 0;
+  let rolls = {};
   let sig = null;
 
-  const chip = h("span.chip");
-  const tabs = h("div.char-tabs.coll-tabs", { role: "tablist", "aria-label": "Collection" });
-  const kinds = h("div.coll-row", { role: "tablist", "aria-label": "Kind" });
-  const groupRow = h("div.coll-row.coll-groups", { role: "tablist", "aria-label": "Ground" });
-  const grid = h("div.coll-grid");
-  const node = h("section.section",
-    h("div.section-head",
-      h("div", h("h2.section-title", "Collection")),
-      h("div.card-actions", chip)),
-    tabs, kinds, groupRow, grid);
+  const total = h("span.coll-total");
+  const totalBar = h("i");
+  const sub = h("p.coll-sub");
+  const album = h("div.coll-album", { role: "list" });
+  const openHead = h("div.coll-open-head");
+  const grid = h("div.coll-tiles");
+  const node = h("section.coll",
+    h("div.coll-head",
+      h("h2.coll-title", "Collection"),
+      h("div.coll-sum", total, h("div.bar.bar-gold.bar-thin", totalBar))),
+    sub, album, h("div.coll-open", openHead, grid));
 
-  const groupsNow = () => (tab === "foes" ? FOE_GROUPS : (KINDS.find((k) => k.id === kind) || KINDS[0]).groups);
-  const seenIn = (items) => (tab === "foes"
-    ? items.filter((m) => felled(rolls || {}, m.id)).length
-    : items.filter((d) => found(rolls || {}, d.id)).length);
+  const modeRow = h("div.seg.seg-full.coll-modes", { role: "tablist", "aria-label": "Collection" });
+  const kindList = h("div.coll-kinds", { role: "tablist", "aria-label": "Kind" });
+  const foeNote = h("div.coll-foe-note");
+  const filters = h("div.coll-filters", modeRow, kindList, foeNote);
 
-  // A chip carrying a name and how much of it is in hand.
-  const countChip = (label, on2, seen, all, data) => h("button.chip.coll-chip", {
-    type: "button", role: "tab", "aria-selected": on2 ? "true" : "false", tabindex: on2 ? "0" : "-1",
-    class: on2 && "is-on", dataset: data,
-  }, label, h("span.coll-n", `${fmtWhole(seen)}/${fmtWhole(all)}`));
+  const isSeen = (d) => (mode === "foes" ? felled(rolls, d.id) > 0 : found(rolls, d.id));
+  const groupsNow = () => (mode === "foes" ? FOE_GROUPS : (KINDS.find((k) => k.id === kind) || KINDS[0]).groups);
+  const seenOf = (items, m = mode) => items.filter((d) => (m === "foes" ? felled(rolls, d.id) > 0 : found(rolls, d.id))).length;
 
-  function draw() {
-    const r = rolls || {};
-    const foeSeen = BESTIARY.reduce((n, g) => n + g.mobs.filter((m) => felled(r, m.id)).length, 0);
-    const itemSeen = KINDS.reduce((n, k) => n + k.groups.reduce((m, g) => m + g.items.filter((d) => found(r, d.id)).length, 0), 0);
-
-    tabs.replaceChildren(
-      countChip("Items", tab === "items", itemSeen, ITEM_COUNT, { tab: "items" }),
-      countChip("Monsters", tab === "foes", foeSeen, BESTIARY_COUNT, { tab: "foes" }));
-
-    // The kind row belongs to the items tab; the bestiary has one kind of thing in it.
-    kinds.hidden = tab !== "items";
-    if (tab === "items") {
-      kinds.replaceChildren(...KINDS.map((k) => countChip(
-        k.name, k.id === kind,
-        k.groups.reduce((n, g) => n + g.items.filter((d) => found(r, d.id)).length, 0),
-        k.count, { kind: k.id })));
+  function drawFilters(itemSeen, foeSeen) {
+    modeRow.replaceChildren(...MODES.map((m) => h("button.seg-btn", {
+      type: "button", role: "tab", "aria-selected": m.id === mode ? "true" : "false", dataset: { mode: m.id },
+    }, m.name, h("span.count", m.id === "foes" ? `${fmtWhole(foeSeen)}/${fmtWhole(BESTIARY_COUNT)}` : `${fmtWhole(itemSeen)}/${fmtWhole(ITEM_COUNT)}`))));
+    kindList.hidden = mode !== "items";
+    foeNote.hidden = mode !== "foes";
+    if (mode === "items") {
+      kindList.replaceChildren(...KINDS.map((k) => {
+        const seen = k.groups.reduce((n, g) => n + seenOf(g.items, "items"), 0);
+        const fill = h("i");
+        setWidth(fill, k.count ? (seen / k.count) * 100 : 0);
+        return h("button.coll-kind", {
+          type: "button", role: "tab", "aria-selected": k.id === kind ? "true" : "false", dataset: { kind: k.id },
+        },
+          h("span.coll-kind-top", h("span.coll-kind-name", k.name), h("span.coll-kind-n", `${fmtWhole(seen)}/${fmtWhole(k.count)}`)),
+          h("span.bar.bar-thin", { class: seen === k.count && "bar-gold" }, fill));
+      }));
+    } else {
+      const fill = h("i");
+      setWidth(fill, BESTIARY_COUNT ? (foeSeen / BESTIARY_COUNT) * 100 : 0);
+      foeNote.replaceChildren(
+        h("div.coll-kind-top", h("span.coll-kind-name", `${fmtWhole(foeSeen)} of ${fmtWhole(BESTIARY_COUNT)} foes seen`)),
+        h("p.coll-foe-copy", "Sovereigns show in gold. Pick a ground to see who you have put down there."),
+        h("span.bar.bar-thin", fill));
     }
-
-    const gs = groupsNow();
-    if (group >= gs.length) group = 0;
-    groupRow.hidden = gs.length < 2;
-    groupRow.replaceChildren(...gs.map((g, i) => countChip(g.name, i === group, seenIn(g.items), g.items.length, { group: String(i) })));
-
-    const items = gs[group] ? gs[group].items : [];
-    grid.replaceChildren(...items.map((def) => (tab === "foes"
-      ? foeCell(def, felled(r, def.id), falls ? falls(def.id) : 0)
-      : itemCell(def, found(r, def.id)))));
-
-    setText(chip, `${fmtWhole(foeSeen + itemSeen)} of ${fmtWhole(BESTIARY_COUNT + ITEM_COUNT)} collected`);
   }
 
+  function drawAlbum(gs) {
+    const foes = mode === "foes";
+    album.hidden = gs.length < 2;
+    album.classList.toggle("is-foes", foes);
+    album.replaceChildren(...gs.map((g, i) => {
+      const seen = seenOf(g.items);
+      return h("button.coll-row", {
+        type: "button", role: "listitem", "aria-pressed": i === group ? "true" : "false", dataset: { group: String(i) },
+        "aria-label": `${g.name}: ${fmtWhole(seen)} of ${fmtWhole(g.items.length)}`,
+      },
+        h("span.coll-row-name", { class: !seen && "is-none" }, g.name),
+        h("span.coll-sqs", { "aria-hidden": "true", style: { "--n": String(g.items.length) } },
+          g.items.map((d) => h("span.coll-sq", { class: isSeen(d) && "is-seen", "data-sov": foes && d.archetype === "sovereign" ? "" : null },
+            foes ? iconEl(foeGlyph(d)) : null))),
+        h("span.coll-row-n", `${fmtWhole(seen)}/${fmtWhole(g.items.length)}`));
+    }));
+  }
+
+  function drawOpen(gs) {
+    const g = gs[group];
+    const items = g ? g.items : [];
+    const seen = seenOf(items);
+    openHead.replaceChildren(h("h3.coll-open-title", g ? g.name : ""),
+      h("span.coll-open-n", `${fmtWhole(seen)} of ${fmtWhole(items.length)} ${mode === "foes" ? "seen" : "found"}`));
+    grid.classList.toggle("is-foes", mode === "foes");
+    grid.replaceChildren(...items.map((d) => (mode === "foes" ? foeCard(d) : itemTile(d))));
+  }
+
+  function itemTile(def) {
+    if (!found(rolls, def.id)) {
+      return h("div.coll-tile.is-locked", { title: "Not found yet" }, h("span.coll-tile-art", { "aria-hidden": "true" }, iconEl(def.icon || "unknown")));
+    }
+    const art = hasArt(def) ? artEl(def, { variant: "cut" }) : iconEl(def.icon || "unknown");
+    return h("button.coll-tile", { type: "button", title: def.name, "aria-label": def.name, dataset: { item: def.id } },
+      h("span.coll-tile-art", { class: { "art-paint": hasArt(def) }, "aria-hidden": "true" }, art));
+  }
+
+  function foeCard(mob) {
+    const kills = felled(rolls, mob.id);
+    const sov = mob.archetype === "sovereign";
+    if (!kills) {
+      return h("div.coll-foe.is-locked", { class: sov && "is-sovereign" },
+        h("span.coll-foe-art", { "aria-hidden": "true" }, iconEl(foeGlyph(mob))),
+        h("span.coll-foe-name", "Unseen"));
+    }
+    return h("button.coll-foe", { type: "button", class: sov && "is-sovereign", dataset: { monster: mob.id } },
+      h("span.coll-foe-art", { "aria-hidden": "true", html: monsterArt(mob) }),
+      h("span.coll-foe-name", mob.name),
+      h("span.coll-foe-n", `${fmtWhole(kills)} slain`));
+  }
+
+  function draw() {
+    const foeSeen = BESTIARY.reduce((n, g) => n + g.mobs.filter((m) => felled(rolls, m.id)).length, 0);
+    const itemSeen = KINDS.reduce((n, k) => n + k.groups.reduce((m, g) => m + g.items.filter((d) => found(rolls, d.id)).length, 0), 0);
+    const all = BESTIARY_COUNT + ITEM_COUNT;
+    const got = foeSeen + itemSeen;
+    total.replaceChildren(h("b", fmtWhole(got)), ` of ${fmtWhole(all)} · ${all ? Math.round((got / all) * 100) : 0}%`);
+    setWidth(totalBar, all ? (got / all) * 100 : 0);
+
+    drawFilters(itemSeen, foeSeen);
+    const gs = groupsNow();
+    if (group >= gs.length) group = 0;
+    const k = KINDS.find((x) => x.id === kind) || KINDS[0];
+    setText(sub, mode === "foes"
+      ? "Foes by ground. Pick a ground to open it below; press anything you have met to read about it."
+      : `${k.sub}${gs.length > 1 ? " Pick a ground to open it below;" : ""} press anything you have found to read about it.`);
+    drawAlbum(gs);
+    drawOpen(gs);
+  }
+
+  const openEntry = (kindOf, id) => {
+    if (!onEntry) return;
+    if (kindOf === "foe") {
+      const mob = BESTIARY.flatMap((g) => g.mobs).find((m) => m.id === id);
+      if (mob) onEntry({ kind: "foe", id, def: mob, count: felled(rolls, id) });
+      return;
+    }
+    const def = KINDS.flatMap((x) => x.groups.flatMap((g) => g.items)).find((d) => d.id === id);
+    if (def) onEntry({ kind: "item", id, def, count: countOf(rolls, `i:${id}`) });
+  };
+
   const offs = [
-    on(tabs, "click", "[data-tab]", (e, t) => {
-      if (t.dataset.tab === tab) return;
-      tab = t.dataset.tab;
+    on(modeRow, "click", "[data-mode]", (e, t) => {
+      if (t.dataset.mode === mode) return;
+      mode = t.dataset.mode;
       group = 0;
       draw();
     }),
-    on(kinds, "click", "[data-kind]", (e, t) => {
+    on(kindList, "click", "[data-kind]", (e, t) => {
       if (t.dataset.kind === kind) return;
       kind = t.dataset.kind;
       group = 0;
       draw();
     }),
-    on(groupRow, "click", "[data-group]", (e, t) => {
+    on(album, "click", "[data-group]", (e, t) => {
       const i = Number(t.dataset.group);
       if (i === group) return;
       group = i;
       draw();
     }),
-    on(grid, "click", ".coll-cell[data-monster]", (e, b) => { if (onFoe) onFoe(b.dataset.monster); }),
-    on(grid, "click", ".coll-cell[data-item]", (e, b) => { if (onItem) onItem(b.dataset.item); }),
+    on(grid, "click", "[data-item]", (e, b) => openEntry("item", b.dataset.item)),
+    on(grid, "click", "[data-monster]", (e, b) => openEntry("foe", b.dataset.monster)),
   ];
 
   return {
     node,
+    filters,
     // Redrawn only when something was met for the first time, or a count moved.
     paint(next) {
       rolls = next && typeof next === "object" ? next : {};
       const keys = Object.keys(rolls).filter((k) => k.charCodeAt(1) === 58 && (k[0] === "m" || k[0] === "i"));
-      const nextSig = `${tab}|${kind}|${group}|${keys.length}|${keys.map((k) => `${k}${k[0] === "m" ? rolls[k] : ""}`).sort().join(",")}`;
+      const nextSig = `${mode}|${kind}|${group}|${keys.length}|${keys.map((k) => `${k}${k[0] === "m" ? rolls[k] : ""}`).sort().join(",")}`;
       if (nextSig === sig) return;
       sig = nextSig;
       draw();
@@ -298,4 +347,4 @@ export function collectionPanel({ onFoe = null, onItem = null, falls = null } = 
   };
 }
 
-export { GEAR_COUNT, PART_COUNT, ITEM_COUNT };
+export { GEAR_COUNT, PART_COUNT, ITEM_COUNT, KINDS };
