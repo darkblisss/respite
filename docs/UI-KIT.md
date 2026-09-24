@@ -1274,13 +1274,13 @@ Idle activity card: `.act-card.is-idle` with a neutral art tile, a title ("No cr
 ```html
 <section class="card card-flush">
   <div class="card-head"><div><h2 class="card-title">The camp</h2><p class="card-sub">It grows each time Delving reaches a new tier.</p></div>
-    <div class="card-actions"><span class="chip">Tier 3 of 9</span></div></div>
-  <div class="camp-scene"><svg viewBox="0 34 1000 186" preserveAspectRatio="xMidYMax slice" role="img" aria-label="The Delving camp">...</svg></div>
-  <div class="camp-foot"><b>Crates and barrels</b><span>Next at Lv 30: a proper work site</span></div>
+    <div class="card-actions"><span class="chip">Lv20 · 3 of 9</span></div></div>
+  <div class="camp-scene"><svg width="1000" height="200" viewBox="0 0 1000 200" preserveAspectRatio="xMidYMax slice" role="img" aria-label="The Delving camp">...</svg></div>
+  <div class="camp-foot"><b>Crates, barrels and a coal heap</b><span>Next at Lv 30: a shored adit and rails</span></div>
 </section>
 ```
 
-The scene SVG is v4's `campScene()` output unchanged: it draws with the `c-*` classes (`c-moon`, `c-star`, `c-tree`, `c-hill-far`, `c-hill-near`, `c-hill-mid`, `c-ground`, `c-stake`, `c-sil`, `c-dark`, `c-void`, `c-rim`, `c-wood`, `c-wood.thin`, `c-rope`, `c-light`, `c-lamp`, `c-lamp-glow`, `c-door`, `c-ember`, `c-flame`, `c-cloth`, `c-fig`, `c-tool`, `c-toolhead`, `c-herb`, `c-hide`, `c-water`, `c-shine`, `c-plank`, `c-wheel`, and the flickering `g.camp-fire`), all in pages.css. Insert it with `h("div.camp-scene", { html: svgString })`.
+The scene comes from `ui/camp-art.js`: `campScene(skillId, stage, prefix)` returns the SVG's inner markup for `CAMP_VIEWBOX` (`0 0 1000 200`), and `CAMP_STAGES[skillId]` holds each trade's nine names for the foot line. Every trade has its own ground (Delving a crag, Felling a pine clearing, Flaying a moor, Harvesting fields, Dredging a lake) and its own nine pieces; at most two workers show. The `prefix` keeps gradient ids unique when two scenes share a page. Whatever moves carries a `cs-*` class (fire, sparks, smoke, lamps, banners, the workers, the wheel and the sails) and the keyframes are in pages.css; reduced motion stills all of it. In a box narrower than 5:1 the page slides the viewBox to keep the fire and the work in frame.
 
 ### 8.3 Artisan bench (`?page=bench`)
 

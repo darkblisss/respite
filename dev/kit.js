@@ -21,6 +21,7 @@ import { h, el, qs, qsa, setText, setWidth, setAttr, clear, on, toggleClass, htm
 import { ICONS, icon, iconEl } from "../src/client/ui/icons.js";
 import { openModal, confirm, toast, tooltip, tipBody, bindDrawer, closeModals } from "../src/client/ui/overlay.js";
 import { fmt, fmtWhole, fmtGold, fmtTime, fmtAgo, signedPct, chancePct, fmtClock, plural } from "../src/client/ui/format.js";
+import { campScene, CAMP_STAGES, CAMP_VIEWBOX } from "../src/client/ui/camp-art.js";
 
 const params = new URLSearchParams(location.search);
 const SHOT = params.has("shot");
@@ -237,46 +238,9 @@ function qtyPicker({ value = 1, max = 9999, unlimited = false, allowUnlimited = 
 
 /* ================= 3. ART: THE CAMP, THE FOES, THE VISTA ================= */
 
-function campFigure(x, y, skillId) {
-  const hand = `${x + 5} ${y - 22}`;
-  const tools = {
-    delving: `<path class="c-tool" d="M${hand} L${x + 15} ${y - 39}"/><path class="c-tool" d="M${x + 8} ${y - 41} Q${x + 15} ${y - 41} ${x + 21} ${y - 34}"/>`,
-    felling: `<path class="c-tool" d="M${hand} L${x + 15} ${y - 39}"/><path class="c-toolhead" d="M${x + 12} ${y - 42} l8 2 -2 8Z"/>`,
-  };
-  return `<g class="c-fig"><circle cx="${x}" cy="${y - 34}" r="4.5"/>` +
-    `<path d="M${x - 6} ${y - 28} H${x + 6} L${x + 8} ${y - 12} H${x + 4} L${x + 3} ${y} H${x + 0.5} L${x} ${y - 9} L${x - 0.5} ${y} H${x - 3} L${x - 4} ${y - 12} H${x - 8}Z"/></g>` +
-    (tools[skillId] || "");
-}
-
-function campScene(stage) {
-  const has = (n) => stage >= n;
-  const out = [];
-  out.push(
-    '<defs>' +
-      '<linearGradient id="campSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1e1629"/><stop offset="1" stop-color="#0d0a12"/></linearGradient>' +
-      '<radialGradient id="campGlow"><stop offset="0" stop-color="#c1613a" stop-opacity=".5"/><stop offset="1" stop-color="#c1613a" stop-opacity="0"/></radialGradient>' +
-      '<linearGradient id="campFog" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8d6fd1" stop-opacity="0"/><stop offset="1" stop-color="#8d6fd1" stop-opacity=".08"/></linearGradient>' +
-    '</defs>',
-    '<rect width="1000" height="220" fill="url(#campSky)"/>',
-    '<path class="c-star" d="M120 58h1.5M236 76h1.5M388 52h1.5M548 66h1.5M702 50h1.5M942 82h1.5M60 90h1.5M640 88h1.5"/>',
-    '<circle class="c-moon-glow" cx="860" cy="74" r="22"/><circle class="c-moon" cx="860" cy="74" r="9"/>',
-    '<path class="c-hill-far" d="M0 142 C110 112 210 128 320 118 C430 108 520 134 640 122 C760 110 880 126 1000 112 V220 H0Z"/>',
-    '<path class="c-tree" d="M168 122 V100 M168 108 L158 98 M168 104 L177 94 M724 116 V92 M724 102 L713 91 M724 98 L734 88 M724 108 L733 101 M930 112 V94 M930 102 L921 94"/>',
-    '<path class="c-hill-near" d="M0 170 C140 156 260 168 400 160 C540 152 660 166 800 158 C880 154 950 158 1000 156 V220 H0Z"/>',
-    '<rect class="c-ground" y="186" width="1000" height="34"/>',
-    '<path class="c-dark" d="M612 186 L630 172 L642 177 L656 166 L674 180 L684 186Z"/><path class="c-rim" d="M630 172 L642 177 L656 166"/>'
-  );
-  if (has(2)) out.push('<path class="c-sil" d="M455 186 L500 124 L545 186Z"/><path class="c-rim" d="M500 124 L545 186"/><path class="c-door" d="M491 186 L500 150 L509 186Z"/><path class="c-wood thin" d="M500 124 V112"/>');
-  out.push('<path class="c-sil" d="M270 186 L322 128 L350 186Z"/><path class="c-wood thin" d="M262 186 L326 122"/><path class="c-rim" d="M322 128 L350 186"/>');
-  if (has(3)) {
-    out.push('<rect class="c-sil" x="352" y="168" width="20" height="18"/><rect class="c-sil" x="370" y="174" width="14" height="12"/>' +
-      '<path class="c-rim" d="M352 168 L372 186 M372 168 L352 186"/><rect class="c-sil" x="560" y="170" width="14" height="16" rx="3"/><path class="c-rim" d="M560 175 H574 M560 181 H574"/>');
-  }
-  out.push('<ellipse cx="413" cy="182" rx="84" ry="30" fill="url(#campGlow)"/><path class="c-wood" d="M398 188 L428 180 M400 180 L428 188"/>' +
-    '<g class="camp-fire"><path class="c-ember" d="M413 184 C402 174 414 166 410 152 C424 162 426 174 413 184Z"/><path class="c-flame" d="M413 184 C407 178 413 173 412 165 C419 171 420 178 413 184Z"/></g>');
-  out.push(campFigure(700, 186, "delving"));
-  out.push('<rect y="140" width="1000" height="80" fill="url(#campFog)"/>');
-  return `<svg viewBox="0 34 1000 186" preserveAspectRatio="xMidYMax slice" role="img" aria-label="The Delving camp">${out.join("")}</svg>`;
+// The camp as the game draws it: ui/camp-art.js, Delving at the given tier.
+function campSvg(stage) {
+  return `<svg viewBox="${CAMP_VIEWBOX}" preserveAspectRatio="xMidYMax slice" role="img" aria-label="The Delving camp">${campScene("delving", stage, "kit-camp-")}</svg>`;
 }
 
 const MONSTER_ART = {
@@ -547,9 +511,9 @@ PAGES.gather = () => {
         }))),
 
     h("section.card.card-flush",
-      cardHead("The camp", { sub: "It grows each time Delving reaches a new tier.", actions: chip("Tier 3 of 9") }),
-      h("div.camp-scene", { html: campScene(3) }),
-      h("div.camp-foot", h("b", "Crates and barrels"), h("span", "Next at Lv 30: a proper work site"))));
+      cardHead("The camp", { sub: "It grows each time Delving reaches a new tier.", actions: chip("Lv20 · 3 of 9") }),
+      h("div.camp-scene", { html: campSvg(3) }),
+      h("div.camp-foot", h("b", CAMP_STAGES.delving[2]), h("span", `Next at Lv 30: ${CAMP_STAGES.delving[3].toLowerCase()}`))));
 };
 
 PAGES.bench = () => {

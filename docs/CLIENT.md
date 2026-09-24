@@ -31,6 +31,7 @@ Serve the repo over HTTP for anything in a browser (ES modules do not load from 
 | `src/client/ui/widgets.js` | `qtyPicker`, `registerPopup`/`openPopup`/`hasPopup`, `confirmSpend` (exists) | shared, extend carefully |
 | `src/client/ui/popups/action.js` | popup `action` | skills |
 | `src/client/pages/skill.js` | `#/skill/<gathering or artisan id>` | skills |
+| `src/client/ui/camp-art.js` | the camp drawn under each gathering page: `campScene(skillId, stage, prefix)`, `CAMP_STAGES`, `CAMP_VIEWBOX` (motion CSS in pages.css, the camp scene) | skills |
 | `src/client/pages/character.js` | `#/character` | skills |
 | `src/client/ui/popups/item.js` | popup `item` | storage |
 | `src/client/pages/armaments.js` | `#/armaments` | storage |
