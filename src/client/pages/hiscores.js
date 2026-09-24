@@ -92,12 +92,12 @@ const TABS = [
     }],
   },
   { id: "hunt", name: "Hunt", icon: "warfare", pick: "Discipline", boards: [huntAllBoard, ...GameData.CLASSES.map(huntBoard)] },
-  { id: "gathering", name: "Gathering", icon: "pick", pick: "Trade", boards: TRADE_ORDER.map(skillBoard) },
-  { id: "artisans", name: "Artisans", icon: "hammer", pick: "Bench", boards: ARTISAN_ORDER.map(skillBoard) },
+  { id: "gathering", name: "Gathering", icon: "gathering", pick: "Trade", boards: TRADE_ORDER.map(skillBoard) },
+  { id: "artisans", name: "Artisans", icon: "artisans", pick: "Bench", boards: ARTISAN_ORDER.map(skillBoard) },
   {
-    id: "wealth", name: "Wealth", icon: "coin",
+    id: "wealth", name: "Wealth", icon: "purse",
     boards: [{
-      id: "wealth", name: "Wealth", title: "Wealth of your own making", icon: "coin", num: "Value", oneFigure: true,
+      id: "wealth", name: "Wealth", title: "Wealth of your own making", icon: "purse", num: "Value", oneFigure: true,
       ask: { how: "board", key: "wealth" },
       /* It ranks what a player has produced, not what they are holding, and the sub line says
          so: selling what you made does not take it back off you. Holdings restricted to

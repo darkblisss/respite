@@ -50,7 +50,7 @@ const SLOT_NOUN = {
 
 const SLOT_LABEL = (slot) => GameData.SLOT_LABELS[slot].toLowerCase();
 
-const POOL_ICON = { inv: "pack", bank: "stockpile", vault: "lock", satchel: "ration" };
+const POOL_ICON = { inv: "pack", bank: "stockpile", vault: "lock", satchel: "potion" };
 
 // How a pool reads inside a sentence: "Belongings", "the Stockpile".
 const phrase = (w) => (w === "inv" ? poolName(w) : `the ${poolName(w)}`);
@@ -374,7 +374,7 @@ function openItem(ctx, key, opts, extra) {
       const room = cmp.displaced.length ? stowPlan(state, key, from, cmp.displaced).every(Boolean) : true;
       list.push({
         id: "equip", kind: "primary", wide: true,
-        icon: d.slot === "weapon" || d.slot === "offhand" ? "swords" : "plate",
+        icon: d.slot === "weapon" || d.slot === "offhand" ? "swords" : "breastplate",
         label: already ? "Already worn" : `Equip · ${GameData.SLOT_LABELS[d.slot]}`,
         disabled: already || !!cmp.blocked || !room,
         onClick: () => send("equip", { key, from }),

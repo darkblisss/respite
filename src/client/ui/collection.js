@@ -124,7 +124,7 @@ const plainMat = (m) => !isVeil(m) && !isRemedy(m) && !isReagent(m);
 const loose = (name, items, sort = byTier) => (items.length ? [{ name, items: items.slice().sort(sort) }] : []);
 
 const KINDS = [
-  { id: "gear", name: "Equipment", icon: "plate",
+  { id: "gear", name: "Equipment", icon: "breastplate",
     groups: byGround(Object.values(GameData.GEAR).filter((g) => !shelved(g)), bySlot) },
   { id: "parts", name: "Resources", icon: "ore",
     groups: byGround(MATS.filter(plainMat), byCategory) },
@@ -189,7 +189,7 @@ function itemCell(def, have) {
 /* ================= 5. THE PANEL ================= */
 
 const TABS = [
-  { id: "items", name: "Items", icon: "crate" },
+  { id: "items", name: "Items", icon: "chest" },
   { id: "foes", name: "Monsters", icon: "skull" },
 ];
 

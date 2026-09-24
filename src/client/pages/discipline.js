@@ -143,7 +143,7 @@ function pathViewBuild(ctx) {
     h("div.path-foot-acts", reset, seal));
 
   const node = h("section.card",
-    h("div.card-head", h("div", h("h2.card-title", iconEl("book"), "Path"), sub), h("div.card-actions", pts)),
+    h("div.card-head", h("div", h("h2.card-title", iconEl("path"), "Path"), sub), h("div.card-actions", pts)),
     body, foot);
 
   const locked = h("div.well", iconEl("lock"),
@@ -664,7 +664,7 @@ function masteryView(ctx) {
       : `Your discipline does not hold a ${row.def.name.toLowerCase()}. The hours are there to be had if you never took one.`);
     D.stones.replaceChildren(...row.milestones.map((mi) => h(
       `span.chip${mi.won ? ".chip-gold" : ""}`,
-      iconEl(mi.won ? "check" : "lock"),
+      iconEl(mi.won ? "medal" : "lock"),
       `${mi.name} \u00b7 ${mi.at}`)));
     setText(D.note, "A mastery is the piece, not the hunter: take it off and the bonus goes with it.");
   }
@@ -733,7 +733,7 @@ function masteryView(ctx) {
 }
 
 const TABS = [
-  { id: "path", name: "Path", icon: "book", build: pathView },
+  { id: "path", name: "Path", icon: "path", build: pathView },
   { id: "mastery", name: "Mastery", icon: "swords", build: (ctx) => masteryView(ctx) },
 ];
 

@@ -22,6 +22,7 @@ import { ICONS, icon, iconEl } from "../src/client/ui/icons.js";
 import { openModal, confirm, toast, tooltip, tipBody, bindDrawer, closeModals } from "../src/client/ui/overlay.js";
 import { fmt, fmtWhole, fmtGold, fmtTime, fmtAgo, signedPct, chancePct, fmtClock, plural } from "../src/client/ui/format.js";
 import { campScene, CAMP_STAGES, CAMP_VIEWBOX } from "../src/client/ui/camp-art.js";
+import { MONSTER_ART, KIND_ART } from "../src/client/ui/monster-art.js";
 
 const params = new URLSearchParams(location.search);
 const SHOT = params.has("shot");
@@ -243,25 +244,9 @@ function campSvg(stage) {
   return `<svg viewBox="${CAMP_VIEWBOX}" preserveAspectRatio="xMidYMax slice" role="img" aria-label="The Delving camp">${campScene("delving", stage, "kit-camp-")}</svg>`;
 }
 
-const MONSTER_ART = {
-  beast:
-    '<path class="m-body" d="M26 78 C30 58 48 46 70 46 C90 46 104 58 108 76 C110 86 106 96 100 100 V108 H92 L90 96 C78 100 58 100 48 96 L44 108 H36 V94 C30 92 26 86 26 78Z"/>' +
-    '<path class="m-body" d="M48 50 L50 36 L57 48 M62 46 L66 32 L71 46 M76 46 L82 34 L85 48 M90 52 L99 42 L99 57"/>' +
-    '<path class="m-body" d="M32 70 C22 63 12 66 8 74 C6 80 10 84 16 86 L30 90 C35 84 35 76 32 70Z"/>' +
-    '<path class="m-body" d="M24 66 L19 51 L32 64Z"/><path class="m-edge" d="M106 80 C116 76 118 64 112 56"/><path class="m-bone" d="M10 81 L12 86 L14 81 M16 83 L18 88 L20 83"/><circle class="m-eye" cx="17" cy="74" r="2.4"/>',
-  man:
-    '<path class="m-body" d="M60 18 C44 18 36 32 36 46 C36 54 38 58 42 62 C30 72 24 88 22 110 H98 C96 88 90 72 78 62 C82 58 84 54 84 46 C84 32 76 18 60 18Z"/>' +
-    '<path class="m-void" d="M48 44 C48 36 53 31 60 31 C67 31 72 36 72 44 C72 53 66 59 60 59 C54 59 48 53 48 44Z"/>' +
-    '<circle class="m-eye" cx="55" cy="45" r="1.9"/><circle class="m-eye" cx="65" cy="45" r="1.9"/><path class="m-edge" d="M40 82 Q60 88 80 82"/>' +
-    '<path class="m-steel" d="M30 92 L8 58 L12 55 L34 88Z"/><path class="m-edge" d="M26 90 L38 82"/>',
-  horror:
-    '<path class="m-body" d="M60 14 C90 14 106 38 104 62 C102 80 92 90 96 108 C84 104 80 96 72 100 C68 112 54 112 50 100 C42 96 38 104 26 108 C30 90 18 80 16 62 C14 38 30 14 60 14Z"/>' +
-    '<ellipse class="m-void" cx="58" cy="54" rx="20" ry="14"/><circle class="m-eye" cx="54" cy="54" r="7"/><ellipse class="m-void" cx="54" cy="54" rx="2" ry="5"/>' +
-    '<circle class="m-eye" cx="36" cy="34" r="2"/><circle class="m-eye" cx="82" cy="31" r="2"/><circle class="m-eye" cx="88" cy="70" r="1.6"/>' +
-    '<path class="m-edge" d="M38 80 Q58 92 78 80"/><path class="m-bone" d="M46 84 V89 M54 86 V92 M62 86 V92 M70 84 V89"/>',
-};
-
-const monsterArt = (kind, rank) => html(`<svg class="m-art ${rank || ""}" viewBox="0 0 120 120" aria-hidden="true">${MONSTER_ART[kind] || MONSTER_ART.horror}</svg>`);
+// The Gallowmoor foes the kit's arena and quarry show, by kind; the Sovereign is the Drowned Bailiff.
+const KIT_FOES = { beast: "mob_t2_skirmisher", horror: "mob_t2_stalker", man: "mob_t2_brute" };
+const monsterArt = (kind, rank) => html(`<svg class="m-art ${rank || ""}" viewBox="0 0 120 120" aria-hidden="true">${MONSTER_ART[rank === "sovereign" ? "mob_t2_sovereign" : KIT_FOES[kind]] || KIND_ART[kind] || KIND_ART.horror}</svg>`);
 
 const VISTA = '<svg viewBox="0 0 600 100" preserveAspectRatio="none" aria-hidden="true">' +
   '<path class="v-far" d="M0 58 C80 38 160 54 240 44 C320 34 400 58 480 40 C540 30 580 38 600 36 V100 H0Z"/>' +
@@ -1352,7 +1337,7 @@ PAGES_MODALS.reset = () => confirm({
 PAGES_MODALS.foe = () => openModal({
   title: "Fen Stalker",
   sub: "Stalker · Gallowmoor",
-  art: `<svg class="m-art" viewBox="0 0 120 120" aria-hidden="true">${MONSTER_ART.horror}</svg>`,
+  art: `<svg class="m-art" viewBox="0 0 120 120" aria-hidden="true">${MONSTER_ART.mob_t2_stalker}</svg>`,
   artTone: "ember",
   body: [
     h("p.ap-desc", "It keeps to the reeds until you are between it and the water."),
@@ -1574,7 +1559,7 @@ function galleryTokens() {
 function galleryIcons() {
   const names = Object.keys(ICONS);
   return section("icons", "Icons",
-    `${names.length} hand-drawn 24px stroke icons. <code>icon(name, cls)</code> gives a string, <code>iconEl(name, cls)</code> an element. Violet ones are new in v5.`,
+    `${names.length} hand-drawn 24px icons: line icons for the controls, solid glyphs for everything that stands for a thing in the world. <code>icon(name, cls)</code> gives a string, <code>iconEl(name, cls)</code> an element. Violet ones are new in v5.`,
     h("div.kit-icons", names.map((n) => h("div.kit-icon", { class: !V4_NAMES.has(n) && "is-new" }, ic(n), n))));
 }
 

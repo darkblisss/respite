@@ -739,7 +739,7 @@ export default {
       const sig = key ? `${d.icon}|${d.rarity || "common"}` : "";
       if (core.dataset.sig === sig) return;
       core.dataset.sig = sig;
-      art.replaceChildren(d ? iconEl(d.icon) : iconEl("band"));
+      art.replaceChildren(d ? iconEl(d.icon) : iconEl("ring"));
       setAttr(core, "data-rarity", d ? d.rarity || "common" : null);
       toggleClass(core, "is-empty", !d);
       setAttr(core, "aria-label", d ? bareName(key) : "Nothing on the anvil");

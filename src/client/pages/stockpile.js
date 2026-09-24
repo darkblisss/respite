@@ -31,9 +31,9 @@ import { toolFor } from "../../shared/progression.js";
 
 const FILTERS = [
   { id: "all", label: "All", test: () => true },
-  { id: "gear", label: "Gear", icon: "blade", test: (d) => d.kind === "gear" },
+  { id: "gear", label: "Gear", icon: "sword", test: (d) => d.kind === "gear" },
   { id: "material", label: "Materials", icon: "ore", test: (d) => d.kind === "material" && !d.heal },
-  { id: "remedy", label: "Remedies", icon: "ration", test: (d) => d.heal > 0 },
+  { id: "remedy", label: "Remedies", icon: "potion", test: (d) => d.heal > 0 },
   { id: "tool", label: "Tools", icon: "pick", test: (d) => d.kind === "tool" },
 ];
 

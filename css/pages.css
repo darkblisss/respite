@@ -1188,21 +1188,51 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
   100% { opacity: 0; transform: translate(-50%, -52px) scale(1); }
 }
 
-/* Monster drawings (120 by 120). */
-.m-art { display: block; }
+/* Monster drawings (120 by 120). Every part is a class; the rim follows the foe's rank. */
+.m-art { display: block; --m-rim: #8a4632; --m-line: 1.6; }
+.m-art.elite { --m-rim: var(--r-rare); }
+.m-art.boss,
+.m-art.sovereign { --m-rim: var(--r-epic); }
 
 /* A foe drawing in an art tile (the foe popup's header). */
 .art .m-art { width: 88%; height: 88%; }
-.m-body { fill: #120d16; stroke: #8a4632; stroke-width: 1.6; stroke-linejoin: round; }
-.m-art.elite .m-body { stroke: var(--r-rare); }
-.m-art.boss .m-body,
-.m-art.sovereign .m-body { stroke: var(--r-epic); }
+
+/* Drawn small, the rim thickens so the shape still reads: the arena and the
+   quarry at about fifty pixels, the Collection and the album at seventy-odd. */
+.foe-art .m-art { --m-line: 2.6; }
+.coll-box .m-art,
+.alb-foe-art .m-art { --m-line: 2.1; }
+.m-body { fill: #120d16; stroke: var(--m-rim); stroke-width: var(--m-line); stroke-linejoin: round; }
+.m-shade { fill: #09070c; stroke: var(--m-rim); stroke-opacity: .42; stroke-width: calc(var(--m-line) * .8); stroke-linejoin: round; }
+.m-cloth { fill: #1b1321; stroke: var(--m-rim); stroke-width: var(--m-line); stroke-linejoin: round; }
+.m-lit { fill: #2b1e27; }
 .m-void { fill: #040305; }
+.m-shadow { fill: #000; opacity: .38; }
 .m-eye { fill: #e0703f; }
+.m-glow { fill: #e0703f; opacity: .18; }
 .m-edge { fill: none; stroke: #3a2f2a; stroke-width: 2; stroke-linecap: round; }
-.m-steel { fill: #2c2833; stroke: #5c5666; stroke-width: 1; }
-.m-crack { fill: none; stroke: #c1613a; stroke-opacity: .6; stroke-width: 1.5; }
-.m-bone { fill: none; stroke: #948d9c; stroke-width: 1.2; }
+.m-steel { fill: #2c2833; stroke: #5c5666; stroke-width: 1; stroke-linejoin: round; }
+.m-crack { fill: none; stroke: #c1613a; stroke-opacity: .7; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.m-bone { fill: none; stroke: #948d9c; stroke-width: 1.2; stroke-linecap: round; }
+.m-ivory { fill: #a89c8a; }
+.m-rust { fill: #4a2a20; }
+.m-wood { fill: #33241b; }
+.m-rope { fill: none; stroke: #7a6448; stroke-width: 1.6; stroke-linecap: round; }
+.m-ash { fill: #6d605a; opacity: .5; }
+.m-fire { fill: #eb9068; }
+.m-ice { fill: #9cc3dc; }
+.m-ice-glow { fill: #9cc3dc; opacity: .2; }
+.m-moss { fill: #48532b; }
+.m-sallow { fill: #8a874b; }
+.m-star { fill: #d6e6ff; }
+.m-star-glow { fill: #bcd4ff; opacity: .22; }
+.m-veil { fill: #a58be6; }
+.m-veil-glow { fill: #9d82e0; opacity: .22; }
+.m-ghost { fill: #b3c7bd; opacity: .5; }
+.m-blood { fill: #6e1f22; }
+.m-bark { fill: #2e2019; stroke: var(--m-rim); stroke-width: var(--m-line); stroke-linejoin: round; }
+.m-plate { fill: #26222d; stroke: var(--m-rim); stroke-width: var(--m-line); stroke-linejoin: round; }
+.m-water { fill: #060509; opacity: .42; }
 
 .hunt-foot {
   display: flex;

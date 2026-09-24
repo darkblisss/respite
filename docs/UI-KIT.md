@@ -385,7 +385,7 @@ const off = on(el("view"), "click", ".item-pill .pill-hit", (e, btn) => {
 
 ### 6.2 icons.js
 
-- `ICONS`: `{ name: svgInnerMarkup }`, 114 icons on a 24 by 24 grid: 109 hand-drawn stroke icons (1.5 stroke, round caps) and five solid ones for the Trades, which fill with `currentColor` instead.
+- `ICONS`: `{ name: svgInnerMarkup }`, 218 icons on a 24 by 24 grid, of two kinds. The controls are hand-drawn stroke icons (1.5 stroke, round caps). Everything that stands for a thing in the world is a solid glyph that fills with `currentColor`: the sidebar's places, and the gear, tools, materials, remedies, foes, zones, weather, disciplines, Path nodes and tab marks. Those are drawn with the icon kit (boolean shapes, parts cut apart where they meet) and go in through `GLYPH(d)`, one path each, between the generated markers at the end of `ICONS`: redraw in the kit and inject rather than editing them by hand. Every v4 name still draws; the gear's old names are aliases (`ALIASES` under `ICONS`).
 - `icon(name, cls?) -> string`: `<svg class="ico cls" width="24" height="24" viewBox="0 0 24 24" ... aria-hidden="true" focusable="false">`. Unknown names draw `unknown`.
 - `iconEl(name, cls?) -> SVGElement`: a fresh element each call (parsed once per name and class, then cloned).
 
@@ -393,25 +393,32 @@ Sizes: `.ico` is 20px; `.ico-xs` 14, `.ico-sm` 16, `.ico-md` 20, `.ico-lg` 24, `
 
 The `width` and `height` attributes are the icon's own size, and they are not optional: an `<svg>` with only a `viewBox` has no intrinsic size, and Safari lays it out from the attributes on the first paint. Every `.ico` rule still wins over them, so the sizes above are what you see. The copies baked into `index.html` carry them too.
 
-Names (all v4 names are kept, unchanged):
+Names (every v4 name still draws):
 
 - Gathering tools: `pick`, `axe`, `sickle`, `knife`, `net`
-- Trade skills (solid): `delving`, `felling`, `flaying`, `harvesting`, `dredging`
-- Artisan skills (solid): `forgemaster`, `woodwright`, `tanner`, `weaver`, `artificer`
-- The Camp in the sidebar (solid): `campStockpile`, `campBounties`, `campRequisitions`, `campShop`, `campFortify`
-- The Realm in the sidebar (solid): `realmAtlas`, `realmMarket`, `realmLeaderboard`
-- The Vanguard in the sidebar (solid): `vanguardCharacter`, `vanguardInventory`, `vanguardDiscipline`, `warfare` (the Hunt skill, everywhere it appears), `vanguardParty`
-- Materials: `ore`, `log`, `fibre`, `hide`, `gem`, `ration`, `crate`; reagents: `coalIco`, `resinIco`, `pulpIco`, `tallowIco`, `shardIco`
-- Gear: `blade`, `greatblade`, `stave`, `ward`, `plate`, `greaves`, `treads`, `gauntlets`, `cowl`, `shroud`, `band`, `charm`, `book`
-- Foes: `beast`, `man`, `golemMob`, `horror`, `drakeMob`, `skull`
+- Trade skills (sidebar): `delving`, `felling`, `flaying`, `harvesting`, `dredging`
+- Artisan skills (sidebar): `forgemaster`, `woodwright`, `tanner`, `weaver`, `artificer`
+- The Camp in the sidebar: `campStockpile`, `campBounties`, `campRequisitions`, `campShop`, `campFortify`
+- The Realm in the sidebar: `realmAtlas`, `realmMarket`, `realmLeaderboard`
+- The Vanguard in the sidebar: `vanguardCharacter`, `vanguardInventory`, `vanguardDiscipline`, `warfare` (the Hunt skill, everywhere it appears), `vanguardParty`
+- Weapons: `sword`, `dagger`, `greatsword`, `targe` (the shield), `bow`, `staff`, `grimoire`
+- Armour, plate: `helm`, `breastplate`, `gauntlets`, `sabatons`; leather: `leatherHood`, `jerkin`, `leatherGloves`, `leatherBoots`; cloth: `clothHood`, `robe`, `clothGloves`, `clothBoots`
+- Jewellery and the Veil's charms: `amulet`, `ring`, `charmLesser`, `charmVeiled`, `charmSovereign`
+- Components: `swordBlade`, `hilt`, `shieldCore`, `binding`, `bowStave`, `bowstring`, `grip`, `shaft`, `staffHead`, `greatBlade`, `greatGrip`, `tome`, `clasp`
+- Materials: `ore`, `log`, `fibre`, `hide`, `gem`, `chest` (the Banded Chest); reagents: `coalIco`, `resinIco`, `pulpIco`, `tallowIco`, `shardIco`, and `flask` for reagents as a whole
+- Remedies: `salve`, `tincture`, `poultice`, `draught`, `decoction`, `tonic`, `leviathanBlood`, `philtre`, `elixir`, one per tier, and `potion` for remedies as a whole
+- Foes, small: `beast`, `man`, `golemMob`, `horror`, `drakeMob`, `skull` (each foe's full drawing is in `ui/monster-art.js`)
 - Companions: `rat`, `crow`, `marshcat`, `hound`, `stag`, `paw`
-- Hunt zones: `zoneOuter`, `zoneMiddle`, `zoneInner`, `zoneCore`
+- Hunt zones: `zoneOuter`, `zoneMiddle`, `zoneInner`, `zoneCore` (rings, one more for each step in; the Core's heart is the Veil's star)
 - Weather: `rain`, `sun`, `fog`, `wind`, `frost`, `moon`, `sky`, `unknown`
-- Places and pages: `atlas`, `shop`, `scroll`, `pack`, `person`, `swords`, `market`, `party`, `trophy`, `bonesetter`, `stockpile`, `map-pin`, `calendar`
+- Disciplines: `warrior`, `rogue`, `mage`; the Path, one a node: `ironhide`, `deepLungs`, `hammerhand`, `braced`, `sunder`, `stonewall`, `weightOfBlow`, `grimPace`, `devastation`, `bulwark`, `quickHands`, `keenEdge`, `sinew`, `lightfoot`, `killersEye`, `findTheGap`, `coiled`, `openVein`, `perfectAmbush`, `shadowstep`, `kindling`, `wardedSkin`, `drawnBreath`, `focus`, `pierceVeil`, `deepWell`, `cadence`, `overchannel`, `elemental`, `arcaneBulwark`
+- Tabs and marks: `path`, `gathering`, `artisans`, `purse` (Wealth), `medal` (a milestone won), `trophy`, `book`, `hourglass`, `swords`
+- Old gear names, now aliases: `blade`, `greatblade`, `stave`, `ward`, `plate`, `greaves`, `treads`, `cowl`, `shroud`, `band`, `charm`, `ration`, `crate`
+- Places and pages: `atlas`, `shop`, `scroll`, `pack`, `person`, `market`, `party`, `bonesetter`, `stockpile`, `map-pin`, `calendar`
 - Money: `coin`, `coin-stack`, `tag`
 - Online: `chat`, `send`, `mail`, `online`, `sync`, `cloud`, `offline`, `logout`, `user-plus`, `crown`, `bell`
 - Controls: `menu`, `plus`, `minus`, `close`, `check`, `chevron-down`, `chevron-right`, `chevron-left`, `chevron-up`, `arrow-right`, `search`, `filter`, `sort`, `dots`, `gear`, `eye`, `eye-off`, `lock`, `info`, `warn`, `alert`
-- Misc: `clock`, `hourglass`, `heart`, `shield`, `sparkle`, `hammer`, `flag`
+- Misc: `clock`, `heart`, `shield`, `sparkle`, `hammer`, `flag`
 
 ### 6.3 overlay.js
 
@@ -1438,7 +1445,7 @@ Armaments renders a two-handed weapon as one spanning slot instead: `.doll-col.h
 
 - Floats: append `<span class="float {kind} lane{0|1|2}">14!</span>` to the target's `.fx-layer` and remove it after 1 second. Kinds: `hit`, `crit` (gold), `strike`, `ambush`, `empowered`, `veil`, `volley` (violet), `bleed`, `thorns`, `hurt`, `ambushed` (ember), `heal` (green), `block`, `dodge`, `glance`, `join`, `enrage` (small caps words). Cycle the lane so blows do not overlap. Show at most the last 8 per frame.
 - Struck: remove `.struck` from the art, read `offsetWidth`, add `.struck` (a 260ms shake).
-- Monster drawings: v4's `MONSTER_ART` markup inside `svg.m-art` (`.elite`, `.sovereign` stroke colours), classes `m-body`, `m-void`, `m-eye`, `m-edge`, `m-steel`, `m-crack`, `m-bone`.
+- Monster drawings: `monsterArt(mob, elite)` from `popups/foe.js` draws the foe's own plate from `ui/monster-art.js` (`MONSTER_ART` by monster id; v4's five `KIND_ART` drawings are the fallback) inside `svg.m-art` (`.elite`, `.sovereign` set the rim through `--m-rim`; `--m-line` thickens it in small tiles). Parts are classes: `m-body`, `m-shade` (the far limbs), `m-cloth`, `m-bark`, `m-plate`, `m-lit`, `m-void`, `m-eye`, `m-glow`, `m-ivory`, `m-steel`, `m-edge`, `m-crack`, `m-bone`, `m-rope`, `m-shadow`, and the regions' own `m-ash`, `m-moss`, `m-sallow`, `m-ice`, `m-star`, `m-veil`, `m-fire`, `m-ghost`, `m-blood`, `m-rust`, `m-wood`, `m-water` (with `-glow` halos for ice, star and the Veil).
 - Foe cards are keyed by foe uid: add new ones, update health in place, give fallen ones `.is-gone` and remove them after 700ms.
 
 3. Zones, two across:

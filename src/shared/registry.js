@@ -265,14 +265,20 @@ function buildRegistry() {
     9: "Godsbane Elixir",
   };
 
+  // Each remedy its own vessel.
+  const REMEDY_ICONS = {
+    1: "salve", 2: "tincture", 3: "poultice", 4: "draught", 5: "decoction",
+    6: "tonic", 7: "leviathanBlood", 8: "philtre", 9: "elixir",
+  };
+
   const REMEDIES = CONFIG.economy.remedies.map((p) => ({
-    id: `provision_t${p.tier}`, name: REMEDY_NAMES[p.tier], icon: "ration", kind: "material",
+    id: `provision_t${p.tier}`, name: REMEDY_NAMES[p.tier], icon: REMEDY_ICONS[p.tier], kind: "material",
     tier: p.tier, heal: p.heal, value: p.value, price: p.price, smuggler: !!p.smuggler,
   }));
   // MATERIALS keeps its own copy, so no object sits in two tables.
   REMEDIES.forEach((r) => { MATERIALS[r.id] = { ...r }; });
 
-  MATERIALS.vault_chest = { id: "vault_chest", name: "Banded Chest", icon: "crate", kind: "material", value: 60, chest: 5, tier: 2 };
+  MATERIALS.vault_chest = { id: "vault_chest", name: "Banded Chest", icon: "chest", kind: "material", value: 60, chest: 5, tier: 2 };
 
   REAGENTS.forEach((r) => {
     MATERIALS[r.id] = { id: r.id, name: r.name, icon: r.icon, kind: "material",
@@ -296,6 +302,8 @@ function buildRegistry() {
       fragment: "sovereign_fragment",      essence: "sovereign_essence",      charm: "sovereign_charm",      fragValue: 1200, essValue: 24000 },
   ];
   const FRAG_PER_ESSENCE = 20;
+  // Each band's charm drawn for itself: a plain disc, a hexagon with a tassel, a crowned sun.
+  const CHARM_ICONS = { lesser: "charmLesser", veiled: "charmVeiled", sovereign: "charmSovereign" };
 
   VEIL_BANDS.forEach((b) => {
     MATERIALS[b.fragment] = { id: b.fragment, name: `${b.name} Fragment`, icon: "shardIco", kind: "material",
@@ -305,7 +313,7 @@ function buildRegistry() {
     /* A charm of the band rides in the rite's fourth socket and betters the odds
        once. The Bonesetter sells them at an Essence's worth; the Smuggler leaves
        them alone. */
-    MATERIALS[b.charm] = { id: b.charm, name: `${b.name} Charm`, icon: "charm", kind: "material",
+    MATERIALS[b.charm] = { id: b.charm, name: `${b.name} Charm`, icon: CHARM_ICONS[b.key], kind: "material",
       category: "Veil", value: Math.round(b.essValue * CONFIG.enchant.charmValue), tier: b.tiers[0], band: b.key, charm: true };
     // The Veil is built here rather than through addMat, so it asks for its paintings itself.
     [b.fragment, b.essence, b.charm].forEach((id) => { const art = matArt(id); if (art) MATERIALS[id].art = art; });
@@ -485,34 +493,34 @@ function buildRegistry() {
     const book = `${kHarv}_book`;
     const clasp = `${kDred}_clasp`;
 
-    addMat(blade, `${tDelve} Blade`, "blade", tier, 10, "Component");
-    addMat(handle, `${tFell} Handle`, "log", tier, 10, "Component");
-    addMat(score, `${tFell} Shield Core`, "ward", tier, 10, "Component");
-    addMat(bind, `${tFlay} Binding`, "hide", tier, 6, "Component");
-    addMat(stave, `${tFell} Bow Stave`, "stave", tier, 10, "Component");
-    addMat(string, `${tHarv} Bowstring`, "fibre", tier, 8, "Component");
-    addMat(grip, `${tFlay} Grip`, "hide", tier, 8, "Component");
-    addMat(shaft, `${tFell} Shaft`, "stave", tier, 10, "Component");
-    addMat(head, `${tDelve} Staff Head`, "gem", tier, 10, "Component");
-    addMat(gblade, `${tDelve} Great Blade`, "greatblade", tier, 14, "Component");
-    addMat(ggrip, `${tFell} Great Grip`, "log", tier, 10, "Component");
-    addMat(book, `${tHarv} Book Tome`, "book", tier, 14, "Component");
-    addMat(clasp, `${tDred} Clasp`, "gem", tier, 6, "Component");
+    addMat(blade, `${tDelve} Blade`, "swordBlade", tier, 10, "Component");
+    addMat(handle, `${tFell} Handle`, "hilt", tier, 10, "Component");
+    addMat(score, `${tFell} Shield Core`, "shieldCore", tier, 10, "Component");
+    addMat(bind, `${tFlay} Binding`, "binding", tier, 6, "Component");
+    addMat(stave, `${tFell} Bow Stave`, "bowStave", tier, 10, "Component");
+    addMat(string, `${tHarv} Bowstring`, "bowstring", tier, 8, "Component");
+    addMat(grip, `${tFlay} Grip`, "grip", tier, 8, "Component");
+    addMat(shaft, `${tFell} Shaft`, "shaft", tier, 10, "Component");
+    addMat(head, `${tDelve} Staff Head`, "staffHead", tier, 10, "Component");
+    addMat(gblade, `${tDelve} Great Blade`, "greatBlade", tier, 14, "Component");
+    addMat(ggrip, `${tFell} Great Grip`, "greatGrip", tier, 10, "Component");
+    addMat(book, `${tHarv} Book Tome`, "tome", tier, 14, "Component");
+    addMat(clasp, `${tDred} Clasp`, "clasp", tier, 6, "Component");
 
     const cTime = CONFIG.compTime(tier);
-    addCraft("forgemaster", blade, MATERIALS[blade].name, "blade", tier, cTime, 1.2, { [bar]: 12, [coal]: tier });
-    addCraft("woodwright", handle, MATERIALS[handle].name, "log", tier, cTime, 1.2, { [plank]: 8, [leather]: 5, [resin]: tier });
-    addCraft("woodwright", score, MATERIALS[score].name, "ward", tier, cTime, 1.2, { [bar]: 11, [plank]: 8, [resin]: tier });
-    addCraft("tanner", bind, MATERIALS[bind].name, "hide", tier, cTime, 1.0, { [leather]: 6, [tallow]: tier });
-    addCraft("woodwright", stave, MATERIALS[stave].name, "stave", tier, cTime, 1.2, { [plank]: 14, [resin]: tier });
-    addCraft("weaver", string, MATERIALS[string].name, "fibre", tier, cTime, 1.2, { [weave]: 12, [pulp]: tier });
-    addCraft("tanner", grip, MATERIALS[grip].name, "hide", tier, cTime, 1.2, { [leather]: 12, [tallow]: tier });
-    addCraft("woodwright", shaft, MATERIALS[shaft].name, "stave", tier, cTime, 1.2, { [plank]: 13, [resin]: tier });
-    addCraft("artificer", head, MATERIALS[head].name, "gem", tier, cTime, 1.2, { [bar]: 13, [inlay]: 2, [shard]: tier });
-    addCraft("forgemaster", gblade, MATERIALS[gblade].name, "greatblade", tier, cTime, 1.4, { [bar]: 14, [coal]: tier });
-    addCraft("woodwright", ggrip, MATERIALS[ggrip].name, "log", tier, cTime, 1.4, { [plank]: 12, [leather]: 6, [resin]: tier });
-    addCraft("weaver", book, MATERIALS[book].name, "book", tier, cTime, 1.4, { [weave]: 26, [pulp]: tier });
-    addCraft("artificer", clasp, MATERIALS[clasp].name, "gem", tier, cTime, 1.0, { [inlay]: 2, [shard]: tier });
+    addCraft("forgemaster", blade, MATERIALS[blade].name, "swordBlade", tier, cTime, 1.2, { [bar]: 12, [coal]: tier });
+    addCraft("woodwright", handle, MATERIALS[handle].name, "hilt", tier, cTime, 1.2, { [plank]: 8, [leather]: 5, [resin]: tier });
+    addCraft("woodwright", score, MATERIALS[score].name, "shieldCore", tier, cTime, 1.2, { [bar]: 11, [plank]: 8, [resin]: tier });
+    addCraft("tanner", bind, MATERIALS[bind].name, "binding", tier, cTime, 1.0, { [leather]: 6, [tallow]: tier });
+    addCraft("woodwright", stave, MATERIALS[stave].name, "bowStave", tier, cTime, 1.2, { [plank]: 14, [resin]: tier });
+    addCraft("weaver", string, MATERIALS[string].name, "bowstring", tier, cTime, 1.2, { [weave]: 12, [pulp]: tier });
+    addCraft("tanner", grip, MATERIALS[grip].name, "grip", tier, cTime, 1.2, { [leather]: 12, [tallow]: tier });
+    addCraft("woodwright", shaft, MATERIALS[shaft].name, "shaft", tier, cTime, 1.2, { [plank]: 13, [resin]: tier });
+    addCraft("artificer", head, MATERIALS[head].name, "staffHead", tier, cTime, 1.2, { [bar]: 13, [inlay]: 2, [shard]: tier });
+    addCraft("forgemaster", gblade, MATERIALS[gblade].name, "greatBlade", tier, cTime, 1.4, { [bar]: 14, [coal]: tier });
+    addCraft("woodwright", ggrip, MATERIALS[ggrip].name, "greatGrip", tier, cTime, 1.4, { [plank]: 12, [leather]: 6, [resin]: tier });
+    addCraft("weaver", book, MATERIALS[book].name, "tome", tier, cTime, 1.4, { [weave]: 26, [pulp]: tier });
+    addCraft("artificer", clasp, MATERIALS[clasp].name, "clasp", tier, cTime, 1.0, { [inlay]: 2, [shard]: tier });
 
     // 4. GEAR (Weapons & Armor)
     const gTime = CONFIG.gearTime(tier);
@@ -525,31 +533,31 @@ function buildRegistry() {
     const wGsword = `${kDelve}_greatsword`;
     const wGrimoire = `${kDred}_grimoire`;
 
-    addGear(wSword, `${tDelve} Sword`, "blade", "weapon", tier, "forgemaster", "sword");
-    addGear(wDagger, `${tDelve} Dagger`, "blade", "weapon", tier, "forgemaster", "dagger");
-    addGear(wShield, `${tFell} Shield`, "ward", "offhand", tier, "woodwright", "shield");
-    addGear(wBow, `${tFell} Bow`, "stave", "weapon", tier, "woodwright", "bow", true);
-    addGear(wStaff, `${tDred} Staff`, "stave", "weapon", tier, "artificer", "staff", true);
-    addGear(wGsword, `${tDelve} Greatsword`, "greatblade", "weapon", tier, "forgemaster", "greatsword", true);
-    addGear(wGrimoire, `${tDred} Grimoire`, "book", "offhand", tier, "artificer", "grimoire");
+    addGear(wSword, `${tDelve} Sword`, "sword", "weapon", tier, "forgemaster", "sword");
+    addGear(wDagger, `${tDelve} Dagger`, "dagger", "weapon", tier, "forgemaster", "dagger");
+    addGear(wShield, `${tFell} Shield`, "targe", "offhand", tier, "woodwright", "shield");
+    addGear(wBow, `${tFell} Bow`, "bow", "weapon", tier, "woodwright", "bow", true);
+    addGear(wStaff, `${tDred} Staff`, "staff", "weapon", tier, "artificer", "staff", true);
+    addGear(wGsword, `${tDelve} Greatsword`, "greatsword", "weapon", tier, "forgemaster", "greatsword", true);
+    addGear(wGrimoire, `${tDred} Grimoire`, "grimoire", "offhand", tier, "artificer", "grimoire");
 
-    addCraft("forgemaster", wSword, GEAR[wSword].name, "blade", tier, gTime, 2.5, { [blade]: 1, [handle]: 1 }, true);
-    addCraft("forgemaster", wDagger, GEAR[wDagger].name, "blade", tier, gTime, 2.5, { [blade]: 1, [handle]: 1 }, true);
-    addCraft("woodwright", wShield, GEAR[wShield].name, "ward", tier, gTime, 2.5, { [score]: 1, [bind]: 1 }, true);
-    addCraft("woodwright", wBow, GEAR[wBow].name, "stave", tier, gTime, 2.8, { [stave]: 1, [string]: 1, [grip]: 1 }, true);
-    addCraft("artificer", wStaff, GEAR[wStaff].name, "stave", tier, gTime, 2.8, { [shaft]: 1, [head]: 1, [bind]: 1 }, true);
-    addCraft("forgemaster", wGsword, GEAR[wGsword].name, "greatblade", tier, gTime, 3.2, { [gblade]: 1, [ggrip]: 1, [bind]: 1 }, true);
-    addCraft("artificer", wGrimoire, GEAR[wGrimoire].name, "book", tier, gTime, 3.2, { [book]: 1, [bind]: 1, [clasp]: 1 }, true);
+    addCraft("forgemaster", wSword, GEAR[wSword].name, "sword", tier, gTime, 2.5, { [blade]: 1, [handle]: 1 }, true);
+    addCraft("forgemaster", wDagger, GEAR[wDagger].name, "dagger", tier, gTime, 2.5, { [blade]: 1, [handle]: 1 }, true);
+    addCraft("woodwright", wShield, GEAR[wShield].name, "targe", tier, gTime, 2.5, { [score]: 1, [bind]: 1 }, true);
+    addCraft("woodwright", wBow, GEAR[wBow].name, "bow", tier, gTime, 2.8, { [stave]: 1, [string]: 1, [grip]: 1 }, true);
+    addCraft("artificer", wStaff, GEAR[wStaff].name, "staff", tier, gTime, 2.8, { [shaft]: 1, [head]: 1, [bind]: 1 }, true);
+    addCraft("forgemaster", wGsword, GEAR[wGsword].name, "greatsword", tier, gTime, 3.2, { [gblade]: 1, [ggrip]: 1, [bind]: 1 }, true);
+    addCraft("artificer", wGrimoire, GEAR[wGrimoire].name, "grimoire", tier, gTime, 3.2, { [book]: 1, [bind]: 1, [clasp]: 1 }, true);
 
     // Jewellery (Artificer)
     const jAmulet = `${kDred}_amulet`;
     const jRing = `${kDelve}_ring`;
 
-    addGear(jAmulet, `${tDred} Amulet`, "charm", "neck", tier, "artificer", "amulet");
-    addGear(jRing, `${tDelve} Ring`, "band", "ring", tier, "artificer", "ring");
+    addGear(jAmulet, `${tDred} Amulet`, "amulet", "neck", tier, "artificer", "amulet");
+    addGear(jRing, `${tDelve} Ring`, "ring", "ring", tier, "artificer", "ring");
 
-    addCraft("artificer", jAmulet, GEAR[jAmulet].name, "charm", tier, gTime, 2.5, { [clasp]: 1, [inlay]: 2, [shard]: tier }, true);
-    addCraft("artificer", jRing, GEAR[jRing].name, "band", tier, gTime, 2.5, { [bar]: 6, [inlay]: 1, [shard]: tier }, true);
+    addCraft("artificer", jAmulet, GEAR[jAmulet].name, "amulet", tier, gTime, 2.5, { [clasp]: 1, [inlay]: 2, [shard]: tier }, true);
+    addCraft("artificer", jRing, GEAR[jRing].name, "ring", tier, gTime, 2.5, { [bar]: 6, [inlay]: 1, [shard]: tier }, true);
 
     // Heavy Armor (Forgemaster)
     const aHH = `${kDelve}_helm`;
@@ -557,9 +565,9 @@ function buildRegistry() {
     const aHB = `${kDelve}_hboots`;
     const aHG = `${kDelve}_hgaunts`;
 
-    addGear(aHH, `${tDelve} Helm`, "cowl", "head", tier, "forgemaster", "helm");
-    addGear(aHC, `${tDelve} Chestplate`, "plate", "chest", tier, "forgemaster", "chest");
-    addGear(aHB, `${tDelve} Boots`, "treads", "feet", tier, "forgemaster", "hboots");
+    addGear(aHH, `${tDelve} Helm`, "helm", "head", tier, "forgemaster", "helm");
+    addGear(aHC, `${tDelve} Chestplate`, "breastplate", "chest", tier, "forgemaster", "chest");
+    addGear(aHB, `${tDelve} Boots`, "sabatons", "feet", tier, "forgemaster", "hboots");
     addGear(aHG, `${tDelve} Gauntlets`, "gauntlets", "hands", tier, "forgemaster", "hgaunts");
 
     [aHH, aHC, aHB, aHG].forEach((id) => {
@@ -572,10 +580,10 @@ function buildRegistry() {
     const aMB = `${kFlay}_mboots`;
     const aMG = `${kFlay}_mgloves`;
 
-    addGear(aMH, `${tFlay} Hood`, "cowl", "head", tier, "tanner", "hood_medium");
-    addGear(aMC, `${tFlay} Jacket`, "shroud", "chest", tier, "tanner", "jacket");
-    addGear(aMB, `${tFlay} Boots`, "treads", "feet", tier, "tanner", "mboots");
-    addGear(aMG, `${tFlay} Gloves`, "gauntlets", "hands", tier, "tanner", "mgloves");
+    addGear(aMH, `${tFlay} Hood`, "leatherHood", "head", tier, "tanner", "hood_medium");
+    addGear(aMC, `${tFlay} Jacket`, "jerkin", "chest", tier, "tanner", "jacket");
+    addGear(aMB, `${tFlay} Boots`, "leatherBoots", "feet", tier, "tanner", "mboots");
+    addGear(aMG, `${tFlay} Gloves`, "leatherGloves", "hands", tier, "tanner", "mgloves");
 
     [aMH, aMC, aMB, aMG].forEach((id) => {
       addCraft("tanner", id, GEAR[id].name, GEAR[id].icon, tier, gTime, 2.5, { [leather]: 20, [tallow]: tier }, true);
@@ -587,10 +595,10 @@ function buildRegistry() {
     const aLB = `${kHarv}_lboots`;
     const aLG = `${kHarv}_lgloves`;
 
-    addGear(aLH, `${tHarv} Hood`, "cowl", "head", tier, "weaver", "hood_light");
-    addGear(aLC, `${tHarv} Robe`, "shroud", "chest", tier, "weaver", "robe");
-    addGear(aLB, `${tHarv} Boots`, "treads", "feet", tier, "weaver", "lboots");
-    addGear(aLG, `${tHarv} Gloves`, "gauntlets", "hands", tier, "weaver", "lgloves");
+    addGear(aLH, `${tHarv} Hood`, "clothHood", "head", tier, "weaver", "hood_light");
+    addGear(aLC, `${tHarv} Robe`, "robe", "chest", tier, "weaver", "robe");
+    addGear(aLB, `${tHarv} Boots`, "clothBoots", "feet", tier, "weaver", "lboots");
+    addGear(aLG, `${tHarv} Gloves`, "clothGloves", "hands", tier, "weaver", "lgloves");
 
     [aLH, aLC, aLB, aLG].forEach((id) => {
       addCraft("weaver", id, GEAR[id].name, GEAR[id].icon, tier, gTime, 2.5, { [weave]: 20, [pulp]: tier }, true);
@@ -739,23 +747,23 @@ function buildRegistry() {
      nothing about a hammer. Mastery levels and the curve live in CONFIG.mastery;
      the track itself is mastery.js. */
   const WEAPON_LINES = [
-    { line: "sword", title: "Sword Saint", name: "Sword", icon: "blade", slot: "weapon", stat: "attack",
+    { line: "sword", title: "Sword Saint", name: "Sword", icon: "sword", slot: "weapon", stat: "attack",
       ranks: ["Swordhand", "Swordsman", "Blademaster", "Duellist", "Swordmaster"] },
-    { line: "shield", title: "Aegis", name: "Shield", icon: "ward", slot: "offhand", stat: "defence",
+    { line: "shield", title: "Aegis", name: "Shield", icon: "targe", slot: "offhand", stat: "defence",
       ranks: ["Shieldbearer", "Warder", "Bulwark", "Aegis", "Shieldmaster"] },
-    { line: "dagger", title: "Shadow", name: "Dagger", icon: "knife", slot: "weapon", stat: "attack",
+    { line: "dagger", title: "Shadow", name: "Dagger", icon: "dagger", slot: "weapon", stat: "attack",
       ranks: ["Cutpurse", "Knifehand", "Shadeblade", "Assassin", "Daggermaster"] },
-    { line: "bow", title: "Sun Piercer", name: "Bow", icon: "stave", slot: "weapon", stat: "attack",
+    { line: "bow", title: "Sun Piercer", name: "Bow", icon: "bow", slot: "weapon", stat: "attack",
       ranks: ["Bowhand", "Archer", "Marksman", "Deadeye", "Bowmaster"] },
-    { line: "staff", title: "Supreme Magus", name: "Staff", icon: "stave", slot: "weapon", stat: "attack",
+    { line: "staff", title: "Supreme Magus", name: "Staff", icon: "staff", slot: "weapon", stat: "attack",
       ranks: ["Channeller", "Adept", "Conduit", "Archmage", "Staffmaster"] },
     /* `released: false` keeps a line out of the world entirely: its recipes are
        pruned off the benches below, no discipline may hold it, and the Mastery
        page does not list it. The gear itself stays in GEAR so a save that
        somehow holds one still loads. Flip the flag to ship the line. */
-    { line: "greatsword", name: "Greatsword", icon: "greatblade", slot: "weapon", stat: "attack", released: false,
+    { line: "greatsword", name: "Greatsword", icon: "greatsword", slot: "weapon", stat: "attack", released: false,
       ranks: ["Hewer", "Cleaver", "Reaver", "Headsman", "Greatmaster"] },
-    { line: "grimoire", name: "Grimoire", icon: "book", slot: "offhand", stat: "attack", released: false,
+    { line: "grimoire", name: "Grimoire", icon: "grimoire", slot: "offhand", stat: "attack", released: false,
       ranks: ["Reader", "Scribe", "Lorekeeper", "Archivist", "Grimoiremaster"] },
   ];
   const WEAPON_LINE_IDS = WEAPON_LINES.map((w) => w.line);
@@ -941,40 +949,40 @@ function buildRegistry() {
 
   const PATHS = {
     warrior: [
-      minor("wr_ironhide", "Ironhide", 1, "The armour sits where it should.", { defencePct: 0.03 }, "plate"),
-      minor("wr_lungs", "Deep Lungs", 1, "You last longer than the thing opposite.", { healthPct: 0.03 }, "heart"),
-      minor("wr_hammerhand", "Hammerhand", 1, "Every blow carries more of you in it.", { attackPct: 0.025 }, "hammer"),
-      minor("wr_braced", "Braced", 1, "The Veil gathers faster in a stance held.", { veilFlat: 2 }, "ward"),
-      minor("wr_sunder", "Sunder", 2, "Armour is a suggestion.", { penFlat: 0.02 }, "axe"),
-      minor("wr_stonewall", "Stonewall", 2, "Heavier, and harder to move.", { healthPct: 0.015, defencePct: 0.015 }, "shield"),
-      minor("wr_weight", "Weight of the Blow", 2, "A full Veil lands heavier.", { techPct: 0.04 }, "swords"),
-      minor("wr_grimpace", "Grim Pace", 2, "Slow is not the same as late.", { speedPct: 0.015 }, "treads"),
-      keystone("wr_devastation", "Devastation", "The strike a full Veil buys stops being a blow and becomes a verdict.", { techPct: 0.35 }, "greatblade"),
-      keystone("wr_vanguard", "Bulwark of the Vanguard", "You are the ground the party stands on.", { defencePct: 0.12, healthPct: 0.08 }, "crown"),
+      minor("wr_ironhide", "Ironhide", 1, "The armour sits where it should.", { defencePct: 0.03 }, "ironhide"),
+      minor("wr_lungs", "Deep Lungs", 1, "You last longer than the thing opposite.", { healthPct: 0.03 }, "deepLungs"),
+      minor("wr_hammerhand", "Hammerhand", 1, "Every blow carries more of you in it.", { attackPct: 0.025 }, "hammerhand"),
+      minor("wr_braced", "Braced", 1, "The Veil gathers faster in a stance held.", { veilFlat: 2 }, "braced"),
+      minor("wr_sunder", "Sunder", 2, "Armour is a suggestion.", { penFlat: 0.02 }, "sunder"),
+      minor("wr_stonewall", "Stonewall", 2, "Heavier, and harder to move.", { healthPct: 0.015, defencePct: 0.015 }, "stonewall"),
+      minor("wr_weight", "Weight of the Blow", 2, "A full Veil lands heavier.", { techPct: 0.04 }, "weightOfBlow"),
+      minor("wr_grimpace", "Grim Pace", 2, "Slow is not the same as late.", { speedPct: 0.015 }, "grimPace"),
+      keystone("wr_devastation", "Devastation", "The strike a full Veil buys stops being a blow and becomes a verdict.", { techPct: 0.35 }, "devastation"),
+      keystone("wr_vanguard", "Bulwark of the Vanguard", "You are the ground the party stands on.", { defencePct: 0.12, healthPct: 0.08 }, "bulwark"),
     ],
     rogue: [
-      minor("rg_quickhands", "Quick Hands", 1, "Two where there was one.", { speedPct: 0.02 }, "gauntlets"),
-      minor("rg_keenedge", "Keen Edge", 1, "You find the seam more often.", { critFlat: 0.01 }, "knife"),
-      minor("rg_sinew", "Sinew", 1, "Thin is not the same as weak.", { attackPct: 0.025 }, "blade"),
-      minor("rg_lightfoot", "Lightfoot", 1, "Harder to catch, and harder to keep hold of.", { healthPct: 0.025 }, "treads"),
-      minor("rg_killerseye", "Killer's Eye", 2, "When it lands, it ends things.", { critDmgFlat: 0.04 }, "eye"),
-      minor("rg_findthegap", "Find the Gap", 2, "Plate has hinges.", { penFlat: 0.02 }, "sickle"),
-      minor("rg_coiled", "Coiled", 2, "The Veil winds tighter with every strike.", { veilFlat: 2 }, "sparkle"),
-      minor("rg_openvein", "Open the Vein", 2, "An Ambush cuts deeper.", { techPct: 0.04 }, "skull"),
-      keystone("rg_perfect", "Perfect Ambush", "Nothing you walk in on gets to be surprised twice.", { techPct: 0.40 }, "cowl"),
-      keystone("rg_shadowstep", "Shadowstep", "You are already somewhere else.", { critFlat: 0.08, speedPct: 0.06 }, "shroud"),
+      minor("rg_quickhands", "Quick Hands", 1, "Two where there was one.", { speedPct: 0.02 }, "quickHands"),
+      minor("rg_keenedge", "Keen Edge", 1, "You find the seam more often.", { critFlat: 0.01 }, "keenEdge"),
+      minor("rg_sinew", "Sinew", 1, "Thin is not the same as weak.", { attackPct: 0.025 }, "sinew"),
+      minor("rg_lightfoot", "Lightfoot", 1, "Harder to catch, and harder to keep hold of.", { healthPct: 0.025 }, "lightfoot"),
+      minor("rg_killerseye", "Killer's Eye", 2, "When it lands, it ends things.", { critDmgFlat: 0.04 }, "killersEye"),
+      minor("rg_findthegap", "Find the Gap", 2, "Plate has hinges.", { penFlat: 0.02 }, "findTheGap"),
+      minor("rg_coiled", "Coiled", 2, "The Veil winds tighter with every strike.", { veilFlat: 2 }, "coiled"),
+      minor("rg_openvein", "Open the Vein", 2, "An Ambush cuts deeper.", { techPct: 0.04 }, "openVein"),
+      keystone("rg_perfect", "Perfect Ambush", "Nothing you walk in on gets to be surprised twice.", { techPct: 0.40 }, "perfectAmbush"),
+      keystone("rg_shadowstep", "Shadowstep", "You are already somewhere else.", { critFlat: 0.08, speedPct: 0.06 }, "shadowstep"),
     ],
     mage: [
-      minor("mg_kindling", "Kindling", 1, "The cast takes less coaxing.", { attackPct: 0.03 }, "sun"),
-      minor("mg_warded", "Warded Skin", 1, "Thin, but no longer paper.", { healthPct: 0.03 }, "hide"),
-      minor("mg_breath", "Drawn Breath", 1, "The air gives it up more readily.", { absorbFlat: 0.3 }, "wind"),
-      minor("mg_focus", "Focus", 1, "You see where it is thinnest.", { critFlat: 0.01 }, "eye"),
-      minor("mg_pierce", "Pierce the Veil", 2, "Nothing between the cast and the thing.", { penFlat: 0.025 }, "stave"),
-      minor("mg_deepwell", "Deep Well", 2, "It comes in faster than you spend it.", { absorbFlat: 0.4 }, "gem"),
-      minor("mg_cadence", "Cadence", 2, "One after another, without the pause.", { speedPct: 0.015 }, "hourglass"),
-      minor("mg_overchannel", "Overchannel", 2, "An empowered cast, and then some.", { techPct: 0.04 }, "sparkle"),
-      keystone("mg_elemental", "Elemental Mastery", "The Veil stops being borrowed and starts being yours.", { techPct: 0.40 }, "crown"),
-      keystone("mg_arcanebulwark", "Arcane Bulwark", "The fragile part was never the point.", { defencePct: 0.10, healthPct: 0.10 }, "ward"),
+      minor("mg_kindling", "Kindling", 1, "The cast takes less coaxing.", { attackPct: 0.03 }, "kindling"),
+      minor("mg_warded", "Warded Skin", 1, "Thin, but no longer paper.", { healthPct: 0.03 }, "wardedSkin"),
+      minor("mg_breath", "Drawn Breath", 1, "The air gives it up more readily.", { absorbFlat: 0.3 }, "drawnBreath"),
+      minor("mg_focus", "Focus", 1, "You see where it is thinnest.", { critFlat: 0.01 }, "focus"),
+      minor("mg_pierce", "Pierce the Veil", 2, "Nothing between the cast and the thing.", { penFlat: 0.025 }, "pierceVeil"),
+      minor("mg_deepwell", "Deep Well", 2, "It comes in faster than you spend it.", { absorbFlat: 0.4 }, "deepWell"),
+      minor("mg_cadence", "Cadence", 2, "One after another, without the pause.", { speedPct: 0.015 }, "cadence"),
+      minor("mg_overchannel", "Overchannel", 2, "An empowered cast, and then some.", { techPct: 0.04 }, "overchannel"),
+      keystone("mg_elemental", "Elemental Mastery", "The Veil stops being borrowed and starts being yours.", { techPct: 0.40 }, "elemental"),
+      keystone("mg_arcanebulwark", "Arcane Bulwark", "The fragile part was never the point.", { defencePct: 0.10, healthPct: 0.10 }, "arcaneBulwark"),
     ],
   };
   /* Ids only. The node objects live in PATHS and nowhere else: GameData holds no
@@ -1006,17 +1014,17 @@ function buildRegistry() {
   ];
 
   const CLASSES = [
-    { id: "warrior", name: "Warrior", icon: "plate",
+    { id: "warrior", name: "Warrior", icon: "warrior",
       blurb: "Forces the Veil through the body. Slow, heavy and hard to put down.",
       health: 1.2, attack: 1, defence: 1.5, speed: 2600, ...BASE_COMBAT,
       veilName: "Devastating Strike",
       veilNote: "Veil builds with every blow you land, and half as much with every blow aimed at you. It carries from fight to fight. Full, your next swing lands three times over and ignores half of Defence." },
-    { id: "rogue", name: "Rogue", icon: "blade",
+    { id: "rogue", name: "Rogue", icon: "rogue",
       blurb: "Brief, precise Veil surges. Fast hands, thin margins.",
       health: 1, attack: 0.85, defence: 1, speed: 2000, ...BASE_COMBAT,
       veilName: "Ambush",
       veilNote: "Every encounter you walk into opens on an Ambush: a certain critical, a quarter harder again. Veil rebuilds with each blow; full, the next swing is another Ambush." },
-    { id: "mage", name: "Mage", icon: "stave",
+    { id: "mage", name: "Mage", icon: "mage",
       blurb: "Shapes the Veil directly. Fragile, and worth it.",
       health: 0.9, attack: 1.3, defence: 0.7, speed: 2600, ...BASE_COMBAT,
       veilName: "Elemental Absorption",

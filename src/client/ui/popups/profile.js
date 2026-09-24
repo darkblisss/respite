@@ -48,7 +48,7 @@ function wornRows(equipment) {
     const d = key && canFortify(key) ? itemDef(key) : null;
     if (!d) {
       return h("div.list-row",
-        h("span.art.art-sm", { "data-tone": "neutral", "aria-hidden": "true" }, iconEl(slot === "neck" ? "charm" : "band")),
+        h("span.art.art-sm", { "data-tone": "neutral", "aria-hidden": "true" }, iconEl(slot === "neck" ? "amulet" : "ring")),
         h("span.lr-main", h("span.lr-title.muted", `No ${slotWord(slot).toLowerCase()}`), h("span.lr-sub", "Nothing worn")),
         h("span.lr-end"));
     }
