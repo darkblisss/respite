@@ -86,8 +86,8 @@ function dollSlot(eq, slot) {
 
 /* Both columns of a paperdoll, filled from any equipment object -- your own save's, or a
    stranger's off player_profile(). A two-handed weapon takes the offhand's place as well.
-   Exported because the commander page wears the same doll, callout lines and all:
-   whoever paints it calls dollLines(doll).update(skin) afterwards. */
+   Exported because the commander page wears the same doll (without the callout
+   lines: those are the Inventory's alone, see dollCard). */
 export function paintDoll(left, right, eq) {
   const weapon = eq.weapon ? itemDef(eq.weapon) : null;
   const twoHands = !!(weapon && weapon.twoHanded);
@@ -99,8 +99,10 @@ export function paintDoll(left, right, eq) {
 }
 
 /* `link` puts a small quiet link in the card head ({ href, label }). The Satchel
-   itself needs none; the Character tab uses it to point back here. */
-export function dollCard(ctx, { link = null } = {}) {
+   itself needs none; the Character tab uses it to point back here. `lines` draws
+   the callout lines from each slot to the body: the Inventory, where the gear is
+   put on and taken off, and nowhere a commander is only being looked at. */
+export function dollCard(ctx, { link = null, lines: withLines = false } = {}) {
   const linkNode = link ? h("a.btn.btn-sm.btn-quiet", { href: link.href }, link.label, iconEl("arrow-right")) : null;
   const chips = h("div.card-actions");
   const left = h("div.doll-col");
@@ -125,7 +127,7 @@ export function dollCard(ctx, { link = null } = {}) {
     h("div.card-head", h("div", h("h2.card-title", "Worn")), chips),
     doll);
   // Each worn slot's line to where the piece sits on the figure.
-  const lines = dollLines(doll);
+  const lines = withLines ? dollLines(doll) : null;
   let linesSig = null;
 
   let sig = null;
@@ -172,7 +174,7 @@ export function dollCard(ctx, { link = null } = {}) {
       dollSkinSig = paintPortrait(dollBust, ctx.state.player.skin, dollSkinSig);
       // The lines follow the slots and the skin; resizing redraws them by itself.
       const nextLines = `${sig}|${dollSkinSig}`;
-      if (nextLines !== linesSig) {
+      if (lines && nextLines !== linesSig) {
         linesSig = nextLines;
         lines.update(ctx.state.player.skin);
       }
@@ -275,7 +277,7 @@ export default {
        already knew how to hold more than one store, and only ever got one. */
     const store = storageCard(ctx, { pools: ["inv", "bank", "vault"], view: VIEW, idBase: "arm" });
     const satchel = satchelCard(ctx, SATCHEL_VIEW);
-    const doll = dollCard(ctx);
+    const doll = dollCard(ctx, { lines: true });
     const standing = standingCard();
 
     view.appendChild(h("div.page",

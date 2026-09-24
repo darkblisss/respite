@@ -23,4 +23,8 @@
    roll keys, so rolls.ench was dropped on every server request and every attempt
    rolled attempt number 0. A browser on 6 predicts every attempt off that one
    number while the server moves on from it, so the two would disagree. */
-export const ENGINE_VERSION = 7;
+/* 8: tools roll rarity on the bench the way gear does (a Common one is still its
+   bare base; anything finer is its own piece), a rolled tool racks whole and works
+   at its rarity's speed. A browser on 7 predicts a plain tool off every craft
+   while the server rolls one, so the two would disagree. */
+export const ENGINE_VERSION = 8;

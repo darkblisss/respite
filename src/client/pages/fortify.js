@@ -34,6 +34,18 @@ const SPARE_POOLS = ["inv", "bank", "vault"];
 // Beams take a second to converge; the stamp stays up long enough to read.
 const STRIKE_MS = 1000;
 const REST_MS = 2600;
+/* The quick rite: no build-up, the verdict for a breath, and the same essence
+   (and charm) back in the holes for the next press. One press is still one
+   command: nothing here presses for you, so the server sees no more than a
+   player pressing by hand would send. */
+const QUICK_REST_MS = 650;
+const QUICK_KEY = "respite:quickRite";
+const readQuick = () => {
+  try { return window.localStorage.getItem(QUICK_KEY) === "1"; } catch { return false; }
+};
+const saveQuick = (on) => {
+  try { window.localStorage.setItem(QUICK_KEY, on ? "1" : "0"); } catch { /* private mode: the choice lasts the visit */ }
+};
 const LOG_LINES = 8;
 
 const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -163,12 +175,22 @@ export default {
     const help = h("button.info-btn", { type: "button", "aria-label": "How the odds and the gain work" }, iconEl("info"));
     const oddsRows = h("div.odds-strip", { role: "list" });
     const goBtn = h("button.btn.btn-primary.btn-lg.btn-block", { type: "button", onClick: () => strike() }, "Fortify");
+    let quickRite = readQuick();
+    const quickBox = h("input", { type: "checkbox" });
+    quickBox.checked = quickRite;
+    quickBox.addEventListener("change", () => {
+      quickRite = quickBox.checked;
+      saveQuick(quickRite);
+    });
+    const quickLine = h("label.check.rite-quick", quickBox,
+      h("span", "Quick rite: skip the build-up and put the same essence back after each press"));
     const fUnder = h("div.rite-under",
       h("div.odds-head",
         h("div.odds", h("span.eyebrow", "Odds of taking"), oddsV, oddsSub),
         help),
       oddsRows,
-      goBtn);
+      goBtn,
+      quickLine);
 
     /* ---------- convert ---------- */
 
@@ -267,6 +289,21 @@ export default {
 
     function clearHoles() {
       held = { 1: null, 2: null, 3: null, charm: null };
+    }
+
+    /* After a quick rite: the holes take back what they held, as far as the stock
+       still covers it, for the piece now on the anvil. */
+    function refillHoles(was) {
+      const plan = sel ? enchantPlan(ctx.state, sel.key) : null;
+      if (!plan || plan.maxed) return;
+      let left = plan.have;
+      HOLES.forEach((i) => {
+        if (was[i] === plan.stone && left > 0) {
+          held[i] = plan.stone;
+          left--;
+        }
+      });
+      if (was.charm && was.charm === plan.charm && plan.charms > 0) held.charm = plan.charm;
     }
 
     function putPiece(p) {
@@ -480,16 +517,24 @@ export default {
       if (n < 1 || plan.have < n || (withCharm && plan.charms < 1)) return;
       const { key, at } = sel;
       const before = plan.level;
+      const quick = quickRite;
+      const was = { ...held };
 
-      // The beams: one a stone, and the charm's from above.
-      fx(fFx,
-        h("div.beam.b1", h("i")),
-        n >= 2 ? h("div.beam.b2", h("i")) : null,
-        n >= 3 ? h("div.beam.b3", h("i")) : null,
-        withCharm ? h("div.beam.beam-charm.b4", h("i")) : null);
-      setPhase("strike");
-      await wait(STRIKE_MS);
-      if (dead) return;
+      if (quick) {
+        // No build-up: the press goes straight to the anvil. The phase still guards a double press.
+        phase = "strike";
+        paint();
+      } else {
+        // The beams: one a stone, and the charm's from above.
+        fx(fFx,
+          h("div.beam.b1", h("i")),
+          n >= 2 ? h("div.beam.b2", h("i")) : null,
+          n >= 3 ? h("div.beam.b3", h("i")) : null,
+          withCharm ? h("div.beam.beam-charm.b4", h("i")) : null);
+        setPhase("strike");
+        await wait(STRIKE_MS);
+        if (dead) return;
+      }
 
       const res = await ctx.dispatch("enchant", { key, from: at, stones: n, charm: withCharm });
       if (dead) return;
@@ -501,22 +546,24 @@ export default {
       if (won) {
         sel = { key: res.data.key, at };
         const hl = res.data.halo ? haloOf(res.data.level) : null;
-        fx(fFx, h("div.flash"), h("div.shock"), sparks(),
+        fx(fFx, h("div.flash"), quick ? null : h("div.shock"), quick ? null : sparks(),
           stamp("stamp-took", "Fortified", hl ? `+${res.data.level} · the ${hl.name} halo` : `+${res.data.level}`));
         setPhase("took");
       } else {
         refusals.unshift({ t: ctx.now, m: `${bareName(key)} refused at +${before + 1}. ${n} Essence lost${withCharm ? " and a charm" : ""}.` });
         refusals.splice(LOG_LINES);
-        fx(fFx, h("div.flash"), smoke(), stamp("stamp-refused", "Failed", `Still +${before}`));
+        fx(fFx, h("div.flash"), quick ? null : smoke(), stamp("stamp-refused", "Failed", `Still +${before}`));
         setPhase("refused");
       }
       // The holes empty: a press is a fresh choice, and a charm is spent either way.
+      // The quick rite puts the same back, as far as the stock still covers it.
       clearHoles();
+      if (quick) refillHoles(was);
       sigs.pieces = null;
       sigs.stock = null;
       sigs.log = null;
       paint();
-      later(REST_MS, () => setPhase("idle"));
+      later(quick ? QUICK_REST_MS : REST_MS, () => setPhase("idle"));
     }
 
     /* ---------- the carrying ---------- */

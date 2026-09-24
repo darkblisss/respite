@@ -699,6 +699,12 @@ button.doll-slot { cursor: pointer; }
   min-height: 0;
 }
 
+/* The figure never grows past a set size: a wide column (the Character page, a
+   commander's page) used to stretch it to half a metre of person. The slots
+   close in on it rather than sitting out at the card's edges. */
+.doll { grid-template-columns: 72px minmax(0, 210px) 72px; }
+.doll-figure .figure-wrap { width: min(100%, 190px); align-self: center; }
+
 .doll-name {
   font-family: var(--font-display);
   font-size: var(--text-xl);
@@ -2485,8 +2491,15 @@ button.seat-name:hover { text-decoration: underline; }
   -webkit-touch-callout: none;
 }
 
-.slot-grid.is-sorting,
-.slot-grid.is-sorting .slot { cursor: grabbing; }
+/* While a slot is being carried the whole page shows the grab. */
+html.is-dragging-slot,
+html.is-dragging-slot * { cursor: grabbing !important; }
+
+/* The slot being carried dims where it was; what it would land on lights up:
+   another slot (the place it would take), another store's tab, or another grid. */
+.slot.is-lifted { opacity: .35; transform: scale(.96); transition: opacity var(--dur-1), transform var(--dur-1); }
+.seg-btn.is-droptarget { background: var(--violet-soft); color: var(--bone); box-shadow: inset 0 0 0 1px var(--violet), 0 0 0 3px var(--violet-soft); }
+.slot-grid.is-droptarget { outline: 2px dashed var(--violet-edge); outline-offset: 6px; border-radius: var(--r-md); }
 
 /* A two-handed weapon takes the Weapon and Offhand places in its column. The
    column turns into four equal rows so the weapon lines up exactly with two
@@ -3300,6 +3313,11 @@ button.seat-name:hover { text-decoration: underline; }
   will-change: transform;
 }
 
+.drag-ghost { animation: ghost-in .12s ease-out; }
+.drag-ghost.is-moving { box-shadow: inset 0 0 0 2px var(--violet), 0 0 0 4px var(--violet-soft), 0 12px 28px -10px rgba(0, 0, 0, .95); }
+.drag-ghost.is-landing { transition: transform .2s cubic-bezier(.4, 0, .6, 1), opacity .2s ease-in; opacity: 0; }
+@keyframes ghost-in { from { opacity: 0; } to { opacity: .92; } }
+
 .drag-ghost .slot-art { width: 100%; height: 100%; }
 .drag-ghost .slot-art img { width: 100%; height: 100%; object-fit: contain; }
 
@@ -3341,7 +3359,7 @@ button.seat-name:hover { text-decoration: underline; }
 .rite-scale {
   position: relative;
   width: 100%;
-  max-width: 440px;
+  max-width: 352px;   /* the 440px circle at 0.8: it fitted the column and made you scroll for the press */
   aspect-ratio: 1;
   margin: 0 auto;
   --rite-k: 1;
@@ -3359,13 +3377,16 @@ button.seat-name:hover { text-decoration: underline; }
 
 .rite-under[hidden] { display: none; }
 
+/* The quick rite's tickbox, quiet under the press. */
+.rite-quick { align-self: center; min-height: 32px; font-size: var(--text-sm); color: var(--bone-faint); }
+
 .odds-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-3); }
 .odds { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 
 .odds-v,
 .toll-v {
   font-family: var(--font-display);
-  font-size: 44px;
+  font-size: 36px;
   font-weight: 600;
   line-height: 1;
   letter-spacing: -.01em;
@@ -3941,7 +3962,8 @@ button.rite-core:disabled { cursor: default; }
 .forge-stock .forge-tile .slot-art { width: 72%; height: auto; aspect-ratio: 1; border-radius: 0; }
 .forge-stock .forge-tile .slot-art .mat-art { width: 100%; height: 100%; }
 .forge-stock .forge-tile .slot-art .ico { width: 55%; height: 55%; }
-.forge-stock .forge-tile .slot-name { font-size: 11px; }
+/* A long name ("Lesser Veil Essence") wraps inside its own tile instead of running into the next. */
+.forge-stock .forge-tile .slot-name { font-size: 10.5px; max-width: 100%; white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
 .forge-tile { position: relative; aspect-ratio: 1 / 1.1; padding: 8px 6px 7px; gap: 3px; justify-content: center; align-items: center; cursor: pointer; }
 .forge-tile .slot-art { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; }

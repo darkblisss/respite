@@ -170,20 +170,19 @@ export function icon(name, cls) {
 
 /* A material that has a painting shows it; everything else keeps its glyph.
    `def` is an item or an action, and only the drawn ones carry `art`, so this
-   is safe to call on anything. `variant` picks the cut: "fade" where there is
-   no frame (a gather pill), "cut" where the frame is already there (a
-   Stockpile slot). The caller puts .art-paint on the plate when hasArt() is
-   true, which is what moves the violet well out of the way. */
+   is safe to call on anything. Every painting is the cut now (the object with
+   no background); `variant` is kept so callers that still name one need no
+   change. The caller puts .art-paint on the plate when hasArt() is true, which
+   is what moves the violet well out of the way. */
 export const hasArt = (def) => !!(def && def.art);
 
-/* The cut a caller asked for, or whichever one the material actually has.
-   Not everything is drawn both ways and no call site should have to know. */
-export function artSrc(def, variant = "fade") {
+// The painting's file: the cut, whatever variant a caller names.
+export function artSrc(def, variant = "cut") {
   if (!hasArt(def)) return null;
-  return def.art[variant] || def.art.cut || def.art.fade || null;
+  return def.art[variant] || def.art.cut || null;
 }
 
-export function artEl(def, { variant = "fade", cls } = {}) {
+export function artEl(def, { variant = "cut", cls } = {}) {
   const src = artSrc(def, variant);
   if (!src) return iconEl(def && def.icon, cls);
   return h(`img.mat-art${cls ? `.${cls}` : ""}`, { src, alt: "", loading: "lazy", decoding: "async" });

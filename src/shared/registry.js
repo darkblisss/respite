@@ -26,10 +26,9 @@ export const matKey = (row, type) => basePrefix(row[type]);
    the file is named for whatever the material is called today, so the folder
    reads as the game does. Anything not in here keeps its stroke icon.
 
-   Two cuts of every painting, because the two places they hang want opposite
-   things. A gather pill has no frame, so `fade` keeps the painted light and
-   lets the tile melt into the row. A Stockpile slot IS a frame, so `cut` drops
-   the background entirely and the object sits in the slot. */
+   One cut of every painting: the object alone, no background, so it sits on
+   any surface, framed or not. (There used to be a `fade` as well, a painting
+   with its light left in for the gather pills; the cut reads better there too.) */
 const MAT_ART = {
   // The ore a crew hauls up. Key and file agree now: schema 12 put an id and a
   // name back on the same word, so gloam.webp is the odd one out -- the painting
@@ -94,21 +93,10 @@ const MAT_ART = {
   coal: "coal", resin: "resin", pulp: "pulp", tallow: "tallow", veil_shard: "veil-shard",
 };
 
-/* The reagents are cut by hand and have no fade of their own: a cutout sits on
-   any surface, so asking for a fade that is not there simply gets the cut. */
-const CUT_ONLY = new Set(["coal", "resin", "pulp", "tallow", "veil_shard",
-  "bitter_axe", "blood_axe", "gnarl_axe",
-  "mangy_leather", "bristle_leather", "dire_leather", "gaunt_leather", "slough_leather", "stag_leather", "drake_leather", "leviathan_leather", "demon_leather",
-  "mangy_flay", "bristle_flay", "dire_flay", "gaunt_flay", "slough_flay", "stag_flay", "drake_flay", "leviathan_flay", "demon_flay",
-  "lesser_veil_fragment", "veiled_fragment", "sovereign_fragment", "lesser_veil_essence", "veiled_essence", "sovereign_essence",
-  "mud_inlay", "bog_inlay", "chalk_inlay", "mourning_inlay", "ghost_inlay", "amber_inlay", "hoard_inlay", "sunken_inlay", "idol_inlay",
-  "mud_dredge", "bog_dredge", "chalk_dredge", "mourning_dredge", "ghost_dredge", "amber_dredge", "hoard_dredge", "sunken_dredge", "idol_dredge"]);
-
 export const matArt = (id) => {
   const file = MAT_ART[id];
   if (!file) return null;
-  const cut = `assets/materials/cut/${file}.webp`;
-  return CUT_ONLY.has(id) ? { cut } : { fade: `assets/materials/fade/${file}.webp`, cut };
+  return { cut: `assets/materials/cut/${file}.webp` };
 };
 
 // A raw material's id from its TIERS row and type: "slag_delve".

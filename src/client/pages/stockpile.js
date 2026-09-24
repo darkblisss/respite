@@ -49,6 +49,8 @@ const EDGE = 56;         // near the top or bottom edge a drag scrolls the page
 
 const phrase = (w) => (w === "inv" ? poolName(w) : `the ${poolName(w)}`);
 
+const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
 const rankOf = (key) => {
   const d = itemDef(key);
   return d && d.kind !== "material" && Object.hasOwn(RARITY_RANK, d.rarity) ? RARITY_RANK[d.rarity] : 6;
@@ -160,8 +162,13 @@ export function storageCard(ctx, { pools, view, idBase, filters = true, hint = n
     return node;
   }
 
-  // Moves only what is out of place, so a focused slot is not pulled from the page.
+  /* Moves only what is out of place, so a focused slot is not pulled from the page.
+     A slot that changes place glides there (first, last, invert, play), so a
+     reorder or a stack arriving reads as things moving rather than a redraw. */
   function reconcile(cells, empties) {
+    const glide = grid.isConnected && slots.size > 0 && slots.size <= 200 && !reducedMotion();
+    const before = new Map();
+    if (glide) slots.forEach((n, id) => { if (n.isConnected) before.set(id, n.getBoundingClientRect()); });
     const keep = new Set(cells.map((c) => c.id));
     slots.forEach((n, id) => {
       if (keep.has(id)) return;
@@ -178,6 +185,17 @@ export function storageCard(ctx, { pools, view, idBase, filters = true, hint = n
     want.concat(blanks).forEach((n, i) => {
       const at = grid.children[i];
       if (at !== n) grid.insertBefore(n, at || null);
+    });
+    if (!glide || !before.size) return;
+    slots.forEach((n, id) => {
+      const was = before.get(id);
+      if (!was) return;
+      const now = n.getBoundingClientRect();
+      const dx = was.left - now.left;
+      const dy = was.top - now.top;
+      if ((!dx && !dy) || typeof n.animate !== "function") return;
+      n.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }],
+        { duration: 180, easing: "cubic-bezier(.2, .7, .2, 1)" });
     });
   }
 
@@ -234,6 +252,7 @@ export function storageCard(ctx, { pools, view, idBase, filters = true, hint = n
       setText(emptyTitle, `No ${f.label.toLowerCase()} in ${phrase(pool)}`);
     }
     setAttr(grid, "data-reorder", view.sort === "custom");
+    setAttr(grid, "data-pool", pool);
 
     const sig = `${pool}|${view.filter}|${view.sort}|${empties}|${cells.map((c) => c.id).join("\n")}`;
     // A drag in progress keeps the grid still; what changed lands when it ends.
@@ -261,48 +280,70 @@ export function storageCard(ctx, { pools, view, idBase, filters = true, hint = n
     update();
   });
 
-  /* ---- drag to reorder ----
+  /* ---- dragging: reorder, and move between stores ----
      Mouse: press and move. Touch: hold still, then move; a finger that moves
-     first is scrolling. The lifted slot is ringed and the place it would
-     take is marked; dropping sends reorder. Only in custom order, where the
-     order is the thing on screen. */
+     first is scrolling. The lifted slot dims where it was and a copy rides
+     under the pointer. Dropped on another slot, it takes that slot's place
+     (custom order only, where the order is the thing on screen). Dropped on
+     another store's tab, or on another grid on the page (Belongings onto the
+     Satchel, say), the whole stack moves there; a single bottle of an
+     unstacked remedy moves alone. The pointer is read once a frame, so a fast
+     drag never queues up more work than the screen can show. */
 
   let drag = null;
   let clickHushUntil = 0;
 
-  const slotAt = (x, y) => {
+  // What is under the pointer that a drop would mean something on.
+  function dropAt(x, y) {
     const hit = document.elementFromPoint(x, y);
-    const s = hit instanceof Element ? hit.closest(".slot") : null;
-    return s && grid.contains(s) ? s : null;
-  };
+    if (!(hit instanceof Element)) return null;
+    const tab = hit.closest(".seg-btn[data-pool]");
+    if (tab && tab.dataset.pool !== view.pool) return { pool: tab.dataset.pool, node: tab };
+    const g = hit.closest(".slot-grid[data-pool]");
+    if (g && g !== grid && g.dataset.pool && g.dataset.pool !== view.pool) return { pool: g.dataset.pool, node: g };
+    if (g === grid && view.sort === "custom") {
+      const s = hit.closest(".slot");
+      return s && s !== drag.node ? { slot: s, node: s } : null;
+    }
+    return null;
+  }
 
-  function aim(target) {
-    const next = target && target !== drag.node ? target : null;
-    if (drag.target === next) return;
-    if (drag.target) toggleClass(drag.target, "is-dragover", false);
+  function aim(next) {
+    const was = drag.target;
+    if ((was && was.node) === (next && next.node)) return;
+    if (was) toggleClass(was.node, was.slot ? "is-dragover" : "is-droptarget", false);
     drag.target = next;
-    if (next) toggleClass(next, "is-dragover", true);
+    if (next) toggleClass(next.node, next.slot ? "is-dragover" : "is-droptarget", true);
+    if (drag.ghost) toggleClass(drag.ghost, "is-moving", !!(next && next.pool));
   }
 
   function lift() {
     drag.active = true;
     clearTimeout(drag.timer);
     hideTip();
-    toggleClass(drag.node, "is-selected", true);
-    toggleClass(grid, "is-sorting", true);
+    toggleClass(drag.node, "is-lifted", true);
+    toggleClass(document.documentElement, "is-dragging-slot", true);
     const art = drag.node.querySelector(".slot-art");
-    if (art) {
-      drag.ghost = h("div.drag-ghost", { "aria-hidden": "true" }, art.cloneNode(true));
-      document.body.appendChild(drag.ghost);
-      moveGhost();
-    }
-    aim(slotAt(drag.x, drag.y));
+    drag.ghost = h("div.drag-ghost", { "aria-hidden": "true" }, art ? art.cloneNode(true) : null);
+    document.body.appendChild(drag.ghost);
+    paintFrame();
   }
 
-  // Under the cursor rather than beside it: the thing being moved is what is pointed at.
-  function moveGhost() {
-    if (!drag || !drag.ghost) return;
-    drag.ghost.style.transform = `translate(${drag.x}px, ${drag.y}px) translate(-50%, -50%)`;
+  // One read and one write a frame: the copy follows the pointer, the target is found under it.
+  function paintFrame() {
+    if (!drag || !drag.active) return;
+    if (drag.ghost) drag.ghost.style.transform = `translate3d(${drag.x}px, ${drag.y}px, 0) translate(-50%, -50%)`;
+    aim(dropAt(drag.x, drag.y));
+  }
+
+  function schedule() {
+    if (!drag || drag.raf) return;
+    drag.raf = requestAnimationFrame(() => {
+      if (!drag) return;
+      drag.raf = 0;
+      paintFrame();
+      edgeScroll();
+    });
   }
 
   // Taking the target's place: before it when moving back, after it when moving on.
@@ -324,24 +365,45 @@ export function storageCard(ctx, { pools, view, idBase, filters = true, hint = n
     ctx.dispatch("reorder", { pool, key, before });
   }
 
+  // The whole stack to another store, or the one bottle a cell stands for. A refusal
+  // (the Satchel takes remedies only, a full store) says so in a toast.
+  function sendMove(node, to) {
+    const key = node.dataset.key;
+    if (qtyIn(ctx.state, view.pool, key) <= 0) return;
+    ctx.dispatch("moveItem", { key, from: view.pool, to, qty: node.dataset.one ? 1 : null });
+  }
+
   function endDrag(drop) {
     if (!drag) return;
     const d = drag;
     drag = null;
     clearTimeout(d.timer);
     cancelAnimationFrame(d.frame);
+    cancelAnimationFrame(d.raf);
     window.removeEventListener("pointermove", onMove);
     window.removeEventListener("pointerup", onUp);
     window.removeEventListener("pointercancel", onCancel);
     document.removeEventListener("keydown", onKey, true);
-    if (d.ghost) d.ghost.remove();
     if (!d.active) return;
     // The press that ended a drag is not also a click on the slot.
     clickHushUntil = performance.now() + 500;
-    toggleClass(d.node, "is-selected", false);
-    toggleClass(grid, "is-sorting", false);
-    if (d.target) toggleClass(d.target, "is-dragover", false);
-    if (drop && d.target) sendReorder(d.node.dataset.key, d.target);
+    toggleClass(d.node, "is-lifted", false);
+    toggleClass(document.documentElement, "is-dragging-slot", false);
+    if (d.target) toggleClass(d.target.node, d.target.slot ? "is-dragover" : "is-droptarget", false);
+    const t = drop ? d.target : null;
+    if (d.ghost) {
+      // A move flies the copy into the store it went to; anything else just lets go.
+      if (t && t.pool && !reducedMotion()) {
+        const r = t.node.getBoundingClientRect();
+        d.ghost.classList.add("is-landing");
+        d.ghost.style.transform = `translate3d(${r.left + r.width / 2}px, ${r.top + r.height / 2}px, 0) translate(-50%, -50%) scale(.4)`;
+        setTimeout(() => d.ghost.remove(), 220);
+      } else {
+        d.ghost.remove();
+      }
+    }
+    if (t && t.slot) sendReorder(d.node.dataset.key, t.slot);
+    else if (t && t.pool) sendMove(d.node, t.pool);
     update();
   }
 
@@ -358,7 +420,7 @@ export function storageCard(ctx, { pools, view, idBase, filters = true, hint = n
       if (!drag) return;
       drag.frame = 0;
       window.scrollBy(0, speed);
-      aim(slotAt(drag.x, drag.y));
+      paintFrame();
       edgeScroll();
     });
   }
@@ -375,10 +437,9 @@ export function storageCard(ctx, { pools, view, idBase, filters = true, hint = n
       }
       if (dist <= SLOP_MOUSE) return;
       lift();
+      return;
     }
-    moveGhost();
-    aim(slotAt(drag.x, drag.y));
-    edgeScroll();
+    schedule();
   }
 
   const onUp = (e) => { if (drag && e.pointerId === drag.id) endDrag(true); };
@@ -391,14 +452,15 @@ export function storageCard(ctx, { pools, view, idBase, filters = true, hint = n
     }
   };
 
+  // Any order can be dragged to another store; only the custom order can be reordered.
   grid.addEventListener("pointerdown", (e) => {
-    if (drag || e.button > 0 || view.sort !== "custom" || !e.isPrimary) return;
+    if (drag || e.button > 0 || !e.isPrimary) return;
     const n = e.target instanceof Element ? e.target.closest(".slot[data-key]") : null;
     if (!n || !grid.contains(n)) return;
     drag = {
       node: n, id: e.pointerId, touch: e.pointerType !== "mouse",
       x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY,
-      active: false, target: null, timer: 0, frame: 0,
+      active: false, target: null, timer: 0, frame: 0, raf: 0, ghost: null,
     };
     if (drag.touch) drag.timer = setTimeout(() => { if (drag && !drag.active) lift(); }, HOLD_MS);
     window.addEventListener("pointermove", onMove);
