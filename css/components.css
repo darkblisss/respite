@@ -370,6 +370,13 @@
 .chip .ico { width: 14px; height: 14px; margin-left: -2px; }
 .chip b { font-weight: 600; color: var(--bone); }
 
+/* A chip that is only an icon (the Stockpile's filters). The -2px above tucks a
+   leading icon in toward its words; with no words it only pushed the icon off
+   centre, and it left the chip 12px of room, which base.css's svg max-width
+   then squeezed the 14px glyph into. */
+.chip-ico { justify-content: center; }
+.chip-ico .ico { margin-left: 0; }
+
 .chip-good { --chip-fg: var(--good); --chip-bg: var(--good-soft); --chip-line: var(--good-edge); }
 .chip-warn { --chip-fg: var(--warn); --chip-bg: var(--warn-soft); --chip-line: var(--warn-edge); }
 .chip-bad { --chip-fg: var(--bad); --chip-bg: var(--bad-soft); --chip-line: var(--bad-edge); }
@@ -1954,12 +1961,15 @@ button.chip:disabled { opacity: .45; }
 
 .item-pill.is-working > .art { box-shadow: inset 0 0 0 1px var(--pill-tone), 0 0 0 4px var(--pill-soft), 0 0 22px var(--pill-soft); }
 
-/* ...but a painting has no plate to ring, and that inset line drew a box around
-   the ore the moment a node started working. It keeps the glow, which is what
-   says "this one is running", and loses the frame. This rule has to sit here
-   rather than up with .art-paint: `.item-pill.is-working > .art` is three
-   classes deep and outranks it. */
-.item-pill.is-working > .art.art-paint { box-shadow: 0 0 18px var(--pill-soft); }
+/* ...but a painting has no plate to ring. Any box-shadow on it follows the
+   box, not the thing, so even a bare glow lit a square around the ore the
+   moment a node started working, with the dark tile left standing in the
+   middle of it. The painting glows through a drop-shadow instead, which
+   follows its own edges. These rules have to sit here rather than up with
+   .art-paint: `.item-pill.is-working > .art` is three classes deep and
+   outranks it. */
+.item-pill.is-working > .art.art-paint { box-shadow: none; }
+.item-pill.is-working > .art.art-paint .mat-art { filter: drop-shadow(0 0 6px var(--pill-edge)); }
 .item-pill.is-working .pill-sub { color: var(--pill-tone-hi); }
 .item-pill.is-working .pill-sub b { color: var(--bone); }
 

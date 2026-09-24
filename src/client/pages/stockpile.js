@@ -103,7 +103,7 @@ export function storageCard(ctx, { pools, view, idBase, filters = true, hint = n
     ? h("div.seg", { role: "tablist", "aria-label": "Store" }, tabs)
     : h("h2.card-title", poolName(pools[0]));
 
-  const chips = filters ? FILTERS.map((f) => h("button.chip", {
+  const chips = filters ? FILTERS.map((f) => h(f.icon ? "button.chip.chip-ico" : "button.chip", {
     type: "button",
     dataset: { filter: f.id },
     "aria-label": f.icon ? f.label : null,
