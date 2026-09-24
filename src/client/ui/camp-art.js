@@ -896,6 +896,8 @@ function watchtower(S, x, y, { h = 96, z = y, flag = false, lamp = true } = {}) 
 // One cloaked worker. Poses: swing (pick or axe), reap, scrape, pole, push, carry, saw, stand.
 // Both boots point the way the worker faces: heel under the back of each leg, toe ahead of it.
 const LEGS = "M-4.2 0L-3.1-9.4L2.8-9.4L4.2 0H2.3L.3-5.6-1.7 0ZM-4.6 0H-.8L-1.2-1.7H-4.3ZM1.9 0h3.9l-.4-1.7H2.2Z";
+// The hips, drawn between the legs and the cloak (see figurePass).
+const SEAT = "M-5.3-10.6C-5.3-12.9-2.9-13.7 0-13.7C2.6-13.7 4.2-12.7 4-10.3C3.8-8.8 2.8-8.3 0-8.3C-3.1-8.3-5.3-8.7-5.3-10.6Z";
 const CLOAK = "M-3.6-21.4C-5.8-18-7.4-13.6-8-8.2L-5.8-9.2-4-7.8-1.8-9.4.4-8 2.6-9.4 4.6-8 5.8-8.8C5.2-13.4 4.6-17.6 3.4-21.4Z";
 const HOOD = "M2.2-20.8C3.4-21.3 3.9-22.3 3.5-23.3C4.1-24.2 4.4-25.3 4.1-26.4C3.7-27.9 2.4-29 .6-29.3C-1.2-29.6-2.8-29.1-4-28.2C-5-27.5-6.2-27.3-7.4-27.6C-6.2-26.6-5.4-25.4-5.1-24C-4.9-22.8-4.5-21.7-3.7-21Z";
 
@@ -928,9 +930,9 @@ function figurePass(o, col) {
   const { arm, tl } = figureParts(o);
   const pose = o.pose;
   let body = "";
-  const lean = { swing: 8, reap: 34, scrape: 10, pole: 12, push: 26, carry: 4, saw: 14, stand: 0, sit: 0 }[pose] ?? 0;
-  const armAnim = { swing: "cs-swing", reap: "cs-reap", scrape: "cs-scrape", pole: "cs-pole", saw: "cs-saw" }[pose];
-  const bodyAnim = { swing: "cs-lean", reap: "cs-bob", scrape: "cs-bob", pole: "cs-bob", push: "cs-bob", saw: "cs-bob" }[pose] || "";
+  const lean = { swing: 8, chop: 10, reap: 34, scrape: 10, pole: 12, push: 26, carry: 4, saw: 14, stand: 0, sit: 0 }[pose] ?? 0;
+  const armAnim = { swing: "cs-swing", chop: `cs-chop${o.chop}`, reap: "cs-reap", scrape: "cs-scrape", pole: "cs-pole", saw: "cs-saw" }[pose];
+  const bodyAnim = { swing: "cs-lean", chop: `cs-chopb${o.chop}`, reap: "cs-bob", scrape: "cs-bob", pole: "cs-bob", push: "cs-bob", saw: "cs-bob" }[pose] || "";
   const sty = `style="--t:${f(o.t || 2.8)}s;--dl:${f(o.dl || 0)}s"`;
   if (pose === "sit") {
     body = `<path d="M-5 0L-4.2-4.6L4.6-4.6L6.8-.2L4.9 0L3.4-2.6L-2.4-2.6L-3 0Z"/>` +
@@ -944,8 +946,11 @@ function figurePass(o, col) {
   if (pose === "carry") armsInner = `<path d="M0 0L3 5.2" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><ellipse cx="-1" cy="-3.6" rx="6.4" ry="3.6" transform="rotate(-12)"/>`;
   if (pose === "pole") armsInner = `<path d="M0 0L6.6 3.2" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M-10-14L40 28" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>`;
   if (pose === "saw") armsInner = `<path d="M0 0L7 3.4" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M6 3.6L26 7.2" stroke="currentColor" stroke-width=".9"/><path d="M5.6 2.2V5.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>`;
-  const armRot = { swing: 0, reap: 40, scrape: 18, pole: 0, push: 0, carry: 0, saw: 0 }[pose] ?? 0;
-  body = `<path d="${LEGS}"/>` +
+  const armRot = { swing: 0, chop: 0, reap: 40, scrape: 18, pole: 0, push: 0, carry: 0, saw: 0 }[pose] ?? 0;
+  // The seat: bent over, the cloak swings up off the back of the legs, so the hips go with it
+  // half way and fill the join. Upright it sits inside the cloak and shows nothing.
+  const seat = lean >= 6 ? `<g transform="translate(0 -10) rotate(${f(lean * 0.5)}) translate(0 10)"><path d="${SEAT}"/></g>` : "";
+  body = `<path d="${LEGS}"/>${seat}` +
     `<g transform="translate(0 -10) rotate(${lean}) translate(0 10)"><g class="${bodyAnim}" ${sty}>` +
     `<path d="${CLOAK}"/><path d="${HOOD}"/>` +
     `<g transform="${armsAt} rotate(${armRot})"><g class="${armAnim || ""}" ${sty}>${armsInner}</g></g>` +
@@ -974,8 +979,8 @@ function rimFilter(S, toFire, dir, L) {
 }
 
 // Draws a worker at (x, y) facing `dir` (1 right, -1 left), scaled by s, rim-lit by the fire and the moon.
-function worker(S, x, y, { pose = "swing", tool: tk = "pick", dir = 1, s = 1.28, z = y + 0.5, t = 2.8, dl = 0, layer = "camp" } = {}) {
-  const o = { pose, tool: tk, t, dl };
+function worker(S, x, y, { pose = "swing", tool: tk = "pick", dir = 1, s = 1.28, z = y + 0.5, t = 2.8, dl = 0, layer = "camp", chop = "" } = {}) {
+  const o = { pose, tool: tk, t, dl, chop };
   const L = S.lit(x, y - 14);
   const toFire = S.fireX == null ? -1 : (S.fireX < x ? -1 : 1);
   S.add(layer, z,
@@ -1487,9 +1492,38 @@ const felling = (() => {
     return { d, rim: rims.join("") };
   }
 
-  function pine(S, layer, z, r, x, base, h, { col = "#0c0e0f", rimCol = "#5a6a7a", rimOp = 0.35, w } = {}) {
+  // `shake` gives the tree a class that rocks it about the foot of its trunk (the tree being cut).
+  function pine(S, layer, z, r, x, base, h, { col = "#0c0e0f", rimCol = "#5a6a7a", rimOp = 0.35, w, shake = null } = {}) {
     const { d, rim } = pineShape(r, x, base, h, w);
-    S.add(layer, z, `<path d="${d}" fill="${col}"/><path d="${rim}" fill="none" stroke="${rimCol}" stroke-opacity="${f2(rimOp)}" stroke-width=".7"/>`);
+    const tree = `<path d="${d}" fill="${col}"/><path d="${rim}" fill="none" stroke="${rimCol}" stroke-opacity="${f2(rimOp)}" stroke-width=".7"/>`;
+    S.add(layer, z, shake
+      ? `<g transform="translate(${f(x)} ${f(base)})"><g class="${shake.cls}" style="--t:${f(shake.t)}s;--dl:${f(shake.dl || 0)}s"><g transform="translate(${f(-x)} ${f(-base)})">${tree}</g></g></g>`
+      : tree);
+  }
+
+  /* How the axe goes in: notch work. A cut down from over the shoulder, a
+     flat cut under it, then a breath; the arm is foreshortened as it comes
+     round, so the swing reads as coming round the body rather than down like
+     the pick. The tree shivers and throws chips at each bite, all on the
+     worker's --t. Its classes carry no letter (the kit draws other swings
+     with a letter each). */
+  const FELL = { swing: "C" };
+  const CHOPS = { C: 3.6 };
+  const chopTag = (k) => (k === "C" ? "" : k);
+
+  // Chips thrown back out of the notch at each bite, in step with the worker's swing.
+  function chipBurst(S, x, y, cls, t) {
+    const r = S.rnd("chipburst");
+    let s = "";
+    for (let i = 0; i < 8; i++) {
+      const dx = -(4 + r() * 9);
+      const dy = 3 + r() * 5;
+      const h = -(2 + r() * 5);
+      const L = S.lit(x, y);
+      s += `<g transform="translate(${f(x - 0.6 + r() * 1.2)} ${f(y - 1.4 + r() * 2.8)})"><g class="${cls}" style="--t:${f(t)}s;--dl:0s;--dx:${f(dx)}px;--dy:${f(dy)}px;--h:${f(h)}px">` +
+        `<path transform="rotate(${Math.round(r() * 360)})" d="M-1-.4L1.1-.6L.7.6Z" fill="${mix("#a07850", "#f6dcae", 0.35 + L * (0.4 + r() * 0.25))}"/></g></g>`;
+    }
+    S.add("camp", GY + 3, s);
   }
 
   // A stump with rings on its cut face and roots gripping the ground.
@@ -1690,11 +1724,13 @@ const felling = (() => {
     const TREES = [[664, 86], [714, 96], [764, 90], [812, 104]];
     const felled = s >= 8 ? 3 : s >= 6 ? 2 : s >= 3 ? 1 : 0;
     const rt = S.rnd("clearing");
+    const chop = CHOPS[FELL.swing] ? FELL.swing : null;
     TREES.forEach(([tx, th], i) => {
       if (i < felled) {
         stump(S, tx, GY + 2, { w: 12 + i, h: 7 + (i % 2) * 2, axe: i === 0 && s >= 3 });
       } else {
-        pine(S, "camp", GY - 6 - i, rt, tx, GY + 1, th, { col: "#0a0b0d", rimCol: "#7a8aa6", rimOp: 0.32 });
+        const shake = chop && i === felled ? { cls: `cs-shiver${chopTag(chop)}`, t: CHOPS[chop] } : null;
+        pine(S, "camp", GY - 6 - i, rt, tx, GY + 1, th, { col: "#0a0b0d", rimCol: "#7a8aa6", rimOp: 0.32, shake });
         if (i === felled) {
           // the notch the axe has cut, lit from the camp
           const L = S.lit(tx, GY - 8);
@@ -1703,7 +1739,11 @@ const felling = (() => {
       }
     });
     const target = TREES[Math.min(felled, 3)];
-    worker(S, target[0] - 21, GY + 1, { pose: "swing", tool: "axe", dir: 1, t: 2.4 });
+    if (chop) {
+      // stands a pace further back than the pick's swing: the axe comes round, not down
+      worker(S, target[0] - 25, GY + 1, { pose: "chop", chop: chopTag(chop), tool: "axe", dir: 1, t: CHOPS[chop] });
+      chipBurst(S, target[0] - 1.6, GY - 6, `cs-chip${chopTag(chop)}`, CHOPS[chop]);
+    }
 
     // felled trunks and the pile at camp
     logLying(S, 592, GY + 5, 52, { r: 4.4, z: GY + 5 });
