@@ -269,6 +269,17 @@ export function createShell(app) {
   $.bell.addEventListener("click", () => bellOpen($.bellPanel.hidden));
   // Anything picked in it, a press anywhere else, or Escape puts it away.
   on($.bellPanel, "click", "a", () => bellOpen(false));
+
+  /* A link marked data-go instead of href: the sidebar rows and the skill cards.
+     With no href the browser shows no URL in the corner when the pointer rests on
+     one, which it did on every row down the sidebar. Enter works as on a link. */
+  const goTo = (a) => { if (location.hash !== a.dataset.go) location.hash = a.dataset.go; };
+  on(document, "click", "[data-go]", (e, a) => { if (e.button === 0 && !e.defaultPrevented) goTo(a); });
+  on(document, "keydown", "[data-go]", (e, a) => {
+    if (e.key !== "Enter" || e.target !== a) return;
+    e.preventDefault();
+    goTo(a);
+  });
   document.addEventListener("mousedown", (e) => {
     if (!$.bellPanel.hidden && !$.bellWrap.contains(e.target)) bellOpen(false);
   });
@@ -547,7 +558,7 @@ export function createShell(app) {
       list.replaceChildren(...g.rows.map((m) => {
         const meta = m.row.meta ? h("span.nav-meta") : null;
         navRefs.push({ meta, fn: m.row.meta });
-        return h("li", h("a.nav-item", { href: hrefOf(m.row.route), "aria-current": m.current ? "page" : null },
+        return h("li", h("a.nav-item", { "data-go": hrefOf(m.row.route), role: "link", tabindex: "0", "aria-current": m.current ? "page" : null },
           iconEl(m.row.icon, "nav-ico"),
           h("span.nav-label", m.row.label),
           m.dot ? h("span.nav-dot", { "data-tone": m.dot.tone === "ember" ? "ember" : null, role: "img", "aria-label": m.dot.label }) : null,

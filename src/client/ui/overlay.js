@@ -1060,7 +1060,7 @@ export function bindDrawer({
 
   // Choosing a page closes the drawer.
   sidebar.addEventListener("click", (e) => {
-    if (open && e.target instanceof Element && e.target.closest("a[href]")) set(false);
+    if (open && e.target instanceof Element && e.target.closest("a[href], [data-go]")) set(false);
   });
 
   const onChange = () => { if (!mq.matches && open) set(false, true); };

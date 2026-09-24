@@ -98,6 +98,9 @@ a {
   text-decoration: none;
 }
 
+/* An in-camp link with no href (data-go, ui/shell.js) still takes the pointer. */
+[data-go] { cursor: pointer; }
+
 img, svg, video, canvas { display: block; max-width: 100%; }
 
 img { height: auto; }

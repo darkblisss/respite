@@ -51,7 +51,7 @@ await run(async () => {
     }, sel);
 
     await go("#/character");
-    const hero = await src(".prof-portrait img");
+    const hero = await src(".char-portrait img");
     check("the Character hero wears the skin that was chosen", /skin-drifter\.webp$/.test(hero || ""), hero);
 
     await go("#/armaments");
@@ -351,46 +351,79 @@ await run(async () => {
     await go("#/character");
     await live(app, () => [...document.querySelectorAll("[role=tab]")].find((t) => /Collection/.test(t.textContent)).click());
     await app.page.waitForTimeout(600);
-    const modes = await live(app, () => [...document.querySelectorAll(".coll-modes [data-mode]")].map((t) => t.dataset.mode));
-    same("two views: what you own and what you have put down", modes, ["items", "foes"]);
-    check("and the numbers give way to them at the side",
-      await live(app, () => document.querySelector(".prof-sheet").hidden && !document.querySelector(".coll-filters").hidden));
+    const tabs = await live(app, () => [...document.querySelectorAll(".coll-tabs .coll-chip")].map((t) => t.dataset.tab));
+    same("two tabs: what you own and what you have put down", tabs, ["items", "foes"]);
 
-    // Monsters: a row for every ground, the first opened, and a felled one carries its count.
+    // Monsters: the ground chips narrow it, and a felled one carries its count.
+    await live(app, () => document.querySelector('[data-tab="foes"]').click());
+    await app.page.waitForTimeout(500);
+    const foes = await live(app, () => ({
+      groups: document.querySelectorAll(".coll-groups .coll-chip").length,
+      cells: document.querySelectorAll(".coll-grid .coll-cell").length,
+      titles: [...document.querySelectorAll("button.coll-cell[data-monster]")].map((b) => b.title),
+    }));
+    check("a ground chip for every region", foes.groups === 9, foes.groups);
+    check("and the first ground's foes are in the grid", foes.cells > 0, foes.cells);
+    check("a monster you have put down says how many",
+      foes.titles.some((t) => /Defeated 2,080/.test(t)), foes.titles.slice(0, 4));
+    check("and never says it the old way",
+      !foes.titles.some((t) => /\d felled\b/i.test(t) || /of yours/.test(t)), foes.titles.slice(0, 4));
+
+    // Items: a kind row, and every piece of gear there is, held or not.
+    await live(app, () => document.querySelector('[data-tab="items"]').click());
+    await app.page.waitForTimeout(400);
+    const kinds = await live(app, () => [...document.querySelectorAll(".coll-row:not(.coll-groups) .coll-chip")].map((t) => t.dataset.kind));
+    check("a chip for every kind of item", kinds.includes("gear") && kinds.includes("parts") && kinds.includes("remedies"), kinds);
+
+    const gear = await live(app, () => ({
+      cells: document.querySelectorAll(".coll-grid .coll-cell").length,
+      chip: document.querySelector(".section-head .chip").textContent,
+    }));
+    check("gear lists every piece of the ground it is on, held or not", gear.cells > 10, gear);
+    check("and the count says how much of everything there is", /of [\d,]+ collected/.test(gear.chip), gear.chip);
+
+    /* A remedy is bought, not found, so it has a kind of its own. What was bought
+       is lit there, because buying is where the record is written. */
+    await live(app, () => document.querySelector('[data-kind="remedies"]').click());
+    await app.page.waitForTimeout(400);
+    const held = await live(app, () => [...document.querySelectorAll("button.coll-cell[data-item]")].map((b) => b.dataset.item));
+    check("what was bought is lit, because that is where a record is written",
+      held.includes("provision_t1"), held.slice(0, 12));
+  }
+
+  section("a profile's Collection, as an album");
+  {
+    // Your own name: the profile reads your save, so what was just bought and felled is on it.
+    await go("#/player/uinew_a");
+    await app.page.waitForTimeout(2500);
+    await live(app, () => [...document.querySelectorAll(".prof-tabs [role=tab]")].find((t) => /Collection/.test(t.textContent)).click());
+    await app.page.waitForTimeout(600);
+    const modes = await live(app, () => [...document.querySelectorAll(".alb-modes [data-mode]")].map((t) => t.dataset.mode));
+    same("two views: what they own and what they have put down", modes, ["items", "foes"]);
+    check("and the numbers give way to them at the side",
+      await live(app, () => document.querySelector(".prof-sheet").hidden && !document.querySelector(".alb-filters").hidden));
+
     await live(app, () => document.querySelector('[data-mode="foes"]').click());
     await app.page.waitForTimeout(500);
     const foes = await live(app, () => ({
-      rows: document.querySelectorAll(".coll-album .coll-row").length,
-      cards: document.querySelectorAll(".coll-tiles .coll-foe").length,
-      rat: (document.querySelector('button.coll-foe[data-monster="mob_t1_skirmisher"]') || { textContent: "" }).textContent,
+      rows: document.querySelectorAll(".alb-album .alb-row").length,
+      cards: document.querySelectorAll(".alb-tiles .alb-foe").length,
+      rat: (document.querySelector('button.alb-foe[data-monster="mob_t1_skirmisher"]') || { textContent: "" }).textContent,
     }));
     check("a row for every ground", foes.rows === 9, foes.rows);
     check("and the first ground's foes are open under it", foes.cards === 4, foes.cards);
-    check("a monster you have put down says how many", /2,080 slain/.test(foes.rat), foes.rat);
+    check("a monster put down says how many", /2,080 slain/.test(foes.rat), foes.rat);
 
-    // Items: three kinds, and every piece of gear of the ground that is open, held or not.
     await live(app, () => document.querySelector('[data-mode="items"]').click());
     await app.page.waitForTimeout(400);
-    const kinds = await live(app, () => [...document.querySelectorAll(".coll-kind")].map((t) => t.dataset.kind));
+    const kinds = await live(app, () => [...document.querySelectorAll(".alb-kind")].map((t) => t.dataset.kind));
     same("a row for every kind of item", kinds, ["gear", "parts", "veil"]);
+    const tiles = await live(app, () => document.querySelectorAll(".alb-tiles .alb-tile").length);
+    check("equipment lists every piece of the ground it is on, tools too", tiles === 24, tiles);
 
-    const gear = await live(app, () => ({
-      tiles: document.querySelectorAll(".coll-tiles .coll-tile").length,
-      total: document.querySelector(".coll-total").textContent,
-    }));
-    check("equipment lists every piece of the ground it is on, tools too, held or not", gear.tiles === 24, gear);
-    check("and the count says how much of everything there is", /of [\d,]+ · \d+%/.test(gear.total), gear.total);
-
-    /* A remedy is brewed rather than found, and is filed with its ground's resources.
-       What was bought is lit there, because buying is where the record is written. */
     await live(app, () => document.querySelector('[data-kind="parts"]').click());
     await app.page.waitForTimeout(400);
-    const held = await live(app, () => [...document.querySelectorAll("button.coll-tile[data-item]")].map((b) => b.dataset.item));
-    check("what was bought is lit, because that is where a record is written",
-      held.includes("provision_t1"), held.slice(0, 12));
-
-    // A lit entry opens its own card; a dark one opens nothing.
-    await live(app, () => document.querySelector('button.coll-tile[data-item="provision_t1"]').click());
+    await live(app, () => document.querySelector('button.alb-tile[data-item="provision_t1"]').click());
     await app.page.waitForTimeout(500);
     const entry = await live(app, () => ({
       title: (document.querySelector(".modal-title") || { textContent: "" }).textContent,
@@ -401,7 +434,6 @@ await run(async () => {
     same("with its facts", entry.facts, ["Heals", "Ground", "Tier"]);
     await live(app, () => document.querySelector(".modal .modal-x").click());
     await app.page.waitForTimeout(400);
-    check("a dark one is not a button", await live(app, () => !document.querySelector(".coll-tile.is-locked") || document.querySelector(".coll-tile.is-locked").tagName === "DIV"));
   }
 
   section("the party, and where it sits");
@@ -610,7 +642,7 @@ await run(async () => {
       sockets: document.querySelectorAll("button.socket").length,
       racks: document.querySelectorAll(".forge-rack").length,
       go: (document.querySelector(".rite-under .btn") || {}).disabled,
-      nav: !!document.querySelector('.nav-item[aria-current="page"][href="#/fortify"]'),
+      nav: !!document.querySelector('.nav-item[aria-current="page"][data-go="#/fortify"]'),
     }));
     check("the Fortify tab opens with an empty anvil", anvil.title === "Fortify" && anvil.empty && anvil.staked === 0, anvil);
     check("three essence sockets and a charm socket round it, two racks beside it",
@@ -750,6 +782,102 @@ await run(async () => {
     await app.page.waitForTimeout(350);
     check("a second Escape shuts the dialog",
       !(await live(app, () => !!document.querySelector(".modal-title"))));
+  }
+
+  section("the shell: search, the bell, the status bar, the phone drawer");
+  {
+    await go("#/character");
+    const P = app.page;
+    const vis = (sel) => live(app, (q) => {
+      const n = document.querySelector(q);
+      if (!n) return false;
+      const r = n.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && getComputedStyle(n).visibility !== "hidden";
+    }, sel);
+
+    const foot = await live(app, () => {
+      const bar = document.getElementById("statusBar");
+      return { conn: !!bar.querySelector("#tbConn"), clock: document.getElementById("sbClockText").textContent,
+        kids: [...bar.children].map((n) => n.id || n.className) };
+    });
+    check("the status bar carries the connection chip", foot.conn, foot);
+    same("and nothing but it and the clock", foot.kids, ["tbConn", "sb-fill", "sbClock"]);
+    // The page keeps the server's clock, and this stage has been pushed forward a little: within ten minutes will do.
+    const utc = new Date().toISOString().slice(11, 16);
+    const mins = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
+    const drift = /^\d\d:\d\d$/.test(foot.clock) ? Math.abs(mins(foot.clock) - mins(utc)) : 1e9;
+    check("the clock reads UTC", Math.min(drift, 1440 - drift) <= 10, [foot.clock, utc]);
+    const bare = await live(app, () => [...document.querySelectorAll(".nav-item, .skill-card")].filter((a) => a.hasAttribute("href")).length);
+    same("no sidebar row or skill card carries an href, so hovering shows no URL", bare, 0);
+    await P.click('.nav-item[data-go="#/skill/delving"]');
+    await P.waitForTimeout(400);
+    same("and a row still goes where it says", await live(app, () => location.hash), "#/skill/delving");
+    await go("#/character");
+    // The page keeps the tab it was last on; the cards are on Skills.
+    await live(app, () => [...document.querySelectorAll("[role=tab]")].find((t) => /Skills/.test(t.textContent)).click());
+    await P.waitForTimeout(300);
+    await P.press('.skill-card[data-go="#/skill/felling"]', "Enter");
+    await P.waitForTimeout(400);
+    same("and Enter on a skill card opens it", await live(app, () => location.hash), "#/skill/felling");
+    await go("#/character");
+    check("the breadcrumb is gone and the search sits in its place",
+      !(await live(app, () => !!document.getElementById("tbCrumbs"))) && await vis("#tbSearch .srch-field"));
+
+    await P.keyboard.press("/");
+    check("/ puts the cursor in the search",
+      await live(app, () => document.activeElement && document.activeElement.matches("#tbSearch .srch-input")));
+    await P.keyboard.type("atla");
+    await P.waitForTimeout(150);
+    const rows = await live(app, () => [...document.querySelectorAll("#tbSearch .srch-row-name")].map((n) => n.textContent));
+    same("a page comes up first by its name", rows[0], "Atlas");
+    await P.keyboard.press("Enter");
+    await P.waitForTimeout(400);
+    same("and Enter goes there", await live(app, () => location.hash), "#/atlas");
+
+    await P.click("#tbSearch .srch-input");
+    await P.keyboard.type("uinew_b");
+    await P.waitForTimeout(150);
+    const who = await live(app, () => [...document.querySelectorAll("#tbSearch .srch-row")].map((n) => n.textContent));
+    check("a name that could be a commander offers their profile", who.some((t) => /uinew_b/.test(t)), who);
+    await P.keyboard.press("Escape");
+
+    await P.click("#tbBell");
+    check("the bell opens what is waiting", await vis("#tbBellPanel") && await live(app, () => /Waiting on you/.test(document.getElementById("tbBellPanel").textContent)));
+    const loud = await live(app, () => ({ badge: document.getElementById("tbBellN").hidden ? 0 : Number(document.getElementById("tbBellN").textContent),
+      rows: document.querySelectorAll("#tbBellPanel .bell-row:not(.is-quiet)").length }));
+    same("its number counts only what wants a hand", loud.badge, loud.rows);
+    await P.keyboard.press("Escape");
+    check("and Escape shuts it", !(await vis("#tbBellPanel")));
+
+    await P.setViewportSize({ width: 1100, height: 800 });
+    await P.waitForTimeout(200);
+    check("below 1280 the search folds to a button", await vis("#tbSearch .srch-btn") && !(await vis("#tbSearch .srch-field")));
+    await P.click("#tbSearch .srch-btn");
+    check("which opens the field", await vis("#tbSearch .srch-field"));
+    await P.keyboard.press("Escape");
+
+    await P.setViewportSize({ width: 390, height: 844 });
+    await P.waitForTimeout(250);
+    check("a phone keeps the logo in the corner", await vis("#tbBrand .tb-logo") && !(await vis("#tbBrand .tb-word")));
+    check("and the gold where it was", await vis("#tbGold"));
+    check("with search and settings gone to the drawer", !(await vis("#tbSearch")) && !(await vis("#tbSettings")));
+    check("and the status bar still along the foot", await vis("#statusBar"));
+    await P.click("#tbMenu");
+    await P.waitForTimeout(450);
+    const you = await live(app, () => {
+      const c = document.querySelector("#drawerYou .dy-card");
+      return c && { name: c.querySelector(".dy-name").textContent, lv: c.querySelector(".dy-lv").textContent, img: !!c.querySelector(".dy-face img") };
+    });
+    check("the drawer opens on you: face, name and total level", !!you && you.img && you.name.length > 0 && /^Total \d+$/.test(you.lv), you);
+    check("with the search under it", await vis("#drawerSearch .srch-input"));
+    await P.fill("#drawerSearch .srch-input", "market");
+    await P.waitForTimeout(150);
+    await P.keyboard.press("Enter");
+    await P.waitForTimeout(500);
+    check("and a result taken there shuts the drawer",
+      (await live(app, () => [location.hash, document.getElementById("app").dataset.drawer])).join() === "#/market,closed");
+    await P.setViewportSize({ width: 1440, height: 900 });
+    await P.waitForTimeout(200);
   }
 
   section("nothing went wrong");

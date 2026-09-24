@@ -256,7 +256,7 @@ function skillsView() {
     const xp = h("div.skill-xp");
     const lv = document.createTextNode("");
     const fill = h("i");
-    const node = h("a.skill-card", { href: `#/skill/${id}`, "data-tone": war ? "ember" : null },
+    const node = h("a.skill-card", { "data-go": `#/skill/${id}`, role: "link", tabindex: "0", "data-tone": war ? "ember" : null },
       h("div.art.art-sm", { "data-tone": war ? "ember" : "violet", "aria-hidden": "true" }, iconEl(s.icon)),
       h("div.skill-main", h("div.skill-name", s.name, dot), xp),
       h("div.skill-lv", h("small", "Lv"), lv),
