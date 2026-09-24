@@ -776,11 +776,24 @@ function normalise(src, opts) {
   /* The roll map holds the deterministic counters (a: action, k: kill, s: sovereign) and
      two records that are not rolls at all but live by the same rule -- m: a monster felled,
      i: an item base that has ever been in this camp's hands. The Collection reads both, and
-     a key nobody recognises is dropped rather than guessed at. */
+     a key nobody recognises is dropped rather than guessed at.
+
+     Plus the counters that are one number for the whole camp and so carry no prefix: ench,
+     the Fortify rite's. It was missing from this list, so every load dropped it, every
+     server request is a load, and every attempt rolled attempt number 0: the same number
+     each time. A camp whose first number sat above its odds could never pass at those odds,
+     which was 37.5% of all camps at 60%. */
   const rolls = obj(src.rolls);
   keysOf(rolls).forEach((k) => {
-    if (/^[amksi]:[a-z0-9_]{1,40}$/.test(k) && finite(rolls[k])) s.rolls[k] = intIn(rolls[k], 0, BIG, 0);
+    if ((/^[amksi]:[a-z0-9_]{1,40}$/.test(k) || NAMED_ROLLS.has(k)) && finite(rolls[k])) s.rolls[k] = intIn(rolls[k], 0, BIG, 0);
   });
+  /* A camp that lost the counter starts it past every worked Common it already minted (a
+     Common's id is `e` and the counter, and every one of them was minted e0), and never at
+     0, the number it has been rolling all along. */
+  if (s.rolls.ench === undefined) {
+    const worked = enchMinted(s);
+    if (worked >= 0 || Object.hasOwn(rolls, "ench") || hasWorkedPiece(s)) s.rolls.ench = Math.max(1, worked + 1);
+  }
   s.serial = intIn(src.serial, 1, BIG, 1);
   s.lootLostAt = finite(src.lootLostAt) ? Math.floor(src.lootLostAt) : null;
 
@@ -822,6 +835,29 @@ function uidOf(key) {
   const c = key.indexOf("|", b + 1);
   return c < 0 ? key.slice(b + 1) : key.slice(b + 1, c);
 }
+
+// Roll counters that are one number for the whole camp, kept by name.
+const NAMED_ROLLS = new Set(["ench"]);
+
+// Every key this camp holds or wears, for the checks that read them all.
+function everyKey(s) {
+  const out = Object.values(s.equipment).filter(Boolean);
+  POOL_IDS.forEach((w) => { if (s[w] && s[w].items) out.push(...Object.keys(s[w].items)); });
+  return out;
+}
+
+// The highest Fortify counter a worked Common was minted off (its id is e<n>), or -1.
+function enchMinted(s) {
+  let top = -1;
+  everyKey(s).forEach((k) => {
+    const m = /\|common\|e(\d{1,9})\|/.exec(k);
+    if (m) top = Math.max(top, Number(m[1]));
+  });
+  return top;
+}
+
+// Whether anything here has been worked at all: a +n on any key.
+const hasWorkedPiece = (s) => everyKey(s).some((k) => /\|\+\d+$/.test(k));
 
 /* The four pools, in one pass each. Keys must be real items in whole
    amounts of at least one; a unique piece counts once and only once across

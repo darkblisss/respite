@@ -612,8 +612,10 @@ await run(async () => {
     same("worn pieces move", [m.equipment.weapon, m.equipment.offhand, m.equipment.head],
       ["rime_sword|common", "gnarl_shield|common", "starfall_helm|epic|c3.1"]);
     same("the tool in each hand moves", m.tools, { delving: "mire_pick", felling: "gnarl_axe", dredging: "chalk_net" });
+    // The Collection's keys alone: a worked ring with no Fortify counter is given one (ench).
     same("the Collection's i: counts move and its m: counts do not",
-      m.rolls, { "m:carrion_rat": 12, "i:rime_delve": 1, "i:slag_delve": 4 });
+      Object.fromEntries(Object.entries(m.rolls).filter(([k]) => /^[im]:/.test(k))),
+      { "m:carrion_rat": 12, "i:rime_delve": 1, "i:slag_delve": 4 });
     check("a posting's target moves", m.bounty && m.bounty.targetId === "rime_delve", m.bounty && m.bounty.targetId);
     check("a running bench task moves, and is still a task the bench knows",
       m.tasks.skilling && m.tasks.skilling.actionId === "craft_gnarl_plank", m.tasks.skilling);

@@ -19,4 +19,8 @@
    by whatever stack is already held, so gathered stock lands in the Stockpile and
    a run's takings in Belongings; leaving a hunt empties the pack into the Vault;
    and travelling to another region stands the bench down and pulls back. */
-export const ENGINE_VERSION = 6;
+/* 7: the Fortify counter survives a load. The save normaliser kept only prefixed
+   roll keys, so rolls.ench was dropped on every server request and every attempt
+   rolled attempt number 0. A browser on 6 predicts every attempt off that one
+   number while the server moves on from it, so the two would disagree. */
+export const ENGINE_VERSION = 7;
