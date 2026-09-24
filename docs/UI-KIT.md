@@ -398,6 +398,7 @@ Names (all v4 names are kept, unchanged):
 - Artisan skills (solid): `forgemaster`, `woodwright`, `tanner`, `weaver`, `artificer`
 - The Camp in the sidebar (solid): `campStockpile`, `campBounties`, `campRequisitions`, `campShop`, `campFortify`
 - The Realm in the sidebar (solid): `realmAtlas`, `realmMarket`, `realmLeaderboard`
+- The Vanguard in the sidebar (solid): `vanguardCharacter`, `vanguardInventory`, `vanguardDiscipline`, `warfare` (the Hunt skill, everywhere it appears), `vanguardParty`
 - Materials: `ore`, `log`, `fibre`, `hide`, `gem`, `ration`, `crate`; reagents: `coalIco`, `resinIco`, `pulpIco`, `tallowIco`, `shardIco`
 - Gear: `blade`, `greatblade`, `stave`, `ward`, `plate`, `greaves`, `treads`, `gauntlets`, `cowl`, `shroud`, `band`, `charm`, `book`
 - Foes: `beast`, `man`, `golemMob`, `horror`, `drakeMob`, `skull`

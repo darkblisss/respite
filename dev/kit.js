@@ -409,7 +409,7 @@ function fillTopbar(root, { bench = "working", hunt = "hunting", conn = "online"
 
 const NAV = [
   { id: "Vanguard", items: [
-    { label: "Character", icon: "person", route: "#/character" },
+    { label: "Character", icon: "vanguardCharacter", route: "#/character" },
     { label: "Armaments", icon: "plate", route: "#/armaments", meta: "7/10" },
     { label: "Companions", icon: "paw", route: "#/companions" },
   ] },
@@ -422,11 +422,11 @@ const NAV = [
   ] },
   { id: "Trades", items: SKILLS.filter((s) => s.kind === "gather").map((s) => ({ label: s.name, icon: s.icon, route: `#/skill/${s.id}`, meta: `Lv ${s.lv}`, dot: s.working ? "violet" : null })) },
   { id: "Artisans", items: SKILLS.filter((s) => s.kind === "craft").map((s) => ({ label: s.name, icon: s.icon, route: `#/skill/${s.id}`, meta: `Lv ${s.lv}` })) },
-  { id: "Field", items: [{ label: "Hunt", icon: "swords", route: "#/skill/warfare", meta: "Lv 31", dot: "ember" }] },
+  { id: "Field", items: [{ label: "Hunt", icon: "warfare", route: "#/skill/warfare", meta: "Lv 31", dot: "ember" }] },
   { id: "Realm", items: [
     { label: "Atlas", icon: "realmAtlas", route: "#/atlas" },
     { label: "Market", icon: "realmMarket", route: "#/market" },
-    { label: "Party", icon: "party", route: "#/party", badge: "2", badgeLabel: "2 unread" },
+    { label: "Party", icon: "vanguardParty", route: "#/party", badge: "2", badgeLabel: "2 unread" },
     { label: "Hiscores", icon: "trophy", route: "#/hiscores" },
   ] },
 ];

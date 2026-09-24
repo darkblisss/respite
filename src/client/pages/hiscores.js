@@ -57,7 +57,7 @@ const skillBoard = (id) => {
    undisciplined beside the rest -- which is the only way to compare across
    disciplines honestly. */
 const huntAllBoard = {
-  id: "hunt_all", name: "All", title: "Hunt", icon: "swords", num: "Level",
+  id: "hunt_all", name: "All", title: "Hunt", icon: "warfare", num: "Level",
   ask: { how: "skill", key: "warfare" },
   empty: "Nobody has taken the vanguard yet. The first to swing at anything tops it.",
 };
@@ -91,7 +91,7 @@ const TABS = [
       empty: "No commander has been counted yet.",
     }],
   },
-  { id: "hunt", name: "Hunt", icon: "swords", pick: "Discipline", boards: [huntAllBoard, ...GameData.CLASSES.map(huntBoard)] },
+  { id: "hunt", name: "Hunt", icon: "warfare", pick: "Discipline", boards: [huntAllBoard, ...GameData.CLASSES.map(huntBoard)] },
   { id: "gathering", name: "Gathering", icon: "pick", pick: "Trade", boards: TRADE_ORDER.map(skillBoard) },
   { id: "artisans", name: "Artisans", icon: "hammer", pick: "Bench", boards: ARTISAN_ORDER.map(skillBoard) },
   {

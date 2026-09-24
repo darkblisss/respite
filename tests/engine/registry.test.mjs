@@ -98,11 +98,11 @@ const DIVERGED = {
     at: ["icon"],
   },
   "GameData.SKILLS": {
-    why: "the same Trades and Artisans icons, in the full skill list",
+    why: "the same Trades and Artisans icons, and the Hunt's own, in the full skill list",
     at: ["icon"],
   },
   "getSkill = skillDef": {
-    why: "the same Trades and Artisans icons, read back through the getter",
+    why: "the same Trades, Artisans and Hunt icons, read back through the getter",
     at: ["icon"],
   },
   gatherSkillDef: {

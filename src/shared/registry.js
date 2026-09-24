@@ -253,7 +253,7 @@ function buildRegistry() {
   const SKILLS = []
     .concat(GATHER_SKILLS.map((s) => ({ id: s.id, name: s.name, verb: s.verb, icon: s.icon, kind: "gather", note: s.note })))
     .concat(PROFESSIONS.map((p) => ({ id: p.id, name: p.name, verb: p.verb, icon: p.icon, kind: "craft", note: p.note })))
-    .concat([{ id: "warfare", name: "Hunt", verb: "Hunt", icon: "swords", kind: "war", note: "You take the vanguard." }]);
+    .concat([{ id: "warfare", name: "Hunt", verb: "Hunt", icon: "warfare", kind: "war", note: "You take the vanguard." }]);
 
   /* ================= 5. GENERATED ECONOMY ================= */
 
