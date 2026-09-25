@@ -3,9 +3,10 @@
    ------------------------------------------------------------
    #/skill/warfare. The hunt as it happens: your commander and up
    to three foes, every blow floating off whoever took it, what
-   the fight is doing and its numbers. Under it the four zones of
-   the region you stand in (each opens the zone popup, where a hunt
-   is taken up) and the quarry that lives there.
+   the fight is doing and its numbers. Under it the region you
+   stand in, drawn as a map with its four zones as rings and who
+   is out on each (a ring or a row opens the zone popup, where a
+   hunt is taken up), and the quarry that lives there.
 
    Built once, then updated in place about ten times a second.
    Foe cards are keyed by hunt and uid: reinforcements slide in,
@@ -26,9 +27,11 @@ import { iconEl, artEl } from "../ui/icons.js";
 import { fmt, fmtStat, fmtWhole, fmtTime } from "../ui/format.js";
 import { openPopup, portraitImg, paintPortrait } from "../ui/widgets.js";
 import { monsterArt } from "../ui/popups/foe.js";
-import { huntChips, chipNode, partyHere, ZONE_ICONS } from "../ui/popups/zone.js";
+import { huntChips, chipNode, partyHere } from "../ui/popups/zone.js";
+import { zoneMap, zoneNotes } from "../ui/zone-map.js";
+import { serverMs } from "../store.js";
 import { CONFIG } from "../../shared/config.js";
-import { GameData, getMonster, getZone, getSkill, foesOf, sovereignOf, regionOfTier } from "../../shared/registry.js";
+import { GameData, getMonster, getZone, getSkill, getClass, foesOf, sovereignOf, regionOfTier } from "../../shared/registry.js";
 import { campPlan, huntRates } from "../../shared/combat.js";
 import { itemDef, itemName } from "../../shared/items.js";
 import { statsOf, canPickClass, recovering, myClass, xpProgress } from "../../shared/stats.js";
@@ -51,15 +54,6 @@ const STRUCK = new Set(["hit", "crit", "strike", "ambush", "volley", "empowered"
 const WORDS = { 1: "one", 2: "two", 3: "three" };
 const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : "");
 
-/* What a ground is worth saying about: only where it differs from the plain
-   one. A line reading "one at once, x1 XP" says the same as no line at all. */
-function zoneNotes(z) {
-  return [
-    z.foesText === "1" ? null : `${z.foesText} at once`,
-    z.xp === 1 ? null : `×${z.xp} XP`,
-    z.power === 1 ? null : `×${z.power} foes`,
-  ].filter(Boolean);
-}
 const huntKey = (c) => (c.id != null ? c.id : c.startedAt);
 const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 const sameId = (a, b) => a != null && b != null && String(a).toLowerCase() === String(b).toLowerCase();
@@ -99,6 +93,57 @@ function skinsOf(ctx) {
 // The zone last looked at this session: the quiet arena offers to hunt it again.
 let lastZone = "outer";
 
+/* ================= WHO ELSE IS OUT ================= */
+/* The realm's hunters on one region's ground, as ground_hunters() last
+   answered (migration 018), kept by tier across visits to the page so coming
+   back does not ask again at once. Asked again every REALM_MS while the page
+   is up and the tab is seen. A realm that has not run 018 answers `missing`
+   and the map shows you and your party alone for the rest of the session. */
+const REALM_MS = 45 * 1000;
+const realmSeen = new Map();   // tier -> { at, rows }
+let realmAsking = false;
+let realmMissing = false;
+
+function realmOn(ctx, tier) {
+  const seen = realmSeen.get(tier) || null;
+  const net = ctx.net;
+  const signedIn = !!(ctx.account && ctx.account.mode === "account");
+  if (realmMissing || !signedIn || !net || typeof net.groundHunters !== "function") return seen ? seen.rows : [];
+  const idle = typeof document !== "undefined" && document.hidden;
+  if (!realmAsking && !idle && (!seen || Date.now() - seen.at >= REALM_MS)) {
+    realmAsking = true;
+    Promise.resolve()
+      .then(() => net.groundHunters(tier))
+      .then((res) => {
+        if (res && res.missing) realmMissing = true;
+        const rows = res && !res.error && Array.isArray(res.rows) ? res.rows : seen ? seen.rows : [];
+        // A failed ask waits out the same interval rather than asking again every tick.
+        realmSeen.set(tier, { at: Date.now(), rows });
+      })
+      .catch(() => realmSeen.set(tier, { at: Date.now(), rows: seen ? seen.rows : [] }))
+      .finally(() => { realmAsking = false; });
+  }
+  return seen ? seen.rows : [];
+}
+
+const ZONE_IDS = new Set(GameData.ZONES.map((z) => z.id));
+
+// A roster member's hunt while it still runs, or null. The roster keeps a stopped one with its end.
+function liveHunt(hunt, now) {
+  if (!hunt || typeof hunt !== "object" || !ZONE_IDS.has(hunt.zone)) return null;
+  const end = serverMs(hunt.ended_at ?? hunt.ends_by);
+  if (Number.isFinite(end) && end <= now) return null;
+  const tier = Number(hunt.tier);
+  return Number.isInteger(tier) ? { tier, zone: hunt.zone } : null;
+}
+
+// "out 40m", "out 3h 5m": whole minutes, so a tip does not tick over every second.
+function outFor(ms) {
+  const m = Math.floor(Math.max(0, ms) / 60000);
+  if (m < 1) return "just out";
+  return m < 60 ? `out ${m}m` : `out ${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
 function commanderName(ctx) {
   const a = ctx.account;
   const name = (a && a.username) || ctx.state.meta.account;
@@ -125,7 +170,7 @@ export default {
       const t = setTimeout(() => { timers.delete(t); fn(); }, ms);
       timers.add(t);
     };
-    const sigs = { tags: null, next: null, company: null, zones: null, quarry: null, band: null, drops: null };
+    const sigs = { tags: null, next: null, company: null, quarry: null, band: null, drops: null };
     // XP/hr and DPS eased toward their true value each tick, so a combat system that
     // only actually changes these numbers at a swing or a kill still reads as live
     // instead of sitting still between hits and then jumping.
@@ -242,15 +287,21 @@ export default {
 
     const awayText = document.createTextNode("");
     const away = h("span.chip.chip-ember", iconEl("swords"), awayText);
-    const zonesGrid = h("div.grid-cards.max-2");
+    /* The region drawn, its four zones as rings on it and who is out on each: you, your
+       party off its roster, and the rest of the realm as it last answered. */
+    const map = zoneMap({
+      onZone: (tier, zoneId) => {
+        lastZone = zoneId;
+        openPopup("zone", ctx, tier, zoneId);
+      },
+    });
     const zones = h("section.section",
       h("div.section-head",
         h("div",
           h("h2.section-title", "Zones"),
-          h("p.section-sub", "Deeper zones field more foes, hit harder and pay more XP. The Inner and the Core are the only ground a Sovereign walks, and the only ground whose Elites carry the Veil.")),
+          h("p.section-sub", "Who from the realm is out on the ground right now. The Inner and the Core are the only ground a Sovereign walks, and the only ground whose Elites carry the Veil.")),
         h("div.section-end", away)),
-      zonesGrid);
-    const zoneRefs = new Map();
+      h("div.card.zone-map", map.node));
 
     const quarrySub = h("p.section-sub");
     const quarryGrid = h("div.grid-cards");
@@ -259,20 +310,6 @@ export default {
       quarryGrid);
 
     view.appendChild(h("div.page", hero, huntCard, zones, quarry));
-
-    function buildZones(tier) {
-      zoneRefs.clear();
-      // No Threat meter per card: one region, one counter, shown in the section head.
-      zonesGrid.replaceChildren(...GameData.ZONES.map((z) => {
-        const tag = h("span");
-        const node = h("button.zone-card", { type: "button", dataset: { tier: String(tier), zone: z.id } },
-          h("span.art", { "data-tone": "ember", "aria-hidden": "true" }, iconEl(ZONE_ICONS[z.id])),
-          h("span.zone-main", h("span.zone-name", z.name), h("span.zone-sub", zoneNotes(z).join(" · "))),
-          tag);
-        zoneRefs.set(z.id, { node, tag });
-        return node;
-      }));
-    }
 
     function buildQuarry(tier) {
       const region = regionOfTier(tier);
@@ -406,10 +443,6 @@ export default {
       else openPopup("zone", ctx, currentRegion(state).tier, lastZone);
     });
     on(foesBox, "click", ".foe-art", (e, b) => openPopup("foe", ctx, b.dataset.monster));
-    on(zonesGrid, "click", ".zone-card", (e, b) => {
-      lastZone = b.dataset.zone;
-      openPopup("zone", ctx, Number(b.dataset.tier), b.dataset.zone);
-    });
     on(quarryGrid, "click", ".foe-tile", (e, b) => openPopup("foe", ctx, b.dataset.monster));
 
     /* ================= UPDATE ================= */
@@ -746,30 +779,58 @@ export default {
       setAttr(band, "hidden", !all.length);
     }
 
-    function paintGround(ctx, region, c) {
+    /* Everyone standing on this region's ground, once each. You are where your own hunt or
+       the party's fight is, or at camp when you are not out at all (a hunt elsewhere is the
+       away chip's to say). Your party comes off its roster, the realm off ground_hunters();
+       a member the realm also names is drawn as party, and the realm never draws you. */
+    function huntersOn(ctx, tier, down) {
       const state = ctx.state;
-      const tier = region.tier;
-      if (sigs.zones !== tier) {
-        sigs.zones = tier;
-        buildZones(tier);
+      const c = state.tasks.combat;
+      const mine = c || partyFight(ctx);
+      const me = ctx.account ? ctx.account.userId : null;
+      const skin = state.player.skin;
+      const out = [];
+      if (mine && mine.tier === tier) {
+        out.push({ id: "me", kind: "me", zone: mine.zone, name: "You", skin, tip: `You · the ${getZone(mine.zone).name}` });
+      } else if (!mine) {
+        out.push({ id: "me", kind: "me", zone: null, name: "You", skin, down, tip: down ? "You · at camp, recovering" : "You · at camp" });
       }
-      // Nothing accumulates any more: each zone simply carries its own odds.
-      const peaked = false;
+      const seen = new Set();
+      const myName = (ctx.account && ctx.account.username) || state.meta.account;
+      if (myName) seen.add(String(myName).toLowerCase());
+      const members = ctx.party && Array.isArray(ctx.party.members) ? ctx.party.members : [];
+      members.forEach((m) => {
+        if (!m || sameId(m.user_id, me)) return;
+        const name = String(m.username || "");
+        if (!name) return;
+        seen.add(name.toLowerCase());
+        const hunt = liveHunt(m.hunt, ctx.now);
+        if (!hunt || hunt.tier !== tier) return;
+        out.push({ id: `p:${String(m.user_id).toLowerCase()}`, kind: "party", zone: hunt.zone, name: cap(name), skin: typeof m.skin === "string" ? m.skin : null,
+          href: `#/player/${encodeURIComponent(name)}`, tip: `${cap(name)} · your party` });
+      });
+      realmOn(ctx, tier).forEach((row) => {
+        const name = row && typeof row.username === "string" ? row.username : "";
+        if (!name || seen.has(name.toLowerCase()) || !ZONE_IDS.has(row.zone)) return;
+        seen.add(name.toLowerCase());
+        const kls = getClass(row.discipline);
+        const since = serverMs(row.started_at);
+        out.push({ id: `r:${name.toLowerCase()}`, kind: "realm", zone: row.zone, name: cap(name), skin: typeof row.skin === "string" ? row.skin : null,
+          href: `#/player/${encodeURIComponent(name)}`,
+          tip: [cap(name), kls ? kls.name : null, Number.isFinite(since) ? outFor(ctx.now - since) : null].filter(Boolean).join(" · ") });
+      });
+      return out;
+    }
 
-      GameData.ZONES.forEach((z) => {
-        const r = zoneRefs.get(z.id);
-        const active = !!(c && c.tier === tier && c.zone === z.id);
-        // A hunt already under way locks every other zone: pull back before picking a new one.
-        const locked = !!c && !active;
-        toggleClass(r.node, "is-active", active);
-        toggleClass(r.node, "is-peaked", peaked);
-        toggleClass(r.node, "is-locked", locked);
-        setAttr(r.node, "disabled", locked);
-        setAttr(r.node, "aria-disabled", locked);
-        toggleClass(r.tag, "tag", active || peaked);
-        toggleClass(r.tag, "tag-ember", active);
-        toggleClass(r.tag, "tag-sovereign", !active && peaked);
-        setText(r.tag, active ? "Hunting" : peaked ? "Peaked" : "");
+    function paintGround(ctx, region, c, down) {
+      const tier = region.tier;
+      /* A hunt already under way locks every other zone: pull back before picking a new one.
+         Both fights hold a tier and a zone, so the map marks either one. */
+      map.paint({
+        tier,
+        active: c && c.tier === tier ? c.zone : null,
+        locked: !!c,
+        hunters: huntersOn(ctx, tier, down),
       });
 
       // Travel doesn't end a hunt: say where it is when that isn't here.
@@ -866,7 +927,7 @@ export default {
       else if (watching) paintParty(ctx, watching, { watching: true, fell });
       else paintArena(ctx, region, c, kls, down);
       // Both fights hold a tier and a zone, so the ground below marks either one.
-      paintGround(ctx, region, c || shown);
+      paintGround(ctx, region, c || shown, down);
     }
 
     update(ctx);
@@ -876,6 +937,7 @@ export default {
         timers.forEach((t) => clearTimeout(t));
         timers.clear();
         offNews();
+        map.destroy();
       },
     };
   },

@@ -149,6 +149,7 @@ function stubNet(store) {
       subscribe: (partyId, onChange) => realmOf(store).subscribe(partyId, onChange),
     },
     hiscores: async (skill, limit) => realmOf(store).hiscores(skill, limit),
+    groundHunters: async (tier) => (guest() ? { rows: [], error: "Sign in first.", missing: false } : groundHunters(store, tier)),
     onlineCount: async () => 12,
     heartbeat: async () => {},
   };
@@ -413,6 +414,28 @@ function realmHash(s) {
   let x = 2166136261;
   for (let i = 0; i < s.length; i++) x = Math.imul(x ^ s.charCodeAt(i), 16777619);
   return x >>> 0;
+}
+
+/* Who else is out, as ground_hunters() (migration 018) would answer: about a
+   third of the realm on any ground, each on a steady zone, face and start.
+   It needs nothing else from the realm, so it stands on its own. */
+function groundHunters(store, tier) {
+  const t = Number(tier);
+  if (!Number.isInteger(t) || t < 1 || t > GameData.REGIONS.length) return { rows: [], error: "No such ground.", missing: false };
+  const now = store.now();
+  const me = store.account().username;
+  const zones = GameData.ZONES.map((z) => z.id);
+  const rows = REALM_PLAYERS.filter((name) => name !== me && realmHash(`${name}:${t}`) % 3 === 0).map((name) => {
+    const n = realmHash(`${name}:ground:${t}`);
+    return {
+      username: name,
+      skin: GameData.SKINS[n % GameData.SKINS.length].id,
+      discipline: [null, "warrior", "rogue", "mage"][n % 4],
+      zone: zones[n % zones.length],
+      started_at: new Date(now - ((n % 400) + 3) * MIN).toISOString(),
+    };
+  });
+  return { rows, error: null, missing: false };
 }
 
 function makeRealm(store) {

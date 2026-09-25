@@ -1400,75 +1400,250 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
   color: var(--bone-faint);
 }
 
-/* Zones: two by two. The bar is the zone's Threat. */
-/* Threat moved to the region header, so a card is just art, name and tag. The
-   "threat" row stays named for a card that still carries a meter. */
+/* The section head's end: the chip that says where the hunt is when it is not here. */
 .section-end { display: flex; align-items: flex-end; gap: var(--sp-3); flex-wrap: wrap; }
-.region-threat { min-width: 180px; }
 
-.zone-card {
-  position: relative;
+/* Zones: the region as a map (ui/region-map.js draws it), its four zones as
+   contour rings from the Outer edge to the Core, and who is out on each
+   (ui/zone-map.js lays them over it). The rings and the rows beside them
+   both open the zone popup. Map and rows sit side by side while the card has
+   the width for both, the rows under the map below that. */
+.zone-map { container-type: inline-size; padding: 12px; }
+
+.zone-map-in {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  grid-template-areas:
-    "art main tag"
-    "threat threat threat";
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-4);
   align-items: center;
-  gap: 14px;
+}
+
+@container (min-width: 860px) {
+  .zone-map-in { grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); gap: var(--sp-5); }
+}
+
+.zone-map-art {
+  position: relative;
+  aspect-ratio: 640 / 400;
+  overflow: hidden;
+  border-radius: var(--r-md);
+  background: #0d0b0e;
+  contain: layout paint;
+}
+
+.zone-map-art > svg {
+  position: absolute;
+  inset: 0;
+  display: block;
   width: 100%;
-  padding: 16px;
-  border-radius: var(--r-lg);
-  border: 1px solid var(--line);
-  background: linear-gradient(180deg, rgba(255, 255, 255, .016), transparent), var(--surface-1);
-  box-shadow: var(--shadow-card);
+  height: 100%;
+}
+
+/* ---- the drawing's own parts: only the bands answer the pointer ---- */
+.zm-band { cursor: pointer; transition: fill var(--dur-1); }
+.zm-band.z0 { fill: rgba(232, 225, 213, .02); }
+.zm-band.z1 { fill: rgba(232, 225, 213, .04); }
+.zm-band.z2 { fill: rgba(216, 116, 63, .06); }
+.zm-band.z3 { fill: rgba(216, 116, 63, .11); }
+
+@media (hover: hover) {
+  .zm-band.z0:hover, .zm-band.z1:hover { fill: rgba(232, 225, 213, .09); }
+  .zm-band.z2:hover, .zm-band.z3:hover { fill: rgba(216, 116, 63, .18); }
+}
+
+.zm-band.is-active { fill: rgba(216, 116, 63, .13); }
+/* A hunt under way anywhere locks every other zone, as the rows below are locked. */
+.zm-band.is-locked { cursor: default; pointer-events: none; }
+
+.zm-halo { fill: none; stroke: rgba(0, 0, 0, .55); stroke-width: 3.8; }
+.zm-line { fill: none; stroke-width: 1.2; }
+.zm-line.z0 { stroke: rgba(232, 225, 213, .42); stroke-dasharray: 5 5; }
+.zm-line.z1 { stroke: rgba(232, 225, 213, .32); }
+.zm-line.z2 { stroke: rgba(216, 116, 63, .55); }
+.zm-line.z3 { stroke: rgba(216, 116, 63, .75); stroke-width: 1.4; }
+.zm-line.is-active { stroke: var(--ember-hi); stroke-width: 2.4; stroke-dasharray: none; filter: drop-shadow(0 0 3px rgba(235, 144, 104, .75)); }
+
+.zm-road { fill: none; stroke: rgba(217, 181, 102, .6); stroke-width: 1.6; stroke-dasharray: .5 5; stroke-linecap: round; }
+.zm-camp-halo { fill: rgba(217, 181, 102, .14); stroke: rgba(217, 181, 102, .5); stroke-width: 1; }
+.zm-camp-tent { fill: var(--gold); stroke: #1a140a; stroke-width: 1.2; stroke-linejoin: round; }
+.zm-camp-door { fill: #1a140a; }
+.zm-crown { fill: var(--r-epic); stroke: #140e18; stroke-width: 1.1; stroke-linejoin: round; }
+
+.zm-frame rect { fill: none; stroke: rgba(232, 225, 213, .16); }
+.zm-frame .zm-frame-in { stroke: rgba(232, 225, 213, .07); }
+.zm-tick { fill: none; stroke: rgba(232, 225, 213, .2); stroke-width: 1; }
+.zm-corner { fill: rgba(232, 225, 213, .32); }
+.zm-compass circle { fill: rgba(0, 0, 0, .3); stroke: rgba(232, 225, 213, .18); }
+.zm-compass-lo { fill: rgba(232, 225, 213, .26); }
+.zm-compass-hi { fill: var(--bone); opacity: .75; }
+.zm-compass text { font: 700 8px var(--font-ui); letter-spacing: .1em; fill: rgba(232, 225, 213, .6); }
+.zm-cart-plate { fill: rgba(8, 6, 10, .55); stroke: rgba(232, 225, 213, .1); }
+.zm-cart-lv { font: 700 8.5px var(--font-ui); letter-spacing: .18em; fill: var(--bone-faint); }
+.zm-cart-name { font: 600 16px var(--font-display); fill: var(--bone); }
+
+/* ---- over the drawing: names, the camp, and the hunters ---- */
+.zone-map-layer { position: absolute; inset: 0; pointer-events: none; }
+
+.zone-label,
+.zone-camp {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: rgba(232, 225, 213, .66);
+  text-shadow: 0 1px 2px #000, 0 0 6px #000, 0 0 10px rgba(0, 0, 0, .8);
+}
+
+.zone-label.is-active { color: var(--ember-hi); }
+/* Under the tent, clear of your own face when you are home. */
+.zone-camp { color: var(--gold); opacity: .8; transform: translate(-50%, 15px); }
+
+.zone-pin {
+  --pin: 22px;
+  --pin-ring: rgba(232, 225, 213, .6);
+  position: absolute;
+  z-index: 1;
+  display: block;
+  width: var(--pin);
+  height: var(--pin);
+  margin: calc(var(--pin) / -2) 0 0 calc(var(--pin) / -2);
+  pointer-events: auto;
+  color: inherit;
+  text-decoration: none;
+}
+
+.zone-pin-face {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 28%, #2c2140, #120e17 75%);
+  box-shadow: 0 0 0 1.5px var(--pin-ring), 0 2px 8px rgba(0, 0, 0, .7);
+}
+
+/* The crop itself is .portrait-bust, in components.css. This is sizing only. */
+
+.zone-pin.is-party { --pin: 26px; --pin-ring: var(--violet); z-index: 2; }
+.zone-pin.is-me { --pin: 30px; --pin-ring: #d8c9ff; z-index: 3; }
+.zone-pin.is-me .zone-pin-face { box-shadow: 0 0 0 2px var(--pin-ring), 0 0 0 5px rgba(157, 130, 224, .28), 0 2px 10px rgba(0, 0, 0, .7); }
+.zone-pin.is-down .zone-pin-face img { filter: grayscale(1); }
+.zone-pin.is-down { opacity: .7; }
+
+.zone-pin.is-more .zone-pin-face {
+  display: grid;
+  place-items: center;
+  background: var(--surface-3);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--bone-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.zone-pin-name {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--bone);
+  text-shadow: 0 1px 2px #000, 0 0 5px #000, 0 0 9px rgba(0, 0, 0, .9);
+  pointer-events: none;
+}
+
+.zone-pin.is-me .zone-pin-name { color: #d8c9ff; }
+.zone-pin.is-party .zone-pin-name { color: var(--violet-hi); }
+.zone-pin.is-realm .zone-pin-name { color: var(--bone-dim); font-weight: 500; }
+
+@media (hover: hover) {
+  a.zone-pin:hover .zone-pin-face { box-shadow: 0 0 0 2px var(--bone), 0 2px 8px rgba(0, 0, 0, .7); }
+}
+
+/* A map drawn under 520px wide (ui/zone-map.js sets it, and spaces the pins to match). */
+.zone-map-art.is-narrow .zone-pin { --pin: 18px; }
+.zone-map-art.is-narrow .zone-pin.is-party { --pin: 22px; }
+.zone-map-art.is-narrow .zone-pin.is-me { --pin: 24px; }
+.zone-map-art.is-narrow .zone-pin-name { font-size: 10px; }
+.zone-map-art.is-narrow .zone-label,
+.zone-map-art.is-narrow .zone-camp { font-size: 9px; letter-spacing: .08em; }
+
+/* ---- the rows: one a zone, the same four in every region ---- */
+.zone-rows { display: flex; flex-direction: column; gap: 6px; }
+
+.zone-row {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  grid-template-areas:
+    "sw name who"
+    ". note note"
+    ". facts facts";
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 2px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line-soft);
+  background: rgba(0, 0, 0, .16);
   text-align: left;
   transition: border-color var(--dur-1), background var(--dur-1);
 }
 
-.zone-card > .art { grid-area: art; }
-.zone-card > .tag { grid-area: tag; align-self: start; }
-.zone-card > .meter { grid-area: threat; }
-
-.zone-main {
-  grid-area: main;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.zone-name {
-  font-family: var(--font-display);
-  font-size: 17px;
-  font-weight: 600;
-  line-height: 1.25;
-  color: var(--bone);
-}
-
-.zone-sub {
-  margin-top: 2px;
-  font-size: var(--text-sm);
-  color: var(--bone-faint);
-  font-variant-numeric: tabular-nums;
-}
-
 @media (hover: hover) {
-  .zone-card:hover { border-color: var(--line-strong); }
+  .zone-row:hover { border-color: var(--line-strong); }
 }
 
-.zone-card.is-active {
+.zone-row.is-active {
   border-color: var(--ember-edge);
-  background: linear-gradient(90deg, var(--ember-soft), transparent 65%), var(--surface-1);
+  background: linear-gradient(90deg, var(--ember-soft), rgba(0, 0, 0, .16) 70%);
 }
 
 /* A hunt is already under way somewhere else: every other zone is picked up
    again only after pulling back, so it reads and acts as out of reach. */
-.zone-card.is-locked {
+.zone-row.is-locked {
   opacity: .45;
   cursor: not-allowed;
   pointer-events: none;
 }
 
-.zone-card.is-peaked .meter-top b { color: var(--ember-hi); }
+.zone-swatch { grid-area: sw; width: 12px; height: 12px; border-radius: 3px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08); }
+.zone-swatch.z0 { background: #3b342c; }
+.zone-swatch.z1 { background: #4d3c2d; }
+.zone-swatch.z2 { background: #7a4028; }
+.zone-swatch.z3 { background: var(--ember); }
+
+.zone-row-name {
+  grid-area: name;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--bone);
+}
+
+.zone-row-note { grid-area: note; font-size: var(--text-xs); line-height: 1.35; color: var(--bone-faint); }
+.zone-row-facts { grid-area: facts; font-size: var(--text-xs); color: var(--bone-dim); font-variant-numeric: tabular-nums; }
+.zone-row-facts:empty { display: none; }
+
+.zone-row-who {
+  grid-area: who;
+  justify-self: end;
+  white-space: nowrap;
+  font-size: var(--text-xs);
+  color: var(--bone-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.zone-row-who.has-party { color: var(--violet-hi); }
 
 /* Quarry: three foes and the Sovereign across the bottom. */
 .foe-tile {
@@ -1590,7 +1765,7 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
   .hunt-foot > .kpis { flex-basis: 100%; }
   .hunt-actions { width: 100%; margin-left: 0; justify-content: space-between; }
 
-  .zone-card { padding: 14px; gap: 10px 12px; }
+  .zone-map { padding: 8px; }
   .foe-tile.is-sovereign { grid-template-columns: auto minmax(0, 1fr); }
   .foe-tile.is-sovereign > .tag { grid-column: 2; justify-self: start; }
 }

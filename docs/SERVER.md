@@ -13,6 +13,7 @@ The server is one Supabase Edge Function, `game`. It owns every save: the browse
 | `supabase/migrations/006_party_hunts.sql` | The party hunt table, the RPC a watcher reads it through, and the cron that ticks it. Required for party hunts, and the only thing here that costs money at rest (section 3). |
 | `supabase/migrations/007_market_pools.sql` | The anonymous market: the tables answer about your own rows only, three functions answer everything a market page draws, and material listings are aggregated into pools. Required, and it goes out with the function and the browser bundle. |
 | `supabase/migrations/010_market_bases.sql` | The shelf: gear and tools grouped by base, with a rarity floor, so a market with forty swords on it does not read as forty rows of the same word. Required with the browser bundle that draws it; the game function does not read it. |
+| `supabase/migrations/018_ground_hunters.sql` | `ground_hunters(tier)`: everyone out hunting on one region's ground (name, face, discipline, zone, since when), read off `hunt_presence` for the Hunt page's map. Optional: without it the map shows a player and their party alone. The game function does not read it. |
 | `.github/workflows/deploy-game.yml` | Deploys on pushes to `main` that touch the rules, the server or the function. |
 | `tests/server/run.mjs` | Integration tests: the real rules against PGlite, optionally through postgres.js. |
 | `package.json` | Dev dependencies and scripts for the local tests. Never deployed. |
@@ -191,7 +192,8 @@ In the Supabase dashboard, SQL Editor, in this order. Each is safe to run again.
 4. `supabase/migrations/004_leaderboard_boards.sql` and `005_wealth_board.sql`. Optional: the boards `hiscores()` cannot answer.
 5. `supabase/migrations/006_party_hunts.sql`. Required for party hunts, and it asks for two values by hand: `RESPITE_TICK_SECRET` in the function's secrets, and the same secret plus the function's URL in `private.settings`. Its header is the instructions. Enable `pg_cron` and `pg_net` first (dashboard, Database, Extensions) or the file says in a notice that the tick is not scheduled and carries on.
 6. `supabase/migrations/007_market_pools.sql`. Required, and it goes out together with the function and the static client: it closes the market's reads to everyone but the row's owner and opens the three functions the page reads instead, so a browser that predates it shows an empty market until it reloads. Run it again after any later run of `schema.sql`, which recreates the two policies it narrows.
-7. The legacy audit in section 5, before announcing the market.
+7. `supabase/migrations/018_ground_hunters.sql`. Optional: who else is out on each region's ground, for the Hunt page's map. Without it the map draws the player and their party and says nothing about anyone else.
+8. The legacy audit in section 5, before announcing the market.
 
 ## 5. Legacy saves: audit before announcing the market
 

@@ -1078,6 +1078,67 @@ async function masterySaints() {
     () => as(ANON, 'select * from public.mastery_saints()'), /Not signed in|permission denied/);
 }
 
+/* Who else is out. ground_hunters() lives in migration 018 and reads hunt_presence,
+   which no client holds a grant on, so it is the one way a browser sees the realm's
+   hunts. It needs nothing but schema.sql under it; running it twice proves it is
+   safe to paste again. */
+async function groundHunters() {
+  await resetParties();
+  const sql = async (file) => readFile(join(REPO, 'supabase', 'migrations', file), 'utf8');
+  try {
+    await db.exec(await sql('018_ground_hunters.sql'));
+    await db.exec(await sql('018_ground_hunters.sql'));
+    check('018 applies over schema.sql, twice', true);
+  } catch (e) {
+    check('018 applies over schema.sql, twice', false, e.message);
+    return;
+  }
+
+  same('ground_hunters: security definer, search_path public, execute for authenticated only',
+    await q1(
+      `select p.prosecdef,
+              coalesce(p.proconfig, '{}') as config,
+              has_function_privilege('anon', p.oid, 'execute') as anon,
+              has_function_privilege('authenticated', p.oid, 'execute') as auth,
+              (p.proacl is null or exists (
+                 select 1 from aclexplode(p.proacl) a where a.grantee = 0 and a.privilege_type = 'EXECUTE'
+              )) as public_exec
+       from pg_proc p
+       where p.oid = 'public.ground_hunters(int)'::regprocedure`,
+    ),
+    { prosecdef: true, config: ['search_path=public'], anon: false, auth: true, public_exec: false });
+
+  // As the game function writes it: a live hunt has no end yet and has not run past its latest.
+  const out = (who, tier, zone, { left = 60, ended = false } = {}) => db.query(
+    `insert into public.hunt_presence (user_id, tier, zone, started_at, ends_by, ended_at)
+     values ($1, $2, $3, now() - interval '40 minutes', now() + make_interval(mins => $4::int), case when $5::boolean then now() else null end)
+     on conflict (user_id) do update
+     set tier = excluded.tier, zone = excluded.zone, started_at = excluded.started_at, ends_by = excluded.ends_by, ended_at = excluded.ended_at`,
+    [who, tier, zone, left, ended]);
+  await db.query(`update public.profiles set skin = 'drifter', klass = 'rogue' where user_id = $1`, [U.bram]);
+  await out(U.ash, 3, 'outer');
+  await out(U.bram, 3, 'inner');
+  await out(U.cinder, 3, 'core', { ended: true });
+  await out(U.dusk, 3, 'middle', { left: -5 });
+  await out(U.ember, 4, 'outer');
+  await out(U.nobody, 3, 'outer');
+
+  const on = async (who, tier) => (await as(who, 'select * from public.ground_hunters($1)', [tier])).map((r) => [r.username, r.zone]);
+  same('ground_hunters: the hunts still running on that ground, and never the caller\'s own', await on(U.ash, 3), [['bram', 'inner']]);
+  same('and another caller sees the first', await on(U.bram, 3), [['ash', 'outer']]);
+  const row = (await as(U.ash, 'select * from public.ground_hunters(3)'))[0];
+  same('each row carries the face and the discipline', [row.skin, row.discipline], ['drifter', 'rogue']);
+  check('and when they set out', row.started_at != null && Number.isFinite(Date.parse(row.started_at)), row.started_at);
+  same('other ground is other ground', await on(U.ash, 4), [['ember', 'outer']]);
+  same('empty ground answers nothing', await on(U.ash, 9), []);
+  await refuses('ground_hunters refuses a session with no user', () => as(SIGNED_OUT, 'select * from public.ground_hunters(3)'), /Not signed in/);
+  await refuses('and anon outright', () => as(ANON, 'select * from public.ground_hunters(3)'), DENIED);
+  await refuses('and ground that is not there', () => as(U.ash, 'select * from public.ground_hunters(10)'), /No such ground/);
+  await refuses('or no ground at all', () => as(U.ash, 'select * from public.ground_hunters(null)'), /No such ground/);
+  same('hunt_presence itself stays shut to a browser', await as(U.ash, `select has_table_privilege('authenticated', 'public.hunt_presence', 'select') as v`).then((r) => r[0].v), false);
+  await resetParties();
+}
+
 async function rerun(schemaSql) {
   await server();
   const counts = () => q1(`select ${TABLES.map((t) => `(select count(*)::int from public.${t}) as ${t}`).join(', ')}`);
@@ -1150,6 +1211,7 @@ async function main() {
   await section('party_state', partyState);
   await section('the party room', partyRoom);
   await section('the five saints', masterySaints);
+  await section('who else is out', groundHunters);
   await section('re-running the schema', () => rerun(schemaSql));
 }
 

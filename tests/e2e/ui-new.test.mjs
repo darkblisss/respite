@@ -454,6 +454,14 @@ await run(async () => {
      needed went missing for a whole release without a test noticing. */
   section("the Hunt page, signed in and out on a hunt");
   {
+    /* Somebody else out on the same ground, as the game function would have written them:
+       a profile and a live row in hunt_presence. In before the page's first signed-in look,
+       because the page keeps the realm's answer for a while once it has one. */
+    const ghost = "44444444-5555-4666-8777-888888888888";
+    await sql(stack, `insert into public.profiles (user_id, username, skin, klass, last_seen) values ($1::uuid, 'e2e_corvin', 'outrider', 'warrior', now())
+                      on conflict (user_id) do nothing`, [ghost]);
+    await sql(stack, `insert into public.hunt_presence (user_id, tier, zone, started_at, ends_by) values ($1::uuid, 1, 'middle', now() - interval '25 minutes', now() + interval '6 hours')
+                      on conflict (user_id) do update set tier = 1, zone = 'middle', ended_at = null, ends_by = now() + interval '6 hours'`, [ghost]);
     await dispatch(app.page, "startHunt", { tier: 1, zone: "outer" });
     await app.page.waitForTimeout(600);
     await go("#/skill/warfare");
@@ -467,8 +475,37 @@ await run(async () => {
     check("and the arena carries the commander's own name, capitalised", arena.name === "Uinew_a", arena);
     const pageErrs = errs().filter((e) => /hunt\.js/.test(String(e.stack || e.message || e)));
     check("and nothing in it threw", pageErrs.length === 0, pageErrs.map((e) => String(e.message || e)));
-    await dispatch(app.page, "pullBack", {});
+
+    // The Zones map: the region drawn, you on the ground you hunt, the realm on theirs.
+    await app.page.waitForFunction(() => !!document.querySelector(".zone-pin.is-realm"), null, { timeout: 8000 }).catch(() => {});
+    const map = await live(app, () => ({
+      tier: document.querySelector(".zone-map-art") ? document.querySelector(".zone-map-art").dataset.tier : null,
+      bands: [...document.querySelectorAll(".zm-band")].map((b) => b.dataset.zone),
+      me: document.querySelector(".zone-pin.is-me") ? document.querySelector(".zone-pin.is-me").dataset.zone : null,
+      realm: [...document.querySelectorAll(".zone-pin.is-realm")].map((p) => [p.dataset.who, p.dataset.zone, p.getAttribute("href"), p.getAttribute("data-tip")]),
+      rows: [...document.querySelectorAll(".zone-row")].map((r) => [r.dataset.zone, r.classList.contains("is-active"), r.disabled, r.querySelector(".zone-row-who").textContent]),
+    }));
+    same("the Zones map draws the region you stand in, a band a zone", [map.tier, map.bands], ["1", ["outer", "middle", "inner", "core"]]);
+    same("you stand on the zone you are hunting", map.me, "outer");
+    check("and the rest of the realm stands where it is hunting, with a way to their page",
+      map.realm.length === 1 && map.realm[0][0] === "r:e2e_corvin" && map.realm[0][1] === "middle" && map.realm[0][2] === "#/player/e2e_corvin"
+        && /^E2e_corvin · Warrior · out 2\dm$/.test(map.realm[0][3] || ""), map.realm);
+    same("the rows: yours marked, the rest shut while the hunt is out, each counting who else is there",
+      map.rows, [["outer", true, false, ""], ["middle", false, true, "1 hunter"], ["inner", false, true, ""], ["core", false, true, ""]]);
+    await live(app, () => document.querySelector('.zm-band[data-zone="outer"]').dispatchEvent(new MouseEvent("click", { bubbles: true })));
     await app.page.waitForTimeout(400);
+    const title = await live(app, () => (document.querySelector(".modal-title") || {}).textContent || null);
+    check("a press on a zone's ring opens that zone", /^Outer · The Ashen Verge$/.test(title || ""), title);
+    await app.page.keyboard.press("Escape");
+    await app.page.waitForTimeout(300);
+
+    await dispatch(app.page, "pullBack", {});
+    await app.page.waitForTimeout(600);
+    const home = await live(app, () => ({
+      me: document.querySelector(".zone-pin.is-me") ? document.querySelector(".zone-pin.is-me").dataset.zone : null,
+      shut: [...document.querySelectorAll(".zone-row")].filter((r) => r.disabled).length,
+    }));
+    same("pulled back, you stand at your camp and every zone is open again", home, { me: "camp", shut: 0 });
   }
 
   section("the Hunt page while the party is out");
@@ -522,6 +559,16 @@ await run(async () => {
     check("with the warband in it, this camp first", band.mates[0] === "You" && band.mates.length === 2, band);
     const huntErrs = errs().filter((e) => /hunt\.js/.test(String(e.stack || e.message || e)));
     check("and nothing in hunt.js threw", huntErrs.length === 0, huntErrs.map((e) => String(e.message || e)));
+
+    // On the map below, the mate stands with you, off the party's roster.
+    await live(app, () => window.__respite.store.refreshParty());
+    await app.page.waitForTimeout(800);
+    const out = await live(app, () => ({
+      me: document.querySelector(".zone-pin.is-me") ? document.querySelector(".zone-pin.is-me").dataset.zone : null,
+      party: [...document.querySelectorAll(".zone-pin.is-party")].map((p) => [p.querySelector(".zone-pin-name") ? p.querySelector(".zone-pin-name").textContent : null, p.dataset.zone]),
+      twice: document.querySelectorAll('.zone-pin[data-who="r:uinew_b"]').length,
+    }));
+    same("the map puts you and your party mate on the party's ground, the mate as party and only once", out, { me: "outer", party: [["Uinew_b", "outer"]], twice: 0 });
 
     // A share is the payout's own figure over the session, so a hunter who has fought has one.
     await advanceServer(stack, 90 * 1000);

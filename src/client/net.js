@@ -545,6 +545,20 @@ export function createNet({
     return { row: row && typeof row === "object" ? row : null, error: null, missing: false };
   }
 
+  /* Who else is out on one region's ground, as migration 018 publishes it:
+     [{ username, skin, discipline, zone, started_at }], one row a hunt still
+     running there, never the caller's own. Same `missing` promise as the boards:
+     a realm that has not run 018 has no such function, and the Hunt page's map
+     shows you and your party alone. */
+  async function groundHunters(tier) {
+    const { data, error, code } = await rpc("ground_hunters", { p_tier: Number(tier) });
+    if (error) {
+      const missing = code === "PGRST202" || /could not find the function|does not exist/i.test(error);
+      return { rows: [], error, missing };
+    }
+    return { rows: Array.isArray(data) ? data : [], error: null, missing: false };
+  }
+
   async function onlineCount() {
     const { data, error } = await rpc("online_count");
     const n = Number(data);
@@ -579,6 +593,7 @@ export function createNet({
     masteryRanks,
     masterySaints,
     playerProfile,
+    groundHunters,
     onlineCount,
     heartbeat,
     get client() { return client; },

@@ -23,6 +23,8 @@ import { openModal, confirm, toast, tooltip, tipBody, bindDrawer, closeModals } 
 import { fmt, fmtWhole, fmtGold, fmtTime, fmtAgo, signedPct, chancePct, fmtClock, plural } from "../src/client/ui/format.js";
 import { campScene, CAMP_STAGES, CAMP_VIEWBOX } from "../src/client/ui/camp-art.js";
 import { MONSTER_ART, KIND_ART } from "../src/client/ui/monster-art.js";
+import { zoneMap } from "../src/client/ui/zone-map.js";
+import { GameData } from "../src/shared/registry.js";
 
 const params = new URLSearchParams(location.search);
 const SHOT = params.has("shot");
@@ -678,14 +680,28 @@ function foeCard({ name, kind, hp, max, rank, target, float }) {
       h("div.hpbar.hpbar-foe", h("i", { style: { width: `${(hp / max) * 100}%` } }), h("span", `${fmt(hp)} / ${fmt(max)}`))));
 }
 
-function zoneCard({ name, iconName, sub, threat, active }) {
-  return h("button.zone-card", { type: "button", class: { "is-active": active, "is-peaked": threat >= 100 } },
-    art(iconName, { tone: "ember" }),
-    h("span.zone-main", h("span.zone-name", name), h("span.zone-sub", sub)),
-    active ? tag("Hunting", "ember") : threat >= 100 ? tag("Peaked", "sovereign") : h("span"),
-    h("span.meter",
-      h("span.meter-top", h("span", "Threat"), h("b", `${threat} / 100`)),
-      bar(threat, "bar-ember bar-thin")));
+/* The Zones map with made-up hunters on it: you, now and then a party mate, and a
+   handful of the realm, spread differently on every region so each map shows a crowd. */
+const KIT_REALM = ["Corvin", "Edda", "Rook", "Hollis", "Wren", "Sable", "Isolde", "Ashlin", "Tobin", "Mara", "Quill", "Orrin"];
+const KIT_YOU = ["outer", null, "middle", "inner", null, "core", "inner", null, "core"];
+
+function kitHunters(tier) {
+  const zones = GameData.ZONES.map((z) => z.id);
+  const mine = KIT_YOU[(tier - 1) % KIT_YOU.length];
+  const out = [{ id: "me", kind: "me", zone: mine, name: "You", skin: "drifter", tip: mine ? "You · hunting here" : "You · at camp" }];
+  if (tier % 3 === 0) out.push({ id: "p:thane", kind: "party", zone: mine || "middle", name: "Thane", skin: "outrider", href: "#/player/thane", tip: "Thane · your party" });
+  const n = 2 + ((tier * 5) % 6);
+  for (let k = 0; k < n; k++) {
+    const name = KIT_REALM[(tier * 3 + k) % KIT_REALM.length];
+    out.push({ id: `r:${name}`, kind: "realm", zone: zones[(tier + k * 3) % zones.length], name, skin: k % 2 ? "drifter" : "outrider", href: `#/player/${name.toLowerCase()}`, tip: `${name} · out 2h 10m` });
+  }
+  return out;
+}
+
+function kitZoneMap(tier, { active = KIT_YOU[(tier - 1) % KIT_YOU.length], hunters = kitHunters(tier) } = {}) {
+  const map = zoneMap({ onZone: () => PAGES_MODALS.huntZone() });
+  map.paint({ tier, active, locked: !!active, hunters });
+  return h("div.card.zone-map", map.node);
 }
 
 PAGES.hunt = () => {
@@ -732,12 +748,17 @@ PAGES.hunt = () => {
             h("button.btn.btn-ember", { type: "button", onClick: () => PAGES_MODALS.huntZone() }, "Change hunt"))))),
 
     h("section.section",
-      sectionHead("Zones", "Deeper zones field more foes, call reinforcements sooner and pay more XP. At 100 Threat the Sovereign may come for you."),
-      h("div.grid-cards.max-2",
-        zoneCard({ name: "Outer", iconName: "zoneOuter", sub: "1 or 2 at once · ×1 XP", threat: 12 }),
-        zoneCard({ name: "Middle", iconName: "zoneMiddle", sub: "1 or 2 at once · ×1.3 XP", threat: 30 }),
-        zoneCard({ name: "Inner", iconName: "zoneInner", sub: "2 or 3 at once · ×1.7 XP", threat: 64, active: true }),
-        zoneCard({ name: "Core", iconName: "zoneCore", sub: "3 at once · ×2.2 XP", threat: 100 }))),
+      sectionHead("Zones", "Who from the realm is out on the ground right now. The Inner and the Core are the only ground a Sovereign walks, and the only ground whose Elites carry the Veil."),
+      kitZoneMap(2, {
+        active: "inner",
+        hunters: [
+          { id: "me", kind: "me", zone: "inner", name: "You", skin: "drifter", tip: "You · the Inner" },
+          { id: "p:thane", kind: "party", zone: "inner", name: "Thane", skin: "outrider", href: "#/player/thane", tip: "Thane · your party" },
+          { id: "r:corvin", kind: "realm", zone: "outer", name: "Corvin", skin: "outrider", href: "#/player/corvin", tip: "Corvin · Warrior · out 40m" },
+          { id: "r:edda", kind: "realm", zone: "middle", name: "Edda", skin: "drifter", href: "#/player/edda", tip: "Edda · Rogue · out 2h 5m" },
+          { id: "r:rook", kind: "realm", zone: "middle", name: "Rook", skin: "outrider", href: "#/player/rook", tip: "Rook · out 12m" },
+        ],
+      })),
 
     h("section.section",
       sectionHead("Quarry", "What lives in Gallowmoor. Pick one to see what it hits for and what it drops."),
@@ -1878,6 +1899,12 @@ function galleryData() {
         h("button.btn.btn-primary.btn-icon", { type: "submit", "aria-label": "Send" }, ic("send")))));
 }
 
+function galleryMaps() {
+  return section("maps", "Region maps",
+    "The Hunt page's Zones: <code>ui/region-map.js</code> draws each region from its name and note, the four zones as contour rings from the Outer edge to the Core, the camp on the rim and the Sovereign's lair at the heart; <code>ui/zone-map.js</code> puts the hunters on it (you, your party, the realm) with a row a zone beside it. A ring or a row opens the zone popup.",
+    GameData.REGIONS.map((r) => block(`${r.tier} · ${r.name} · Lv ${r.level}`, kitZoneMap(r.tier))));
+}
+
 function galleryPages() {
   const list = [
     ["character", "person", "Character"], ["gather", "delving", "Gathering: Delving"], ["bench", "plate", "Artisan: Forgemaster"],
@@ -1898,8 +1925,17 @@ async function bootGallery() {
   // Sample links point at game routes; in the gallery they go nowhere.
   on(document, "click", 'a[href^="#/"]', (e) => e.preventDefault());
   const shell = await galleryShell();
-  const sections = [galleryTokens(), galleryIcons(), galleryButtons(), galleryForms(), galleryChips(), galleryBars(), galleryCards(),
-    galleryPills(), gallerySlots(), galleryOverlays(), shell, galleryFeedback(), galleryData(), galleryPages()];
+  // One section that falls over says so in its own place rather than taking the whole book down.
+  const safe = (build) => {
+    try {
+      return build();
+    } catch (err) {
+      const name = build.name.replace(/^gallery/, "") || "Section";
+      return section(name.toLowerCase(), name, `This section fell over: <code>${String(err && err.message).replace(/</g, "&lt;")}</code>`);
+    }
+  };
+  const sections = [galleryTokens, galleryIcons, galleryButtons, galleryForms, galleryChips, galleryBars, galleryCards,
+    galleryPills, gallerySlots, galleryOverlays, () => shell, galleryFeedback, galleryData, galleryMaps, galleryPages].map(safe);
 
   root.append(
     h("header.kit-top", h("img", { src: "assets/respite-logo.webp", alt: "" }), h("div", h("h1", "Respite UI Kit"), h("p", "v5 · every component, every state, drawn with the real CSS and helpers."))),

@@ -1448,22 +1448,46 @@ Armaments renders a two-handed weapon as one spanning slot instead: `.doll-col.h
 - Monster drawings: `monsterArt(mob, elite)` from `popups/foe.js` draws the foe's own plate from `ui/monster-art.js` (`MONSTER_ART` by monster id; v4's five `KIND_ART` drawings are the fallback) inside `svg.m-art` (`.elite`, `.sovereign` set the rim through `--m-rim`; `--m-line` thickens it in small tiles). Parts are classes: `m-body`, `m-shade` (the far limbs), `m-cloth`, `m-bark`, `m-plate`, `m-lit`, `m-void`, `m-eye`, `m-glow`, `m-ivory`, `m-steel`, `m-edge`, `m-crack`, `m-bone`, `m-rope`, `m-shadow`, and the regions' own `m-ash`, `m-moss`, `m-sallow`, `m-ice`, `m-star`, `m-veil`, `m-fire`, `m-ghost`, `m-blood`, `m-rust`, `m-wood`, `m-water` (with `-glow` halos for ice, star and the Veil).
 - Foe cards are keyed by foe uid: add new ones, update health in place, give fallen ones `.is-gone` and remove them after 700ms.
 
-3. Zones, two across:
+3. Zones, the region as a map. `zoneMap({ onZone })` from `ui/zone-map.js` builds it and `paint({ tier, active, locked, hunters })` keeps it current; the drawing itself is `regionMap(tier, prefix)` from `ui/region-map.js`, one map a region, seeded so the same tier always draws the same ground (ash and burnt stumps at Lv 1, peat pools and gibbets, snow over tunnel mouths, pine and cairns, dead water, old growth round star iron, warm cracked stone and a wyrm's bones, ruins in mist, roots into a maw at Lv 80).
 
 ```html
-<div class="grid-cards max-2">
-  <button class="zone-card is-active" type="button">                           <!-- .is-peaked at 100 Threat -->
-    <div class="art" data-tone="ember" aria-hidden="true"><svg>zoneInner</svg></div>
-    <span class="zone-main"><span class="zone-name">Inner</span><span class="zone-sub">2 or 3 at once · ×1.7 XP</span></span>
-    <span class="tag tag-ember">Hunting</span>                                  <!-- "Peaked" (tag-sovereign) at 100, or an empty span -->
-    <span class="meter"><span class="meter-top"><span>Threat</span><b>64 / 100</b></span><div class="bar bar-ember bar-thin"><i></i></div></span>
-  </button>
+<div class="card zone-map">                                   <!-- container-type: inline-size; map and rows side by side from 860px -->
+  <div class="zone-map-in">
+    <div class="zone-map-art" role="group" aria-label="Gallowmoor, and who is hunting where" data-tier="2">
+      <svg viewBox="0 0 640 400" aria-hidden="true">           <!-- regionMap(tier): the land, then the rings -->
+        <path class="zm-band z2 is-active" data-zone="inner"/> <!-- one band a zone, the next one cut out: the only part that takes a press -->
+        <path class="zm-line z2 is-active" data-zone="inner"/> <!-- the contour on its outer edge; .is-locked bands ignore the pointer -->
+        ...the lair and its crown, the road, the camp, the frame, the compass, the title
+      </svg>
+      <div class="zone-map-layer">                               <!-- over the drawing, positioned in % of it -->
+        <span class="zone-label is-active">Inner</span>          <!-- at the top of each band -->
+        <span class="zone-camp">Your camp</span>
+        <span class="zone-pin is-me" data-zone="inner"><span class="zone-pin-face portrait-bust"><img></span><span class="zone-pin-name">You</span></span>
+        <a class="zone-pin is-party" href="#/player/thane" data-tip="Thane · your party">...</a>
+        <a class="zone-pin is-realm" href="#/player/corvin" data-tip="Corvin · Warrior · out 40m">...</a>
+        <span class="zone-pin is-more" data-tip="Edda, Rook"><span class="zone-pin-face">+2</span></span>
+      </div>
+    </div>
+    <div class="zone-rows">
+      <button class="zone-row is-active" type="button" data-zone="inner">   <!-- .is-locked (and disabled) while a hunt is out on other ground -->
+        <span class="zone-swatch z2"></span>
+        <span class="zone-row-name"><span>Inner</span><span class="tag tag-ember">Hunting</span></span>
+        <span class="zone-row-who">2 others</span>                      <!-- "3 hunters" where you are not; .has-party when one is yours -->
+        <span class="zone-row-note">Where the ground stops pretending. ...</span>
+        <span class="zone-row-facts">2 at once · ×1.7 XP · ×1.27 foes</span> <!-- empty (and hidden) for the Outer -->
+      </button>
+    </div>
+  </div>
 </div>
 ```
 
+- Hunters: `{ id, kind: "me" | "party" | "realm", zone, name, skin, tip, href, down }`. You stand at the south of your band, your party beside you, everyone else on a spot their name picks (`placePins`), so a hunter keeps their place between looks. You stand on the camp (zone `null`) when you are not out, greyed while recovering; a hunt on other ground is the away chip's to say.
+- Pins are 30px (you), 26px (party) and 22px (realm); on a map drawn under 520px wide the component sets `.is-narrow` on `.zone-map-art` and they are 24, 22 and 18, packed a little closer. Names go on in that order wherever they fit; one that would land on a name, a pin or a zone's label is left to its tip. A band with more hunters than spots gives its last spot to `+N`.
+- The drawing is built once a region; pins are rebuilt when who stands where changes and laid out again when the map changes size, never on a tick.
+
 4. Quarry: `.grid-cards` of three `button.foe-tile` (`span.foe-art` with the drawing, `span.foe-tile-main` > `.foe-tile-name` + `.foe-tile-sub` "Stalker · 48 health · swings every 2.4s") and one `button.foe-tile.is-sovereign` spanning the row, with a `tag-sovereign` at its end.
 
-Phones (below 768px): the arena is one column: you in a strip (72px portrait beside your bars), the status and timer on one ruled line, then the foe cards at full width with names that wrap rather than truncate. KPIs go two by two; the switch and buttons share a line.
+Phones (below 768px): the arena is one column: you in a strip (72px portrait beside your bars), the status and timer on one ruled line, then the foe cards at full width with names that wrap rather than truncate. KPIs go two by two; the switch and buttons share a line. The Zones map sits over its rows.
 
 Added with the live page (pages.css, The Hunt), for the party's shared fight:
 

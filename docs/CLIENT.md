@@ -38,6 +38,8 @@ Serve the repo over HTTP for anything in a browser (ES modules do not load from 
 | `src/client/pages/armaments.js` | `#/armaments` | storage |
 | `src/client/pages/stockpile.js` | `#/stockpile` | storage |
 | `src/client/pages/hunt.js` | `#/skill/warfare` | hunt |
+| `src/client/ui/region-map.js` | each region drawn as a map for the Hunt page's Zones: `regionMap(tier, prefix)` (inner markup for `MAP_VIEWBOX`, `0 0 640 400`), and the geometry the pins stand on: `labelSpot`, `campSpot`, `pinSlots`, `placePins` (styles in pages.css, The Hunt) | hunt |
+| `src/client/ui/zone-map.js` | the Zones component: `zoneMap({ onZone })` -> `{ node, paint({ tier, active, locked, hunters }), destroy }`, the map with its hunters over it and a row a zone; `zoneNotes(zone)` | hunt |
 | `src/client/ui/popups/zone.js`, `foe.js`, `class.js` | popups `zone`, `foe`, `class` | hunt |
 | `src/client/pages/companions.js`, `bounties.js`, `requisitions.js`, `shop.js`, `atlas.js` | camp and atlas pages | camp |
 | `src/client/ui/popups/sky.js` | popup `sky` (the week's weather, opened from the Atlas and the weather card) | camp |
@@ -119,7 +121,7 @@ Behaviour:
 - Reconcile: on every response the store adopts the server state, replays still-unsent commands on top with a quiet env, advances to now quietly, and emits `store:replaced`. Toasts never repeat for replayed time.
 - A predicted command the server refused emits `store:rejected { type, error }`.
 - Server news (`response.events`: `mail:claimed { gold, items, count }`, `away { ms, gains, gold }`) is emitted as `store:news { type, ...payload }`.
-- Cadence (account mode): sync on load, on focus/visibility, after commands (debounced), and every 5 minutes while visible; never overlapping; again soon when the answer's `state.clock < now`. Heartbeat RPC every 60s while visible (activity `{ skill, action, hunt: { tier, zone } | null }`). `online_count` every 60s. Party state every 30s while in a party or on the Party page, plus realtime pokes.
+- Cadence (account mode): sync on load, on focus/visibility, after commands (debounced), and every 5 minutes while visible; never overlapping; again soon when the answer's `state.clock < now`. Heartbeat RPC every 60s while visible (activity `{ skill, action, hunt: { tier, zone } | null }`). `online_count` every 60s. Party state every 30s while in a party or on the Party page, plus realtime pokes. `ground_hunters` for the region on the map every 45s while the Hunt page is up and the tab is seen (hunt.js keeps the last answer per tier across visits).
 - Returning to a tab hidden more than 5 minutes: sync first (the server does the catch-up), then adopt.
 - `store.bus` events: every engine event from live frames (payloads carry `at` and `state`; see ENGINE.md 17 "Events"), plus `store:replaced {}`, `store:status { status }`, `store:rejected { type, error }`, `store:news { type, ... }`, `store:party { party }`, `store:partyHunt { partyHunt }`, `store:online { online }`.
 - Party hunts: the answer to a game request carries `party`, `sessionView()` of the shared fight this camp is out on (CONTRACT.md), and leaves it out otherwise. `store.partyHunt` is that value, kept word for word and cleared the moment an answer omits it or calls it `over`. Nothing reads it into the save and nothing plays it forward: a shared fight cannot be predicted at all (`src/shared/partyHunt.js`), so a page draws what came back and no more. While one is live the sync cadence drops from five minutes to `TIMING.partyHuntMs` (4 s) while the tab is visible, because that request is what plays the party's fight forward (docs/SERVER.md 3); `party_hunt_view()` would cost a request and move nothing.
@@ -160,6 +162,9 @@ net.party.setSlots(n) / propose(tier, zone) / ready(on)
                                               // -> { data, error }  the room: open squares, the ground up, your mark
 net.party.subscribe(partyId, onChange)        // realtime on party_messages, party_members, party_invites; -> unsubscribe
 net.hiscores(skill = "total", limit = 50)     // -> { rows, error }
+net.groundHunters(tier)                       // -> { rows, error, missing }; ground_hunters() (migration 018): everyone else out on
+                                              // one region's ground, { username, skin, discipline, zone, started_at }; `missing`
+                                              // when the realm has not run 018 (the Hunt page's map then shows you and your party)
 net.onlineCount()                             // -> number | null
 net.heartbeat(activity)
 ```
