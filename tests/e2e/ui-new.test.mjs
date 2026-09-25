@@ -801,7 +801,23 @@ await run(async () => {
         kids: [...bar.children].map((n) => n.id || n.className) };
     });
     check("the status bar carries the connection chip", foot.conn, foot);
-    same("and nothing but it and the clock", foot.kids, ["tbConn", "sb-fill", "sbClock"]);
+    same("and, all to the right, the weather, who is online and the clock", foot.kids, ["sb-fill", "weather", "sb-sep", "tbConn", "sb-sep", "sbClock"]);
+    const bar = await live(app, () => {
+      const b = document.getElementById("statusBar").getBoundingClientRect();
+      const side = document.getElementById("sidebar").getBoundingClientRect();
+      const w = document.getElementById("weather");
+      return { left: Math.round(b.left), side: Math.round(side.right), bottom: Math.round(b.bottom), vh: innerHeight,
+        glass: getComputedStyle(document.getElementById("statusBar")).backdropFilter, wx: w.hidden ? "" : w.textContent,
+        inSidebar: !!document.querySelector("#sidebar .weather, #sidebar #weather") };
+    });
+    check("it starts at the sidebar's edge and sits on the floor", Math.abs(bar.left - bar.side) <= 1 && bar.bottom === bar.vh, bar);
+    check("and the page shows through it, blurred", /blur/.test(bar.glass || ""), bar.glass);
+    check("the day's weather is in it, and no longer at the sidebar's foot", bar.wx.length > 3 && !bar.inSidebar, bar);
+    await P.click("#weather");
+    await P.waitForTimeout(400);
+    check("and it opens the Sky", await live(app, () => !!document.querySelector(".modal-title") && /Sky/i.test(document.querySelector(".modal").textContent)));
+    await P.keyboard.press("Escape");
+    await P.waitForTimeout(350);
     // The page keeps the server's clock, and this stage has been pushed forward a little: within ten minutes will do.
     const utc = new Date().toISOString().slice(11, 16);
     const mins = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));

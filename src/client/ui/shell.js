@@ -3,10 +3,9 @@
    ------------------------------------------------------------
    Everything around the page: the topbar (the search, the crews,
    the hunt, gold, health, what is waiting on you), the sidebar
-   and its rows, the weather card, the status bar along the foot
-   (the connection and the realm's clock), the banners and the
-   camp log. On phones and tablets the drawer also carries who you
-   are and a second search.
+   and its rows, the status bar along the foot (the weather, who is
+   online, the clock), the banners and the camp log. On phones and
+   tablets the drawer also carries who you are and a second search.
 
    Built once and painted in place several times a second. A
    part is rebuilt only when its shape changes: a nav row comes
@@ -290,18 +289,8 @@ export function createShell(app) {
     $.bell.focus();
   });
 
-  // The weather card opens the Sky: the week's forecast lives in a popup, as it does in the Atlas.
-  setAttr($.weather, "role", "button");
-  setAttr($.weather, "tabindex", "0");
-  setAttr($.weather, "aria-label", "Open the Sky: this week's weather");
-  const openSky = () => app.openSky();
-  $.weather.addEventListener("click", openSky);
-  $.weather.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      openSky();
-    }
-  });
+  // The weather in the status bar opens the Sky: the week's forecast lives in a popup, as it does in the Atlas.
+  $.weather.addEventListener("click", () => app.openSky());
 
   /* ---------- topbar ---------- */
 
@@ -604,17 +593,21 @@ export function createShell(app) {
     if (sig === weatherSig) return;
     weatherSig = sig;
     const w = weatherAt(now);
+    // One line in the status bar: the day's name, then what it does. Bountiful Weekend
+    // is a flat bonus that stands alone: the day's favoured/hindered roll doesn't also
+    // apply on top of it, so it isn't shown as if it did. Tomorrow, once it is known,
+    // rides in the tooltip.
     // replaceChildren writes a skipped part as the text "null": filter them out first.
     $.weather.replaceChildren(...[
-      h("div.weather-top", iconEl(w.icon), h("span.weather-name", w.label)),
-      // Bountiful Weekend is a flat bonus that stands alone: the day's favoured/hindered
-      // roll doesn't also apply on top of it, so it isn't shown as if it did.
-      w.bountiful ? null : h("div.weather-mods",
-        h("span.up", `${signedPct(w.mods[w.favoured])} ${skillName(w.favoured)}`),
-        h("span.down", `${signedPct(w.mods[w.hindered])} ${skillName(w.hindered)}`)),
-      w.bountiful ? h("div.weather-bonus", `Bountiful Weekend · ${signedPct(Math.round(CONFIG.weather.bountifulXp * 100))} XP to every trade`) : null,
-      revealed ? h("div.weather-next", `Tomorrow: ${weatherForDay(day + 1).label}`) : null,
+      iconEl(w.icon),
+      h("span.sb-wx-name", w.label),
+      h("span.sb-wx-mods", w.bountiful
+        ? [h("span.sb-wx-dot", "·"), h("span.sb-wx-bonus", `${signedPct(Math.round(CONFIG.weather.bountifulXp * 100))} XP to every trade`)]
+        : [h("span.sb-wx-dot", "·"),
+          h("span.up", `${signedPct(w.mods[w.favoured])} ${skillName(w.favoured)}`),
+          h("span.down", `${signedPct(w.mods[w.hindered])} ${skillName(w.hindered)}`)]),
     ].filter(Boolean));
+    setAttr($.weather, "title", revealed ? `Tomorrow: ${weatherForDay(day + 1).label}. Open the Sky for the week.` : "Open the Sky for the week");
     $.weather.hidden = false;
   }
 

@@ -602,10 +602,15 @@ button.conn:hover { background: var(--wash-strong); border-color: var(--line); }
 .conn[data-state="offline"] .conn-dot { background: var(--ember); }
 .conn[data-state="guest"] .conn-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--bone-faint); }
 
-/* ---- the status bar along the foot: who is online, and the realm's clock ---- */
+/* ---- the status bar along the foot: the weather, who is online, the realm's clock ----
+   It starts at the sidebar's edge and the page shows through it, blurred, as it
+   does through the topbar. The main column's foot padding keeps the last of a
+   page clear of it. */
 
 .statusbar {
-  position: sticky;
+  position: fixed;
+  left: var(--sidebar-w);
+  right: 0;
   bottom: 0;
   z-index: var(--z-topbar);
   display: flex;
@@ -613,13 +618,49 @@ button.conn:hover { background: var(--wash-strong); border-color: var(--line); }
   gap: var(--sp-3);
   height: calc(var(--statusbar-h) + env(safe-area-inset-bottom));
   padding: 0 max(12px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(12px, env(safe-area-inset-left));
-  background: rgba(11, 9, 16, .92);
+  background: rgba(11, 9, 16, .55);
   border-top: 1px solid var(--line-soft);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  backdrop-filter: blur(12px) saturate(1.2);
+  /* The same WebKit hint as the topbar: a fixed layer that blurs can come up empty
+     until something forces a repaint. */
+  will-change: backdrop-filter;
   font-size: var(--text-xs);
   color: var(--bone-faint);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .statusbar { background: rgba(11, 9, 16, .96); }
+}
+
+.sb-sep { width: 1px; height: 14px; flex-shrink: 0; background: var(--line); }
+.sb-weather[hidden] + .sb-sep { display: none; }
+
+.sb-weather {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--r-pill);
+  color: var(--gold);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  transition: background var(--dur-1);
+}
+
+.sb-weather[hidden] { display: none; }
+.sb-weather:hover { background: var(--wash); }
+.sb-weather .ico { width: 14px; height: 14px; flex-shrink: 0; }
+.sb-wx-name { font-weight: 500; }
+.sb-wx-mods { display: inline-flex; align-items: center; gap: 7px; }
+.sb-wx-dot { color: var(--bone-faint); }
+.sb-weather .up { color: var(--good); }
+.sb-weather .down { color: var(--ember-hi); }
+.sb-wx-bonus { color: var(--gold-hi); }
 
 .statusbar .conn {
   height: 22px;
@@ -650,8 +691,8 @@ button.conn:hover { background: var(--wash-strong); border-color: var(--line); }
 .sidebar {
   position: sticky;
   top: calc(var(--topbar-h) + env(safe-area-inset-top));
-  height: calc(100vh - var(--topbar-h) - var(--statusbar-h) - env(safe-area-inset-top) - env(safe-area-inset-bottom));
-  height: calc(100dvh - var(--topbar-h) - var(--statusbar-h) - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  height: calc(100vh - var(--topbar-h) - env(safe-area-inset-top));
+  height: calc(100dvh - var(--topbar-h) - env(safe-area-inset-top));
   align-self: start;
   will-change: transform;
   display: flex;
@@ -833,80 +874,6 @@ button.conn:hover { background: var(--wash-strong); border-color: var(--line); }
 .nav-item.is-active .nav-ico,
 .nav-item[aria-current="page"] .nav-ico { color: var(--violet-hi); }
 
-.side-foot {
-  margin-top: auto;
-  padding-top: var(--sp-2);
-}
-
-/* ---- the weather card at the foot of the sidebar ---- */
-
-.weather {
-  position: relative;
-  padding: 14px;
-  border-radius: var(--r-lg);
-  border: 1px solid var(--line);
-  background:
-    radial-gradient(240px 120px at 0% 0%, var(--gold-soft), transparent 70%),
-    var(--surface-1);
-  box-shadow: var(--shadow-card);
-}
-
-/* The card opens the Sky. */
-.weather[role="button"] { cursor: pointer; transition: border-color var(--dur-fast, 120ms) linear; }
-.weather[role="button"]:hover { border-color: var(--line-strong, var(--line)); }
-.weather[role="button"]:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }
-
-.weather-top {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.weather-top .ico { width: 18px; height: 18px; color: var(--gold); flex-shrink: 0; }
-
-.weather-name {
-  font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--gold-hi);
-  line-height: 1.25;
-}
-
-.weather-mods {
-  margin-top: 8px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 10px;
-  font-size: var(--text-xs);
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-}
-
-.weather-mods .up { color: var(--good); }
-.weather-mods .down { color: var(--ember-hi); }
-
-.weather-bonus {
-  margin-top: 6px;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--gold);
-}
-
-.weather-open {
-  margin-top: 10px;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--gold);
-}
-
-.weather-next {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line-soft);
-  font-size: var(--text-xs);
-  color: var(--bone-faint);
-}
-
 /* ================= 4. WIDE SCREENS ================= */
 
 @media (max-width: 1279px) {
@@ -1038,6 +1005,9 @@ button.conn:hover { background: var(--wash-strong); border-color: var(--line); }
   .nav-meta { font-size: var(--text-sm); }
 
   .main { padding-top: var(--sp-6); }
+
+  /* No sidebar beside it here: the bar runs the full width. */
+  .statusbar { left: 0; }
 }
 
 @media (min-width: 1024px) {
@@ -1053,6 +1023,9 @@ button.conn:hover { background: var(--wash-strong); border-color: var(--line); }
   .tb-brand { padding-right: 2px; }
   .tb-search,
   .tb-settings { display: none; }
+
+  /* The status bar keeps the weather's name; what it does is a tap away in the Sky. */
+  .sb-wx-mods { display: none; }
 
   .act {
     height: 44px;
