@@ -1431,6 +1431,10 @@ Armaments renders a two-handed weapon as one spanning slot instead: `.doll-col.h
         </div>
       </div>
       <!-- no foes: <div class="foe-empty"><span class="foe-empty-title">The Inner lies quiet</span><span class="foe-empty-sub">Nothing is being hunted here.</span></div> -->
+      <!-- the walk after an encounter it saw begin: the sub gives way to what it came to (ui/recap.js):
+           <div class="chip-row hunt-recap"><span class="eyebrow">Encounter 41</span><span class="chip"><svg class="ico"/>3 slain</span>
+           <span class="chip chip-gold">+152 XP</span><span class="chip"><img class="mat-art">Coal</span><span class="chip"><svg class="ico"/>24s</span></div>
+           a Sovereign's adds <span class="chip chip-violet"><svg class="ico"/>Sovereign felled</span> (or "Broke away") and counts its Essence -->
     </div>
   </div>
   <div class="hunt-foot">

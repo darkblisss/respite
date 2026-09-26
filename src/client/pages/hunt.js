@@ -29,6 +29,7 @@ import { openPopup, portraitImg, paintPortrait } from "../ui/widgets.js";
 import { monsterArt } from "../ui/popups/foe.js";
 import { huntChips, chipNode, partyHere } from "../ui/popups/zone.js";
 import { zoneMap, zoneNotes } from "../ui/zone-map.js";
+import { recapTracker } from "../ui/recap.js";
 import { serverMs } from "../store.js";
 import { CONFIG } from "../../shared/config.js";
 import { GameData, getMonster, getZone, getSkill, getClass, foesOf, sovereignOf, regionOfTier } from "../../shared/registry.js";
@@ -180,7 +181,7 @@ export default {
       const t = setTimeout(() => { timers.delete(t); fn(); }, ms);
       timers.add(t);
     };
-    const sigs = { tags: null, next: null, company: null, quarry: null, band: null, drops: null };
+    const sigs = { tags: null, next: null, company: null, quarry: null, band: null, drops: null, recap: null };
     // XP/hr and DPS eased toward their true value each tick, so a combat system that
     // only actually changes these numbers at a swing or a kill still reads as live
     // instead of sitting still between hits and then jumping.
@@ -258,7 +259,9 @@ export default {
     const timer = h("div.arena-timer");
     const emptyTitle = h("span.foe-empty-title");
     const emptySub = h("span.foe-empty-sub");
-    const empty = h("div.foe-empty", emptyTitle, emptySub);
+    // On the walk after an encounter, what it came to takes the place of the line under the title.
+    const recapRow = h("div.chip-row.hunt-recap", { hidden: true });
+    const empty = h("div.foe-empty", emptyTitle, emptySub, recapRow);
     const foesBox = h("div.arena-foes", empty);
     const arena = h("div.arena",
       you,
@@ -389,6 +392,36 @@ export default {
       let fading = false;
       cards.forEach((card) => { if (card.gone) fading = true; });
       setAttr(empty, "hidden", foes.length > 0 || fading);
+    }
+
+    /* ================= THE LAST ENCOUNTER ================= */
+
+    /* Fed every frame of your own hunt, so it sees each walk and the fight after it (see
+       ui/recap.js). A Sovereign's Essence and a break-away come off their own events. */
+    const recap = recapTracker();
+    ctx.on("hunt:felled", (p) => recap.felled(p && p.key));
+    ctx.on("hunt:retreat", () => recap.broke());
+
+    function recapChips(r) {
+      const sov = r.kind === "sovereign";
+      return [
+        h("span.eyebrow", `Encounter ${fmtWhole(r.n)}`),
+        sov ? h("span.chip.chip-violet", iconEl("crown"), r.felled ? "Sovereign felled" : r.broke ? "Broke away" : "A Sovereign") : null,
+        h("span.chip", iconEl("skull"), `${fmtWhole(r.slain)} slain`),
+        r.xp >= 1 ? h("span.chip.chip-gold", `+${fmtWhole(Math.round(r.xp))} XP`) : null,
+        ...Object.keys(r.drops).map((k) => h("span.chip", artEl(itemDef(k)), r.drops[k] > 1 ? `${itemName(k)} ×${fmtWhole(r.drops[k])}` : itemName(k))),
+        h("span.chip", iconEl("hourglass"), fmtTime(r.ms)),
+      ].filter(Boolean);
+    }
+
+    function paintRecap(r) {
+      const sig = r ? [r.n, r.slain, Math.round(r.xp), Object.keys(r.drops).map((k) => `${k}:${r.drops[k]}`).join(","), Math.round(r.ms / 1000), r.felled, r.broke].join("|") : "";
+      if (sig !== sigs.recap) {
+        sigs.recap = sig;
+        recapRow.replaceChildren(...(r ? recapChips(r) : []));
+      }
+      setAttr(recapRow, "hidden", !r);
+      setAttr(emptySub, "hidden", !!r);
     }
 
     /* ================= FX ================= */
@@ -567,6 +600,7 @@ export default {
       setText(timer, tm);
       setText(emptyTitle, et);
       setText(emptySub, es);
+      paintRecap(recap(c, c ? huntKey(c) : null));
 
       syncFoes(c && c.phase === "fight" ? c.foes : [], c ? huntKey(c) : null);
       drainFx(ctx.now);
@@ -705,6 +739,7 @@ export default {
       setText(timer, tm);
       setText(emptyTitle, et);
       setText(emptySub, es);
+      paintRecap(null);
 
       // A foe this build cannot name is left out rather than drawn as an unknown.
       syncFoes(enc ? enc.foes.filter((f) => getMonster(f.id)) : [], enc ? `p${view.partyId}:${enc.id}` : null);

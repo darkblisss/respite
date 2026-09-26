@@ -1239,6 +1239,15 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
   color: var(--bone-faint);
 }
 
+/* The walk after an encounter: what it came to, as chips under the title. */
+.hunt-recap {
+  justify-content: center;
+  max-width: 520px;
+  margin-top: 6px;
+}
+
+.hunt-recap .eyebrow { margin-right: 2px; }
+
 .struck { animation: struck 260ms ease-out; }
 
 @keyframes struck {

@@ -5,11 +5,11 @@
   "description": "Respite: a slow, grim idle RPG. Static site on GitHub Pages, shared rules in src/shared, an authoritative Supabase Edge Function in src/server.",
   "scripts": {
     "dev": "node dev/server.mjs --port 8787 --allow-sql",
-    "test": "node tests/engine/run-all.mjs && node tests/sql/run.mjs && node tests/server/run.mjs && node tests/client/store.test.mjs && node tests/client/region-map.test.mjs",
+    "test": "node tests/engine/run-all.mjs && node tests/sql/run.mjs && node tests/server/run.mjs && node tests/client/store.test.mjs && node tests/client/region-map.test.mjs && node tests/client/recap.test.mjs",
     "test:engine": "node tests/engine/run-all.mjs",
     "test:sql": "node tests/sql/run.mjs",
     "test:server": "node tests/server/run.mjs",
-    "test:client": "node tests/client/store.test.mjs && node tests/client/region-map.test.mjs",
+    "test:client": "node tests/client/store.test.mjs && node tests/client/region-map.test.mjs && node tests/client/recap.test.mjs",
     "test:e2e": "node tests/e2e/harness.test.mjs && node tests/e2e/client-smoke.test.mjs && node tests/e2e/ui-new.test.mjs"
   },
   "devDependencies": {
