@@ -29,7 +29,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { createGameHandler, CATCHING_UP, MAX_BODY, PARTY_OUT, START_OVER_ALONE } from '../../src/server/handler.js';
 import { pgliteAdapter, postgresJsAdapter } from '../../src/server/db.js';
 import { CONFIG } from '../../src/shared/config.js';
-import { GameData } from '../../src/shared/registry.js';
+import { GameData, essenceOfTier } from '../../src/shared/registry.js';
 import { ENGINE_VERSION } from '../../src/shared/version.js';
 import { createState } from '../../src/shared/state.js';
 import { hashString } from '../../src/shared/rng.js';
@@ -1344,7 +1344,51 @@ await section('a party hunt, together', async () => {
   const without = await huntRow(pid);
   check('and the share they had not taken goes with the old camp', !without.members.includes(bex.id) && without.session.hunters.length === 2, without.members);
 
-  // A fall, settled as a fall: the recovery, the wound, the wear and the bestiary.
+  /* A Sovereign, brought down together. The session is told its next encounter is the
+     Sovereign's, as the roll after a cleared one would tell it, and each of them who hurt
+     it is left what one felled alone leaves: its Essence, the count and the line. */
+  NOW += MINUTE;
+  const [kel, lyr] = ['band_k', 'band_l'].map((n) => newUser(n));
+  await seedSave(kel, 31, kit(200000));
+  await seedSave(lyr, 32, kit(200000));
+  await play(kel);
+  await play(lyr);
+  const pid3 = await inParty('the crowned', kel, lyr);
+  await play(kel, cmd('partyHuntStart', { tier: 1, zone: 'core' }));
+  await play(lyr, cmd('partyHuntJoin'));
+  const called = await huntRow(pid3);
+  called.session.sovereignNext = true;
+  await db.query('update public.party_hunts set session = $2::text::jsonb where party_id = $1 and not over', [pid3, JSON.stringify(called.session)]);
+  NOW += 1000;
+  same('the walk says what is coming', (await play(kel)).party.vast, true);
+  let crowned = null;
+  for (let i = 0; i < 20 && !crowned; i++) {
+    NOW += 1000;
+    await tick();
+    const row = await huntRow(pid3);
+    if (row.session.enc && row.session.enc.kind === 'sovereign') crowned = row;
+  }
+  check('a party is found by its Sovereign', !!crowned && crowned.session.enc.foes.length === 1 + GameData.SOVEREIGN.escorts,
+    crowned && crowned.session.enc.foes.length);
+  check('its foes each go for one of them', !!crowned && crowned.view.enc.foes.every((f) => [kel.id, lyr.id].includes(f.target)),
+    crowned && crowned.view.enc.foes.map((f) => f.target));
+  for (let i = 0; i < 240; i++) {
+    NOW += 5000;
+    await tick();
+    const row = await huntRow(pid3);
+    if (!row.session.enc || row.session.enc.kind !== 'sovereign') break;
+  }
+  const crown = await play(kel);
+  const essence = essenceOfTier(1);
+  check('the one who settles is left its Essence', haveQty(crown.state, essence) === GameData.SOVEREIGN.essence, haveQty(crown.state, essence));
+  same('and it counts, as one felled alone does', crown.state.stats.bosses, 1);
+  check('the camp log says it fell', crown.state.log.some((l) => /fell after/.test(l.m)), crown.state.log.slice(-4));
+  check('and the browser is told', crown.events.some((e) => e.type === 'party:spoils' && e.essence === essence), crown.events);
+  const crown2 = await play(lyr);
+  check('so is the other: an Essence each, not one between them', haveQty(crown2.state, essence) === GameData.SOVEREIGN.essence && crown2.state.stats.bosses === 1,
+    { qty: haveQty(crown2.state, essence), bosses: crown2.state.stats.bosses });
+
+  // A fall, settled as a fall: the wound and the bestiary.
   NOW += MINUTE;
   const [dread, doom] = ['band_d', 'band_e'].map((n) => newUser(n));
   const green = (s) => { s.equipment.weapon = sword; s.travel.unlocked = everywhere; };
@@ -1362,9 +1406,9 @@ await section('a party hunt, together', async () => {
 
   const fell = await play(dread);
   const H = CONFIG.hunt;
-  same('a fall in a party is a real death', [fell.state.stats.deaths, fell.state.player.recoveryLeft], [1, H.recoveryMs]);
-  same('with the wound that follows one', fell.state.debuff, { until: NOW + H.recoveryMs + H.deathDebuffMs, mult: 1 - H.deathDebuff });
-  check('the gear is the worse for it', fell.state.wear[sword] >= H.deathWear, fell.state.wear);
+  same('a fall in a party is a real death', [fell.state.stats.deaths, fell.state.player.recoveryLeft], [1, 0]);
+  same('with the wound that follows one', fell.state.debuff, { until: NOW + H.deathDebuffMs, mult: 1 - H.deathDebuff });
+  same('and they come round on one point of health', fell.state.player.hp, 1);
   check('the bestiary remembers what did it', Object.values(fell.state.foeDeaths).reduce((a, b) => a + b, 0) === 1, fell.state.foeDeaths);
   check('and the camp log says so', fell.state.log.some((l) => /put you down/.test(l.m)), fell.state.log.slice(-3));
   check('the fallen are out of the session until they rejoin', !(await huntRow(pid2)).members.includes(dread.id), (await huntRow(pid2)).members);

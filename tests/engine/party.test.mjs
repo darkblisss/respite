@@ -9,8 +9,9 @@ import { run, check, section, same, shared, clone } from "./harness.mjs";
 
 await run(async () => {
   const { CONFIG } = await shared("config.js");
-  const { GameData, getZone } = await shared("registry.js");
+  const { GameData, getZone, getMonster } = await shared("registry.js");
   const { combatStats } = await shared("stats.js");
+  const { foeNumbers } = await shared("combat.js");
   const P = await shared("partyHunt.js");
 
   const H = CONFIG.hunt;
@@ -39,7 +40,7 @@ await run(async () => {
   {
     const e = start(1);
     check("a lone hunter meets what the zone fields", e.foes.length >= 1 && e.foes.length <= H.maxFoes, e.foes.length);
-    check("no foe is owned by anyone: the roster is shared", e.foes.every((f) => f.target === undefined));
+    check("every foe it opens with has picked someone to go for", e.foes.every((f) => f.target === e.hunters[0].userId), e.foes.map((f) => f.target));
     check("the encounter carries its own dice, not just its seed", typeof e.dice === "number" && e.dice !== e.seed);
 
     const four = start(4);
@@ -121,10 +122,13 @@ await run(async () => {
     const xp = one.hunters.map((u) => u.owed.xp);
     const sum = xp[0] + xp[1];
     check("one foe's whole XP is paid out, and no more", sum > 0 && Number.isFinite(sum), { xp, total });
-    // 70% of the damage dealt and 30% of the damage taken, so a share sits between
-    // a pure damage split and an even one rather than tracking damage exactly.
+    /* 70% of the damage dealt and 30% of the damage taken. The foe keeps to u0, so u0
+       takes every blow and is paid for holding the line over its damage share, but the
+       taken half is capped at half the encounter's, so never by more than a fifth. */
     const dealtShare = one.hunters[0].dmg / (one.hunters[0].dmg + one.hunters[1].dmg);
-    check("a share leans on damage dealt but not wholly", xp[0] / sum > 0.5 && xp[0] / sum < dealtShare + 0.01 && dealtShare > 0.5,
+    check("the foe kept to the one it picked", one.hunters[0].taken > 0 && one.hunters[1].taken === 0,
+      one.hunters.map((u) => Math.round(u.taken)));
+    check("a share leans on damage dealt, and pays the one who held the line", xp[0] / sum > dealtShare && xp[0] / sum < dealtShare + 0.2,
       { xpShare: xp[0] / sum, dealtShare });
     check("both hunters roll their own drop", one.hunters.every((u) => u.owed.drops.length > 0),
       one.hunters.map((u) => u.owed.drops.length));
@@ -186,6 +190,61 @@ await run(async () => {
       solo > 0 && four / solo > 0.9 && four / solo < 1.35, { solo, four, ratio: four / solo });
   }
 
+  section("Whom foes go for");
+  {
+    /* Three hunters with their health well apart, so "the healthiest" means one of them.
+       The rule: an encounter's opening foes take the healthiest hunter nobody has yet,
+       heaviest hitter first; anything later takes the healthiest; each keeps its hunter
+       until they fall. */
+    const most = statsAt(40).maxHp;
+    const trio = () => [["tank", 1], ["mid", 0.66], ["low", 0.33]].map(([id, k]) => P.makeHunter(id, statsAt(40), { hp: most * k }));
+    const open = (o) => P.newEncounter(Object.assign({ id: 1, partyId: "p1", tier: 3, zone: "inner", seed: 12345, hunters: trio() }, o));
+    const weight = (f) => { const m = getMonster(f.id); return foeNumbers(m, f.elite, f.power).attack / m.speed; };
+    const who = (e) => e.foes.map((f) => f.target);
+    const hunter = (e, id) => e.hunters.find((u) => u.userId === id);
+
+    const two = open();
+    same("two foes on three hunters take the two healthiest, one each", who(two).slice().sort(), ["mid", "tank"]);
+    const heavy = two.foes.slice().sort((a, b) => weight(b) - weight(a))[0];
+    same("the heavier of them on the healthiest", heavy.target, "tank");
+
+    let three = null;
+    for (let seed = 1; seed < 400 && !three; seed++) {
+      const e = open({ zone: "core", seed });
+      if (e.foes.length === 3) three = e;
+    }
+    check("three foes on three hunters: one each, so the whole party is struck", !!three && new Set(who(three)).size === 3, three && who(three));
+    const order = three ? three.foes.slice().sort((a, b) => weight(b) - weight(a)).map((f) => f.target) : [];
+    same("and in order of weight: heaviest on the healthiest, lightest on the frailest", order, ["tank", "mid", "low"]);
+
+    const sov = open({ zone: "core", kind: "sovereign" });
+    const isSov = (f) => getMonster(f.id).archetype === "sovereign";
+    same("a Sovereign goes for the healthiest", sov.foes.find(isSov).target, "tank");
+    same("and its guard for the other two", sov.foes.filter((f) => !isSov(f)).map((f) => f.target).sort(), ["low", "mid"]);
+
+    // Kept: the healthiest changes under it and nothing switches; the one nobody picked is never struck.
+    const kept = open();
+    const picked = new Map(kept.foes.map((f) => [f.uid, f.target]));
+    hunter(kept, "tank").hp = hunter(kept, "mid").hp - 1;
+    P.stepEncounter(kept, 4000);
+    check("the healthiest changing moves no foe off the hunter it has",
+      kept.foes.every((f) => !picked.has(f.uid) || picked.get(f.uid) === f.target), { was: [...picked], now: kept.foes.map((f) => [f.uid, f.target]) });
+    check("and blows land where the foes are, not in turn", hunter(kept, "tank").taken > 0 && hunter(kept, "low").taken === 0,
+      kept.hunters.map((u) => [u.userId, Math.round(u.taken)]));
+
+    // Later: a reinforcement takes the healthiest, even with a hunter nobody has.
+    const late = open();
+    hunter(late, "tank").hp = most;
+    late.reinforceAt = late.clock + 1;
+    P.stepEncounter(late, 50);
+    const joined = late.foes.filter((f) => f.ambush);
+    check("a reinforcement comes", joined.length > 0, late.foes.length);
+    check("and takes the healthiest, not the one nobody has", joined.every((f) => f.target === "tank"), who(late));
+
+    const seen = P.encounterView(two);
+    same("the view says whom each foe is on, by user id", seen.foes.map((f) => f.target), who(two));
+  }
+
   section("When one of them goes down");
   {
     // A weak pair on hard ground: somebody falls.
@@ -225,6 +284,46 @@ await run(async () => {
     const before = e.enrage;
     P.stepEncounter(e, GameData.SOVEREIGN.enrageMs + 1000);
     check("and it grows angrier on the clock", e.enrage > before, { before, now: e.enrage });
+  }
+
+  section("A party meets its Sovereign");
+  {
+    /* As a lone hunter does: every encounter it clears on ground a Sovereign walks rolls
+       the zone's chance that the next one is it. A band strong enough to clear the Core of
+       the first region fast, so the rolls come quickly. */
+    const s = P.newSession({ partyId: "p1", tier: 1, zone: "core", seed: 4242, hunters: band(3, 99) });
+    let vast = null;
+    let met = null;
+    for (let t = 0; t < 3 * 3600 && !met; t++) {
+      P.stepSession(s, 1000);
+      if (!vast && P.sessionView(s).vast) vast = { wait: s.wait, view: P.sessionView(s) };
+      if (s.enc && s.enc.kind === "sovereign") met = s.enc;
+    }
+    check("a party on ground a Sovereign walks meets it", !!met, { encounters: s.encounters });
+    check("the walk to it says so, and is the shortest walk there is", !!vast && vast.wait <= H.searchMinMs + 1 && vast.view.phase === "search",
+      vast && { wait: vast.wait, phase: vast.view.phase });
+    check("it comes with its guard, and nothing else", !!met && met.foes.length === 1 + GameData.SOVEREIGN.escorts, met && met.foes.length);
+    const view = P.sessionView(s);
+    check("the view of its fight carries its anger", !!view.enc && view.enc.kind === "sovereign" && view.enc.enrage === 0 && view.enc.enrageIn > 0,
+      view.enc && { kind: view.enc.kind, enrage: view.enc.enrage, enrageIn: view.enc.enrageIn });
+    check("and the walk no longer says one is coming", view.vast === false);
+
+    const id = met ? met.id : null;
+    for (let t = 0; t < 3600 && s.enc && s.enc.id === id; t++) P.stepSession(s, 250);
+    check("after it, the shortest walk and no roll for another", s.phase === "search" && s.wait <= H.searchMinMs && !s.sovereignNext,
+      { phase: s.phase, wait: s.wait, next: s.sovereignNext });
+    const felled = s.hunters.filter((u) => u.owed.drops.some((d) => getMonster(d.id).archetype === "sovereign"));
+    check("everyone who hurt it is owed its kill, with how long the fight ran", felled.length === 3 &&
+      felled.every((u) => u.owed.drops.some((d) => getMonster(d.id).archetype === "sovereign" && d.ms > 0)),
+      s.hunters.map((u) => u.owed.drops.filter((d) => getMonster(d.id).archetype === "sovereign")));
+
+    const outer = P.newSession({ partyId: "p2", tier: 1, zone: "outer", seed: 4242, hunters: band(3, 99) });
+    let never = true;
+    for (let t = 0; t < 3600; t++) {
+      P.stepSession(outer, 1000);
+      if (P.sessionView(outer).vast || (outer.enc && outer.enc.kind === "sovereign")) never = false;
+    }
+    check("the Outer never meets one", never && outer.encounters > 10, outer.encounters);
   }
 
   section("Ending, and being read");

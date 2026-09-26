@@ -681,15 +681,14 @@ async function partyInvite() {
   await rpc.respond(U.bram, toBram, true);
   await refuses('party_invite refuses a member who is not the leader', () => rpc.invite(U.bram, 'cinder'), /Only the party leader can invite/);
 
-  await rpc.invite(U.ash, 'cinder');
   const toDusk = await rpc.invite(U.ash, 'dusk');
-  await refuses('party_invite caps members plus pending invites at 4', () => rpc.invite(U.ash, 'ember'), /The party is full/);
+  await refuses('party_invite caps members plus pending invites at 3', () => rpc.invite(U.ash, 'ember'), /The party is full/);
   same('the refused invite was not stored',
-    await qv(`select count(*)::int from public.party_invites where party_id = $1 and status = 'pending'`, [P1]), 2);
+    await qv(`select count(*)::int from public.party_invites where party_id = $1 and status = 'pending'`, [P1]), 1);
 
   await rpc.respond(U.dusk, toDusk, false);
-  const toEmber = await rpc.invite(U.ash, 'ember');
-  check('a declined invite frees its seat', Number.isInteger(toEmber), toEmber);
+  const toCinder = await rpc.invite(U.ash, 'cinder');
+  check('a declined invite frees its seat', Number.isInteger(toCinder), toCinder);
   await refuses('the cap holds again once the seat is retaken', () => rpc.invite(U.ash, 'fen'), /The party is full/);
 
   const hollowToCinder = await rpc.invite(U.hollow, 'cinder');
@@ -733,10 +732,10 @@ async function partyRespond() {
 
   // Invites hold seats, so only the server can overfill a party; the accept check must still hold.
   const toDusk = await rpc.invite(U.ash, 'dusk');
-  await db.query(`insert into public.party_members (party_id, user_id, username) values ($1, $2, 'fen'), ($1, $3, 'iris')`, [P1, U.fen, U.iris]);
+  await db.query(`insert into public.party_members (party_id, user_id, username) values ($1, $2, 'fen')`, [P1, U.fen]);
   await refuses('party_respond refuses to accept into a full party', () => rpc.respond(U.dusk, toDusk, true), /The party is full/);
   same('the full party refusal leaves the invite pending', await inviteStatus(toDusk), 'pending');
-  same('the full party still has 4 members', await memberCount(P1), 4);
+  same('the full party still has 3 members', await memberCount(P1), 3);
 
   await db.query('delete from public.party_members where user_id = $1', [U.fen]);
   await rpc.respond(U.dusk, toDusk, true);
@@ -799,8 +798,10 @@ async function partyLeave() {
   await resetParties();
   await refuses('party_leave refuses a player with no party', () => rpc.leave(U.dusk), /You are not in a party/);
 
-  const P1 = await partyWith('ash', 'Wardens', 'bram', 'cinder');
+  const P1 = await partyWith('ash', 'Wardens', 'bram');
   const toDusk = await rpc.invite(U.ash, 'dusk');
+  // A third sits past the seat the invite holds, as only the server can: the handover needs two left behind.
+  await db.query(`insert into public.party_members (party_id, user_id, username) values ($1, $2, 'cinder')`, [P1, U.cinder]);
   // bram joined first, but cinder is made the oldest remaining member: the handover follows joined_at.
   await db.query(
     `update public.party_members
@@ -937,7 +938,7 @@ async function partyState() {
 
   let st = await rpc.state(U.ash);
   same('party_state member: top level keys', Object.keys(st).sort(), ['invites_in', 'invites_out', 'members', 'messages', 'party']);
-  same('party_state member: party', st.party, { id: P1, name: 'Wardens', leader_id: U.ash, slots: 4, proposed: null });
+  same('party_state member: party', st.party, { id: P1, name: 'Wardens', leader_id: U.ash, slots: 3, proposed: null });
   same('party_state member: members, oldest first', st.members.map((m) => m.user_id), [U.ash, U.bram]);
   same('party_state member: member keys', st.members.map((m) => Object.keys(m).sort()),
     Array(2).fill(['activity', 'hunt', 'joined_at', 'last_seen', 'levels', 'ready', 'skin', 'total_level', 'user_id', 'username']));
@@ -983,16 +984,16 @@ async function partyRoom() {
   const readyOf = (u) => qv('select ready from public.party_members where user_id = $1', [u]);
   const upOf = () => q1('select proposed_tier, proposed_zone from public.parties where id = $1', [P1]);
 
-  same('a new party opens every square', await slotsOf(), 4);
-  await refuses('party_set_slots refuses a member who is not the leader', () => rpc.slots(U.bram, 3), /Only the party leader/);
+  same('a new party opens every square', await slotsOf(), 3);
+  await refuses('party_set_slots refuses a member who is not the leader', () => rpc.slots(U.bram, 2), /Only the party leader/);
   await refuses('party_set_slots refuses closing a square somebody sits in', () => rpc.slots(U.ash, 1), /sitting in that square/);
-  await refuses('party_set_slots refuses more than the room holds', () => rpc.slots(U.ash, 5), /holds four/);
-  await refuses('party_set_slots refuses a caller with no party', () => rpc.slots(U.dusk, 3), /You are not in a party/);
-  same('refused presses left the room as it was', await slotsOf(), 4);
+  await refuses('party_set_slots refuses more than the room holds', () => rpc.slots(U.ash, 4), /holds three/);
+  await refuses('party_set_slots refuses a caller with no party', () => rpc.slots(U.dusk, 2), /You are not in a party/);
+  same('refused presses left the room as it was', await slotsOf(), 3);
 
-  same('party_set_slots closes a square', await rpc.slots(U.ash, 3), 3);
-  same('and the room keeps it', await slotsOf(), 3);
-  same('party_set_slots opens one again', await rpc.slots(U.ash, 4), 4);
+  same('party_set_slots closes a square', await rpc.slots(U.ash, 2), 2);
+  same('and the room keeps it', await slotsOf(), 2);
+  same('party_set_slots opens one again', await rpc.slots(U.ash, 3), 3);
 
   await refuses('party_ready refuses a mark with no ground up', () => rpc.ready(U.bram, true), /put a ground up/);
   await refuses('party_propose refuses a ground nobody has', () => rpc.propose(U.ash, 3, 'nowhere'), /No such ground/);

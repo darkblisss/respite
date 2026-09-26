@@ -308,8 +308,9 @@ async function main() {
     { marketFee: 0.05, marketMaxListings: 20, marketListingDays: 7, marketMaxPrice: 1000000000 },
     { marketFee: CONFIG.economy.marketFee, marketMaxListings: CONFIG.economy.marketMaxListings,
       marketListingDays: CONFIG.economy.marketListingDays, marketMaxPrice: CONFIG.economy.marketMaxPrice });
-  // v4 had no parties, so this is v5's own number: 5% a member, three others at most.
-  same("CONFIG.party", { maxSize: 4, huntBonusPerMember: 0.05, huntBonusCap: 0.15 }, CONFIG.party);
+  // v4 had no parties, so these are v5's own numbers: three to a party, 5% a member, two others at most.
+  same("CONFIG.party", { maxSize: 3, huntBonusPerMember: 0.05, huntBonusCap: 0.10 },
+    { maxSize: CONFIG.party.maxSize, huntBonusPerMember: CONFIG.party.huntBonusPerMember, huntBonusCap: CONFIG.party.huntBonusCap });
 
   section("CONFIG formulas");
   same("CONFIG.xpTable = XP_TABLE", O.XP_TABLE, CONFIG.xpTable);

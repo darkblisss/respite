@@ -209,11 +209,12 @@ const bench = {
 /* ================= 10. PARTIES ================= */
 
 /* Partying is for the company, not the numbers: the bonus is small on purpose,
-   and the draw is a shared fight rather than a multiplier worth chasing. */
+   and the draw is a shared fight rather than a multiplier worth chasing. Three to
+   a party: the room, the hunt and the ground bonus all stop there. */
 const party = {
-  maxSize: 4,
+  maxSize: 3,
   huntBonusPerMember: 0.05,
-  huntBonusCap: 0.15,           // the three others you can have, at 5% each
+  huntBonusCap: 0.10,           // the two others you can have, at 5% each
 
   /* What a share of an encounter is worth. Damage dealt is most of it, but holding
      the line is worth counting too, or the only way to be paid is to swing. Gold is

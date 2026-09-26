@@ -74,7 +74,17 @@ with probes(ord, migration, what, present) as (
                     limit 1), false)),
 
     (17, '017_mastery_saints',   'mastery_saints()',
-         to_regproc('public.mastery_saints') is not null)
+         to_regproc('public.mastery_saints') is not null),
+
+    (18, '018_ground_hunters',   'ground_hunters()',
+         to_regproc('public.ground_hunters') is not null),
+
+    (19, '019_party_of_three',   'a party room holds three',
+         coalesce((select pg_get_functiondef(p.oid) like '%holds three%'
+                     from pg_proc p
+                     join pg_namespace n on n.oid = p.pronamespace
+                    where n.nspname = 'public' and p.proname = 'party_set_slots'
+                    limit 1), false))
 )
 select migration,
        case when present then 'in' else 'MISSING' end as status,

@@ -758,9 +758,9 @@ await run(async () => {
     stepWhile(beside, w2.env, 1000, () => !!beside.tasks.combat, 600);
     stepWhile(other, w3.env, 1000, () => !!other.tasks.combat, 600);
     const gain = (s) => s.skills.warfare - X[40];
-    // 5% a member now, and no more than the three others you can have: the draw is the company, not the multiplier.
+    // 5% a member now, and no more than the two others you can have: the draw is the company, not the multiplier.
     check("Two members on the same ground at the same time: +10% Hunt XP", Math.abs(gain(beside) / gain(alone) - 1.1) < 1e-9, gain(beside) / gain(alone));
-    check("capped at +15%", Math.abs(gain(other) / gain(alone) - 1.15) < 1e-9, gain(other) / gain(alone));
+    check("capped at +10%", Math.abs(gain(other) / gain(alone) - 1.1) < 1e-9, gain(other) / gain(alone));
   }
 
   section("Time away plays out the same");

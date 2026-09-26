@@ -193,7 +193,7 @@ Tables to add (all `public`, RLS enabled on every one):
   - Index: `(user_id) where claimed_at is null`.
 - `parties`
   - Columns: `id uuid primary key default gen_random_uuid()`, `name text not null` (check 1 to 24 chars), `leader_id uuid not null`, `slots smallint not null default 4` (check 1 to 4, migration 014), `proposed_tier smallint` and `proposed_zone text` (migration 014), `created_at timestamptz default now()`.
-  - `slots` is how many of the room's four squares stand open; the rest are drawn crossed out and nobody can be invited into them. `proposed_*` is the ground last put up, which every member marks ready against.
+  - `slots` is how many of the room's three squares stand open (migration 019; a room was four before it); the rest are drawn crossed out and nobody can be invited into them. `proposed_*` is the ground last put up, which every member marks ready against.
   - Select: members only.
 - `party_members`
   - Columns: `party_id uuid references parties(id) on delete cascade`, `user_id uuid not null unique`, `username text not null`, `ready boolean not null default false` (migration 014), `joined_at timestamptz default now()`, primary key `(party_id, user_id)`.
@@ -278,7 +278,7 @@ Response:
 { ok: false, error: "unauthorized" | "outdated" | "bad_request" | "server_error", v? }
 ```
 
-`party` is `sessionView()` of the party hunt the caller is out on, and absent when they are not.
+`party` is `sessionView()` of the party hunt the caller is out on, and absent when they are not. Beside who is in it and their shares, it says `vast: true` on the walk to the ground's Sovereign; its `enc` gives each foe's `target` (the user id it is going for) and, for a Sovereign's fight, `enrage` (how often it has risen) and `enrageIn` (ms until it rises again).
 
 The handler runs one transaction:
 1. Lock the save row (create a fresh one if none exists).

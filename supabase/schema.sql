@@ -121,13 +121,13 @@ create table if not exists public.mail (
 
 create index if not exists mail_unclaimed_idx on public.mail (user_id) where claimed_at is null;
 
--- A party is a room of four squares. `slots` is how many stand open (the rest
+-- A party is a room of three squares. `slots` is how many stand open (the rest
 -- are crossed out), and the proposed ground is whatever anyone last put up.
 create table if not exists public.parties (
   id uuid primary key default gen_random_uuid(),
   name text not null check (char_length(name) between 1 and 24),
   leader_id uuid not null,
-  slots smallint not null default 4 check (slots between 1 and 4),
+  slots smallint not null default 3 constraint parties_slots_range check (slots between 1 and 3),
   proposed_tier smallint,
   proposed_zone text,
   created_at timestamptz default now()
@@ -527,7 +527,7 @@ begin
   select (select count(*) from public.party_members m where m.party_id = v_party_id)
        + (select count(*) from public.party_invites i where i.party_id = v_party_id and i.status = 'pending')
   into v_taken;
-  if v_taken >= 4 then
+  if v_taken >= 3 then
     raise exception 'The party is full.';
   end if;
 
@@ -658,7 +658,7 @@ begin
   if exists (select 1 from public.party_members m where m.user_id = v_uid) then
     raise exception 'You are already in a party.';
   end if;
-  if (select count(*) from public.party_members m where m.party_id = v_party_id) >= 4 then
+  if (select count(*) from public.party_members m where m.party_id = v_party_id) >= 3 then
     raise exception 'The party is full.';
   end if;
 
@@ -898,7 +898,7 @@ begin
              'id', v_party.id,
              'name', v_party.name,
              'leader_id', v_party.leader_id,
-             'slots', coalesce(v_party.slots, 4),
+             'slots', coalesce(v_party.slots, 3),
              'proposed',
                case when v_party.proposed_zone is null then null
                     else jsonb_build_object('tier', v_party.proposed_tier, 'zone', v_party.proposed_zone)
@@ -1024,8 +1024,8 @@ begin
   if v_want < v_taken then
     raise exception 'Somebody is sitting in that square.';
   end if;
-  if v_want < 1 or v_want > 4 then
-    raise exception 'A party room holds four.';
+  if v_want < 1 or v_want > 3 then
+    raise exception 'A party room holds three.';
   end if;
 
   update public.parties set slots = v_want where id = v_party_id;

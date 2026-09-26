@@ -29,19 +29,27 @@
      the way mail already does.
 
    FAIRNESS
-   A party fights the same roster a lone hunter does -- never more
-   than CONFIG.hunt.maxFoes at once -- but each foe is scaled to the
-   warband: its health and its attack both rise with the number
-   standing. Nobody holds a foe of their own; every swing it takes is
-   aimed at whoever is standing, in turn, so the pressure lands across
-   the party rather than four separate fights running side by side.
-   One bigger thing, shared, instead of four small ones.
+   A party (three at most, CONFIG.party.maxSize) fights the same roster
+   a lone hunter does -- never more than CONFIG.hunt.maxFoes at once --
+   but each foe is scaled to the warband: its health and its attack
+   both rise with the number standing. The hunters all strike the
+   oldest foe still standing, as a lone hunter does. Each foe picks one
+   of them and keeps them until they fall: the ones an encounter opens
+   with take the healthiest hunter nobody has yet, heaviest hitter
+   first, so a crowd strikes the whole party; anything later takes the
+   healthiest there is. The biggest pool of health draws the heaviest
+   blows, which is what a Warrior is for. One bigger thing, shared,
+   instead of three small ones.
+
+   A party meets its ground's Sovereign as a lone hunter does: every
+   encounter it clears rolls the zone's chance that the next one is
+   it. A party never breaks away; it fights it out.
 
    WHAT A KILL PAYS
    An encounter's XP pool rides the same scale its foes do, so a fair
-   split of a foe built for four pays each of the four what a foe built
-   for one pays a lone hunter. Partying is then worth a small bonus on
-   top, and nothing more.
+   split of a foe built for three pays each of the three what a foe
+   built for one pays a lone hunter. Partying is then worth a small
+   bonus on top, and nothing more.
 
    A share of that pool is 70% of the damage you dealt and 30% of the
    damage you took, so holding the line counts for something without
@@ -50,9 +58,10 @@
    never striking. Shares are normalised, so the pool is paid out once.
 
    Gold is equal -- everyone who was there did the encounter. Drops are
-   rolled for each hunter separately, so nobody races for a last hit.
-   And the kill itself is credited to everyone who actually hurt it: one
-   shared encounter, not four independent corpses.
+   rolled for each hunter separately, so nobody races for a last hit; a
+   Sovereign leaves its Essence to each of them who hurt it. And the
+   kill itself is credited to everyone who actually hurt it: one shared
+   encounter, not three independent corpses.
    ============================================================ */
 
 import { CONFIG } from "./config.js";
@@ -127,6 +136,7 @@ export function newEncounter({ id, partyId, tier, zone, seed, hunters, kind = "n
       spawn(e, rng, r.mob, r.elite);
     }
   }
+  aimOpening(e);
   // A hunter opens the way they would alone: a Rogue and a Mage walk in ready.
   e.hunters.forEach((u) => {
     u.swing = 250 + rng() * 400;
@@ -153,10 +163,10 @@ const maxFoes = () => H.maxFoes;
 const partyScale = (e) => Math.max(1, standing(e).length);
 
 /* One foe, sized for the party that is facing it: health and attack both times the
-   number standing. A four fights a thing with four times the health hitting four
-   times as hard, spread across four of them -- which is the same fight each of them
-   would have alone, made into one shared one. `scale` is kept on the foe so a hunter
-   going down mid-fight cannot resize what is already on the floor. */
+   number standing. A three fights a thing with three times the health hitting three
+   times as hard, spread across the three of them -- which is the same fight each of
+   them would have alone, made into one shared one. `scale` is kept on the foe so a
+   hunter going down mid-fight cannot resize what is already on the floor. */
 function spawn(e, rng, mob, elite, ambush = false) {
   const z = getZone(e.zone);
   const power = z.power || 1;
@@ -174,15 +184,48 @@ function spawn(e, rng, mob, elite, ambush = false) {
   return f;
 }
 
-/* Nobody owns a foe. Each blow it throws goes to whoever is standing, taken in turn
-   from a marker that walks the party, so a foe scaled for four spreads those four
-   blows' worth across the four of them instead of pounding one. The marker lives on
-   the encounter, not the foe, so the spread holds across the whole roster. */
-function nextTarget(e) {
+/* Whom a foe goes for, and keeps. The foes an encounter opens with pick in order of how
+   hard they hit, heaviest first, each taking the healthiest hunter nobody has yet (the
+   healthiest of all once everyone has one), so a crowd strikes the whole party. A
+   reinforcement, coming later, takes the healthiest there is. A foe keeps its hunter
+   until they fall, then picks again as a latecomer would. Healthiest is health as it
+   stands, the first on the roster on a tie, so the biggest pool draws the heaviest
+   blows: a Warrior's, most of the time.
+
+   `target` is a user id rather than the hunter itself, because the encounter goes
+   through JSON between steps and a reference would not survive it. */
+function healthiest(list) {
+  let best = null;
+  list.forEach((u) => { if (!best || u.hp > best.hp) best = u; });
+  return best;
+}
+
+function aim(e, f, opening) {
   const up = standing(e);
-  if (!up.length) return null;
-  e.turn = ((e.turn || 0) + 1) % up.length;
-  return up[e.turn];
+  if (!up.length) {
+    f.target = null;
+    return null;
+  }
+  const free = opening ? up.filter((u) => !e.foes.some((o) => o !== f && o.target === u.userId)) : [];
+  const u = healthiest(free.length ? free : up);
+  f.target = u.userId;
+  return u;
+}
+
+// How hard a foe hits: its attack over its swing. The order an encounter's opening foes pick in.
+function weight(f) {
+  const mob = getMonster(f.id);
+  return foeNumbers(mob, f.elite, f.power).attack / mob.speed;
+}
+
+function aimOpening(e) {
+  e.foes.slice().sort((a, b) => weight(b) - weight(a) || a.uid - b.uid).forEach((f) => aim(e, f, true));
+}
+
+// Whom a foe's next blow is for: the hunter it has, while they stand.
+function targetOf(e, f) {
+  const u = f.target ? hunterOf(e, f.target) : null;
+  return u && !u.down ? u : aim(e, f, false);
 }
 
 const hunterOf = (e, userId) => e.hunters.find((u) => u.userId === userId) || null;
@@ -275,7 +318,10 @@ function reinforce(ctx) {
     const r = rollFoe(e.tier, z, ctx.rng);
     joined.push(spawn(e, ctx.rng, r.mob, r.elite, true));
   }
-  joined.forEach((f) => ctx.fx(f.uid, "join", 0));
+  joined.forEach((f) => {
+    aim(e, f, false);
+    ctx.fx(f.uid, "join", 0);
+  });
 }
 
 function enrageStep(ctx) {
@@ -379,8 +425,8 @@ function foeSwing(ctx, f) {
   const mob = getMonster(f.id);
   f.timer += mob.speed;
 
-  const u = nextTarget(e);
-  if (!u || u.down) return;
+  const u = targetOf(e, f);
+  if (!u) return;
   const s = u.stats;
 
   /* Scaled to the warband, as its health is. It swings no more often than it would
@@ -443,10 +489,13 @@ function takeRemedy(ctx, u) {
 }
 
 function fall(ctx, u, mob) {
+  const e = ctx.e;
   u.down = true;
   u.hp = 0;
   u.owed.died = mob.id;
   ctx.fx(u.userId, "fall", 0);
+  // Whatever was on them turns to whoever is still standing, as a latecomer picks.
+  e.foes.forEach((f) => { if (f.target === u.userId) aim(e, f, false); });
 }
 
 /* ================= 4. WHAT A KILL PAYS ================= */
@@ -494,7 +543,8 @@ function killFoe(ctx, f) {
     u.owed.mastery += n.xp * z.xp;
     u.owed.kills++;
     u.owed.slain.push({ id: mob.id, elite: !!f.elite });
-    u.owed.drops.push({ id: mob.id, elite: !!f.elite });
+    // A Sovereign's entry carries how long its fight ran, for the line its fall leaves in the log.
+    u.owed.drops.push(mob.archetype === "sovereign" ? { id: mob.id, elite: false, ms: Math.round(e.clock) } : { id: mob.id, elite: !!f.elite });
   });
 
   if (!e.foes.length) e.over = "cleared";
@@ -562,7 +612,12 @@ export function encounterView(e) {
     foes: e.foes.map((f) => ({
       uid: f.uid, id: f.id, elite: f.elite,
       hp: Math.max(0, Math.ceil(f.hp)), max: f.max,
+      // Whom it is going for, as a user id: the hunters are listed by the same.
+      target: f.target || null,
     })),
+    // A Sovereign's anger: how many times it has risen, and how long until it does again.
+    enrage: e.kind === "sovereign" ? e.enrage : 0,
+    enrageIn: e.kind === "sovereign" ? Math.max(0, Math.round(e.enrageAt - e.clock)) : null,
     hunters: (() => {
       const shares = contributionMap(e);
       return e.hunters.map((u) => ({
@@ -621,6 +676,8 @@ export function newSession({ partyId, tier, zone, seed, hunters, expecting = [] 
     elapsed: 0,
     encounters: 0,
     enc: null,
+    // The encounter at the end of this walk is the ground's Sovereign.
+    sovereignNext: false,
     // The warband, kept across encounters: health and remedies carry over, as they do alone.
     hunters: hunters.slice(),
     muster: waiting.length ? { waiting, left: CONFIG.party.musterMs } : null,
@@ -655,6 +712,8 @@ function nextEncounter(s) {
     return;
   }
   s.encounters++;
+  const kind = s.sovereignNext ? "sovereign" : "normal";
+  s.sovereignNext = false;
   s.enc = newEncounter({
     id: s.encounters,
     partyId: s.partyId,
@@ -662,6 +721,7 @@ function nextEncounter(s) {
     zone: s.zone,
     seed: Math.floor(rng() * 4294967296),
     hunters: up,
+    kind,
   });
   s.phase = "fight";
 }
@@ -707,14 +767,24 @@ export function stepSession(s, dt, hooks = {}) {
     left -= ran;
     played += ran;
     if (!s.enc.over) break;
-    // Cleared inside the window, the rest of it is the walk to the next one.
     const z = getZone(s.zone);
     if (s.enc.over === "wiped") {
       s.over = "wiped";
       break;
     }
+    const was = s.enc;
     s.phase = "search";
-    s.wait = Math.max(H.searchMinMs, z.windowMs - s.enc.clock);
+    if (was.kind === "sovereign") {
+      // A Sovereign's fight is followed by the shortest walk, as it is alone, and by no roll for another.
+      s.wait = H.searchMinMs;
+    } else if (was.over === "cleared" && z.sovereign > 0 && makeRng(s, "dice")() < z.sovereign) {
+      // It may be waiting in the next one: the zone's flat chance, rolled once, as a lone hunter's is.
+      s.sovereignNext = true;
+      s.wait = H.searchMinMs;
+    } else {
+      // Cleared inside the window, the rest of it is the walk to the next one.
+      s.wait = Math.max(H.searchMinMs, z.windowMs - was.clock);
+    }
     s.enc = null;
     if (!s.hunters.some((u) => !u.down)) s.over = "wiped";
   }
@@ -754,6 +824,8 @@ export function sessionView(s) {
     // How many of the ready ones the first walk is still being held for.
     muster: held ? s.muster.waiting.length : 0,
     elapsed: Math.round(s.elapsed), encounters: s.encounters, over: s.over,
+    // Walking toward the ground's Sovereign: the walk says so.
+    vast: s.phase === "search" && !!s.sovereignNext,
     enc: s.enc ? encounterView(s.enc) : null,
     hunters: s.hunters.map((u) => ({
       userId: u.userId, down: u.down,

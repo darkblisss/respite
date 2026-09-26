@@ -7,7 +7,7 @@
    refreshParty(), with realtime pokes and a five-second poll
    while the page is open.
 
-   The party is a room of four squares. A square holds whoever is
+   The party is a room of three squares. A square holds whoever is
    sitting in it (the face, the host's remove in the top corner
    with the Hunt level under it, and the crown, the name and what
    they are at along the bottom), stands open and says Waiting, or
@@ -462,7 +462,7 @@ function partyBody(ctx, page) {
      The fight is drawn on the Hunt page, never here: this card only names it. */
   /* ================= THE ROOM ================= */
 
-  /* A party is a room of four squares. Somebody sits in one, one stands open and
+  /* A party is a room of three squares. Somebody sits in one, one stands open and
      says so, or the leader has crossed it out. Under them the ground anyone can
      put up, a ready mark each, and the leader's press that sends the room out
      together. When the party is already out the same card carries the way in.
@@ -624,7 +624,8 @@ function partyBody(ctx, page) {
         const sig = [leaderId, amLeader, slots, members.map((m) => `${m.user_id}:${m.ready ? 1 : 0}`).join(",")].join("|");
         if (sig !== seatSig) {
           seatSig = sig;
-          seats = Array.from({ length: P.maxSize }, (_, i) => (i < members.length
+          // A party of four from before three was the most still draws all four of them.
+          seats = Array.from({ length: Math.max(P.maxSize, members.length) }, (_, i) => (i < members.length
             ? memberSeat(members[i], sameId(members[i].user_id, leaderId), amLeader, !!members[i].ready)
             : emptySeat(i < slots ? SEAT_OPEN : SEAT_SHUT, i, amLeader)));
           squares.replaceChildren(...seats.map((s) => s.node));

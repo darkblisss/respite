@@ -1031,8 +1031,9 @@ button.doll-slot { cursor: pointer; }
 .arena-you .veilbar { max-width: 240px; }
 
 /* The warband while the party is out: a square each, you first. Two across for a
-   pair, two over one for a three, two by two for a four -- everyone on screen at
-   once, with room to breathe rather than crammed into a column of thin rows. */
+   pair, two over one for a three (the most a party holds; a four from before that
+   stands two by two) -- everyone on screen at once, with room to breathe rather
+   than crammed into a column of thin rows. */
 .arena-band {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2555,17 +2556,18 @@ button.listing:disabled { opacity: .5; cursor: default; }
 
 /* ================= 11. PARTY ================= */
 
-/* The room: four squares, two by two. One holds whoever is sitting in it, one
-   stands open and says so, and one the leader has closed carries the cross. */
+/* The room: three squares in a row. One holds whoever is sitting in it, one
+   stands open and says so, and one the leader has closed carries the cross. On a
+   wide screen they keep the size four of them had. */
 .room-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--sp-3);
   margin-bottom: var(--sp-4);
 }
 
 @media (min-width: 900px) {
-  .room-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .room-grid { grid-template-columns: repeat(3, minmax(0, 260px)); }
 }
 
 .seat {

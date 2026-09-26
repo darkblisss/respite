@@ -145,22 +145,26 @@ Never the row. It carries the encounter's seed and the dice position, and a clie
 
 ### Setting out, joining, leaving
 
-`partyHuntStart { tier, zone }` needs a party, no live session, no hunt of the caller's own, no recovery to sit out, ground their save has unlocked and a real zone. `partyHuntJoin {}` needs a live session with room (four at most). Both count the rest the hunter has had at camp exactly as a lone hunt setting out does, take the remedies in their Satchel as the list the fight drinks from, and use up the camp's note; the walk the note owed is dropped, because the party keeps its own rhythm. A hunter joins on the walk, never in the middle of an encounter: the roster of foes was drawn for the party that walked into it.
+`partyHuntStart { tier, zone }` needs a party, no live session, no hunt of the caller's own, no recovery to sit out, ground their save has unlocked and a real zone. `partyHuntJoin {}` needs a live session with room (three at most, `CONFIG.party.maxSize`; migration 019 holds the room and its invites to the same). Both count the rest the hunter has had at camp exactly as a lone hunt setting out does, take the remedies in their Satchel as the list the fight drinks from, and use up the camp's note; the walk the note owed is dropped, because the party keeps its own rhythm. A hunter joins on the walk, never in the middle of an encounter: the roster of foes was drawn for the party that walked into it.
 
 **A member already out on their own hunt is refused** (`Pull back before you set out with your party.`), and `startHunt` while out with the party is refused too (`You're out with your party.`). Ending their solo hunt for them was the alternative: it would throw away a live fight, its limit and the record it was earning, and it is the one thing on screen the browser is predicting, so the player would watch a hunt they never stopped disappear. A refusal costs one tap and says why.
 
 `partyHuntLeave {}` plays the fight up to that moment, pays the share, and takes the hunter out of it. `resetCamp` does the same without the share: a camp that starts over leaves what it was owed behind.
 
+### The fight
+
+Every rule is in `src/shared/partyHunt.js`; in short: the hunters all strike the oldest foe still standing. Each foe picks one hunter and keeps them until they fall: the foes an encounter opens with pick heaviest first (attack over swing), each taking the healthiest hunter nobody has yet, so a crowd strikes the whole party; a reinforcement takes the healthiest there is; a foe whose hunter falls picks again the same way. The view carries each foe's `target` (a user id), and the Hunt page writes it on the foe's card. A party meets its ground's Sovereign as a lone hunter does: each encounter it clears rolls the zone's chance that the next is the Sovereign's, the walk to it is the shortest there is and the view says so (`vast`), and the fight's view carries its anger (`enrage`, `enrageIn`). A party never breaks away from one.
+
 ### What a share is worth
 
-`owedFor()` gives a member `{ xp, gold, kills, threat, drops, died, remedies }`, and the settlement spends it through the same functions a lone kill is paid through, so a shared kill is worth what a lone one is:
+`owedFor()` gives a member `{ xp, gold, mastery, kills, slain, drops, died, remedies }`, and the settlement spends it through the same functions a lone kill is paid through, so a shared kill is worth what a lone one is:
 
 - XP: `owed.xp * xpMult(state, "warfare", at) * partyMult(...)` through `addXp`, so the weather, the companion, a bounty buff and the party's own 5% a member all still apply.
 - Gold: `tx.gold(round(owed.gold * (1 + companion gold bonus)), true)`.
-- Threat: added to the region-wide counter, capped as ever.
-- Per kill: `stats.kills`, a companion find on the `k:<tier>` counter, and a kill's wear on the weapon and one armour piece.
-- The kills whose spoils they won (the engine gives a drop to whoever hurt the foe most, ties to the killing blow) also roll that foe's drops on the `m:<id>` counter, the rare find on `k:<tier>`, and count toward a slay bounty.
-- A fall: `stats.deaths`, `foeDeaths`, five minutes of recovery, the ten minute wound, death wear on every worn piece, no camp note, and the usual `hunt:death` line.
+- Mastery: `owed.mastery` through `addMastery`, unsplit.
+- Per kill, through `creditKill` (combat.js), the function a lone kill is paid through: `stats.kills`, a slay bounty's tally, the foe's drops rolled on this save's own `m:<id>` counter, an Elite's Fragment in the Inner and the Core, a companion find on `k:<tier>`. Everyone who hurt a foe is owed its kill and rolls its drops separately.
+- A Sovereign, through `creditSovereign`, as alone: its Essence to each of them who hurt it, `stats.bosses`, and the `hunt:felled` line in the camp log. The `party:spoils` news names the Essence.
+- A fall: `stats.deaths`, `foeDeaths`, the ten minute wound, one point of health and a camp note that keeps it there, and the usual `hunt:death` line.
 - `owed.remedies` bottles come off the Satchel, strongest first, and `player.hp` follows the fight.
 
 The share is taken **after** the request's catch-up, at the save's own clock, and cleared in the same transaction that writes the save: a request that fails pays nothing, and a request that succeeds cannot pay twice. After the catch-up rather than before, because `advance()` has cleared an expired bounty buff by then; settling first would let a buff claimed half a day ago double a whole day of somebody else's fighting. The cost is that a fall is answered for when the hunter comes back to it: the recovery and the wound run from the moment they settle, not from the moment they went down, which the fight does not date.
@@ -175,12 +179,9 @@ Nothing about this is required for a party to hunt while somebody is watching: a
 
 ### What the handler is doing that the engine should
 
-Four things are worked around here rather than fixed where they belong. Each is a small change to `src/shared/partyHunt.js` or `combat.js`, and until it is made this file is where the reason lives.
+One thing is worked around here rather than fixed where it belongs. It is a small change to `src/shared/partyHunt.js`, and until it is made this file is where the reason lives.
 
 1. **A session is not JSON round-trippable in the middle of an encounter.** The roster (`s.hunters`) and the live encounter (`s.enc.hunters`) are the same objects in memory and two sets of copies after `jsonb`, and only the encounter's copy is the one the fight moves. A share settled from a stored row would be read off a hunter who stopped fighting when the row was written. The handler points the roster back at the encounter's hunters on every read (`rehydrate`). The fix is for the engine to look its hunters up by id, or for `owedFor`, `sessionView` and `nextEncounter` to read the encounter's roster while one is live. The server suite has the regression test.
-2. **`owed.kills` is a count, not the foes.** Only the kills a hunter won the spoils of carry a monster id, so shared kills cannot credit a slay bounty, the `m:<id>` counter or the bestiary the way a lone kill does. `owed` should carry the kills as ids.
-3. **`dropLoot` and `stashLoot` are not exported from `combat.js`**, and neither is the Threat setter, so the settlement spells all three out again (`dropFor`, `stashLoot`, the `state.threat` line in `settleParty`). Two copies of the drop rolls is exactly how a party kill quietly stops dropping what a lone one does. Exporting them is a one-word change each.
-4. **A party session never calls a Sovereign down**, and never banks a run record: `newSession` only ever builds `kind: "normal"` encounters, and `bankRun` is private. Threat still rises with every kill, so a party can push a region to its cap with nothing at the top of it and no way down but hiding alone.
 
 ## 4. Setting up the database
 
@@ -193,7 +194,8 @@ In the Supabase dashboard, SQL Editor, in this order. Each is safe to run again.
 5. `supabase/migrations/006_party_hunts.sql`. Required for party hunts, and it asks for two values by hand: `RESPITE_TICK_SECRET` in the function's secrets, and the same secret plus the function's URL in `private.settings`. Its header is the instructions. Enable `pg_cron` and `pg_net` first (dashboard, Database, Extensions) or the file says in a notice that the tick is not scheduled and carries on.
 6. `supabase/migrations/007_market_pools.sql`. Required, and it goes out together with the function and the static client: it closes the market's reads to everyone but the row's owner and opens the three functions the page reads instead, so a browser that predates it shows an empty market until it reloads. Run it again after any later run of `schema.sql`, which recreates the two policies it narrows.
 7. `supabase/migrations/018_ground_hunters.sql`. Optional: who else is out on each region's ground, for the Hunt page's map. Without it the map draws the player and their party and says nothing about anyone else.
-8. The legacy audit in section 5, before announcing the market.
+8. `supabase/migrations/019_party_of_three.sql`. Required: a party holds three. The room, its invites and its accepts stop at three, as the game function does; a party already four keeps its members and takes nobody new until it is under three.
+9. The legacy audit in section 5, before announcing the market.
 
 ## 5. Legacy saves: audit before announcing the market
 

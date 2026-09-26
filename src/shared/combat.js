@@ -774,35 +774,8 @@ function liveHunt(state, c, env, nowAt) {
     gainGold: (n) => {
       if (n > 0) transact(state, (tx) => tx.gold(Math.round(n * (1 + companionBonus(state, "gold"))), true));
     },
-    killed: (mob, elite) => {
-      const at = nowAt();
-      const kKey = `k:${mob.tier}`;
-      const mKey = `m:${mob.id}`;
-      const kN = state.rolls[kKey] || 0;
-      state.stats.kills++;
-      bountyProgress(state, "slay", mob, env, at);
-      dropLoot(state, mob, elite, kN, env, at);
-      // The Inner and the Core are the only ground whose Elites carry the Veil.
-      if (elite && getZone(c.zone).fragments) {
-        stashLoot(state, fragmentOfTier(mob.tier), GameData.ELITE.fragments, env, at);
-      }
-      companionFinds(state, "warfare", kKey, kN, env, at);
-      state.rolls[mKey] = (state.rolls[mKey] || 0) + 1;
-      state.rolls[kKey] = kN + 1;
-    },
-    /* What a Sovereign leaves. No gear: the bench makes what you own, the hunt only
-       makes it better. Its Essence comes whole, where twenty Elite Fragments would
-       have had to be merged for the same thing. */
-    sovereignDown: (mob) => {
-      const at = nowAt();
-      const sKey = `s:${mob.tier}`;
-      const sN = state.rolls[sKey] || 0;
-      state.stats.bosses = (state.stats.bosses || 0) + 1;
-      const key = essenceOfTier(mob.tier);
-      const kept = stashLoot(state, key, GameData.SOVEREIGN.essence, env, at);
-      state.rolls[sKey] = sN + 1;
-      emit(state, env, "hunt:felled", { monsterId: mob.id, key: kept ? key : null, fightMs: Math.round(c.clock), at });
-    },
+    killed: (mob, elite) => { creditKill(state, mob, elite, c.zone, env, nowAt()); },
+    sovereignDown: (mob) => { creditSovereign(state, mob, c.clock, env, nowAt()); },
     died: (mob) => {
       const at = nowAt();
       const took = c.elapsed;
@@ -994,7 +967,43 @@ export function stashLoot(state, key, qty, env, at) {
   return null;
 }
 
-// kN is this kill's index on the k:<tier> counter.
+/* One kill's spoils, into a save: the kill counted, a bounty's tally, what it drops, the
+   Fragment an Elite carries on ground that holds the Veil, and a companion's nose. A lone
+   hunt's kill and a party's share settled on the server both pay through here, so a kill
+   is worth the same however it was made. Returns how many things it left in the save. */
+export function creditKill(state, mob, elite, zoneId, env, at) {
+  const kKey = `k:${mob.tier}`;
+  const mKey = `m:${mob.id}`;
+  const kN = state.rolls[kKey] || 0;
+  let n = 0;
+  state.stats.kills++;
+  bountyProgress(state, "slay", mob, env, at);
+  n += dropLoot(state, mob, elite, kN, env, at);
+  // The Inner and the Core are the only ground whose Elites carry the Veil.
+  const zone = getZone(zoneId);
+  if (elite && zone && zone.fragments && stashLoot(state, fragmentOfTier(mob.tier), GameData.ELITE.fragments, env, at)) n += GameData.ELITE.fragments;
+  companionFinds(state, "warfare", kKey, kN, env, at);
+  state.rolls[mKey] = (state.rolls[mKey] || 0) + 1;
+  state.rolls[kKey] = kN + 1;
+  return n;
+}
+
+/* What a Sovereign leaves, over and above the kill. No gear: the bench makes what you
+   own, the hunt only makes it better. Its Essence comes whole, where twenty Elite
+   Fragments would have had to be merged for the same thing. Alone or in a party, the
+   same: returns the Essence's key when there was room for it, else null. */
+export function creditSovereign(state, mob, fightMs, env, at) {
+  const sKey = `s:${mob.tier}`;
+  const sN = state.rolls[sKey] || 0;
+  state.stats.bosses = (state.stats.bosses || 0) + 1;
+  const key = essenceOfTier(mob.tier);
+  const kept = stashLoot(state, key, GameData.SOVEREIGN.essence, env, at);
+  state.rolls[sKey] = sN + 1;
+  emit(state, env, "hunt:felled", { monsterId: mob.id, key: kept ? key : null, fightMs: Math.round(fightMs || 0), at });
+  return kept ? key : null;
+}
+
+// kN is this kill's index on the k:<tier> counter. Returns how many things it left in the save.
 export function dropLoot(state, mob, elite, kN, env, at) {
   const seed = state.rng.seed;
   const bonus = 1 + companionBonus(state, "drops");
@@ -1002,8 +1011,12 @@ export function dropLoot(state, mob, elite, kN, env, at) {
   const mKey = `m:${mob.id}`;
   const mN = state.rolls[mKey] || 0;
   const c = state.tasks.combat;
+  let left = 0;
   // What this hunt has turned up, for the little stack the arena shows.
-  const tally = (key, n) => { if (c && c.drops) c.drops[key] = (c.drops[key] || 0) + n; };
+  const tally = (key, n) => {
+    left += n;
+    if (c && c.drops) c.drops[key] = (c.drops[key] || 0) + n;
+  };
   mob.drops.forEach(([k, qty, chance], j) => {
     if (!(roll(seed, mKey, mN, SALT.drop + j) < chance * bonus)) return;
     // "@reagent": whichever of the five this one was carrying, on the same stream.
@@ -1026,4 +1039,5 @@ export function dropLoot(state, mob, elite, kN, env, at) {
       emit(state, env, "loot:found", { key, at });
     }
   }
+  return left;
 }

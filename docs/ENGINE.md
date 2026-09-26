@@ -290,10 +290,10 @@ export function huntPresence(state)                   // { tier, zone, startedAt
 - `remedy`: `bestRemedy` then `transact` spend 1 from the pool it sits in; returns heal.
 - `gainXp(amount)`: `gain = amount * xpMult(state, "warfare", at) * partyMult(env, tier, zone, at)`; `c.xp += gain`; `addXp`; refresh stats on a level.
 - `gainGold(n)`: `Math.round(n * (1 + companionBonus(state, "gold")))` via `tx.gold(n, true)`.
-- `killed(mob, elite)`: `stats.kills++`, bounty slay progress, drops (below), companion finds on `k:<tier>`, `applyWear` (refresh on break), then `m:<id>` and `k:<tier>` counters++.
+- `killed(mob, elite)`: `creditKill(state, mob, elite, zone, env, at)`: `stats.kills++`, bounty slay progress, drops (below), an Elite's Fragment on ground that carries the Veil (the Inner and the Core), companion finds on `k:<tier>`, then `m:<id>` and `k:<tier>` counters++. Returns how many things it left. The server settles every kill in a party share through the same function.
 - Drops: for each `mob.drops[j] = [key, qty, chance]`: `roll(seed, "m:"+id, n, SALT.drop + j) < chance * (1 + companionBonus("drops"))` then stash `qty * (elite ? ELITE.drops : 1)` in ORDER.loot. Rare find: `rare = companionBonus("rare")`; if `roll(k-key, n, SALT.rare) < rare`, rarity `fineRarityFromRoll(SALT.rareRarity)`, piece from GEAR of the mob's tier (registry order) by `SALT.rarePick`, uid `f<tier>.<n>`, relic prefix from `SALT.prefix` on the same key; emit `loot:found {key}` if placed.
 - Nowhere to put loot: at most once per 10 minutes of clock (`state.lootLostAt`), emit `loot:lost {key}`.
-- `sovereignDown(mob)`: `stats.bosses++`, `stats.epics++`, epic piece from GEAR of that tier by `roll(s-key, n, SALT.sovereignPick)`, uid `s<tier>.<n>`, stash ORDER.loot, `s:<tier>`++, emit `hunt:felled { monsterId, key|null, fightMs }`.
+- `sovereignDown(mob)`: `creditSovereign(state, mob, fightMs, env, at)`: `stats.bosses++`, its tier's Essence (`SOVEREIGN.essence`) stashed, `s:<tier>`++, emit `hunt:felled { monsterId, key|null, fightMs }`. A party share settles each hunter's Sovereign through the same function.
 - `died(mob)`: v4 (tasks.combat = null, deaths++, hp = maxHp, recoveryLeft = recoveryMs, death wear on worn pieces), and `player.camp = null`; emit `hunt:death { monsterId, elapsedMs }`.
 - `ended(reason)`: write the camp's note at `at`, then tasks.combat = null; emit `hunt:ended { reason, kills, elapsedMs }`.
 - `retreated`, `hid`, `met`: emit the events above.

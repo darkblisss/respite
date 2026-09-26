@@ -351,19 +351,23 @@ export default {
       const fill = h("i");
       const text = h("span");
       const art = h("button.foe-art", { type: "button", "aria-label": `${mob.name}: details`, dataset: { monster: mob.id }, html: monsterArt(mob, f.elite) });
+      // In a party, whom it is going for (UI-KIT.md: the line under the bar, in existing utilities).
+      const on = h("div.small.muted.mt-1", { hidden: true });
       const node = h("div.foe-card", { class: { "is-elite": f.elite && !sov, "is-sovereign": sov } },
         art,
         h("div.foe-body",
           h("div.foe-name", h("span", mob.name), sov ? h("span.tag.tag-sovereign", "Sovereign") : f.elite ? h("span.tag.tag-elite", "Elite") : null),
-          h("div.hpbar.hpbar-foe", fill, text)));
-      return { node, art, fill, text, gone: false };
+          h("div.hpbar.hpbar-foe", fill, text),
+          on));
+      return { node, art, fill, text, on, gone: false };
     }
 
     /* One roster of foe cards for both fights, and the same one either way: a party's
        encounter is one shared roster (up to CONFIG.hunt.maxFoes, scaled, never one per
-       hunter), so it draws exactly like your own with no per-player targeting shown --
-       nobody sees who a foe happens to be swinging at, or the numbers behind it. */
-    function syncFoes(foes, hunt) {
+       hunter), so it draws like your own. The one thing a party's cards add is whom each
+       foe is going for (`onOf`): a foe keeps the hunter it picked until they fall
+       (partyHunt.js), so the name holds still long enough to read. */
+    function syncFoes(foes, hunt, onOf = null) {
       const standing = new Set(foes.map((f) => `${hunt}:${f.uid}`));
 
       cards.forEach((card, key) => {
@@ -387,6 +391,9 @@ export default {
         toggleClass(card.node, "is-target", i === 0);
         setWidth(card.fill, (f.hp / f.max) * 100);
         setText(card.text, `${fmt(Math.max(0, Math.ceil(f.hp)))} / ${fmt(f.max)}`);
+        const who = onOf ? onOf(f) : null;
+        setAttr(card.on, "hidden", !who);
+        if (who) setText(card.on, who);
       });
 
       let fading = false;
@@ -724,14 +731,24 @@ export default {
         tm = `Waiting on ${fmtWhole(view.muster)} more`;
         et = `Gathering at the ${zone.name}`;
         es = "Everyone who marked ready walks in together.";
+      } else if (!enc && view.vast) {
+        // The walk to the ground's Sovereign, said the way your own hunt says it.
+        st = "Something vast approaches";
+        tm = `Here in ${fmtTime(view.wait)}`;
+        et = sovereignOf(view.tier).name;
+        es = "It has found you.";
       } else if (enc && !watching && !fighting) {
         st = "Waiting";
         tm = "In on the next encounter";
         et = `The ${zone.name} lies quiet`;
         es = "This one was drawn for the party that walked into it.";
       } else if (enc) {
-        st = enc.kind === "sovereign" ? "A Sovereign" : "Fighting";
-        tm = `Encounter ${fmtWhole(view.encounters)}`;
+        const sov = enc.kind === "sovereign";
+        st = sov ? "A Sovereign" : "Fighting";
+        // A Sovereign's anger, as your own hunt says it; any other fight, which encounter this is.
+        tm = sov && Number.isFinite(enc.enrageIn)
+          ? (enc.enrage ? `Enraged ×${enc.enrage}` : `Enrages in ${fmtTime(enc.enrageIn)}`)
+          : `Encounter ${fmtWhole(view.encounters)}`;
         et = `The ${zone.name} lies quiet`;
         es = "Nothing is left standing here.";
       }
@@ -742,7 +759,12 @@ export default {
       paintRecap(null);
 
       // A foe this build cannot name is left out rather than drawn as an unknown.
-      syncFoes(enc ? enc.foes.filter((f) => getMonster(f.id)) : [], enc ? `p${view.partyId}:${enc.id}` : null);
+      const onOf = (f) => {
+        if (!f.target) return null;
+        if (sameId(f.target, me)) return "On you";
+        return `On ${names.get(String(f.target).toLowerCase()) || "someone"}`;
+      };
+      syncFoes(enc ? enc.foes.filter((f) => getMonster(f.id)) : [], enc ? `p${view.partyId}:${enc.id}` : null, onOf);
       toggleClass(arena, "is-party", true);
 
       // ---- the numbers ----
@@ -790,9 +812,9 @@ export default {
 
     // One row a member: their name, their health, and a mark on whoever has fallen or is waiting.
 /* The whole warband, you first, as squares: two across for a pair, two over one for
-   a three, two by two for a four. Everyone is on screen at once, which is the point
-   of hunting together, and a square each is the only shape that stays readable at
-   four. `data-n` is what the grid reads to lay them out. */
+   a three, the most a party holds (a four from before that stands two by two).
+   Everyone is on screen at once, which is the point of hunting together. `data-n` is
+   what the grid reads to lay them out. */
     function syncBand(all, names, skins, inEnc, me) {
       const sig = all.map((u) => `${u.userId}:${u.down ? 1 : 0}:${u.note || ""}`).join("|");
       if (sig !== sigs.band) {

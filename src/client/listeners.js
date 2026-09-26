@@ -151,6 +151,8 @@ const TABLE = {
       if (p.drops > 0) parts.push(plural(p.drops, "drop"));
       const out = [];
       if (parts.length) out.push([`Your share: ${parts.join(", ")}`, { kind: "gold", icon: "party" }, { every: 60 * 1000, key: "party:spoils" }]);
+      // A Sovereign the party brought down leaves its Essence to each of them, as one felled alone does.
+      if (p.essence) out.push([`Sovereign felled: ${itemName(p.essence)}`, { kind: "gold", icon: "crown" }, { once: `partyfelled:${p.at}` }]);
       if (p.died) out.push(["You fell beside your party", { kind: "bad", icon: "skull" }, { once: `partyfell:${p.at}` }]);
       return out.length ? out : null;
     }

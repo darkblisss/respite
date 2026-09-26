@@ -22,12 +22,10 @@ import { attachChronicle } from "../shared/chronicle.js";
 import { itemDef, itemName, validKey } from "../shared/items.js";
 import { ORDER, qtyIn, transact } from "../shared/storage.js";
 import {
-  bestRemedy, campPlan, dropLoot, huntPresence, remedyHeals,
+  bestRemedy, campPlan, creditKill, creditSovereign, huntPresence, remedyHeals,
 } from "../shared/combat.js";
 import { companionBonus, companionFinds } from "../shared/companions.js";
 import { addXp, partyMult, xpMult } from "../shared/progression.js";
-import { bountyProgress } from "../shared/world.js";
-import { makeRng } from "../shared/rng.js";
 import { maxHp, recovering, skillLevel, statsOf, totalLevel } from "../shared/stats.js";
 import { applyMail, applyPurchase, applyReturn, fillPool, marketFee, prepareListing, remintKey } from "../shared/market.js";
 import {
@@ -1085,7 +1083,7 @@ function settleParty(ctx, row) {
   const drops = Array.isArray(owed.drops) ? owed.drops : [];
   const took = {
     tier: row.tier, zone: row.zone, kills: owed.kills, xp: 0, gold: 0,
-    drops: 0, remedies: owed.remedies, died: owed.died || null,
+    drops: 0, remedies: owed.remedies, died: owed.died || null, essence: null, at,
   };
   // Carried through the same fight, so it pays the same as a lone kill's would.
   if (owed.mastery > 0) addMastery(state, owed.mastery);
@@ -1114,20 +1112,28 @@ function settleParty(ctx, row) {
     if (took.gold > 0) transact(state, (tx) => tx.gold(took.gold, true));
   }
 
-  /* Wear, companion finds and the counters are per kill, as they are alone. The spoils of a kill
-     cannot be halved, so the engine gives them to whoever hurt it most: those kills carry the foe
-     that died, and are the ones that roll for drops and count toward a bounty. */
-  const rng = makeRng(state.rng, "hunt");
+  /* A kill's spoils are paid through creditKill, the function a lone kill is paid through: the
+     counters, a bounty's tally, its drops rolled on this save's own dice, an Elite's Fragment on
+     ground that carries the Veil, a companion's find. A Sovereign leaves its Essence besides, to
+     every one of them who hurt it, and a line in the log. */
   const kills = Math.max(owed.kills, drops.length);
   for (let i = 0; i < kills; i++) {
     const won = drops[i] && drops[i].id ? getMonster(drops[i].id) : null;
+    if (won) {
+      took.drops += creditKill(state, won, !!drops[i].elite, row.zone, env, at);
+      if (won.archetype === "sovereign") {
+        const key = creditSovereign(state, won, Number(drops[i].ms) || 0, env, at);
+        if (key) {
+          took.drops += GameData.SOVEREIGN.essence;
+          took.essence = key;
+        }
+      }
+      continue;
+    }
+    // A kill with no foe on it, from a row written before the foe was: counted, as it always was.
     const kKey = `k:${row.tier}`;
     const kN = state.rolls[kKey] || 0;
     state.stats.kills++;
-    if (won) {
-      bountyProgress(state, "slay", won, env, at);
-      took.drops += dropLoot(state, won, !!drops[i].elite, kN, env, at);
-    }
     companionFinds(state, "warfare", kKey, kN, env, at);
     state.rolls[kKey] = kN + 1;
   }
