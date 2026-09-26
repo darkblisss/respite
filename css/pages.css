@@ -970,39 +970,127 @@ button.doll-slot { cursor: pointer; }
   gap: var(--sp-4);
 }
 
-.arena {
+/* The stage: the walk between encounters and the Closing Ring share it. The ring is a
+   canvas (ui/hunt-ring.js) drawn at the stage's own size; the walk and the fight's head are
+   laid over it. Wide, the stage keeps the board's proportions (1130 by 500) and the walk
+   is three columns; narrow (the card set to data-size="narrow" by the ring), it grows
+   with the walk and What waits moves under it, beside the list of foes. */
+.hunt-stage {
   position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, .9fr) auto minmax(0, 1.35fr);
-  align-items: center;
-  gap: var(--sp-5);
-  padding: var(--sp-6) var(--sp-5);
+  aspect-ratio: 1130 / 500;
   border-radius: var(--r-lg);
-  border: 1px solid var(--line-soft);
-  background:
-    radial-gradient(420px 200px at 18% 100%, rgba(157, 130, 224, .13), transparent 70%),
-    radial-gradient(520px 220px at 82% 100%, rgba(216, 116, 63, .13), transparent 70%),
-    linear-gradient(180deg, #110d17 0%, #0b0910 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03), inset 0 -40px 60px -40px rgba(0, 0, 0, .6);
   overflow: hidden;
+  background: #0b0910;
+  box-shadow: inset 0 0 0 1px var(--line-soft);
   isolation: isolate;
 }
 
-.arena::before {
-  content: "";
+.hunt-ring {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 42%;
-  z-index: -1;
-  background: repeating-linear-gradient(90deg, rgba(255, 255, 255, .018) 0 1px, transparent 1px 48px);
-  mask-image: linear-gradient(180deg, transparent, #000);
-  -webkit-mask-image: linear-gradient(180deg, transparent, #000);
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
-.arena-you {
-  position: relative;
+/* Over the ring while it is fought: which encounter, and when the next one steps out. */
+.hunt-fight-head {
+  position: absolute;
+  top: 16px;
+  left: 22px;
+  right: 22px;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 450ms ease;
+}
+
+.hunt-card[data-phase="fight"] .hunt-fight-head { opacity: 1; }
+
+.hunt-fh-l { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+
+.hunt-fh-l b {
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--bone);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, .8);
+}
+
+.hunt-fh-l span {
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--ember-hi);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, .9);
+}
+
+.hunt-fh-r {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  font-size: var(--text-sm);
+  color: var(--bone-dim);
+  text-align: right;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, .9);
+}
+
+.hunt-fh-r em {
+  margin-left: .3em;
+  font-style: normal;
+  font-weight: 700;
+  color: var(--bone);
+  font-variant-numeric: tabular-nums;
+}
+
+.hunt-fh-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 8px;
+  border-radius: var(--r-pill);
+  background: rgba(40, 14, 10, .7);
+  box-shadow: inset 0 0 0 1px rgba(235, 144, 104, .35);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: #f0b393;
+  text-shadow: none;
+}
+
+.hunt-fh-icon { display: inline-grid; }
+.hunt-fh-icon .ico { width: 14px; height: 14px; }
+
+/* The walk: you (or the party), the way on and what the last encounter came to, what waits. */
+.hunt-walk {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(170px, 236px) minmax(0, 1fr) minmax(270px, 350px);
+  align-items: center;
+  gap: 26px;
+  padding: 24px 28px;
+  background:
+    radial-gradient(520px 320px at 16% 60%, rgba(157, 130, 224, .14), transparent 70%),
+    radial-gradient(560px 300px at 88% 60%, rgba(216, 116, 63, .12), transparent 70%),
+    linear-gradient(180deg, rgba(14, 11, 20, .74), rgba(11, 9, 16, .62));
+  transition: opacity 500ms ease, visibility 0s linear 0s;
+}
+
+.hunt-card[data-phase="fight"] .hunt-walk {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 450ms ease, visibility 0s linear 450ms;
+}
+
+.hunt-walk-you {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1010,156 +1098,337 @@ button.doll-slot { cursor: pointer; }
   min-width: 0;
 }
 
-/* The crop itself is .portrait-bust, in components.css. This is sizing only. */
-.arena-portrait {
+.hunt-walk-you[hidden] { display: none; }
+.hunt-walk-you .hpbar { width: 100%; max-width: 236px; }
+.hunt-walk-you.is-down .hunt-face-in { opacity: .45; filter: grayscale(.85); }
+
+/* A face in a circle, the way the ring draws one. The crop itself is .portrait-bust. */
+.hunt-face {
   position: relative;
-  width: clamp(112px, 12vw, 150px);
-  aspect-ratio: 1 / 1;
-  transition: opacity 300ms, filter 300ms, transform 300ms;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 124px;
+  aspect-ratio: 1;
 }
 
-.arena-name {
+.hunt-face.is-sm { width: 50px; }
+
+.hunt-face-in {
+  display: block;
+  width: 84%;
+  height: 84%;
+  overflow: hidden;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 30%, #2c2140, #120e17 75%);
+  box-shadow: inset 0 0 0 1px rgba(157, 130, 224, .3), 0 6px 18px rgba(0, 0, 0, .5);
+}
+
+.hunt-you-name {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  max-width: 100%;
+  min-width: 0;
   font-family: var(--font-display);
   font-size: var(--text-xl);
   font-weight: 600;
   line-height: 1.2;
-  text-align: center;
   color: var(--bone);
 }
 
-.arena-you .hpbar,
-.arena-you .veilbar { max-width: 240px; }
+.hunt-you-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* The warband while the party is out: a square each, you first. Two across for a
-   pair, two over one for a three (the most a party holds; a four from before that
-   stands two by two) -- everyone on screen at once, with room to breathe rather
-   than crammed into a column of thin rows. */
-.arena-band {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  width: 100%;
-  max-width: 300px;
-  margin-top: 2px;
-  justify-items: center;
-}
+/* The discipline, as its glyph in front of a name. */
+.hunt-klass { display: inline-grid; place-items: center; flex: none; color: var(--violet-hi); }
+.hunt-klass[hidden] { display: none; }
+.hunt-klass .ico { width: 18px; height: 18px; }
 
-/* One alone takes the width; the third of a three sits centred under the first two. */
-.arena-band[data-n="1"] { grid-template-columns: minmax(0, 1fr); max-width: 170px; }
-.arena-band[data-n="3"] > .band-mate:last-child { grid-column: 1 / -1; }
+/* The party on the walk: a row each, a face, the glyph and name, health and share of the take. */
+.hunt-band { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.hunt-band[hidden] { display: none; }
+.hunt-band-rows { display: flex; flex-direction: column; gap: 12px; }
 
 .band-mate {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 50px minmax(0, 1fr);
   align-items: center;
-  gap: 5px;
-  width: 100%;
-  max-width: 132px;
+  gap: 10px;
   min-width: 0;
 }
 
-.band-art {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 1;
-  overflow: hidden;
-  border-radius: var(--r-md);
-  border: 1px solid var(--line);
-  background: radial-gradient(circle at 50% 28%, #2c2140, #120e17 75%);
-}
-
-/* The crop itself is .portrait-bust, in components.css. This is sizing only. */
-
-.band-mate.is-me .band-art { border-color: var(--violet-edge); }
-.band-mate.is-down { opacity: .45; }
-.band-mate.is-down .band-art img { filter: grayscale(1); }
-.band-mate .hpbar { width: 100%; }
+.band-main { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.band-line { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.band-line .hunt-klass .ico { width: 14px; height: 14px; }
 
 .band-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--bone-dim);
-}
-
-.veilbar {
-  width: 100%;
-  height: 6px;
-  border-radius: var(--r-pill);
-  background: #16111b;
-  box-shadow: inset 0 0 0 1px var(--line-soft);
-  overflow: hidden;
-}
-
-.veilbar > i {
-  display: block;
-  height: 100%;
-  width: 0;
-  background: linear-gradient(90deg, var(--veil-deep), var(--veil));
-  box-shadow: 0 0 8px rgba(168, 142, 230, .6);
-  transition: width 220ms ease-out;
-}
-
-.veilbar.is-locked { opacity: .4; }
-
-.veil-note {
-  min-height: 16px;
-  font-size: var(--text-xs);
-  font-weight: 500;
-  letter-spacing: .02em;
-  text-align: center;
-  color: var(--violet-hi);
-}
-
-.veilbar.is-locked + .veil-note { color: var(--bone-faint); }
-
-.arena-you.is-down .arena-portrait { opacity: .38; filter: grayscale(.85); }
-.arena-you.is-dead .arena-portrait { opacity: .18; filter: grayscale(1); transform: translateY(8px); }
-
-.arena-mid {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  max-width: 170px;
-  text-align: center;
-}
-
-.arena-status {
-  margin-top: 4px;
-  font-size: var(--text-md);
+  font-family: var(--font-display);
+  font-size: 15px;
   font-weight: 600;
   color: var(--bone);
 }
 
-.arena-timer {
-  min-height: 16px;
+.band-mate.is-me .band-name { color: var(--violet-hi); }
+.band-mate .hpbar { height: 12px; }
+.band-mate.is-down { opacity: .5; }
+.band-mate.is-down .hunt-face-in img { filter: grayscale(1); }
+
+.hunt-mate-share {
+  margin-left: auto;
+  font-style: normal;
   font-size: var(--text-xs);
-  color: var(--bone-faint);
+  font-weight: 700;
+  color: #d6c9ff;
   font-variant-numeric: tabular-nums;
+}
+
+.hunt-sharebar { display: block; height: 4px; overflow: hidden; border-radius: 2px; background: rgba(0, 0, 0, .45); }
+.hunt-sharebar > i { display: block; width: 0; height: 100%; border-radius: 2px; background: linear-gradient(90deg, #6c52c0, var(--violet-hi)); transition: width 400ms ease; }
+
+.hunt-walk-mid { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+.hunt-walk-state {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+
+.hunt-walk-state b { font-family: var(--font-display); font-size: 22px; font-weight: 600; color: var(--bone); }
+.hunt-walk-state span { font-size: var(--text-sm); color: var(--bone-dim); }
+.hunt-walk-state span[hidden] { display: none; }
+.hunt-walk-state em { font-style: normal; font-weight: 700; color: var(--bone); font-variant-numeric: tabular-nums; }
+.hunt-card[data-vast="1"] .hunt-walk-state b { color: #e6d6ff; }
+
+/* The way on: the diamond is you, walking toward the fog at the end of it. */
+.hunt-trail {
+  position: relative;
+  height: 90px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: linear-gradient(90deg, rgba(157, 130, 224, .1), transparent 30%, transparent 70%, rgba(216, 116, 63, .12)), var(--surface-sunk);
+  box-shadow: inset 0 0 0 1px var(--line-soft), inset 0 2px 8px rgba(0, 0, 0, .5);
+}
+
+.hunt-trail[hidden] { display: none; }
+
+.hunt-trail i {
+  position: absolute;
+  width: 10px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(232, 225, 213, .12);
+  rotate: -12deg;
+  transition: background-color 300ms;
+}
+
+.hunt-trail i.on { background: rgba(185, 164, 242, .55); }
+
+.hunt-trail-you {
+  position: absolute;
+  top: 50%;
+  left: 8%;
+  width: 18px;
+  height: 18px;
+  translate: -50% -50%;
+  rotate: 45deg;
+  border-radius: 3px;
+  background: var(--violet-hi);
+  box-shadow: 0 0 14px rgba(185, 164, 242, .9);
+  transition: left 250ms linear;
+}
+
+.hunt-trail-fog {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 26%;
+  background: linear-gradient(90deg, transparent, rgba(40, 20, 20, .9)), repeating-radial-gradient(circle at 80% 50%, rgba(216, 116, 63, .06) 0 6px, transparent 6px 14px);
+}
+
+.hunt-card[data-vast="1"] .hunt-trail-fog {
+  background: linear-gradient(90deg, transparent, rgba(40, 18, 56, .92)), repeating-radial-gradient(circle at 80% 50%, rgba(184, 139, 219, .1) 0 6px, transparent 6px 14px);
+}
+
+.hunt-walk-sub { margin: 0; font-size: var(--text-sm); line-height: 1.45; color: var(--bone-faint); }
+.hunt-walk-sub[hidden] { display: none; }
+
+/* On the walk after an encounter, what it came to, as chips. */
+.hunt-recap { align-items: center; }
+.hunt-recap[hidden] { display: none; }
+.hunt-recap .eyebrow { margin-right: 4px; }
+.hunt-recap .chip { animation: hunt-in 500ms ease both; }
+.hunt-recap .mat-art { width: 16px; height: 16px; }
+
+@keyframes hunt-in { from { opacity: 0; translate: 0 4px; } to { opacity: 1; translate: 0 0; } }
+
+/* What waits: the kinds that walk the zone and how often, how many at once on the left,
+   the odds stacked on the right, the Sovereign's under the Elites'. */
+.hunt-coming {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(24, 14, 17, .6);
+  box-shadow: inset 0 0 0 1px rgba(216, 116, 63, .22);
+}
+
+.hunt-coming-head { color: var(--ember-hi); }
+.hunt-coming.is-sov { background: rgba(22, 14, 30, .6); box-shadow: inset 0 0 0 1px rgba(184, 139, 219, .35); }
+.hunt-coming.is-sov .hunt-coming-head { color: var(--r-epic); }
+.hunt-coming-rows { display: flex; flex-direction: column; gap: 10px; }
+
+.hunt-wc-row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 70px 38px;
+  align-items: center;
+  gap: 10px;
+}
+
+.hunt-wc-row b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--bone);
+}
+
+.hunt-wc-row em {
+  font-style: normal;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-align: right;
+  color: var(--bone);
+  font-variant-numeric: tabular-nums;
+}
+
+.hunt-wc-art {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  border-radius: 10px;
+  cursor: pointer;
+  background: radial-gradient(circle at 50% 40%, #3a211c, #140e12 75%);
+  box-shadow: inset 0 0 0 1px #5e3325;
+}
+
+.hunt-wc-art .m-art { width: 90%; height: 90%; --m-line: 2.4; filter: brightness(.75); }
+.hunt-wc-art:hover .m-art { filter: none; }
+.hunt-wc-art:focus-visible { outline: 2px solid var(--violet-hi); outline-offset: 2px; }
+
+.hunt-wc-art.is-sov {
+  width: 56px;
+  height: 56px;
+  background: radial-gradient(circle at 50% 40%, #33204a, #120d18 75%);
+  box-shadow: inset 0 0 0 1px rgba(184, 139, 219, .55);
+}
+
+.hunt-wc-bar { height: 6px; overflow: hidden; border-radius: 3px; background: rgba(0, 0, 0, .4); }
+.hunt-wc-bar > i { display: block; height: 100%; background: linear-gradient(90deg, var(--ember-lo), var(--ember-hi)); }
+
+.hunt-wc-row.is-sov { grid-template-columns: 56px minmax(0, 1fr); }
+.hunt-wc-sov-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.hunt-wc-sov-name b { font-size: 18px; color: #efe4ff; }
+.hunt-wc-sov-name small { font-size: var(--text-xs); color: var(--bone-faint); }
+
+.hunt-sov-line { display: flex; align-items: center; gap: 8px; font-size: var(--text-sm); color: var(--bone-dim); }
+.hunt-sov-line .ico { flex: none; width: 15px; height: 15px; color: var(--r-epic); }
+
+.hunt-odds { display: flex; align-items: flex-start; gap: 8px; font-size: var(--text-sm); color: var(--bone-dim); }
+.hunt-odds-l { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.hunt-odds-r { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; margin-left: auto; }
+
+.hunt-pips { display: inline-flex; gap: 3px; }
+.hunt-pips i { width: 9px; height: 9px; rotate: 45deg; border-radius: 2px; box-shadow: inset 0 0 0 1px rgba(232, 225, 213, .14); }
+.hunt-pips i.on { background: var(--ember); box-shadow: 0 0 6px rgba(216, 116, 63, .5); }
+.hunt-pips i.may { box-shadow: inset 0 0 0 1.5px var(--ember); }
+
+.hunt-odd {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.hunt-odd .ico { width: 12px; height: 12px; }
+.hunt-odd.is-elite { color: var(--r-rare); background: rgba(122, 162, 220, .1); box-shadow: inset 0 0 0 1px rgba(122, 162, 220, .3); }
+.hunt-odd.is-sov { color: var(--r-epic); background: rgba(184, 139, 219, .12); box-shadow: inset 0 0 0 1px rgba(184, 139, 219, .35); }
+.hunt-odd.is-quiet { color: var(--bone-dim); background: rgba(255, 255, 255, .03); box-shadow: inset 0 0 0 1px var(--line-soft); }
+
+/* Narrow: the stage grows with the walk, stacked, and the foes are listed under it. */
+.hunt-below { display: flex; flex-direction: column; gap: var(--sp-3); }
+.hunt-card[data-size="wide"] .hunt-below { display: none; }
+.hunt-card[data-size="narrow"][data-phase="fight"] .hunt-below .hunt-coming { display: none; }
+.hunt-below .hunt-wc-row { grid-template-columns: 40px minmax(0, 1fr) minmax(70px, 180px) 38px; }
+.hunt-card[data-size="narrow"] .hunt-stage { aspect-ratio: auto; min-height: 360px; container-type: inline-size; }
+
+.hunt-card[data-size="narrow"] .hunt-walk {
+  position: relative;
+  inset: auto;
+  min-height: 360px;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: center;
+  gap: 16px;
+  padding: 18px 16px;
+}
+
+
+.hunt-card[data-size="narrow"] .hunt-walk-you {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  grid-template-areas: "face name" "face hp";
+  column-gap: 12px;
+  row-gap: 6px;
+  align-items: center;
+}
+
+.hunt-card[data-size="narrow"] .hunt-walk-you .hunt-face { grid-area: face; width: 68px; }
+.hunt-card[data-size="narrow"] .hunt-you-name { grid-area: name; justify-content: flex-start; font-size: var(--text-lg); }
+.hunt-card[data-size="narrow"] .hunt-walk-you .hpbar { grid-area: hp; max-width: none; }
+.hunt-card[data-size="narrow"] .hunt-walk-state b { font-size: 19px; }
+.hunt-card[data-size="narrow"] .hunt-trail { height: 54px; }
+.hunt-card[data-size="narrow"] .hunt-fight-head { top: 10px; left: 14px; right: 14px; gap: 10px; }
+.hunt-card[data-size="narrow"] .hunt-fh-l b { font-size: 17px; }
+.hunt-card[data-size="narrow"] .hunt-fh-l span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9.5px; letter-spacing: .1em; }
+.hunt-card[data-size="narrow"] .hunt-fh-r { flex: none; font-size: var(--text-xs); }
+.hunt-card[data-size="narrow"] .hunt-fh-pill { padding: 2px 8px 2px 6px; white-space: nowrap; font-size: 11px; }
+
+/* A tablet's card: you beside the way on rather than over it, and a taller stage for the ring. */
+@container (min-width: 560px) {
+  .hunt-card[data-size="narrow"] .hunt-walk { min-height: 460px; grid-template-columns: minmax(150px, 200px) minmax(0, 1fr); gap: 22px; padding: 20px 22px; }
+  .hunt-card[data-size="narrow"] .hunt-walk-you { display: flex; }
+  .hunt-card[data-size="narrow"] .hunt-walk-you .hunt-face { width: 104px; }
+  .hunt-card[data-size="narrow"] .hunt-you-name { justify-content: center; }
 }
 
 .arena-foes {
   display: flex;
   flex-direction: column;
-  justify-content: center;
   gap: 8px;
   min-width: 0;
-  min-height: 176px;
 }
 
-/* A party's roster of foes scales with the party, up to a dozen, so they stand two abreast
-   rather than running the card down the page. auto-fit, so one foe is still one wide card. */
-.arena.is-party .arena-foes {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-  align-content: center;
-}
-
-.arena.is-party .foe-empty { grid-column: 1 / -1; }
+.arena-foes[hidden] { display: none; }
 
 .foe-card {
   position: relative;
@@ -1214,41 +1483,6 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
 
 .foe-card .hpbar { margin-top: 6px; height: 16px; border-radius: 5px; }
 
-.foe-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  min-height: 150px;
-  padding: 16px;
-  border-radius: var(--r-md);
-  border: 1px dashed rgba(216, 116, 63, .22);
-  text-align: center;
-}
-
-.foe-empty-title {
-  font-family: var(--font-display);
-  font-size: var(--text-lg);
-  font-weight: 600;
-  color: var(--bone-dim);
-}
-
-.foe-empty-sub {
-  font-size: var(--text-sm);
-  line-height: 1.45;
-  color: var(--bone-faint);
-}
-
-/* The walk after an encounter: what it came to, as chips under the title. */
-.hunt-recap {
-  justify-content: center;
-  max-width: 520px;
-  margin-top: 6px;
-}
-
-.hunt-recap .eyebrow { margin-right: 2px; }
-
 .struck { animation: struck 260ms ease-out; }
 
 @keyframes struck {
@@ -1256,88 +1490,6 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
   25% { transform: translateX(-6px); filter: brightness(1.7); }
   60% { transform: translateX(4px); }
   100% { transform: none; }
-}
-
-/* Numbers that float up off whoever took the blow. */
-.fx-layer {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 0;
-  z-index: 5;
-  pointer-events: none;
-}
-
-.foe-card .fx-layer { left: 8px; right: auto; width: 56px; top: 6px; }
-
-.float {
-  position: absolute;
-  left: 50%;
-  top: 36px;
-  white-space: nowrap;
-  font-family: var(--font-display);
-  font-size: 24px;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--bone);
-  text-shadow: 0 2px 6px rgba(0, 0, 0, .9);
-  animation: float-up 950ms ease-out forwards;
-}
-
-.foe-card .float { top: 14px; font-size: 20px; }
-
-.float.lane0 { margin-left: -28px; }
-.float.lane1 { margin-left: 22px; top: 52px; }
-.float.lane2 { margin-left: -4px; top: 22px; }
-.foe-card .float.lane1 { top: 24px; }
-.foe-card .float.lane2 { top: 8px; }
-
-/* Your own portrait on the hunt screen: floats sit at a fixed spot along the
-   top edge of the image, centred, instead of drifting through the lane
-   positions the small foe cards use. */
-.arena-you .float,
-.arena-you .float.lane0,
-.arena-you .float.lane1,
-.arena-you .float.lane2 {
-  top: 8px;
-  margin-left: 0;
-  transform: translateX(-50%);
-}
-
-.float.crit { font-size: 32px; color: var(--gold-hi); }
-.foe-card .float.crit { font-size: 25px; }
-.float.veil,
-.float.strike,
-.float.ambush,
-.float.empowered { font-size: 30px; color: #c4b0f5; }
-.float.volley { font-size: 26px; color: #c4b0f5; }
-.float.bleed,
-.float.thorns { font-size: 18px; color: #e3927a; }
-.float.hurt { color: var(--ember-hi); }
-.float.ambushed { font-size: 30px; color: var(--ember-hi); }
-.float.heal { color: var(--good-hi); }
-
-.float.block,
-.float.dodge,
-.float.glance,
-.float.join,
-.float.enrage {
-  font-family: var(--font-ui);
-  font-size: var(--text-xs);
-  font-weight: 700;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: var(--bone-dim);
-}
-
-.float.join,
-.float.enrage { color: var(--ember-hi); }
-
-@keyframes float-up {
-  0% { opacity: 0; transform: translate(-50%, 10px) scale(.85); }
-  15% { opacity: 1; transform: translate(-50%, 0) scale(1.1); }
-  100% { opacity: 0; transform: translate(-50%, -52px) scale(1); }
 }
 
 /* Monster drawings (120 by 120). Every part is a class; the rim follows the foe's rank. */
@@ -1404,10 +1556,51 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
   margin-left: auto;
 }
 
-.hunt-hint {
-  flex: 1 1 280px;
-  font-size: var(--text-sm);
-  color: var(--bone-faint);
+/* What the run has turned up: a tile a thing, its count in the corner. */
+.hunt-loot { display: flex; flex-direction: column; gap: 6px; }
+.hunt-loot[hidden] { display: none; }
+.hunt-loot-tiles { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.hunt-loot-tile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  background: radial-gradient(circle at 50% 40%, #241d2d, #120e17);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.hunt-loot-tile .mat-art,
+.hunt-loot-tile .ico { width: 25px; height: 25px; object-fit: contain; }
+
+.hunt-loot-tile b {
+  position: absolute;
+  right: 2px;
+  bottom: 1px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--bone);
+  text-shadow: 0 1px 2px #000, 0 0 4px #000;
+  font-variant-numeric: tabular-nums;
+}
+
+.hunt-loot-tile.is-new { animation: hunt-pop 600ms ease; }
+.hunt-loot-none { font-size: var(--text-sm); color: var(--bone-faint); }
+
+@keyframes hunt-pop {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.25); box-shadow: inset 0 0 0 1px rgba(242, 207, 122, .7), 0 0 14px rgba(242, 207, 122, .45); }
+  100% { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hunt-recap .chip,
+  .hunt-loot-tile.is-new { animation: none; }
+  .hunt-walk,
+  .hunt-fight-head,
+  .hunt-trail-you { transition: none; }
 }
 
 /* The section head's end: the chip that says where the hunt is when it is not here. */
@@ -1695,129 +1888,199 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
 
 .zone-row-who.has-party { color: var(--violet-hi); }
 
-/* Quarry: three foes and the Sovereign across the bottom. */
-.foe-tile {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+/* Quarry: the region's four on one plate, a tab each, the plate given to the one picked:
+   its numbers as it stands in the zone you hunt, what a kill of it pays you, what it leaves. */
+.quarry-plate { container-type: inline-size; overflow: hidden; padding: 0; }
+
+.quarry-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-bottom: 1px solid var(--line); }
+
+.quarry-tab {
+  appearance: none;
+  display: flex;
   align-items: center;
-  gap: 14px;
-  width: 100%;
-  padding: 14px 16px 14px 14px;
-  border-radius: var(--r-lg);
-  border: 1px solid var(--line);
-  background: linear-gradient(180deg, rgba(255, 255, 255, .016), transparent), var(--surface-1);
-  box-shadow: var(--shadow-card);
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 0;
+  cursor: pointer;
+  font: inherit;
   text-align: left;
-  transition: border-color var(--dur-1);
+  color: inherit;
+  background: rgba(0, 0, 0, .2);
+  box-shadow: inset -1px 0 0 var(--line-soft);
 }
 
-@media (hover: hover) {
-  .foe-tile:hover { border-color: var(--line-strong); }
+.quarry-tab:hover { background: rgba(255, 255, 255, .02); }
+.quarry-tab:focus-visible { outline: 2px solid var(--violet-hi); outline-offset: -2px; }
+.quarry-tab[aria-selected="true"] { background: var(--surface-1); box-shadow: inset 0 -2px 0 var(--ember-hi), inset -1px 0 0 var(--line-soft); }
+.quarry-tab.is-sov[aria-selected="true"] { box-shadow: inset 0 -2px 0 var(--r-epic), inset -1px 0 0 var(--line-soft); }
+
+.quarry-tab-face {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: radial-gradient(circle at 50% 40%, #3a211c, #140e12 75%);
+  box-shadow: inset 0 0 0 1px rgba(94, 51, 37, .8);
+  opacity: .75;
 }
 
-.foe-tile .foe-art { width: 52px; height: 52px; }
+.quarry-tab.is-sov .quarry-tab-face { background: radial-gradient(circle at 50% 40%, #33204a, #120d18 75%); box-shadow: inset 0 0 0 1px rgba(184, 139, 219, .55); }
+.quarry-tab-face .m-art { width: 92%; height: 92%; --m-line: 2.6; }
+.quarry-tab[aria-selected="true"] .quarry-tab-face { opacity: 1; }
+.quarry-tab-text { display: flex; flex-direction: column; min-width: 0; }
 
-.foe-tile-main { min-width: 0; display: flex; flex-direction: column; }
-
-.foe-tile-name {
+.quarry-tab-text b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--font-display);
-  font-size: var(--text-lg);
+  font-size: 15px;
   font-weight: 600;
-  line-height: 1.25;
+  color: var(--bone-dim);
+}
+
+.quarry-tab[aria-selected="true"] .quarry-tab-text b { color: var(--bone); }
+.quarry-tab-text small { font-size: 11.5px; color: var(--bone-faint); }
+
+.quarry-body {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  align-items: center;
+  gap: 22px;
+  padding: 18px 26px 22px 14px;
+}
+
+.quarry-art {
+  display: grid;
+  place-items: center;
+  height: 280px;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+  background: radial-gradient(circle at 50% 60%, rgba(216, 116, 63, .14), transparent 60%);
+}
+
+.quarry-art.is-sov { background: radial-gradient(circle at 50% 60%, rgba(184, 139, 219, .16), transparent 60%); }
+.quarry-art .m-art { width: 270px; height: 270px; }
+.quarry-art:focus-visible { outline: 2px solid var(--violet-hi); outline-offset: -2px; border-radius: var(--r-md); }
+.quarry-info { min-width: 0; }
+
+.quarry-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ember-hi);
+}
+
+.quarry-eyebrow.is-sov { color: var(--r-epic); }
+
+.quarry-name {
+  margin: 4px 0;
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1.1;
   color: var(--bone);
+  text-wrap: balance;
 }
 
-.foe-tile-sub {
-  margin-top: 2px;
-  font-size: var(--text-sm);
+.quarry-note {
+  max-width: 62ch;
+  margin: 0 0 14px;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-style: italic;
+  font-weight: 500;
+  color: var(--bone-dim);
+}
+
+.quarry-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+
+.quarry-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+}
+
+.quarry-stat > span {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
   color: var(--bone-faint);
-  font-variant-numeric: tabular-nums;
 }
 
-.foe-tile.is-sovereign {
-  grid-column: 1 / -1;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  border-color: rgba(184, 139, 219, .32);
-  background:
-    radial-gradient(420px 160px at 0% 50%, rgba(184, 139, 219, .12), transparent 70%),
-    var(--surface-1);
+.quarry-stat b { font-size: 17px; font-weight: 600; color: var(--bone); font-variant-numeric: tabular-nums; }
+.quarry-stat b small { margin-left: 5px; font-size: 12px; font-weight: 500; color: var(--bone-faint); }
+.quarry-stat.is-mastery { background: linear-gradient(180deg, rgba(157, 130, 224, .1), rgba(157, 130, 224, .04)), var(--surface-2); box-shadow: inset 0 0 0 1px rgba(157, 130, 224, .28); }
+.quarry-stat.is-mastery b { color: #d6c9ff; }
+.quarry-small { margin: 10px 0 0; font-size: 12px; color: var(--bone-faint); }
+.quarry-drops { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; }
+
+.quarry-drops-l {
+  margin-right: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--bone-faint);
 }
 
-.foe-tile.is-sovereign .foe-art {
-  width: 64px;
-  height: 64px;
-  background: radial-gradient(circle at 50% 40%, #35243f, #140e18 75%);
-  box-shadow: inset 0 0 0 1px rgba(184, 139, 219, .45);
+.quarry-drop {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 4px 5px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--bone-dim);
 }
 
-.foe-tile.is-sovereign .foe-tile-name { font-size: 20px; }
+button.quarry-drop { cursor: pointer; }
+button.quarry-drop:hover { box-shadow: inset 0 0 0 1px var(--line-strong); }
+.quarry-drop .mat-art,
+.quarry-drop .ico { width: 24px; height: 24px; object-fit: contain; }
+.quarry-reagents { display: inline-flex; }
+.quarry-reagents > * + * { margin-left: -9px; }
+.quarry-drop em { font-style: normal; font-weight: 500; color: var(--bone-faint); }
+.quarry-drop.is-veil { box-shadow: inset 0 0 0 1px var(--violet-edge); color: #d6c9ff; }
+
+@container (max-width: 760px) {
+  .quarry-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .quarry-body { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 14px; }
+  .quarry-art { height: 180px; }
+  .quarry-art .m-art { width: 170px; height: 170px; }
+  .quarry-name { font-size: 26px; }
+  .quarry-note { font-size: 15px; }
+  .quarry-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 
 @media (max-width: 767px) {
-  .arena {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--sp-3);
-    padding: var(--sp-3);
-  }
-
-  .arena-you {
-    display: grid;
-    grid-template-columns: 72px minmax(0, 1fr);
-    grid-template-areas:
-      "art name"
-      "art hp"
-      "art veil"
-      "art note";
-    column-gap: var(--sp-3);
-    row-gap: 6px;
-    align-items: center;
-  }
-
-  .arena-portrait { grid-area: art; width: 72px; align-self: start; border-radius: 12px; }
-  .arena-name { grid-area: name; text-align: left; font-size: var(--text-lg); }
-  .arena-you .hpbar { grid-area: hp; max-width: none; }
-  /* Under your own bars, in the same column: a name that lands under the portrait reads as a
-     label for it. A mate's bar is not your bar, so it keeps out of the areas this grid names. */
-  .arena-band { grid-column: 2; max-width: none; }
-  .arena-band .hpbar { grid-area: auto; }
-  .band-mate { max-width: 104px; }
-  /* The party fight hides the portrait/name/hp column rather than removing it, so
-     the band takes the whole row instead of leaving an empty gutter beside it. */
-  .arena.is-party .arena-you { grid-template-columns: minmax(0, 1fr); }
-  .arena.is-party .arena-band { grid-column: 1; max-width: 300px; }
-  .arena.is-party .arena-foes { grid-template-columns: minmax(0, 1fr); }
-  .arena-you .veilbar { grid-area: veil; max-width: none; }
-  .arena-you .veil-note { grid-area: note; text-align: left; }
-  .arena-you .fx-layer { right: auto; width: 72px; }
-  .arena-you .float { top: 22px; font-size: 18px; }
-
-  .arena-mid {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: baseline;
-    justify-content: space-between;
-    max-width: none;
-    padding: 8px 2px;
-    border-top: 1px solid var(--line-soft);
-    border-bottom: 1px solid var(--line-soft);
-  }
-
-  .arena-status { margin: 0; }
-  .arena-foes { min-height: 0; }
-  .foe-empty { min-height: 92px; }
   .foe-card { grid-template-columns: 48px minmax(0, 1fr); gap: 10px; padding: 7px 10px 7px 7px; }
   .foe-art { width: 48px; height: 48px; }
-  .foe-card .fx-layer { left: 7px; width: 48px; }
   .foe-name { font-size: 14px; }
   .foe-card .hpbar { height: 14px; }
-  .float { font-size: 18px; }
-  .float.crit, .float.veil, .float.strike, .float.ambush, .float.empowered { font-size: 22px; }
 
   .hunt-foot > .kpis { flex-basis: 100%; }
   .hunt-actions { width: 100%; margin-left: 0; justify-content: space-between; }
 
   .zone-map { padding: 8px; }
-  .foe-tile.is-sovereign { grid-template-columns: auto minmax(0, 1fr); }
-  .foe-tile.is-sovereign > .tag { grid-column: 2; justify-self: start; }
 }
 
 /* ================= 6. ATLAS ================= */
@@ -2556,18 +2819,27 @@ button.listing:disabled { opacity: .5; cursor: default; }
 
 /* ================= 11. PARTY ================= */
 
-/* The room: three squares in a row. One holds whoever is sitting in it, one
-   stands open and says so, and one the leader has closed carries the cross. On a
-   wide screen they keep the size four of them had. */
+/* The room and the chat: side by side while the page has the width for both, the
+   chat as tall as the room (it stands in a box that adds no height of its own) and
+   scrolling inside it; the chat under the room below that. */
+.party-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--page-gap); align-items: stretch; }
+.party-side { min-width: 0; }
+
+@media (min-width: 1280px) {
+  .party-main { grid-template-columns: minmax(0, 1fr) minmax(320px, 380px); }
+  .party-side { position: relative; min-height: 440px; }
+  .party-side > .chat { position: absolute; inset: 0; }
+  .party-side .chat-log { flex: 1 1 0; height: auto; min-height: 0; }
+}
+
+/* The room: three squares in a row, as wide as the room is. One holds whoever is
+   sitting in it, one stands open and says so, and one the leader has closed carries
+   the cross. */
 .room-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--sp-3);
   margin-bottom: var(--sp-4);
-}
-
-@media (min-width: 900px) {
-  .room-grid { grid-template-columns: repeat(3, minmax(0, 260px)); }
 }
 
 .seat {
@@ -2750,6 +3022,17 @@ button.seat-name:hover { text-decoration: underline; }
   gap: 8px;
   max-width: min(86%, 560px);
   align-self: flex-start;
+}
+
+.chat-face {
+  display: block;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 28%, #2c2140, #120e17 75%);
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 
 .msg-meta {

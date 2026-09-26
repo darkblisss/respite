@@ -52,7 +52,7 @@ ES modules need HTTP: `cd repo && python3 -m http.server 8765`, then open `http:
 <link rel="stylesheet" href="css/base.css">        <!-- reset, type styles, utilities -->
 <link rel="stylesheet" href="css/components.css">  <!-- everything reusable -->
 <link rel="stylesheet" href="css/layout.css">      <!-- the shell: topbar, sidebar, drawer; wins over components -->
-<link rel="stylesheet" href="css/pages.css">       <!-- one page only: arena, paperdoll, atlas, market, party... -->
+<link rel="stylesheet" href="css/pages.css">       <!-- one page only: hunt stage, paperdoll, atlas, market, party... -->
 ```
 
 Fonts: Spectral 500/600/700 (display) and Inter 400/500/600/700 (UI) from Google Fonts. Fallbacks are Georgia and the system UI font, so the UI stays usable if fonts are blocked.
@@ -175,7 +175,7 @@ Fixed: `--sidebar-w 232px`, `--content-max 1180px`. `--tap` is 32px, and 44px on
 | `min-width: 1024px` | desktop | 64px topbar with brand, activity chips with meta and stop buttons, gold, HP bar, connection pill, settings; sticky 232px sidebar |
 | `max-width: 1023px` | tablet | 56px topbar plus a 3px health line on its bottom edge; menu button opens the sidebar as a drawer; connection pill hides and the settings button shows a coloured dot; inputs 16px |
 | `max-width: 899px` | | Sky forecast becomes a list of rows |
-| `max-width: 767px` | | item pills put their stats under the name; the hunt arena goes single column; market listings become cards; atlas stacks (list above detail) |
+| `max-width: 767px` | | item pills put their stats under the name; the Quarry plate stacks; market listings become cards; atlas stacks (list above detail) |
 | `max-width: 599px` | phone | topbar: menu, two compact chips (icon, short name, bar), gold, settings; brand hidden; dialogs become bottom sheets; toasts span the bottom; heroes stack; `.grid-2` goes to one column; `.list-row.stack-sm` drops its end to a new line; skills grid 2 columns |
 | `max-width: 479px` | | storage slot grid 4 across |
 | `max-width: 379px` | narrow phone | tighter topbar; gutter 12px; card padding 14px |
@@ -772,7 +772,7 @@ Sizes: `.art-sm` 36px, default 44px, `.art-lg` 56px, `.art-xl` 72px. `data-tone`
 | (none) | violet: skills, XP, crafting |
 | `.bar-ember` | the hunt, Threat |
 | `.bar-gold` | bounties, market progress |
-| `.bar-good` | health outside the arena, bond when complete |
+| `.bar-good` | health off the Hunt page, bond when complete |
 | `.bar-neutral` | anything without meaning |
 | `.bar-thin` (3px), `.bar-lg` (10px) | heights; default 6px |
 | `.bar-striped` | recovering (animated stripes) |
@@ -780,14 +780,14 @@ Sizes: `.art-sm` 36px, default 44px, `.art-lg` 56px, `.art-xl` 72px. `data-tone`
 
 Always update with `setWidth(fill, pct)`. When the bar is the only place a number lives, add `role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="36"`; otherwise leave it decorative.
 
-**Health bar with numbers** (arena, foes):
+**Health bar with numbers** (the walk, the foe list, the party's rows):
 
 ```html
 <div class="hpbar"><i style="width: 78%"></i><span>87 / 112</span></div>
 <div class="hpbar hpbar-foe"><i style="width: 46%"></i><span>22 / 48</span></div>     <!-- hpbar-sm: 16px -->
 ```
 
-**Veil bar**: `<div class="veilbar"><i></i></div><div class="veil-note">Bulwark · 64 of 100</div>`; `.veilbar.is-locked` before a discipline (the note then reads "The Veil opens at Hunt 5" or "Choose a discipline").
+**Veil**: drawn on the Hunt page's ring, round your face (`ui/hunt-ring.js`); no page carries a Veil bar.
 
 **Meter**: a labelled bar.
 
@@ -1402,54 +1402,79 @@ Armaments renders a two-handed weapon as one spanning slot instead: `.doll-col.h
 ### 8.7 Hunt (`?page=hunt`)
 
 1. `.hero` with `data-tone="ember"`; the party bonus chip (`chip-violet`, `party` icon, "+20% Hunt XP · 2 of your party here") only when it applies.
-2. The fight:
+2. The fight and the walk share one stage. The ring is a canvas (`ui/hunt-ring.js`); the walk and the fight's head are DOM laid over it. The card carries the state: `data-phase` (`quiet`, `search`, `fight`), `data-vast` ("1" on the walk to a Sovereign) and `data-size` (`wide`, or `narrow` below a card of 820px, which the ring sets).
 
 ```html
-<section class="card hunt-card">
-  <div class="card-head">...The Inner of Gallowmoor · "Two or three at once · ×1.7 XP a kill"...</div>
-  <div class="arena">
-    <div class="arena-you">                                                 <!-- .is-down while recovering, .is-dead on the killing blow -->
-      <div class="fx-layer"></div>
-      <div class="portrait arena-portrait"><img src="assets/commander-default.webp" alt=""></div>
-      <div class="arena-name">Morwen</div>
-      <div class="hpbar"><i></i><span>87 / 112</span></div>
-      <div class="veilbar"><i></i></div>
-      <div class="veil-note">Bulwark · 64 of 100</div>
+<section class="card hunt-card" data-phase="search" data-vast="" data-size="wide">   <!-- .is-party on the shared fight -->
+  <div class="card-head">...The Core of The Sallow Fen · "2 or 3 at once · ×2.2 XP · ×1.4 foes"...</div>
+  <div class="hunt-stage">                                   <!-- 1130 by 500 wide; narrow it grows with the walk -->
+    <canvas class="hunt-ring" aria-hidden="true"></canvas>   <!-- the ground, the ring, the discs and plates, every blow -->
+    <div class="hunt-fight-head">                            <!-- shows while data-phase="fight" -->
+      <div class="hunt-fh-l"><b>Encounter 42</b><span>Fighting in the Core · 3 on you</span></div>
+      <div class="hunt-fh-r"><span>Another steps out in<em>17s</em></span>      <!-- a Sovereign's: "Enrages in", "Enraged ×2 · again in" -->
+        <span class="hunt-fh-pill"><span class="hunt-fh-icon"><svg class="ico"/></span><span>One waits in the dark</span></span></div>  <!-- a Sovereign's: eye-off, "No others will come" -->
     </div>
-    <div class="arena-mid">
-      <div class="arena-vs" aria-hidden="true">VS</div>
-      <div class="arena-status">Fighting</div>                             <!-- Searching, Hiding, A Sovereign, Recovering, Not hunting -->
-      <div class="arena-timer">Reinforcements in 31s</div>
+    <div class="hunt-walk">                                  <!-- hidden while data-phase="fight" -->
+      <div class="hunt-walk-you">                            <!-- .is-down while recovering; hidden in a party -->
+        <span class="hunt-face"><span class="hunt-face-in portrait-bust"><img></span></span>
+        <div class="hunt-you-name"><span class="hunt-klass" title="Rogue"><svg class="ico"/></span><span class="hunt-you-text">Bliss</span></div>
+        <div class="hpbar"><i></i><span>4,280 / 4,544</span></div>
+      </div>
+      <div class="hunt-band" hidden>                         <!-- in a party: a row each, you first -->
+        <span class="eyebrow">Shares of the take</span>
+        <div class="hunt-band-rows">
+          <div class="band-mate is-me">                        <!-- .is-down dims a fallen or absent member -->
+            <span class="hunt-face is-sm"><span class="hunt-face-in portrait-bust"><img></span></span>
+            <div class="band-main">
+              <div class="band-line"><span class="hunt-klass"><svg/></span><b class="band-name">You</b><em class="hunt-mate-share">30%</em></div>
+              <div class="hpbar hpbar-sm"><i></i><span>4,456 / 4,544</span></div>
+              <div class="hunt-sharebar"><i></i></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="hunt-walk-mid">
+        <div class="hunt-walk-state"><b>Searching the Core</b><span>Next encounter in <em>5s</em></span></div>  <!-- "Something vast approaches", "Here in" -->
+        <div class="hunt-trail"><i style="left: 5%; top: 38%"></i>...<span class="hunt-trail-you"></span><span class="hunt-trail-fog"></span></div>
+        <p class="hunt-walk-sub">Nothing is being hunted here. Choose a zone below to take up the hunt.</p>  <!-- quiet only -->
+        <div class="chip-row hunt-recap">...the last encounter (ui/recap.js): Encounter 41, 3 slain, +152 XP, what it left, 24s...</div>
+      </div>
+      <div class="hunt-coming">                              <!-- .is-sov once the Sovereign has found you; under the stage when narrow -->
+        <span class="eyebrow hunt-coming-head">What waits</span>
+        <div class="hunt-coming-rows">
+          <div class="hunt-wc-row"><button class="hunt-wc-art" type="button" data-monster="mob_t5_brute"><svg class="m-art"/></button><b>Sallow Troll</b><span class="hunt-wc-bar"><i style="width: 50%"></i></span><em>50%</em></div>
+        </div>
+        <div class="hunt-odds">
+          <span class="hunt-odds-l"><span class="hunt-pips"><i class="on"></i><i class="on"></i><i class="may"></i></span><span>2 or 3 at once</span></span>
+          <span class="hunt-odds-r"><span class="hunt-odd is-elite">Elites 20%</span><span class="hunt-odd is-sov"><svg class="ico"/>Sovereign 5%</span></span>
+        </div>
+      </div>
     </div>
+  </div>
+  <div class="hunt-below">                                   <!-- narrow only: the foes as cards (.arena-foes > .foe-card), What waits -->
     <div class="arena-foes">
-      <div class="foe-card is-target">                                     <!-- .is-elite, .is-sovereign; .is-gone fades a fallen foe out -->
-        <div class="fx-layer"></div>
+      <div class="foe-card is-target">                       <!-- .is-elite, .is-sovereign; .is-gone fades a fallen foe out -->
         <button class="foe-art" type="button" aria-label="Fen Stalker: details"><svg class="m-art" viewBox="0 0 120 120">...</svg></button>
         <div class="foe-body">
           <div class="foe-name"><span>Fen Stalker</span><span class="tag tag-elite">Elite</span></div>
           <div class="hpbar hpbar-foe"><i></i><span>22 / 48</span></div>
+          <div class="small muted mt-1" hidden>On Thane</div>   <!-- in a party: whom it is going for -->
         </div>
       </div>
-      <!-- no foes: <div class="foe-empty"><span class="foe-empty-title">The Inner lies quiet</span><span class="foe-empty-sub">Nothing is being hunted here.</span></div> -->
-      <!-- the walk after an encounter it saw begin: the sub gives way to what it came to (ui/recap.js):
-           <div class="chip-row hunt-recap"><span class="eyebrow">Encounter 41</span><span class="chip"><svg class="ico"/>3 slain</span>
-           <span class="chip chip-gold">+152 XP</span><span class="chip"><img class="mat-art">Coal</span><span class="chip"><svg class="ico"/>24s</span></div>
-           a Sovereign's adds <span class="chip chip-violet"><svg class="ico"/>Sovereign felled</span> (or "Broke away") and counts its Essence -->
     </div>
   </div>
   <div class="hunt-foot">
-    <div class="kpis">...Kills, XP/hr, Threat (with a bar), Time left...</div>     <!-- not hunting here: <p class="hunt-hint">Choose a zone below to take up the hunt.</p> -->
-    <div class="hunt-actions">
-      <label class="switch"><input type="checkbox"> Hide when Threat peaks</label>
-      <div class="btn-row"><button class="btn btn-quiet" type="button">Pull back</button><button class="btn btn-ember" type="button">Change hunt</button></div>
-    </div>
+    <div class="kpis">...Kills, XP/hr, DPS, Time left; in a party Encounters, Your damage, Party damage, Your share (with a bar), Time out...</div>
+    <div class="hunt-loot"><span class="eyebrow">This run</span>
+      <div class="hunt-loot-tiles"><span class="hunt-loot-tile" data-tip="Coal"><img class="mat-art"><b>14</b></span></div></div>  <!-- .is-new pops a tile that just grew -->
+    <div class="hunt-actions"><div class="btn-row"><button class="btn btn-quiet" type="button">Pull back</button><button class="btn btn-ember" type="button">Change hunt</button></div></div>
   </div>
 </section>
 ```
 
-- Floats: append `<span class="float {kind} lane{0|1|2}">14!</span>` to the target's `.fx-layer` and remove it after 1 second. Kinds: `hit`, `crit` (gold), `strike`, `ambush`, `empowered`, `veil`, `volley` (violet), `bleed`, `thorns`, `hurt`, `ambushed` (ember), `heal` (green), `block`, `dodge`, `glance`, `join`, `enrage` (small caps words). Cycle the lane so blows do not overlap. Show at most the last 8 per frame.
-- Struck: remove `.struck` from the art, read `offsetWidth`, add `.struck` (a 260ms shake).
-- Monster drawings: `monsterArt(mob, elite)` from `popups/foe.js` draws the foe's own plate from `ui/monster-art.js` (`MONSTER_ART` by monster id; v4's five `KIND_ART` drawings are the fallback) inside `svg.m-art` (`.elite`, `.sovereign` set the rim through `--m-rim`; `--m-line` thickens it in small tiles). Parts are classes: `m-body`, `m-shade` (the far limbs), `m-cloth`, `m-bark`, `m-plate`, `m-lit`, `m-void`, `m-eye`, `m-glow`, `m-ivory`, `m-steel`, `m-edge`, `m-crack`, `m-bone`, `m-rope`, `m-shadow`, and the regions' own `m-ash`, `m-moss`, `m-sallow`, `m-ice`, `m-star`, `m-veil`, `m-fire`, `m-ghost`, `m-blood`, `m-rust`, `m-wood`, `m-water` (with `-glow` halos for ice, star and the Veil).
+- The ring: `huntRing({ onFoe, onMode })` gets a snapshot every store frame (`sync`) and every `hunt:fx` event (`blow`), and runs the swing timers on between them. A foe's distance from you is its swing timer: it steps in as the blow comes round and strikes from the inner ring (marked 2s, 1s, now). The one every hunter strikes (the first in the roster) is on the solid line with a TARGET chip; a Sovereign has a violet rim and the crown. Beside every foe (wide only) a plate: name, chips, "Strikes in 1.2s" ("Strikes Thane in 1.2s" in a party), health. Under your face the Veil as a ring, a Mage's three opening casts as diamonds, the discipline's glyph and your name, your health. Techniques are drawn as themselves (Devastating Strike, Ambush, Volley); a reinforcement's first blow says AMBUSHED. Eyes in the dark are the ones waiting for a gap, and the next one's before its window runs out; violet ones on the walk to a Sovereign.
+- Struck (narrow only, on the list's cards): remove `.struck` from the art, read `offsetWidth`, add `.struck` (a 260ms shake).
+- Monster drawings: `monsterArt(mob, elite)` from `popups/foe.js` draws the foe's own plate from `ui/monster-art.js` (`MONSTER_ART` by monster id; v4's five `KIND_ART` drawings are the fallback) inside `svg.m-art` (`.elite`, `.sovereign` set the rim through `--m-rim`; `--m-line` thickens it in small tiles). Parts are classes: `m-body`, `m-shade` (the far limbs), `m-cloth`, `m-bark`, `m-plate`, `m-lit`, `m-void`, `m-eye`, `m-glow`, `m-ivory`, `m-steel`, `m-edge`, `m-crack`, `m-bone`, `m-rope`, `m-shadow`, and the regions' own `m-ash`, `m-moss`, `m-sallow`, `m-ice`, `m-star`, `m-veil`, `m-fire`, `m-ghost`, `m-blood`, `m-rust`, `m-wood`, `m-water` (with `-glow` halos for ice, star and the Veil). The ring paints the same drawings as pictures, the m- rules read off pages.css.
 - Foe cards are keyed by foe uid: add new ones, update health in place, give fallen ones `.is-gone` and remove them after 700ms.
 
 3. Zones, the region as a map. `zoneMap({ onZone, onView })` from `ui/zone-map.js` builds it and `paint({ tier, active, locked, hunters, counts, party, view })` keeps it current. The drawing is `ui/region-map.js`, one map a region, seeded so the same tier always draws the same ground (ash and burnt stumps at Lv 1, peat pools and gibbets, snow over tunnel mouths, pine and cairns, dead water, old growth round star iron, warm cracked stone and a wyrm's bones, ruins in mist, roots into a maw at Lv 80), in two sheets: `regionLand(tier)` is the ground as a whole SVG document, shown as an `<img>` (built once a region for the session), and `regionOverlay(tier)` the live rings over it. Each is on a layer of its own, so lighting a ring never redraws the ground's filters. `regionMap(tier)` is both in one, for the kit.
@@ -1497,34 +1522,31 @@ Armaments renders a two-handed weapon as one spanning slot instead: `.doll-col.h
 - `view: "party"` (the Party button, offered while `party` is true) leaves the realm off the map altogether; the page keeps the choice for the session.
 - The drawing is built once a region. Pins are kept by who they are and moved, made again only when their face, name or state changes, and laid out again when the map changes size, never on a tick. A tip that changes (the "out 40m" in it) is set on its pin and nothing else. The bands have no fill fade: a fade repaints the rings every frame it runs.
 
-4. Quarry: `.grid-cards` of three `button.foe-tile` (`span.foe-art` with the drawing, `span.foe-tile-main` > `.foe-tile-name` + `.foe-tile-sub` "Stalker · 48 health · swings every 2.4s") and one `button.foe-tile.is-sovereign` spanning the row, with a `tag-sovereign` at its end.
-
-Phones (below 768px): the arena is one column: you in a strip (72px portrait beside your bars), the status and timer on one ruled line, then the foe cards at full width with names that wrap rather than truncate. KPIs go two by two; the switch and buttons share a line. The Zones map sits over its rows.
-
-Added with the live page (pages.css, The Hunt), for the party's shared fight:
+4. Quarry, one plate: a tab for each of the region's three and its Sovereign, the plate given to the one picked, as it stands in the zone you hunt (or last looked at).
 
 ```html
-<div class="arena is-party">                                <!-- the shared fight, never your own -->
-  <div class="arena-you">
-    ...portrait, name, your hpbar...
-    <div class="arena-band">                                <!-- the rest of the warband; hidden when alone -->
-      <div class="band-mate is-down">                       <!-- .is-down dims a fallen or absent member -->
-        <span class="band-name">Thane</span>
-        <div class="hpbar hpbar-sm"><i></i><span>25 / 25</span></div>
-      </div>
-    </div>
+<div class="card quarry-plate">                               <!-- container-type: inline-size; stacks under 760px -->
+  <div class="quarry-tabs" role="tablist">
+    <button class="quarry-tab" role="tab" aria-selected="true" data-monster="mob_t5_skirmisher"><span class="quarry-tab-face"><svg class="m-art"/></span><span class="quarry-tab-text"><b>Fen Lurker</b><small>Skirmisher</small></span></button>
+    <button class="quarry-tab is-sov" role="tab" aria-selected="false" data-monster="mob_t5_sovereign">...</button>
   </div>
-  ...
-  <div class="arena-foes">
-    <div class="foe-card">
-      ...art, name, hpbar...
-      <div class="small muted mt-1">On Thane</div>           <!-- who the foe is on; existing utilities -->
+  <div class="quarry-body" role="tabpanel">
+    <button class="quarry-art" type="button" data-monster="mob_t5_skirmisher"><svg class="m-art"/></button>   <!-- opens the foe popup -->
+    <div class="quarry-info">
+      <span class="quarry-eyebrow">Skirmisher · seldom seen in the Core</span>
+      <h3 class="quarry-name">Fen Lurker</h3>
+      <p class="quarry-note">Fast and thin. Hits often and hits light.</p>
+      <div class="quarry-stats"><div class="quarry-stat"><span>Health</span><b>4,115</b></div>...Attack, Swings every, Defence, A kill pays, Mastery a kill (.is-mastery)...</div>
+      <p class="quarry-small">As it stands in the Core: health and attack ×1.4, XP ×2.2. Mastery goes to the weapon in your hands.</p>
+      <div class="quarry-drops"><span class="quarry-drops-l">Leaves</span><span class="quarry-drop"><span class="quarry-reagents"><img class="mat-art">...</span>A reagent <em>45% of kills</em></span><button class="quarry-drop is-veil" data-item="...">...Veiled Fragment <em>Elites, Inner and Core</em></button></div>
     </div>
   </div>
 </div>
 ```
 
-`.arena-band` is a column of rows under your own bars (240px at most, in the same column as your hpbar on phones). `.band-mate` is a 72px name beside the bar; `.band-name` truncates rather than wraps. `.arena.is-party` is the one state class: it turns `.arena-foes` into an `auto-fit` grid of 230px cards, because a party's roster scales with it (up to a dozen) and they should stand two abreast rather than run down the page. One foe still gets one wide card, and below 768px it is one column again. Nothing else about the arena changes.
+Narrow (a card under 820px): the stage grows with the walk, which stacks (you in a strip beside your bars from 560px up, over the way on below that); the ring is drawn in the card's own pixels with no plates, the foes listed as cards under the stage, and What waits moves under it too. KPIs go two by two below 600px. The Zones map sits over its rows.
+
+On the shared fight the card is `.is-party`: the walk shows `.hunt-band` in place of your own strip, the ring draws the party (you in the middle of a three) with each hunter's share after their name and a line from each foe to whoever its next blow is for, and the narrow list's cards say whom each foe is on ("On Thane").
 
 ### 8.8 Atlas (`?page=atlas`)
 
@@ -1707,12 +1729,13 @@ Seven columns in one ruled strip; below 900px, seven rows.
 ```
 
   `member-doing` tones: `ember` for hunting, `violet` for crafting and gathering, none for offline ("Last seen 2h ago"). Bonus chip: "Counts toward your bonus" (good), "Not hunting", "Other ground", "Offline". Your own card: "+20% to your Hunt XP". Kick only for the leader, never on yourself.
-- Chat (`card card-flush chat` in a `.grid-2` with Invites):
+- The room and the chat in `.party-main`: side by side from 1280px, the chat in `.party-side` (a box that adds no height, so the chat is exactly as tall as the room and its log scrolls), the chat under the room below that. The room's three squares fill its width (`.room-grid`, three columns).
+- Chat (`card card-flush chat` in `.party-side`):
 
 ```html
 <ol class="chat-log" aria-live="polite">
   <li class="msg-note">Thane joined the party · 2d ago</li>
-  <li class="msg"><span class="avatar avatar-sm">T</span><div><div class="msg-meta"><b>Thane</b><time>14m</time></div><p class="msg-text">Bring poultices.</p></div></li>
+  <li class="msg"><span class="chat-face portrait-bust" aria-hidden="true"><img></span><div><div class="msg-meta"><b>Thane</b><time>14m</time></div><p class="msg-text">Bring poultices.</p></div></li>   <!-- their face off the roster, as the Hunt page's map draws it -->
   <li class="msg is-own"><div><div class="msg-meta"><time>6m</time></div><p class="msg-text">I have 30 spare.</p></div></li>
 </ol>
 <form class="composer">

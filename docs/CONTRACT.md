@@ -278,7 +278,7 @@ Response:
 { ok: false, error: "unauthorized" | "outdated" | "bad_request" | "server_error", v? }
 ```
 
-`party` is `sessionView()` of the party hunt the caller is out on, and absent when they are not. Beside who is in it and their shares, it says `vast: true` on the walk to the ground's Sovereign; its `enc` gives each foe's `target` (the user id it is going for) and, for a Sovereign's fight, `enrage` (how often it has risen) and `enrageIn` (ms until it rises again).
+`party` is `sessionView()` of the party hunt the caller is out on, and absent when they are not. Beside who is in it and their shares, it says `vast: true` on the walk to the ground's Sovereign; its `enc` gives each foe's `target` (the user id it is going for) and `timer` (ms until it swings), `reinforceIn` (ms until the window brings another; null in a Sovereign's fight) and, for a Sovereign's fight, `enrage` (how often it has risen) and `enrageIn` (ms until it rises again). Every hunter, in the session and in the encounter, carries `klass` (their discipline or null); the encounter's add `veil` (0 to 100) and `volley` (a Mage's opening casts left).
 
 The handler runs one transaction:
 1. Lock the save row (create a fresh one if none exists).

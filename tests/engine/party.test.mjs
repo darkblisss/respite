@@ -243,6 +243,11 @@ await run(async () => {
 
     const seen = P.encounterView(two);
     same("the view says whom each foe is on, by user id", seen.foes.map((f) => f.target), who(two));
+    // What the Hunt page's ring runs on between answers.
+    same("and how long until each of them swings", seen.foes.map((f) => f.timer), two.foes.map((f) => Math.max(0, Math.round(f.timer))));
+    same("and how long until the next steps out of the dark", seen.reinforceIn, Math.max(0, Math.round(two.reinforceAt - two.clock)));
+    same("and each hunter's discipline, Veil and opening casts", seen.hunters.map((u) => [u.klass, u.veil, u.volley]),
+      two.hunters.map((u) => [u.stats.klass || null, Math.round(u.veil || 0), u.volley || 0]));
   }
 
   section("When one of them goes down");
@@ -521,6 +526,7 @@ await run(async () => {
 
     const view = P.sessionView(s);
     check("the view says where the party is and what it is doing", view.zone === "outer" && (view.phase === "search" || view.phase === "fight"));
+    same("and each hunter's discipline, for the glyph beside their name", view.hunters.map((u) => u.klass), s.hunters.map((u) => u.stats.klass || null));
     check("and carries no seed, dice or stat lines", !/\bseed\b|\bdice\b|maxHp|critDmg/.test(JSON.stringify(view)));
   }
 });

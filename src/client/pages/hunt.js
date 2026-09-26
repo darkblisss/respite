@@ -1,41 +1,52 @@
 /* ============================================================
    Respite · pages/hunt.js · The Field
    ------------------------------------------------------------
-   #/skill/warfare. The hunt as it happens: your commander and up
-   to three foes, every blow floating off whoever took it, what
-   the fight is doing and its numbers. Under it the region you
-   stand in, drawn as a map with its four zones as rings and who
+   #/skill/warfare. The hunt as it happens, on one stage. Between
+   encounters it is the walk: you, the way on to the next one, what
+   the last came to, and what waits at the end of it. In one it is
+   the Closing Ring (ui/hunt-ring.js): you in the middle and every
+   foe out on the ring at the distance its next swing is away. Under
+   it the run's numbers and what it has turned up; under that the
+   region you stand in, drawn as a map with its four zones and who
    is out on each (a ring or a row opens the zone popup, where a
-   hunt is taken up), and the quarry that lives there.
+   hunt is taken up), and the quarry that lives there, one at a
+   time on a plate.
 
-   Built once, then updated in place about ten times a second.
-   Foe cards are keyed by hunt and uid: reinforcements slide in,
-   the fallen fade out. Blows arrive as hunt:fx events while the
-   store plays a frame; they are queued and drawn after the cards
-   have caught up, the way v4 drained its combatFx.
+   Built once, then updated in place about ten times a second. The
+   ring draws at the screen's rate by itself: the page hands it a
+   snapshot of the fight each time the store plays a frame, and
+   every blow it hears of (hunt:fx, queued while the store plays and
+   passed on once the ring has caught up, the way v4 drained its
+   combatFx). The walk and the fight's head are ordinary DOM over it.
 
-   While the party is out and this player is on it, the same arena
+   While the party is out and this player is on it, the same stage
    draws the shared fight instead (store.partyHunt, which is the
    server's sessionView and nothing else). That fight is not played
    here and cannot be: two members are at different clocks and hold
-   dice that cannot be synchronised, so the page renders what came
-   back in the last answer and no more.
+   dice that cannot be synchronised, so the page draws what came back
+   in the last answer, and the ring runs the swing timers on from it.
    ============================================================ */
 
 import { h, on, setAttr, setText, setWidth, toggleClass } from "../ui/dom.js";
 import { iconEl, artEl } from "../ui/icons.js";
-import { fmt, fmtStat, fmtWhole, fmtTime } from "../ui/format.js";
+import { fmt, fmtStat, fmtWhole, fmtTime, fmtGold, chancePct } from "../ui/format.js";
 import { openPopup, portraitImg, paintPortrait } from "../ui/widgets.js";
 import { monsterArt } from "../ui/popups/foe.js";
 import { huntChips, chipNode, partyHere } from "../ui/popups/zone.js";
 import { zoneMap, zoneNotes } from "../ui/zone-map.js";
 import { recapTracker } from "../ui/recap.js";
+import { huntRing } from "../ui/hunt-ring.js";
 import { serverMs } from "../store.js";
 import { CONFIG } from "../../shared/config.js";
-import { GameData, getMonster, getZone, getSkill, getClass, foesOf, sovereignOf, regionOfTier } from "../../shared/registry.js";
-import { campPlan, huntRates } from "../../shared/combat.js";
+import {
+  GameData, getMonster, getZone, getSkill, getClass, foesOf, sovereignOf, regionOfTier,
+  veilBandOfTier, fragmentOfTier, essenceOfTier,
+} from "../../shared/registry.js";
+import { campPlan, huntRates, foeNumbers } from "../../shared/combat.js";
 import { itemDef, itemName } from "../../shared/items.js";
 import { statsOf, canPickClass, recovering, myClass, xpProgress } from "../../shared/stats.js";
+import { xpMult } from "../../shared/progression.js";
+import { companionBonus } from "../../shared/companions.js";
 import { currentRegion } from "../../shared/world.js";
 
 const H = CONFIG.hunt;
@@ -44,20 +55,21 @@ const IDLE_CAP = CONFIG.time.idleCapMs;
 const FX_STALE_MS = 1500;       // simulated age past which a blow is not worth drawing
 const FX_QUEUE_MAX = 60;
 const GONE_MS = 700;            // the fade in pages.css, then the card goes
-const DEAD_MS = 1400;
 
-// No floating text of any kind any more (no "Crit", "Glance", damage numbers):
-// a health bar winding down says how the fight is going, and the DPS on the run
-// bar says how fast. A struck card still shakes (see strike() below), which is
-// the one bit of hit feedback that's left.
-const STRUCK = new Set(["hit", "crit", "strike", "ambush", "volley", "empowered", "hurt", "ambushed", "block", "kill"]);
+// A struck card in the narrow list still shakes: the list is what a phone has instead of plates.
+const STRUCK = new Set(["hit", "crit", "strike", "ambush", "volley", "empowered", "thorns", "bleed"]);
 
 const WORDS = { 1: "one", 2: "two", 3: "three" };
 const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : "");
+const lower = (id) => String(id).toLowerCase();
 
 const huntKey = (c) => (c.id != null ? c.id : c.startedAt);
 const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 const sameId = (a, b) => a != null && b != null && String(a).toLowerCase() === String(b).toLowerCase();
+const ZONE_INDEX = new Map(GameData.ZONES.map((z, i) => [z.id, i]));
+
+// A countdown: whole seconds, never 0 while it still runs, minutes once it is long.
+const secs = (ms) => (ms >= 60000 ? fmtTime(ms) : `${Math.max(1, Math.ceil(Math.max(0, ms) / 1000))}s`);
 
 /* The party's fight, when the server says this player is out on one. It only ever comes off an
    answer, never off the save, and it is absent the moment they are not in it. */
@@ -75,7 +87,7 @@ function namesOf(ctx) {
   const members = ctx.party && Array.isArray(ctx.party.members) ? ctx.party.members : [];
   const out = new Map();
   members.forEach((m) => {
-    if (m && m.user_id) out.set(String(m.user_id).toLowerCase(), cap(String(m.username || "Someone")));
+    if (m && m.user_id) out.set(lower(m.user_id), cap(String(m.username || "Someone")));
   });
   return out;
 }
@@ -86,12 +98,12 @@ function skinsOf(ctx) {
   const members = ctx.party && Array.isArray(ctx.party.members) ? ctx.party.members : [];
   const out = new Map();
   members.forEach((m) => {
-    if (m && m.user_id && typeof m.skin === "string") out.set(String(m.user_id).toLowerCase(), m.skin);
+    if (m && m.user_id && typeof m.skin === "string") out.set(lower(m.user_id), m.skin);
   });
   return out;
 }
 
-// The zone last looked at this session: the quiet arena offers to hunt it again.
+// The zone last looked at this session: the quiet stage offers to hunt it again.
 let lastZone = "outer";
 
 /* ================= WHO ELSE IS OUT ================= */
@@ -181,14 +193,14 @@ export default {
       const t = setTimeout(() => { timers.delete(t); fn(); }, ms);
       timers.add(t);
     };
-    const sigs = { tags: null, next: null, company: null, quarry: null, band: null, drops: null, recap: null };
+    const sigs = { tags: null, next: null, company: null, band: null, drops: null, recap: null, coming: null, plate: null, tabs: null, quarry: null };
     // XP/hr and DPS eased toward their true value each tick, so a combat system that
     // only actually changes these numbers at a swing or a kill still reads as live
     // instead of sitting still between hits and then jumping.
     let dispXp = null;
     let dispDps = null;
-    const mates = new Map();   // the party's other hunters, by user id
-    let wasParty = false;      // which fight the arena was last drawn for
+    const mates = new Map();   // the party's rows in the walk, by user id
+    let wasParty = false;      // which fight the stage was last drawn for
     /* The party's fight while this camp is not on it: after a fall, after breaking away, or
        before ever joining. The server stops sending a camp the fight the moment it is off
        the roster, so this is asked for on its own (party_hunt_view), as the Party page does. */
@@ -197,8 +209,13 @@ export default {
     let watchAsking = false;
     let onFight = false;       // drawn on the party's fight last time round
     let fell = false;          // and went down in it: the camp is watching because it fell
-    let joinMode = false;      // the arena's main press is "Join your party"
+    let joinMode = false;      // the card's main press is "Join your party"
     const WATCH_MS = 4000;
+    // The last party answer the ring was given, and when it came: its clocks run on from then.
+    let partySeen = null;
+    let partySeenAt = 0;
+    let walkFull = 0;          // the longest this walk has been seen to be, for the trail
+    let size = "wide";         // what the ring is drawing at: "wide" or "narrow"
     const offNews = ctx.on("store:news", (e) => {
       // The death is settled in the same answer that takes the camp off the roster.
       if (e && e.type === "hunt:death" && onFight) fell = true;
@@ -232,41 +249,78 @@ export default {
           h("p.lr-sub", "Warrior, Rogue or Mage. It opens the Veil and shapes every fight after. Set once.")),
         h("div.lr-end", h("button.btn.btn-primary", { type: "button", onClick: () => openPopup("class", ctx) }, "Choose"))));
 
-    /* ================= THE FIGHT ================= */
+    /* ================= THE STAGE ================= */
 
     const huntTitle = h("h2.card-title");
     const huntSub = h("p.card-sub");
     const company = h("div.card-actions");
     const huntHead = h("div.card-head", h("div", huntTitle, huntSub), company);
 
-    const youPortrait = h("div.portrait.portrait-bust.arena-portrait", portraitImg(ctx.state.player.skin));
-    // The face in the arena is yours, so it is the skin on the save.
+    const ring = huntRing({
+      onFoe: (id) => openPopup("foe", ctx, id),
+      onMode: (mode) => setSize(mode),
+    });
+
+    // Over the ring while it is fought: which encounter, and when the next one steps out.
+    const fhTitle = h("b");
+    const fhSub = h("span");
+    const fhNextLabel = document.createTextNode("");
+    const fhNextTime = h("em");
+    const fhNext = h("span", fhNextLabel, fhNextTime);
+    const fhPillIcon = h("span.hunt-fh-icon");
+    const fhPillText = h("span");
+    const fhPill = h("span.hunt-fh-pill", { hidden: true }, fhPillIcon, fhPillText);
+    const fightHead = h("div.hunt-fight-head",
+      h("div.hunt-fh-l", fhTitle, fhSub),
+      h("div.hunt-fh-r", fhNext, fhPill));
+
+    /* The walk. Alone: your face, the discipline's glyph before your name, your health, and
+       nothing of the Veil, which every encounter opens the same way. With the party: each
+       of you, and each one's share of the take so far. */
+    const youFace = h("span.hunt-face-in.portrait-bust", portraitImg(ctx.state.player.skin));
+    // The face on the stage is yours, so it is the skin on the save.
     let youSkinSig = ctx.state.player.skin;
-    const youName = h("div.arena-name");
+    const youKlass = h("span.hunt-klass");
+    let youKlassSig = null;
+    const youName = h("span.hunt-you-text");
     const youFill = h("i");
     const youText = h("span");
-    // The rest of the warband, only while the party is out: name and health, one row each.
-    const band = h("div.arena-band", { hidden: true });
     const youHp = h("div.hpbar", youFill, youText);
-    // band lives inside arena-you on purpose (the mobile grid places it beside the
-    // portrait column): a party fight hides your own portrait/name/hp, not the whole
-    // node, or the band hiding right along with its parent is exactly how nobody's
-    // square ever showed up.
-    const you = h("div.arena-you", youPortrait, youName, youHp, band);
-    let veil = null;   // { bar, fill, note }, only once a discipline is held
+    const walkYou = h("div.hunt-walk-you",
+      h("span.hunt-face", youFace),
+      h("div.hunt-you-name", youKlass, youName),
+      youHp);
+    const bandRows = h("div.hunt-band-rows");
+    const band = h("div.hunt-band", { hidden: true }, h("span.eyebrow", "Shares of the take"), bandRows);
 
-    const status = h("div.arena-status");
-    const timer = h("div.arena-timer");
-    const emptyTitle = h("span.foe-empty-title");
-    const emptySub = h("span.foe-empty-sub");
-    // On the walk after an encounter, what it came to takes the place of the line under the title.
+    const walkTitle = h("b");
+    const walkInLabel = document.createTextNode("");
+    const walkIn = h("em");
+    const walkWhen = h("span", walkInLabel, " ", walkIn);
+    const trailYou = h("span.hunt-trail-you");
+    const trailSteps = Array.from({ length: 14 }, (_, i) => h("i", { style: { left: `${5 + i * 6.6}%`, top: `${i % 2 ? 58 : 38}%` } }));
+    const trail = h("div.hunt-trail", { "aria-hidden": "true" }, trailSteps, trailYou, h("span.hunt-trail-fog"));
+    const walkSub = h("p.hunt-walk-sub");
+    // On the walk after an encounter, what it came to (ui/recap.js).
     const recapRow = h("div.chip-row.hunt-recap", { hidden: true });
-    const empty = h("div.foe-empty", emptyTitle, emptySub, recapRow);
-    const foesBox = h("div.arena-foes", empty);
-    const arena = h("div.arena",
-      you,
-      h("div.arena-mid", status, timer),
-      foesBox);
+    const walkMid = h("div.hunt-walk-mid",
+      h("div.hunt-walk-state", walkTitle, walkWhen),
+      trail, walkSub, recapRow);
+
+    // What waits: the three kinds that walk the zone and how often, or, once it has found you, the Sovereign.
+    const comingHead = h("span.eyebrow.hunt-coming-head");
+    const comingRows = h("div.hunt-coming-rows");
+    const comingOdds = h("div.hunt-odds");
+    const coming = h("div.hunt-coming", comingHead, comingRows, comingOdds);
+
+    const walk = h("div.hunt-walk", walkYou, band, walkMid, coming);
+    const stage = h("div.hunt-stage", ring.node, fightHead, walk);
+
+    /* A phone has no room for plates beside the foes: under the stage it gets the foes as a
+       list (the cards, keyed by hunt and uid: reinforcements slide in, the fallen fade out),
+       and What waits moves down here beside them. */
+    const foesBox = h("div.arena-foes", { hidden: true });
+    const below = h("div.hunt-below", foesBox);
 
     // The label is a node too: the party's fight has different numbers to report in the same strip.
     const kpi = (label, withBar) => {
@@ -278,23 +332,30 @@ export default {
     const kKills = kpi("Kills");
     const kRate = kpi("XP/hr");
     const kDps = kpi("DPS");
-    // The fourth box is shared: solo shows what this run has turned up (a stack of
-    // icons, not a chance meter -- that number never told you anything useful);
-    // the party fight still shows your share of the group's damage in it instead.
-    const kSov = kpi("Sovereign", true);
-    const kSovBar = kSov.node.querySelector(".bar");
-    const dropsList = h("div.kpi-drops", { hidden: true });
-    kSov.node.append(dropsList);
+    // Your share of the party's take, or while watching, how you stand. Never shown alone.
+    const kShare = kpi("Your share", true);
+    const kShareBar = kShare.node.querySelector(".bar");
     const kLeft = kpi("Time left");
-    const kpis = h("div.kpis", kKills.node, kRate.node, kDps.node, kSov.node, kLeft.node);
-    const hint = h("p.hunt-hint");
+    const kpis = h("div.kpis", kKills.node, kRate.node, kDps.node, kShare.node, kLeft.node);
+    // What this run has turned up, a tile a thing.
+    const lootTiles = h("div.hunt-loot-tiles");
+    const loot = h("div.hunt-loot", { hidden: true }, h("span.eyebrow", "This run"), lootTiles);
 
     const pullBtn = h("button.btn.btn-quiet", { type: "button" }, "Pull back");
     const goBtn = h("button.btn.btn-ember", { type: "button" }, "Change hunt");
-    const huntCard = h("section.card.hunt-card",
+    const huntCard = h("section.card.hunt-card", { dataset: { size, phase: "quiet" } },
       huntHead,
-      arena,
-      h("div.hunt-foot", kpis, hint, h("div.hunt-actions", h("div.btn-row", pullBtn, goBtn))));
+      stage,
+      below,
+      h("div.hunt-foot", kpis, loot, h("div.hunt-actions", h("div.btn-row", pullBtn, goBtn))));
+
+    function setSize(mode) {
+      size = mode === "narrow" ? "narrow" : "wide";
+      huntCard.dataset.size = size;
+      // What waits sits in the walk while there is room for it, and under the stage when there is not.
+      const host = size === "narrow" ? below : walk;
+      if (coming.parentNode !== host) host.appendChild(coming);
+    }
 
     /* ================= ZONES AND QUARRY ================= */
 
@@ -307,7 +368,7 @@ export default {
         lastZone = zoneId;
         openPopup("zone", ctx, tier, zoneId);
       },
-      onView: (view) => { groundView = view; },
+      onView: (v) => { groundView = v; },
     });
     const zones = h("section.section",
       h("div.section-head",
@@ -317,31 +378,18 @@ export default {
         h("div.section-end", away)),
       h("div.card.zone-map", map.node));
 
+    // The quarry as one plate: a tab for each that lives here, the plate given to the one picked.
     const quarrySub = h("p.section-sub");
-    const quarryGrid = h("div.grid-cards");
+    const plateTabs = h("div.quarry-tabs", { role: "tablist", "aria-label": "What lives here" });
+    const plateBody = h("div.quarry-body", { role: "tabpanel" });
     const quarry = h("section.section",
       h("div.section-head", h("div", h("h2.section-title", "Quarry"), quarrySub)),
-      quarryGrid);
+      h("div.card.quarry-plate", plateTabs, plateBody));
+    let platePick = null;      // which of the four, by monster id
 
     view.appendChild(h("div.page", hero, huntCard, zones, quarry));
 
-    function buildQuarry(tier) {
-      const region = regionOfTier(tier);
-      setText(quarrySub, `What lives in ${region.name}. Pick one to see what it hits for and what it drops.`);
-      const tile = (mob) => {
-        const sov = mob.archetype === "sovereign";
-        const sub = sov
-          ? `Sovereign · comes on its own odds, with ${GameData.SOVEREIGN.escorts} Elites · enrages every ${GameData.SOVEREIGN.enrageMs / 1000}s`
-          : `${GameData.ARCHETYPES[mob.archetype].name} · ${fmt(mob.hp)} health · swings every ${(mob.speed / 1000).toFixed(1)}s`;
-        return h("button.foe-tile", { type: "button", class: { "is-sovereign": sov }, dataset: { monster: mob.id } },
-          h("span.foe-art", { html: monsterArt(mob) }),
-          h("span.foe-tile-main", h("span.foe-tile-name", mob.name), h("span.foe-tile-sub", sub)),
-          sov ? h("span.tag.tag-sovereign", "Sovereign") : null);
-      };
-      quarryGrid.replaceChildren(...foesOf(tier).map(tile), tile(sovereignOf(tier)));
-    }
-
-    /* ================= FOE CARDS ================= */
+    /* ================= FOE CARDS (NARROW) ================= */
 
     const cards = new Map();   // `${hunt}:${uid}` -> { node, art, fill, text, on, gone }
 
@@ -352,19 +400,19 @@ export default {
       const text = h("span");
       const art = h("button.foe-art", { type: "button", "aria-label": `${mob.name}: details`, dataset: { monster: mob.id }, html: monsterArt(mob, f.elite) });
       // In a party, whom it is going for (UI-KIT.md: the line under the bar, in existing utilities).
-      const on = h("div.small.muted.mt-1", { hidden: true });
+      const onLine = h("div.small.muted.mt-1", { hidden: true });
       const node = h("div.foe-card", { class: { "is-elite": f.elite && !sov, "is-sovereign": sov } },
         art,
         h("div.foe-body",
           h("div.foe-name", h("span", mob.name), sov ? h("span.tag.tag-sovereign", "Sovereign") : f.elite ? h("span.tag.tag-elite", "Elite") : null),
           h("div.hpbar.hpbar-foe", fill, text),
-          on));
-      return { node, art, fill, text, on, gone: false };
+          onLine));
+      return { node, art, fill, text, on: onLine, gone: false };
     }
 
     /* One roster of foe cards for both fights, and the same one either way: a party's
        encounter is one shared roster (up to CONFIG.hunt.maxFoes, scaled, never one per
-       hunter), so it draws like your own. The one thing a party's cards add is whom each
+       hunter), so it lists like your own. The one thing a party's cards add is whom each
        foe is going for (`onOf`): a foe keeps the hunter it picked until they fall
        (partyHunt.js), so the name holds still long enough to read. */
     function syncFoes(foes, hunt, onOf = null) {
@@ -395,10 +443,7 @@ export default {
         setAttr(card.on, "hidden", !who);
         if (who) setText(card.on, who);
       });
-
-      let fading = false;
-      cards.forEach((card) => { if (card.gone) fading = true; });
-      setAttr(empty, "hidden", foes.length > 0 || fading);
+      setAttr(foesBox, "hidden", size !== "narrow" || (!foes.length && !cards.size));
     }
 
     /* ================= THE LAST ENCOUNTER ================= */
@@ -428,7 +473,105 @@ export default {
         recapRow.replaceChildren(...(r ? recapChips(r) : []));
       }
       setAttr(recapRow, "hidden", !r);
-      setAttr(emptySub, "hidden", !!r);
+    }
+
+    /* ================= WHAT WAITS ================= */
+
+    // How many at once, as three diamonds: lit for the fewest, outlined for the most.
+    const pips = (lo, hi) => h("span.hunt-pips", { "aria-hidden": "true" },
+      [1, 2, 3].map((i) => h("i", { class: { on: i <= lo, may: i > lo && i <= hi } })));
+
+    function paintComing(tier, zoneId, vast, isParty) {
+      const sig = `${tier}|${zoneId}|${vast ? 1 : 0}|${isParty ? 1 : 0}`;
+      if (sig === sigs.coming) return;
+      sigs.coming = sig;
+      const z = getZone(zoneId);
+      const region = regionOfTier(tier);
+      toggleClass(coming, "is-sov", vast);
+      setText(comingHead, vast ? "It has found you" : "What waits");
+      if (vast) {
+        const it = sovereignOf(tier);
+        const S = GameData.SOVEREIGN;
+        comingRows.replaceChildren(
+          h("div.hunt-wc-row.is-sov",
+            h("button.hunt-wc-art.is-sov", { type: "button", "aria-label": `${it.name}: details`, dataset: { monster: it.id }, html: monsterArt(it) }),
+            h("span.hunt-wc-sov-name", h("b", it.name), h("small", `Sovereign of ${region ? region.name : "this ground"}`))),
+          h("div.hunt-sov-line", iconEl("swords"), h("span", `${cap(WORDS[S.escorts] || String(S.escorts))} Elites at its back. No others will come.`)),
+          h("div.hunt-sov-line", iconEl("hourglass"), h("span", `Angrier every ${S.enrageMs / 1000}s it stands.`)));
+        comingOdds.replaceChildren(
+          h("span.hunt-odds-l", pips(3, 3), h("span", `${1 + S.escorts} at once`)),
+          h("span.hunt-odds-r",
+            h("span.hunt-odd.is-sov", iconEl("crown"), "Felled, its Essence"),
+            isParty ? null : h("span.hunt-odd.is-quiet", "At a quarter, you break away")));
+        return;
+      }
+      const mobs = foesOf(tier).slice().sort((a, b) => (z.mix[b.archetype] || 0) - (z.mix[a.archetype] || 0));
+      comingRows.replaceChildren(...mobs.map((m) => {
+        const pct = Math.round((z.mix[m.archetype] || 0) * 100);
+        return h("div.hunt-wc-row",
+          h("button.hunt-wc-art", { type: "button", "aria-label": `${m.name}: details`, dataset: { monster: m.id }, html: monsterArt(m) }),
+          h("b", m.name),
+          h("span.hunt-wc-bar", h("i", { style: { width: `${pct}%` } })),
+          h("em", `${pct}%`));
+      }));
+      const counts = z.sizes.map((s) => s[0]);
+      comingOdds.replaceChildren(
+        h("span.hunt-odds-l", pips(Math.min(...counts), Math.max(...counts)), h("span", `${z.foesText} at once`)),
+        // The odds stacked, the Sovereign's under the Elites'.
+        h("span.hunt-odds-r",
+          h("span.hunt-odd.is-elite", `Elites ${Math.round(z.elite * 100)}%`),
+          z.sovereign > 0 ? h("span.hunt-odd.is-sov", iconEl("crown"), `Sovereign ${Math.round(z.sovereign * 100)}%`) : null));
+    }
+
+    /* ================= THE WALK ================= */
+
+    function paintTrail(k, vast) {
+      const at = 8 + clamp01(k) * 80;
+      trailYou.style.left = `${at.toFixed(2)}%`;
+      trailSteps.forEach((d, i) => toggleClass(d, "on", 5 + i * 6.6 < at));
+      huntCard.dataset.vast = vast ? "1" : "";
+    }
+    const clamp01 = (x) => Math.max(0, Math.min(1, Number(x) || 0));
+
+    function paintYou(ctx, hp, max, kls, down) {
+      setText(youName, commanderName(ctx));
+      youSkinSig = paintPortrait(youFace, ctx.state.player.skin, youSkinSig);
+      const k = kls ? kls.id : "";
+      if (k !== youKlassSig) {
+        youKlassSig = k;
+        youKlass.replaceChildren(...(kls ? [iconEl(kls.icon || kls.id)] : []));
+        setAttr(youKlass, "title", kls ? kls.name : null);
+        setAttr(youKlass, "hidden", !kls);
+      }
+      setWidth(youFill, (hp / max) * 100);
+      setText(youText, `${fmt(hp)} / ${fmt(max)}`);
+      toggleClass(walkYou, "is-down", down);
+    }
+
+    function setWalk({ title, label = "", when = "", sub = "", trailOn = false }) {
+      setText(walkTitle, title);
+      setText(walkInLabel, label);
+      setText(walkIn, when);
+      setAttr(walkWhen, "hidden", !label && !when);
+      setAttr(trail, "hidden", !trailOn);
+      setText(walkSub, sub);
+      setAttr(walkSub, "hidden", !sub);
+    }
+
+    function setFightHead({ title, sub, label = "", when = "", pill = null, pillIcon = "eye" }) {
+      setText(fhTitle, title);
+      setText(fhSub, sub);
+      setText(fhNextLabel, label);
+      setText(fhNextTime, when);
+      setAttr(fhNext, "hidden", !label && !when);
+      setAttr(fhPill, "hidden", !pill);
+      if (pill) {
+        if (fhPillIcon.dataset.icon !== pillIcon) {
+          fhPillIcon.dataset.icon = pillIcon;
+          fhPillIcon.replaceChildren(iconEl(pillIcon));
+        }
+        setText(fhPillText, pill);
+      }
     }
 
     /* ================= FX ================= */
@@ -448,30 +591,22 @@ export default {
       node.classList.add("struck");
     }
 
-    // No floating text any more (no "Crit", "Glance", damage numbers, ...): a
-    // struck card still shakes, which says a blow landed without printing it.
-    function showFx(ev) {
-      if (ev.kind === "fall") {
-        toggleClass(you, "is-dead", true);
-        later(() => toggleClass(you, "is-dead", false), DEAD_MS);
-        return;
-      }
-      const card = ev.who === "you" ? null : cards.get(`${ev.hunt}:${ev.who}`);
-      if (ev.who !== "you" && !card) return;
-      if (STRUCK.has(ev.kind)) strike(card ? card.art : youPortrait);
-    }
-
+    // Every blow goes to the ring; on a phone the struck foe's card shakes as well.
     function drainFx(now) {
       if (!fxQueue.length) return;
-      const events = fxQueue.splice(0);
-      if (document.hidden || reducedMotion()) return;
-      events.filter((ev) => now - ev.at < FX_STALE_MS).forEach(showFx);
+      const events = fxQueue.splice(0).filter((ev) => now - ev.at < FX_STALE_MS);
+      events.forEach((ev) => {
+        ring.blow(ev);
+        if (size !== "narrow" || reducedMotion() || ev.who === "you" || !STRUCK.has(ev.kind)) return;
+        const card = cards.get(`${ev.hunt}:${ev.who}`);
+        if (card) strike(card.art);
+      });
     }
 
     /* ================= WIRING ================= */
 
     /* One button, two fights: walking away from the party's is a server-only command, and the
-       answer to it is what takes the shared arena off the page. A refusal toasts itself. */
+       answer to it is what takes the shared fight off the page. A refusal toasts itself. */
     pullBtn.addEventListener("click", () => {
       if (partyFight(ctx)) {
         pullBtn.disabled = true;
@@ -494,7 +629,29 @@ export default {
       else openPopup("zone", ctx, currentRegion(state).tier, lastZone);
     });
     on(foesBox, "click", ".foe-art", (e, b) => openPopup("foe", ctx, b.dataset.monster));
-    on(quarryGrid, "click", ".foe-tile", (e, b) => openPopup("foe", ctx, b.dataset.monster));
+    on(coming, "click", "[data-monster]", (e, b) => openPopup("foe", ctx, b.dataset.monster));
+    on(plateTabs, "click", "[data-monster]", (e, b) => {
+      platePick = b.dataset.monster;
+      sigs.plate = null;
+      paintPlate(ctx);
+      const again = plateTabs.querySelector(`[data-monster="${platePick}"]`);
+      if (again) again.focus();
+    });
+    on(plateTabs, "keydown", "[data-monster]", (e) => {
+      if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+      e.preventDefault();
+      const tabs = Array.from(plateTabs.querySelectorAll("[data-monster]"));
+      const i = tabs.findIndex((t) => t.dataset.monster === platePick);
+      const next = tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+      if (!next) return;
+      platePick = next.dataset.monster;
+      sigs.plate = null;
+      paintPlate(ctx);
+      const again = plateTabs.querySelector(`[data-monster="${platePick}"]`);
+      if (again) again.focus();
+    });
+    on(plateBody, "click", "[data-monster]", (e, b) => openPopup("foe", ctx, b.dataset.monster));
+    on(plateBody, "click", "[data-item]", (e, b) => openPopup("item", ctx, b.dataset.item, { from: null }));
 
     /* ================= UPDATE ================= */
 
@@ -527,22 +684,36 @@ export default {
       }
     }
 
-    /* The Veil is your own fight's: the party's view carries none (no stat lines leave the
-       server), so the bar goes while they are out rather than sitting there at nothing. */
-    function setVeil(want) {
-      if (want && !veil) {
-        const fill = h("i");
-        veil = { fill, bar: h("div.veilbar", fill) };
-        you.append(veil.bar);
-      } else if (!want && veil) {
-        veil.bar.remove();
-        veil = null;
-      }
+    // The strip's labels for your own hunt: the party's fight puts its own in the same boxes.
+    function soloStrip() {
+      setText(kKills.l, "Kills");
+      setText(kRate.l, "XP/hr");
+      setText(kDps.l, "DPS");
+      setText(kLeft.l, "Time left");
+      setAttr(kShare.node, "hidden", true);
     }
 
-    function paintArena(ctx, region, c, kls, down) {
+    function paintLoot(drops) {
+      const keys = drops ? Object.keys(drops) : [];
+      const dsig = keys.map((k) => `${k}:${drops[k]}`).join(",");
+      if (dsig !== sigs.drops) {
+        const was = sigs.drops ? new Map(sigs.drops.split(",").map((p) => p.split(":")).map(([k, n]) => [k, Number(n)])) : new Map();
+        sigs.drops = dsig;
+        lootTiles.replaceChildren(...(keys.length
+          ? keys.map((k) => {
+            const tile = h("span.hunt-loot-tile", { "data-tip": itemName(k), dataset: { item: k } }, artEl(itemDef(k)), h("b", fmt(drops[k])));
+            // What came in since the last look gives a little pop.
+            if (was.size && (was.get(k) || 0) < drops[k] && !reducedMotion()) tile.classList.add("is-new");
+            return tile;
+          })
+          : [h("span.hunt-loot-none", "Nothing yet")]));
+      }
+      setAttr(loot, "hidden", false);
+    }
+
+    function paintSolo(ctx, region, c, kls, down) {
       const state = ctx.state;
-      const zone = c ? getZone(c.zone) : null;
+      const zone = getZone(c ? c.zone : lastZone) || GameData.ZONES[0];
       joinMode = false;
 
       /* A hunt on ground this build has never heard of belongs to a newer engine:
@@ -564,66 +735,70 @@ export default {
 
       // ---- you ----
       const s = statsOf(state);
-      // At camp health comes back over five minutes; the save keeps what you came home with.
+      // At camp health comes back slowly; the save keeps what you came home with.
       const rest = c ? null : campPlan(state, ctx.now);
       const hp = Math.max(0, Math.min(s.maxHp, Math.ceil(rest ? rest.hp : state.player.hp)));
-      setText(youName, commanderName(ctx));
-      youSkinSig = paintPortrait(youPortrait, ctx.state.player.skin, youSkinSig);
-      setWidth(youFill, (hp / s.maxHp) * 100);
-      setText(youText, `${fmt(hp)} / ${fmt(s.maxHp)}`);
-      toggleClass(you, "is-down", down);
+      paintYou(ctx, hp, s.maxHp, kls, down);
+      setAttr(walkYou, "hidden", false);
+      setAttr(band, "hidden", true);
 
-      setVeil(!!kls);
-      if (veil) {
-        const v = c ? Math.max(0, Math.min(H.veilMax, c.veil)) : 0;
-        setWidth(veil.fill, (v / H.veilMax) * 100);
-      }
-
-      // ---- what is happening ----
-      let st = "Not hunting";
-      let tm = "";
-      let et = `${region.name} lies quiet`;
-      let es = "Nothing is being hunted here.";
-      if (down) {
-        st = "Recovering";
-        tm = `Back in ${fmtTime(state.player.recoveryLeft)}`;
-        es = "You are in no state to hunt.";
-      } else if (c) {
-        et = `The ${zone.name} lies quiet`;
-        if (c.phase === "search") {
-          st = c.sovereignNext ? "Something vast approaches" : "Searching";
-          tm = c.sovereignNext ? `Here in ${fmtTime(c.wait)}` : `Next encounter in ${fmtTime(c.wait)}`;
-          et = c.sovereignNext ? sovereignOf(c.tier).name : `Searching the ${zone.name}`;
-          es = c.sovereignNext ? "It has found you." : "The next encounter is close.";
-        } else if (c.kind === "sovereign") {
-          st = "A Sovereign";
-          tm = c.enrage ? `Enraged ×${c.enrage}` : `Enrages in ${fmtTime(c.enrageAt - c.clock)}`;
+      // ---- the stage ----
+      const fighting = !!(c && c.phase === "fight");
+      huntCard.dataset.phase = fighting ? "fight" : c ? "search" : "quiet";
+      huntCard.dataset.vast = "";
+      const tier = c ? c.tier : region.tier;
+      const vast = !!(c && !fighting && c.sovereignNext);
+      if (c && !fighting) walkFull = Math.max(walkFull, c.wait, 1);
+      else walkFull = 0;
+      if (!c) {
+        setWalk(down
+          ? { title: "Recovering", label: "Back in", when: fmtTime(state.player.recoveryLeft), sub: "You are in no state to hunt." }
+          : { title: `${region.name} lies quiet`, sub: "Nothing is being hunted here. Choose a zone below to take up the hunt." });
+      } else if (!fighting) {
+        setWalk(vast
+          ? { title: "Something vast approaches", label: "Here in", when: secs(c.wait), trailOn: true }
+          : { title: `Searching the ${zone.name}`, label: "Next encounter in", when: secs(c.wait), trailOn: true });
+        paintTrail(1 - c.wait / walkFull, vast);
+      } else {
+        const sov = c.kind === "sovereign";
+        const up = c.foes.length;
+        const where = sov ? "A Sovereign" : `Fighting in the ${zone.name}`;
+        if (sov) {
+          const again = Math.max(0, c.enrageAt - c.clock);
+          setFightHead({ title: `Encounter ${fmtWhole(c.encounters)}`, sub: `${where} · ${up} on you`,
+            label: c.enrage ? `Enraged ×${c.enrage} · again in` : "Enrages in", when: secs(again), pill: "No others will come", pillIcon: "eye-off" });
         } else {
-          st = "Fighting";
-          tm = c.foes.length >= H.maxFoes ? `${cap(WORDS[H.maxFoes] || String(H.maxFoes))} at once` : `Reinforcements in ${fmtTime(c.reinforceAt - c.clock)}`;
+          const q = c.queued || 0;
+          setFightHead({ title: `Encounter ${fmtWhole(c.encounters)}`, sub: `${where} · ${up} on you`,
+            label: "Another steps out in", when: secs(Math.max(0, c.reinforceAt - c.clock)),
+            pill: q ? (q === 1 ? "One waits in the dark" : `${cap(WORDS[q] || String(q))} wait in the dark`) : null });
         }
       }
-      setText(status, st);
-      setText(timer, tm);
-      setText(emptyTitle, et);
-      setText(emptySub, es);
       paintRecap(recap(c, c ? huntKey(c) : null));
+      paintComing(tier, zone.id, vast, false);
 
-      syncFoes(c && c.phase === "fight" ? c.foes : [], c ? huntKey(c) : null);
+      ring.sync({
+        key: c ? `solo:${huntKey(c)}` : `quiet:${tier}`,
+        party: false,
+        tier,
+        zoneIdx: ZONE_INDEX.get(zone.id) || 0,
+        phase: fighting ? "fight" : c ? "search" : "quiet",
+        enc: c ? c.encounters : 0,
+        kind: c ? c.kind : "normal",
+        vast,
+        enrage: fighting && c.kind === "sovereign" ? c.enrage : 0,
+        reinforceIn: fighting && c.kind === "normal" ? c.reinforceAt - c.clock : null,
+        queued: fighting ? c.queued || 0 : 0,
+        hunters: [{ id: "me", me: true, name: commanderName(ctx), skin: state.player.skin, klass: kls ? kls.id : null,
+          hp, max: s.maxHp, veil: c ? c.veil / H.veilMax : 0, volley: c ? c.volley : 0, down }],
+        foes: fighting ? c.foes.map((f) => ({ uid: f.uid, id: f.id, elite: f.elite, hp: Math.max(0, f.hp), max: f.max, timer: f.timer, target: "me" })) : [],
+      });
+      syncFoes(fighting ? c.foes : [], c ? huntKey(c) : null);
       drainFx(ctx.now);
 
       // ---- the numbers ----
       setAttr(kpis, "hidden", !c);
-      setAttr(hint, "hidden", !!c);
-      // The strip reports the party's fight while one is out, so its labels come back here.
-      setText(kKills.l, "Kills");
-      setText(kRate.l, "XP/hr");
-      setText(kDps.l, "DPS");
-      setText(kSov.l, "Drops");
-      setAttr(kSov.v, "hidden", true);
-      setAttr(kSovBar, "hidden", true);
-      setAttr(dropsList, "hidden", false);
-      setText(kLeft.l, "Time left");
+      soloStrip();
       if (c) {
         setText(kKills.v, fmt(c.done));
         // Eased toward the true rate each tick: combat only actually moves xp/dmg
@@ -634,20 +809,10 @@ export default {
         dispDps = rates.dps == null ? null : dispDps == null ? rates.dps : dispDps + (rates.dps - dispDps) * 0.2;
         setText(kRate.v, dispXp == null ? "Reckoning" : fmt(Math.round(dispXp)));
         setText(kDps.v, dispDps == null ? "Reckoning" : fmtStat(dispDps));
-        // What this run has actually turned up, not the flat odds of a Sovereign.
-        const drops = c.drops || {};
-        const keys = Object.keys(drops);
-        const dsig = keys.map((k) => `${k}:${drops[k]}`).join(",");
-        if (dsig !== sigs.drops) {
-          sigs.drops = dsig;
-          dropsList.replaceChildren(...(keys.length
-            ? keys.map((k) => h("span.drop-pip", { "data-tip": itemName(k) }, artEl(itemDef(k)), fmt(drops[k])))
-            : [h("span.drop-pip.is-empty", "Nothing yet")]));
-        }
         setText(kLeft.v, fmtTime(Math.max(0, IDLE_CAP - c.elapsed)));
+        paintLoot(c.drops || {});
       } else {
-        // The time left is already on the arena's status line.
-        setText(hint, down ? "You fell. Choose a zone below once you are back on your feet." : "Choose a zone below to take up the hunt.");
+        setAttr(loot, "hidden", true);
       }
 
       setAttr(pullBtn, "hidden", !c);
@@ -655,20 +820,13 @@ export default {
       setAttr(goBtn, "hidden", false);
       setAttr(goBtn, "disabled", down);
       setText(goBtn, down ? "Recovering" : c ? "Change hunt" : `Hunt the ${getZone(lastZone).name}`);
-      setAttr(band, "hidden", true);
-      // Back to your own card when the party's fight is not what is on screen.
-      setAttr(you, "hidden", false);
-      setAttr(youPortrait, "hidden", false);
-      setAttr(youName, "hidden", false);
-      setAttr(youHp, "hidden", false);
-      toggleClass(arena, "is-party", false);
+      toggleClass(huntCard, "is-party", false);
     }
 
     /* The party's fight. Nothing below is worked out here: every number comes off the last
        answer, which is what makes a disagreement with the server impossible rather than
-       merely unlikely. There is no float or shake layer either, because those come off
-       hunt:fx events raised by a local simulation, and for a shared fight there is no local
-       simulation to raise them. The arena is quieter for it, and that is the right trade. */
+       merely unlikely. Its blows are read off what each answer took, so the ring shows
+       where they landed rather than every swing: a quieter fight, and the right trade. */
     function paintParty(ctx, view, { watching = false, fell = false } = {}) {
       const zone = getZone(view.zone);
       const region = regionOfTier(view.tier);
@@ -681,16 +839,25 @@ export default {
       const enc = e && Array.isArray(e.foes) && Array.isArray(e.hunters) ? e : null;
       joinMode = watching;
 
+      // A new answer: the clocks in it run on from now, on the ring and on the walk.
+      const fresh = view !== partySeen;
+      if (fresh) {
+        partySeen = view;
+        partySeenAt = performance.now();
+      }
+      const since = performance.now() - partySeenAt;
+
       setAttr(huntHead, "hidden", false);
       setText(huntTitle, `The ${zone.name} of ${region.name}`);
       /* Watching is either a fall or never having gone. A fall is said plainly, because the
-         arena going quiet on somebody who was fighting a second ago reads as the game losing
+         stage going quiet on somebody who was fighting a second ago reads as the game losing
          them; the party is still out, and the camp can see it and walk back on. */
       setText(huntSub, !watching
         ? "The party's hunt · XP by your share, gold and drops the same for everyone"
         : fell
           ? "You fell. Your party fights on, and you can rejoin on their next walk"
           : "Your party is out without you. Join them and you come in on their next walk");
+      setAttr(huntSub, "hidden", false);
       const chip = `${hunters.length} out together`;
       if (chip !== sigs.company) {
         sigs.company = chip;
@@ -698,80 +865,113 @@ export default {
       }
       setAttr(company, "hidden", false);
 
-      // Your own solo portrait gives way to the warband -- but not the node it lives
-      // in, since that is what the band grid is nested inside.
-      setAttr(you, "hidden", false);
-      setAttr(youPortrait, "hidden", true);
-      setAttr(youName, "hidden", true);
-      setAttr(youHp, "hidden", true);
-      setVeil(false);
-
       /* Whoever joined after an encounter had begun is in the session but not in that fight:
          the roster of foes was drawn for the party that walked into it. They are in on the
          next one, and saying so is the only way their nothing-happening makes sense. */
       const inEnc = (u) => !enc || enc.hunters.some((x) => sameId(x.userId, u.userId));
       const fighting = !!(enc && mine && inEnc(mine));
 
-      // ---- the warband, you first ----
+      // ---- the party, you first ----
       /* A camp watching is not on the session, so it is not in the view either; it is put
-         back in the band where it stood, fallen or at camp, so the squares still read as
-         the party it belongs to rather than a party of strangers. */
-      const band4 = hunters.slice().sort((a, b) => (sameId(a.userId, me) ? -1 : sameId(b.userId, me) ? 1 : 0));
-      if (watching && me) band4.unshift({ userId: me, down: fell, hp: 0, max: 1, note: fell ? "Fallen" : "At camp" });
-      syncBand(band4, names, skins, inEnc, me);
+         back in the band where it stood, fallen or at camp, so the rows still read as the
+         party it belongs to rather than a party of strangers. */
+      const all = hunters.slice().sort((a, b) => (sameId(a.userId, me) ? -1 : sameId(b.userId, me) ? 1 : 0));
+      if (watching && me) all.unshift({ userId: me, down: fell, hp: 0, max: 1, note: fell ? "Fallen" : "At camp" });
+      syncBand(all, names, skins, inEnc, me);
+      setAttr(walkYou, "hidden", true);
+      setAttr(band, "hidden", false);
 
-      // ---- what is happening ----
-      let st = "Walking";
-      let tm = `Next encounter in ${fmtTime(view.wait)}`;
-      let et = `Searching the ${zone.name}`;
-      let es = "The party walks on to the next one.";
+      // ---- the stage ----
+      huntCard.dataset.phase = enc ? "fight" : "search";
+      huntCard.dataset.vast = "";
+      const wait = Math.max(0, (view.wait || 0) - since);
+      if (!enc) walkFull = Math.max(walkFull, view.wait || 0, 1);
+      else walkFull = 0;
       if (!enc && view.muster > 0) {
         // The first walk, held until everyone who marked ready is on the ground.
-        st = "Mustering";
-        tm = `Waiting on ${fmtWhole(view.muster)} more`;
-        et = `Gathering at the ${zone.name}`;
-        es = "Everyone who marked ready walks in together.";
+        setWalk({ title: `Gathering at the ${zone.name}`, label: "Waiting on", when: `${fmtWhole(view.muster)} more`, sub: "Everyone who marked ready walks in together." });
       } else if (!enc && view.vast) {
         // The walk to the ground's Sovereign, said the way your own hunt says it.
-        st = "Something vast approaches";
-        tm = `Here in ${fmtTime(view.wait)}`;
-        et = sovereignOf(view.tier).name;
-        es = "It has found you.";
-      } else if (enc && !watching && !fighting) {
-        st = "Waiting";
-        tm = "In on the next encounter";
-        et = `The ${zone.name} lies quiet`;
-        es = "This one was drawn for the party that walked into it.";
-      } else if (enc) {
+        setWalk({ title: "Something vast approaches", label: "Here in", when: secs(wait), trailOn: true });
+        paintTrail(1 - wait / walkFull, true);
+      } else if (!enc) {
+        setWalk({ title: `Searching the ${zone.name}`, label: "Next encounter in", when: secs(wait), trailOn: true });
+        paintTrail(1 - wait / walkFull, false);
+      } else {
         const sov = enc.kind === "sovereign";
-        st = sov ? "A Sovereign" : "Fighting";
-        // A Sovereign's anger, as your own hunt says it; any other fight, which encounter this is.
-        tm = sov && Number.isFinite(enc.enrageIn)
-          ? (enc.enrage ? `Enraged ×${enc.enrage}` : `Enrages in ${fmtTime(enc.enrageIn)}`)
-          : `Encounter ${fmtWhole(view.encounters)}`;
-        et = `The ${zone.name} lies quiet`;
-        es = "Nothing is left standing here.";
+        const up = enc.foes.filter((f) => getMonster(f.id)).length;
+        const sub = watching
+          ? `${sov ? "A Sovereign" : `Fighting in the ${zone.name}`} · you are watching`
+          : !fighting
+            ? "In on the next encounter · this one was drawn for the party that walked into it"
+            : `${sov ? "A Sovereign" : `Fighting in the ${zone.name}`} · ${up} on the party`;
+        if (sov && Number.isFinite(enc.enrageIn)) {
+          const again = Math.max(0, enc.enrageIn - since);
+          setFightHead({ title: `Encounter ${fmtWhole(view.encounters)}`, sub,
+            label: enc.enrage ? `Enraged ×${enc.enrage} · again in` : "Enrages in", when: secs(again), pill: "No others will come", pillIcon: "eye-off" });
+        } else if (!sov && Number.isFinite(enc.reinforceIn)) {
+          setFightHead({ title: `Encounter ${fmtWhole(view.encounters)}`, sub, label: "Another steps out in", when: secs(Math.max(0, enc.reinforceIn - since)) });
+        } else {
+          setFightHead({ title: `Encounter ${fmtWhole(view.encounters)}`, sub, pill: sov ? "No others will come" : null, pillIcon: "eye-off" });
+        }
       }
-      setText(status, st);
-      setText(timer, tm);
-      setText(emptyTitle, et);
-      setText(emptySub, es);
       paintRecap(null);
+      paintComing(view.tier, zone.id, !enc && !!view.vast, true);
+
+      // Only a new answer is news to the ring: the same one again would set its clocks back.
+      if (fresh) {
+        const session = new Map(hunters.map((u) => [lower(u.userId), u]));
+        const fought = enc ? enc.hunters : hunters;
+        ring.sync({
+          key: `party:${view.partyId}`,
+          party: true,
+          tier: view.tier,
+          zoneIdx: ZONE_INDEX.get(zone.id) || 0,
+          phase: enc ? "fight" : "search",
+          enc: enc ? enc.id : 0,
+          kind: enc ? enc.kind : "normal",
+          vast: !enc && !!view.vast,
+          enrage: enc && enc.kind === "sovereign" ? enc.enrage || 0 : 0,
+          reinforceIn: enc && Number.isFinite(enc.reinforceIn) ? enc.reinforceIn : null,
+          queued: 0,
+          hunters: fought.map((u) => {
+            const id = lower(u.userId);
+            const isMe = !watching && sameId(u.userId, me);
+            const s = session.get(id) || u;
+            return {
+              id, me: isMe,
+              name: isMe ? commanderName(ctx) : names.get(id) || "Someone",
+              skin: isMe ? ctx.state.player.skin : skins.get(id) || null,
+              klass: u.klass || s.klass || null,
+              hp: Math.max(0, u.hp || 0), max: Math.max(1, u.max || 1),
+              veil: Number.isFinite(u.veil) ? u.veil / H.veilMax : 0, volley: u.volley || 0,
+              down: !!u.down, share: Number.isFinite(s.share) ? s.share : null,
+            };
+          }),
+          foes: enc ? enc.foes.filter((f) => getMonster(f.id)).map((f) => ({
+            uid: f.uid, id: f.id, elite: !!f.elite, hp: Math.max(0, f.hp), max: Math.max(1, f.max),
+            // A realm from before the timers were sent: the foe waits mid-ring and keeps its own time from there.
+            timer: Number.isFinite(f.timer) ? f.timer : getMonster(f.id).speed * 0.6,
+            target: f.target ? lower(f.target) : null,
+          })) : [],
+        });
+      }
+      fxQueue.length = 0;
 
       // A foe this build cannot name is left out rather than drawn as an unknown.
       const onOf = (f) => {
         if (!f.target) return null;
         if (sameId(f.target, me)) return "On you";
-        return `On ${names.get(String(f.target).toLowerCase()) || "someone"}`;
+        return `On ${names.get(lower(f.target)) || "someone"}`;
       };
       syncFoes(enc ? enc.foes.filter((f) => getMonster(f.id)) : [], enc ? `p${view.partyId}:${enc.id}` : null, onOf);
-      toggleClass(arena, "is-party", true);
+      toggleClass(huntCard, "is-party", true);
 
       // ---- the numbers ----
       const total = hunters.reduce((n, u) => n + (u.dmg || 0), 0);
       setAttr(kpis, "hidden", false);
-      setAttr(hint, "hidden", true);
-      setAttr(dropsList, "hidden", true);
+      setAttr(loot, "hidden", true);
+      setAttr(kShare.node, "hidden", false);
       setText(kKills.l, "Encounters");
       setText(kKills.v, fmtWhole(view.encounters));
       setText(kDps.l, "Party damage");
@@ -783,10 +983,9 @@ export default {
         const standing = hunters.filter((u) => !u.down).length;
         setText(kRate.l, "Standing");
         setText(kRate.v, `${fmtWhole(standing)} of ${fmtWhole(hunters.length)}`);
-        setText(kSov.l, "You");
-        setAttr(kSov.v, "hidden", false);
-        setAttr(kSovBar, "hidden", true);
-        setText(kSov.v, fell ? "Fallen" : "At camp");
+        setText(kShare.l, "You");
+        setAttr(kShareBar, "hidden", true);
+        setText(kShare.v, fell ? "Fallen" : "At camp");
       } else {
         /* A share is the payout's own formula over the whole session's damage dealt and
            taken (sessionView), the one figure worth watching in a fight whose spoils are
@@ -794,11 +993,10 @@ export default {
         const share = mine && Number.isFinite(mine.share) ? mine.share : 0;
         setText(kRate.l, "Your damage");
         setText(kRate.v, fmt(Math.round(mine ? mine.dmg : 0)));
-        setText(kSov.l, "Your share");
-        setAttr(kSov.v, "hidden", false);
-        setAttr(kSovBar, "hidden", false);
-        setText(kSov.v, `${Math.round(share)}%`);
-        setWidth(kSov.fill, share);
+        setText(kShare.l, "Your share");
+        setAttr(kShareBar, "hidden", false);
+        setText(kShare.v, `${Math.round(share)}%`);
+        setWidth(kShare.fill, share);
       }
 
       setAttr(pullBtn, "hidden", watching);
@@ -810,41 +1008,43 @@ export default {
       }
     }
 
-    // One row a member: their name, their health, and a mark on whoever has fallen or is waiting.
-/* The whole warband, you first, as squares: two across for a pair, two over one for
-   a three, the most a party holds (a four from before that stands two by two).
-   Everyone is on screen at once, which is the point of hunting together. `data-n` is
-   what the grid reads to lay them out. */
+    /* The party on the walk, you first: a face, the glyph and name, their health and their
+       share of the take so far, a row each. */
     function syncBand(all, names, skins, inEnc, me) {
-      const sig = all.map((u) => `${u.userId}:${u.down ? 1 : 0}:${u.note || ""}`).join("|");
+      const sig = all.map((u) => `${u.userId}:${u.down ? 1 : 0}:${u.note || ""}:${u.klass || ""}:${skins.get(lower(u.userId)) || ""}`).join("|");
       if (sig !== sigs.band) {
         sigs.band = sig;
         mates.clear();
-        band.replaceChildren(...all.map((u) => {
+        bandRows.replaceChildren(...all.map((u) => {
           const fill = h("i");
           const text = h("span");
+          const share = h("em.hunt-mate-share");
+          const shareFill = h("i");
           const isMe = sameId(u.userId, me);
-          const label = isMe ? "You" : (names.get(String(u.userId).toLowerCase()) || "Someone");
-          /* Your own face in the band is yours. A party mate's skin comes off the
-             realm when it knows one, and falls back to the default bust when it
-             does not. */
+          const label = isMe ? "You" : (names.get(lower(u.userId)) || "Someone");
+          const kls = u.klass ? getClass(u.klass) : null;
+          /* Your own face is yours. A party mate's skin comes off the realm when it knows
+             one, and falls back to the default bust when it does not. */
           const node = h("div.band-mate", { class: { "is-down": u.down, "is-me": isMe } },
-            h("div.band-art.portrait-bust", portraitImg(isMe ? ctx.state.player.skin : skins.get(String(u.userId).toLowerCase()) || null)),
-            h("span.band-name", label),
-            h("div.hpbar.hpbar-sm", fill, text));
-          mates.set(String(u.userId).toLowerCase(), { fill, text });
+            h("span.hunt-face.is-sm", h("span.hunt-face-in.portrait-bust", portraitImg(isMe ? ctx.state.player.skin : skins.get(lower(u.userId)) || null))),
+            h("div.band-main",
+              h("div.band-line", kls ? h("span.hunt-klass", { title: kls.name }, iconEl(kls.icon || kls.id)) : null, h("b.band-name", label), share),
+              h("div.hpbar.hpbar-sm", fill, text),
+              h("div.hunt-sharebar", shareFill)));
+          mates.set(lower(u.userId), { fill, text, share, shareFill });
           return node;
         }));
       }
-      setAttr(band, "data-n", String(all.length));
       all.forEach((u) => {
-        const row = mates.get(String(u.userId).toLowerCase());
+        const row = mates.get(lower(u.userId));
         if (!row) return;
         const max = u.max > 0 ? u.max : 1;
         setWidth(row.fill, (Math.max(0, u.hp) / max) * 100);
         setText(row.text, u.note || (u.down ? "Fallen" : inEnc(u) ? `${fmt(Math.max(0, u.hp))} / ${fmt(max)}` : "Waiting"));
+        const sh = Number.isFinite(u.share) ? u.share : null;
+        setText(row.share, sh == null ? "" : `${Math.round(sh)}%`);
+        setWidth(row.shareFill, sh || 0);
       });
-      setAttr(band, "hidden", !all.length);
     }
 
     /* Everyone standing on this region's ground, once each. You are where your own hunt or
@@ -874,7 +1074,7 @@ export default {
         seen.add(name.toLowerCase());
         const hunt = liveHunt(m.hunt, ctx.now);
         if (!hunt || hunt.tier !== tier) return;
-        out.push({ id: `p:${String(m.user_id).toLowerCase()}`, kind: "party", zone: hunt.zone, name: cap(name), skin: typeof m.skin === "string" ? m.skin : null,
+        out.push({ id: `p:${lower(m.user_id)}`, kind: "party", zone: hunt.zone, name: cap(name), skin: typeof m.skin === "string" ? m.skin : null,
           href: `#/player/${encodeURIComponent(name)}`, tip: `${cap(name)} · your party` });
       });
       realmOn(ctx, tier).rows.forEach((row) => {
@@ -888,6 +1088,92 @@ export default {
           tip: [cap(name), kls ? kls.name : null, Number.isFinite(since) ? outFor(ctx.now - since) : null].filter(Boolean).join(" · ") });
       });
       return out;
+    }
+
+    /* ================= THE QUARRY ================= */
+
+    /* One of the region's four, as it stands in the zone you hunt (or last looked at):
+       its numbers at that depth, what a kill of it pays you now, and what it leaves. */
+    function plateSig(ctx, tier, zoneId) {
+      const state = ctx.state;
+      return [tier, zoneId, platePick, Math.round(xpMult(state, "warfare", ctx.now) * 1000), companionBonus(state, "gold"), companionBonus(state, "drops")].join("|");
+    }
+
+    function paintPlate(ctx) {
+      const state = ctx.state;
+      const c = state.tasks.combat;
+      const party = partyFight(ctx);
+      const tier = currentRegion(state).tier;
+      const here = c && c.tier === tier ? c : party && party.tier === tier ? party : null;
+      const z = getZone(here ? here.zone : lastZone);
+      const list = [...foesOf(tier), sovereignOf(tier)];
+      // The commonest in the zone to begin with.
+      if (!platePick || !list.some((m) => m.id === platePick)) {
+        platePick = foesOf(tier).slice().sort((a, b) => (z.mix[b.archetype] || 0) - (z.mix[a.archetype] || 0))[0].id;
+      }
+      const sig = plateSig(ctx, tier, z.id);
+      if (sig === sigs.plate) return;
+      sigs.plate = sig;
+
+      const tabsSig = `${tier}|${platePick}`;
+      if (tabsSig !== sigs.tabs) {
+        sigs.tabs = tabsSig;
+        plateTabs.replaceChildren(...list.map((m) => {
+          const sov = m.archetype === "sovereign";
+          const picked = m.id === platePick;
+          return h("button.quarry-tab", { type: "button", role: "tab", class: { "is-sov": sov }, "aria-selected": picked, tabindex: picked ? "0" : "-1", dataset: { monster: m.id } },
+            h("span.quarry-tab-face", { html: monsterArt(m) }),
+            h("span.quarry-tab-text", h("b", m.name), h("small", sov ? "Sovereign" : GameData.ARCHETYPES[m.archetype].name)));
+        }));
+      }
+
+      const m = list.find((x) => x.id === platePick) || list[0];
+      const sov = m.archetype === "sovereign";
+      const n = foeNumbers(m, false, z.power);
+      const base = n.xp * z.xp;
+      const xp = base * xpMult(state, "warfare", ctx.now);
+      const goldMult = 1 + companionBonus(state, "gold");
+      const dropMult = 1 + companionBonus(state, "drops");
+      const mix = z.mix[m.archetype] || 0;
+      const where = sov
+        ? "Sovereign · it walks the Inner and the Core"
+        : `${GameData.ARCHETYPES[m.archetype].name} · ${mix >= 0.35 ? `the ${z.name} is thick with them` : mix >= 0.2 ? `common in the ${z.name}` : `seldom seen in the ${z.name}`}`;
+      const stat = (l, v, cls) => h("div.quarry-stat", { class: cls }, h("span", l), h("b", v));
+      const band = veilBandOfTier(tier);
+      const reagent = m.drops.find((d) => d[0] === "@reagent");
+      const drops = [];
+      if (reagent) {
+        const [, qty, chance] = reagent;
+        const odds = Math.min(1, chance * dropMult);
+        drops.push(h("span.quarry-drop",
+          h("span.quarry-reagents", GameData.REAGENTS.map((r) => artEl(itemDef(r.id)))),
+          `${qty > 1 ? `${qty} reagents` : "A reagent"} `, h("em", odds >= 1 ? "always" : `${chancePct(odds)} of kills`)));
+      }
+      m.drops.filter((d) => d[0] !== "@reagent").forEach(([key, qty, chance]) => {
+        drops.push(h("button.quarry-drop", { type: "button", dataset: { item: key } }, artEl(itemDef(key)), `${itemName(key)}${qty > 1 ? ` ×${qty}` : ""} `, h("em", chancePct(Math.min(1, chance * dropMult)))));
+      });
+      const veilKey = sov ? essenceOfTier(tier) : fragmentOfTier(tier);
+      if (veilKey) {
+        drops.push(h("button.quarry-drop.is-veil", { type: "button", dataset: { item: veilKey } }, artEl(itemDef(veilKey)),
+          `${band.name} ${sov ? "Essence" : "Fragment"} `, h("em", sov ? "felled, always" : "Elites, Inner and Core")));
+      }
+      plateBody.replaceChildren(
+        h("button.quarry-art", { type: "button", class: { "is-sov": sov }, "aria-label": `${m.name}: everything about it`, dataset: { monster: m.id }, html: monsterArt(m) }),
+        h("div.quarry-info",
+          h("span.quarry-eyebrow", { class: { "is-sov": sov } }, where),
+          h("h3.quarry-name", m.name),
+          h("p.quarry-note", sov ? "It rules this ground. It comes with two Elites at its back and grows angrier the longer the fight runs." : GameData.ARCHETYPES[m.archetype].note),
+          h("div.quarry-stats",
+            stat("Health", fmt(n.hp)),
+            stat("Attack", fmtStat(n.attack)),
+            stat("Swings every", `${(m.speed / 1000).toFixed(1)}s`),
+            stat("Defence", fmtStat(m.defence)),
+            stat("A kill pays", h("span", `${fmtStat(xp)} XP`, h("small", `${fmtGold(Math.round(n.gold[0] * goldMult))} to ${fmtGold(Math.round(n.gold[1] * goldMult))}`))),
+            stat("Mastery a kill", `+${fmtStat(base * CONFIG.mastery.perKill)}`, "is-mastery")),
+          h("p.quarry-small", z.power === 1 && z.xp === 1
+            ? `As it stands in the ${z.name}, the plain ground. Mastery goes to the weapon in your hands.`
+            : `As it stands in the ${z.name}: health and attack ×${z.power}, XP ×${z.xp}. Mastery goes to the weapon in your hands.${sov ? ` It enrages: +${Math.round(GameData.SOVEREIGN.enrage * 100)}% attack every ${GameData.SOVEREIGN.enrageMs / 1000}s.` : ""}`),
+          h("div.quarry-drops", h("span.quarry-drops-l", "Leaves"), drops)));
     }
 
     function paintGround(ctx, region, c, down) {
@@ -915,8 +1201,9 @@ export default {
 
       if (sigs.quarry !== tier) {
         sigs.quarry = tier;
-        buildQuarry(tier);
+        setText(quarrySub, `What lives in ${region.name}, as it stands in the zone you hunt. Pick one to see it up close.`);
       }
+      paintPlate(ctx);
     }
 
     // In a party, signed in, and a realm that can say whether the party is out.
@@ -990,14 +1277,17 @@ export default {
         wasParty = !!shown;
         sigs.band = null;
         sigs.company = null;
+        sigs.coming = null;
+        partySeen = null;
+        walkFull = 0;
         cards.forEach((card) => card.node.remove());
         cards.clear();
-        // Blows queued off the fight that just ended have nothing left to float from.
+        // Blows queued off the fight that just ended have nothing left to land on.
         fxQueue.length = 0;
       }
       if (party) paintParty(ctx, party);
       else if (watching) paintParty(ctx, watching, { watching: true, fell });
-      else paintArena(ctx, region, c, kls, down);
+      else paintSolo(ctx, region, c, kls, down);
       // Both fights hold a tier and a zone, so the ground below marks either one.
       paintGround(ctx, region, c || shown, down);
     }
@@ -1009,6 +1299,7 @@ export default {
         timers.forEach((t) => clearTimeout(t));
         timers.clear();
         offNews();
+        ring.destroy();
         map.destroy();
       },
     };

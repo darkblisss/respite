@@ -61,8 +61,8 @@ await run(async () => {
 
     await go("#/skill/warfare");
     await app.page.waitForTimeout(400);
-    const arena = await src(".arena-portrait img");
-    same("and so does the one in the arena", arena, hero);
+    const arena = await src(".hunt-face-in img");
+    same("and so does the one on the Hunt page's stage", arena, hero);
   }
 
   section("the Discipline page");
@@ -468,11 +468,16 @@ await run(async () => {
     await app.page.waitForTimeout(600);
     const arena = await live(app, () => ({
       fell: document.querySelector(".empty-title") ? document.querySelector(".empty-title").textContent : null,
-      name: document.querySelector(".arena-name") ? document.querySelector(".arena-name").textContent : null,
-      foes: document.querySelectorAll(".arena-foes .foe-card").length,
+      name: document.querySelector(".hunt-you-text") ? document.querySelector(".hunt-you-text").textContent : null,
+      ring: !!document.querySelector(".hunt-stage canvas.hunt-ring"),
+      phase: (document.querySelector(".hunt-card") || { dataset: {} }).dataset.phase,
+      waits: (document.querySelector(".hunt-coming-head") || {}).textContent,
+      odds: [...document.querySelectorAll(".hunt-odd")].map((n) => n.textContent),
     }));
     check("it mounts rather than falling over", arena.fell === null, arena);
-    check("and the arena carries the commander's own name, capitalised", arena.name === "Uinew_a", arena);
+    check("and the stage carries the commander's own name, capitalised", arena.name === "Uinew_a", arena);
+    check("with the ring drawn on a canvas, and the stage walking or fighting", arena.ring && /^(search|fight)$/.test(arena.phase || ""), arena);
+    check("and What waits on the ground, with the Elite odds (the Outer has no Sovereign)", arena.waits === "What waits" && arena.odds.join() === "Elites 4%", arena);
     const pageErrs = errs().filter((e) => /hunt\.js/.test(String(e.stack || e.message || e)));
     check("and nothing in it threw", pageErrs.length === 0, pageErrs.map((e) => String(e.message || e)));
 
@@ -549,7 +554,7 @@ await run(async () => {
     await app.page.waitForTimeout(1200);
     const band = await live(app, () => ({
       fell: document.querySelector(".empty-title") ? document.querySelector(".empty-title").textContent : null,
-      party: !!document.querySelector(".arena.is-party"),
+      party: !!document.querySelector(".hunt-card.is-party"),
       mates: [...document.querySelectorAll(".band-mate .band-name")].map((n) => n.textContent),
       title: (document.querySelector(".hunt-title") || {}).textContent,
       you: !!document.querySelector(".band-mate.is-me"),
@@ -618,7 +623,7 @@ await run(async () => {
     await dispatch(app.page, "partyHuntLeave", {});
     await app.page.waitForTimeout(1500);
     const watched = await live(app, () => ({
-      party: !!document.querySelector(".arena.is-party"),
+      party: !!document.querySelector(".hunt-card.is-party"),
       band: [...document.querySelectorAll(".band-mate")].map((n) => [n.querySelector(".band-name").textContent, n.querySelector(".hpbar span").textContent]),
       sub: (document.querySelector(".hunt-card .card-sub") || {}).textContent,
       go: [...document.querySelectorAll(".hunt-actions .btn")].filter((b) => !b.hidden).map((b) => b.textContent.trim()),

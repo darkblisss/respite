@@ -614,18 +614,24 @@ export function encounterView(e) {
       hp: Math.max(0, Math.ceil(f.hp)), max: f.max,
       // Whom it is going for, as a user id: the hunters are listed by the same.
       target: f.target || null,
+      // How long until it swings, so a page can run the clock on between answers.
+      timer: Math.max(0, Math.round(f.timer)),
     })),
     // A Sovereign's anger: how many times it has risen, and how long until it does again.
     enrage: e.kind === "sovereign" ? e.enrage : 0,
     enrageIn: e.kind === "sovereign" ? Math.max(0, Math.round(e.enrageAt - e.clock)) : null,
+    // And any other fight's window: how long until the next one steps out of the dark.
+    reinforceIn: e.kind === "normal" ? Math.max(0, Math.round(e.reinforceAt - e.clock)) : null,
     hunters: (() => {
       const shares = contributionMap(e);
       return e.hunters.map((u) => ({
         userId: u.userId, down: u.down,
         // Both rounded the same way, so a hunter at full health never reads 7,300 / 7,299.
-      hp: Math.max(0, Math.min(Math.ceil(u.hp), Math.ceil(u.stats.maxHp))), max: Math.ceil(u.stats.maxHp),
+        hp: Math.max(0, Math.min(Math.ceil(u.hp), Math.ceil(u.stats.maxHp))), max: Math.ceil(u.stats.maxHp),
         dmg: Math.round(u.dmg), taken: Math.round(u.taken),
         share: Math.round((shares[u.userId] || 0) * 100),
+        // The discipline, and how full its Veil and a Mage's opening casts stand.
+        klass: u.stats.klass || null, veil: Math.round(u.veil || 0), volley: u.volley || 0,
       }));
     })(),
   };
@@ -833,6 +839,7 @@ export function sessionView(s) {
       hp: Math.max(0, Math.min(Math.ceil(u.hp), Math.ceil(u.stats.maxHp))), max: Math.ceil(u.stats.maxHp),
       dmg: Math.round(u.dmg),
       share: Math.round((shares[u.userId] || 0) * 1000) / 10,
+      klass: u.stats.klass || null,
     })),
   };
 }

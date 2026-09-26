@@ -24,6 +24,7 @@ import { fmt, fmtWhole, fmtGold, fmtTime, fmtAgo, signedPct, chancePct, fmtClock
 import { campScene, CAMP_STAGES, CAMP_VIEWBOX } from "../src/client/ui/camp-art.js";
 import { MONSTER_ART, KIND_ART } from "../src/client/ui/monster-art.js";
 import { zoneMap } from "../src/client/ui/zone-map.js";
+import { huntRing } from "../src/client/ui/hunt-ring.js";
 import { GameData } from "../src/shared/registry.js";
 
 const params = new URLSearchParams(location.search);
@@ -671,15 +672,6 @@ PAGES.armaments = () => h("div.page",
           stat("Defence", "9.8", null, h("small", "stops 31% here")), stat("Swing", "2.6s"), stat("Crit chance", "7%"),
           stat("Crit damage", "150%"), stat("Penetration", "10%"), stat("Veil", "+11 a blow"), stat("Hunt", "Lv 31", "good"))))));
 
-function foeCard({ name, kind, hp, max, rank, target, float }) {
-  return h("div.foe-card", { class: { "is-target": target, "is-elite": rank === "elite", "is-sovereign": rank === "sovereign" } },
-    h("div.fx-layer", float ? h("span.float", { class: [float.kind, "lane0", SHOT && "is-frozen"] }, float.text) : null),
-    h("button.foe-art", { type: "button", "aria-label": `${name}: details`, onClick: () => PAGES_MODALS.foe() }, monsterArt(kind, rank)),
-    h("div.foe-body",
-      h("div.foe-name", h("span", name), rank === "elite" ? tag("Elite", "elite") : null, rank === "sovereign" ? tag("Sovereign", "sovereign") : null),
-      h("div.hpbar.hpbar-foe", h("i", { style: { width: `${(hp / max) * 100}%` } }), h("span", `${fmt(hp)} / ${fmt(max)}`))));
-}
-
 /* The Zones map with made-up hunters on it: you, now and then a party mate, and a
    handful of the realm, spread differently on every region so each map shows a crowd. */
 const KIT_REALM = ["Corvin", "Edda", "Rook", "Hollis", "Wren", "Sable", "Isolde", "Ashlin", "Tobin", "Mara", "Quill", "Orrin"];
@@ -722,9 +714,92 @@ function kitCrowd(tier) {
   return { active: "inner", hunters, counts, party: true };
 }
 
+/* The Hunt card, as the page draws it: once on the walk (the stage's DOM, still) and once
+   in a fight, where the ring itself runs on a made-up snapshot so the kit shows it moving. */
+function kitWalk() {
+  const steps = Array.from({ length: 14 }, (_, i) => h("i", { class: { on: i < 5 }, style: { left: `${5 + i * 6.6}%`, top: `${i % 2 ? 58 : 38}%` } }));
+  const row = (kind, name, pct) => h("div.hunt-wc-row",
+    h("button.hunt-wc-art", { type: "button", "aria-label": `${name}: details`, onClick: () => PAGES_MODALS.foe() }, monsterArt(kind)),
+    h("b", name), h("span.hunt-wc-bar", h("i", { style: { width: `${pct}%` } })), h("em", `${pct}%`));
+  return h("div.hunt-walk",
+    h("div.hunt-walk-you",
+      h("span.hunt-face", h("span.hunt-face-in.portrait-bust", h("img", { src: "assets/skin-drifter.webp", alt: "" }))),
+      h("div.hunt-you-name", h("span.hunt-klass", { title: "Warrior" }, ic("warrior")), h("span.hunt-you-text", ME.name)),
+      h("div.hpbar", h("i", { style: { width: `${(ME.hp / ME.maxHp) * 100}%` } }), h("span", `${ME.hp} / ${ME.maxHp}`))),
+    h("div.hunt-walk-mid",
+      h("div.hunt-walk-state", h("b", "Searching the Inner"), h("span", "Next encounter in ", h("em", "5s"))),
+      h("div.hunt-trail", steps, h("span.hunt-trail-you", { style: { left: "40%" } }), h("span.hunt-trail-fog")),
+      h("div.chip-row.hunt-recap",
+        h("span.eyebrow", "Encounter 41"), chip("3 slain", null, "skull"), chip("+152 XP", "gold"), chip("Coal"), chip("24s", null, "hourglass"))),
+    h("div.hunt-coming",
+      h("span.eyebrow.hunt-coming-head", "What waits"),
+      h("div.hunt-coming-rows", row("horror", "Fen Stalker", 45), row("man", "Bog Brute", 35), row("beast", "Bog Crawler", 20)),
+      h("div.hunt-odds",
+        h("span.hunt-odds-l", h("span.hunt-pips", h("i.on"), h("i.on"), h("i")), h("span", "2 at once")),
+        h("span.hunt-odds-r", h("span.hunt-odd.is-elite", "Elites 5%"), h("span.hunt-odd.is-sov", ic("crown"), "Sovereign 1%")))));
+}
+
+function kitFight() {
+  const ring = huntRing({ onFoe: () => PAGES_MODALS.foe() });
+  const head = h("div.hunt-fight-head",
+    h("div.hunt-fh-l", h("b", "Encounter 42"), h("span", "Fighting in the Inner · 3 on you")),
+    h("div.hunt-fh-r", h("span", "Another steps out in", h("em", "17s")), h("span.hunt-fh-pill", h("span.hunt-fh-icon", ic("eye")), h("span", "One waits in the dark"))));
+  const stage = h("div.hunt-stage", ring.node, head);
+  // Timers run on from here and wrap, as they do between a party's answers: the foes keep striking.
+  requestAnimationFrame(() => ring.sync({
+    key: "kit", party: false, tier: 2, zoneIdx: 2, phase: "fight", enc: 42, kind: "normal", vast: false, enrage: 0, reinforceIn: 17000, queued: 1,
+    hunters: [{ id: "me", me: true, name: ME.name, skin: "drifter", klass: "warrior", hp: ME.hp, max: ME.maxHp, veil: 0.64, volley: 0 }],
+    foes: [
+      { uid: 1, id: "mob_t2_stalker", elite: false, hp: 22, max: 48, timer: 900, target: "me" },
+      { uid: 2, id: "mob_t2_skirmisher", elite: true, hp: 54, max: 54, timer: 1700, target: "me" },
+      { uid: 3, id: "mob_t2_brute", elite: false, hp: 64, max: 78, timer: 2400, target: "me" },
+    ],
+  }));
+  return stage;
+}
+
+function kitHuntCard(phase) {
+  const fight = phase === "fight";
+  return h("section.card.hunt-card", { dataset: { phase, size: "wide" } },
+    cardHead("The Inner of Gallowmoor", { sub: "2 at once · ×1.7 XP · ×1.27 foes", actions: chip("Thane hunts here too", "violet", "party") }),
+    fight ? kitFight() : h("div.hunt-stage", h("canvas.hunt-ring", { "aria-hidden": "true" }), kitWalk()),
+    h("div.hunt-foot",
+      h("div.kpis",
+        h("div.kpi", h("span.l", "Kills"), h("span.v", "38")),
+        h("div.kpi", h("span.l", "XP/hr"), h("span.v", "4,210")),
+        h("div.kpi", h("span.l", "DPS"), h("span.v", "18.4")),
+        h("div.kpi", h("span.l", "Time left"), h("span.v", "10h 48m"))),
+      h("div.hunt-loot", h("span.eyebrow", "This run"),
+        h("div.hunt-loot-tiles", h("span.hunt-loot-tile", { "data-tip": "Coal" }, ic("coalIco"), h("b", "14")), h("span.hunt-loot-tile", { "data-tip": "Tallow" }, ic("tallowIco"), h("b", "3")))),
+      h("div.hunt-actions",
+        h("div.btn-row",
+          h("button.btn.btn-quiet", { type: "button" }, "Pull back"),
+          h("button.btn.btn-ember", { type: "button", onClick: () => PAGES_MODALS.huntZone() }, "Change hunt")))));
+}
+
+function kitQuarry() {
+  const tabs = [["beast", "Bog Crawler", "Skirmisher"], ["horror", "Fen Stalker", "Stalker"], ["man", "Bog Brute", "Brute"], ["man", "The Drowned Bailiff", "Sovereign", "sovereign"]];
+  const stat = (l, v, cls) => h("div.quarry-stat", { class: cls }, h("span", l), h("b", v));
+  return h("div.card.quarry-plate",
+    h("div.quarry-tabs", { role: "tablist" }, tabs.map(([kind, name, sub, rank], i) =>
+      h("button.quarry-tab", { type: "button", role: "tab", class: { "is-sov": rank === "sovereign" }, "aria-selected": i === 1 },
+        h("span.quarry-tab-face", monsterArt(kind, rank)), h("span.quarry-tab-text", h("b", name), h("small", sub))))),
+    h("div.quarry-body", { role: "tabpanel" },
+      h("button.quarry-art", { type: "button", onClick: () => PAGES_MODALS.foe() }, monsterArt("horror")),
+      h("div.quarry-info",
+        h("span.quarry-eyebrow", "Stalker · the Inner is thick with them"),
+        h("h3.quarry-name", "Fen Stalker"),
+        h("p.quarry-note", "Patient and even. It keeps pace with you, blow for blow."),
+        h("div.quarry-stats", stat("Health", "61"), stat("Attack", "5.3"), stat("Swings every", "2.4s"), stat("Defence", "0.1"),
+          stat("A kill pays", h("span", "20.4 XP", h("small", "9g to 14g"))), stat("Mastery a kill", "+0.46", "is-mastery")),
+        h("p.quarry-small", "As it stands in the Inner: health and attack ×1.27, XP ×1.7. Mastery goes to the weapon in your hands."),
+        h("div.quarry-drops", h("span.quarry-drops-l", "Leaves"),
+          h("span.quarry-drop", ic("coalIco"), "A reagent ", h("em", "50% of kills")),
+          h("span.quarry-drop.is-veil", ic("sparkle"), "Lesser Fragment ", h("em", "Elites, Inner and Core"))))));
+}
+
 PAGES.hunt = () => {
   const s = skill("warfare");
-  const floatYou = h("span.float.hurt.lane1", { class: SHOT && "is-frozen" }, "6");
   return h("div.page",
     h("section.hero", { "data-tone": "ember" },
       art("swords", { size: "xl", tone: "ember" }),
@@ -735,35 +810,8 @@ PAGES.hunt = () => {
         bar(((s.xp - s.base) / (s.next - s.base)) * 100, "bar-ember"),
         h("div.hero-xp-meta", h("span", "You take the vanguard."), h("span", h("b", fmtWhole(s.next - s.xp)), " to Lv 32")))),
 
-    h("section.card.hunt-card",
-      cardHead("The Inner of Gallowmoor", { sub: "Two or three at once · ×1.7 XP a kill", actions: chip("Thane hunts here too", "violet", "party") }),
-      h("div.arena",
-        h("div.arena-you",
-          h("div.fx-layer", floatYou),
-          h("div.portrait.arena-portrait", h("img", { src: "assets/commander-default.webp", alt: "" })),
-          h("div.arena-name", ME.name),
-          h("div.hpbar", h("i", { style: { width: `${(ME.hp / ME.maxHp) * 100}%` } }), h("span", `${ME.hp} / ${ME.maxHp}`)),
-          h("div.veilbar", h("i", { style: { width: "64%" } })),
-          h("div.veil-note", "Bulwark · 64 of 100")),
-        h("div.arena-mid",
-          h("div.arena-vs", { "aria-hidden": "true" }, "VS"),
-          h("div.arena-status", "Fighting"),
-          h("div.arena-timer", "Reinforcements in 31s")),
-        h("div.arena-foes",
-          foeCard({ name: "Fen Stalker", kind: "horror", hp: 22, max: 48, target: true, float: { kind: "crit", text: "14!" } }),
-          foeCard({ name: "Bog Crawler", kind: "beast", hp: 30, max: 30, rank: "elite" }),
-          foeCard({ name: "Bog Brute", kind: "man", hp: 64, max: 78 }))),
-      h("div.hunt-foot",
-        h("div.kpis",
-          h("div.kpi", h("span.l", "Kills"), h("span.v", "38")),
-          h("div.kpi", h("span.l", "XP/hr"), h("span.v", "4,210")),
-          h("div.kpi", h("span.l", "Threat"), h("span.v", "64 / 100"), bar(64, "bar-ember bar-thin")),
-          h("div.kpi", h("span.l", "Time left"), h("span.v", "10h 48m"))),
-        h("div.hunt-actions",
-          h("label.switch", h("input", { type: "checkbox", checked: true }), "Hide when Threat peaks"),
-          h("div.btn-row",
-            h("button.btn.btn-quiet", { type: "button" }, "Pull back"),
-            h("button.btn.btn-ember", { type: "button", onClick: () => PAGES_MODALS.huntZone() }, "Change hunt"))))),
+    kitHuntCard("search"),
+    kitHuntCard("fight"),
 
     h("section.section",
       sectionHead("Zones", "Who from the realm is out on the ground right now. The Inner and the Core are the only ground a Sovereign walks, and the only ground whose Elites carry the Veil."),
@@ -779,16 +827,8 @@ PAGES.hunt = () => {
       })),
 
     h("section.section",
-      sectionHead("Quarry", "What lives in Gallowmoor. Pick one to see what it hits for and what it drops."),
-      h("div.grid-cards",
-        [["Bog Crawler", "beast", "Skirmisher · 30 health · swings every 2.0s"], ["Fen Stalker", "horror", "Stalker · 48 health · swings every 2.4s"], ["Bog Brute", "man", "Brute · 78 health · swings every 3.0s"]]
-          .map(([name, kind, sub]) => h("button.foe-tile", { type: "button", onClick: () => PAGES_MODALS.foe() },
-            h("span.foe-art", monsterArt(kind)),
-            h("span.foe-tile-main", h("span.foe-tile-name", name), h("span.foe-tile-sub", sub)))),
-        h("button.foe-tile.is-sovereign", { type: "button" },
-          h("span.foe-art", monsterArt("man", "sovereign")),
-          h("span.foe-tile-main", h("span.foe-tile-name", "The Drowned Bailiff"), h("span.foe-tile-sub", "Sovereign · comes when Threat peaks · enrages every 30s")),
-          tag("Sovereign", "sovereign")))));
+      sectionHead("Quarry", "What lives in Gallowmoor, as it stands in the zone you hunt. Pick one to see it up close."),
+      kitQuarry()));
 };
 
 const REGIONS = [
@@ -1518,19 +1558,6 @@ function liveBars() {
     if (huntBar) setWidth(huntBar, pct(48));
     qsa(".item-pill.is-working .pill-bar > i").forEach((i) => setWidth(i, pct(36)));
   }, 250);
-
-  // A blow now and then in the arena.
-  setInterval(() => {
-    const target = qs(".foe-card.is-target .fx-layer");
-    if (!target || document.hidden) return;
-    const kinds = [["hit", "9"], ["crit", "17!"], ["hit", "11"], ["glance", "Glance"]];
-    const [kind, text] = kinds[Math.floor(Math.random() * kinds.length)];
-    const f = h("span.float", { class: [kind, `lane${Math.floor(Math.random() * 3)}`] }, text);
-    target.appendChild(f);
-    const art = qs(".foe-card.is-target .foe-art");
-    if (art) { art.classList.remove("struck"); void art.offsetWidth; art.classList.add("struck"); }
-    setTimeout(() => f.remove(), 1000);
-  }, 1400);
 }
 
 function pageSwitcher() {

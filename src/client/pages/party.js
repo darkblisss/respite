@@ -731,16 +731,21 @@ function partyBody(ctx, page) {
     let invitesSig = null;
 
     const onlineChip = h("span.chip.chip-good", iconEl("online"), h("span"));
-    const chat = chatPanel();
+    // Who looks like what, off the roster: the chat puts each speaker's face beside their words.
+    const skins = new Map();
+    const chat = chatPanel({ skinOf: (id) => skins.get(String(id).toLowerCase()) || null });
     const room = roomCard();
 
-    // The room, then the chat under it at the full width.
+    /* The room and the chat side by side while the page has the width for both, the chat
+       as tall as the room and scrolling inside it; the chat under the room below that. */
     page.replaceChildren(
       h("header.page-head",
         h("div", eyebrow, title, h("p.page-sub", RULE), h("div.chip-row.mt-3", bonusChip)),
         actions),
-      room.node,
-      h("section.card.card-flush.chat", cardHead("Party chat", { actions: onlineChip }), chat.log, chat.alert, chat.form));
+      h("div.party-main",
+        room.node,
+        h("div.party-side",
+          h("section.card.card-flush.chat", cardHead("Party chat", { actions: onlineChip }), chat.log, chat.alert, chat.form))));
 
     /* The page actions: a button that opens the invite dialog, and Leave for everyone.
        The chat is the reason to be on this page, so the invite field and the list of
@@ -919,6 +924,8 @@ function partyBody(ctx, page) {
         room.paint(st, now, myHunt, fight);
         paintActions(st, leader);
         paintInvites(st, now, leader);
+        skins.clear();
+        members.forEach((m) => { if (m && m.user_id && typeof m.skin === "string") skins.set(String(m.user_id).toLowerCase(), m.skin); });
         chat.paint(list(st.messages), now);
         // The chat is on screen, so it has been read. The sidebar's dot reads the same mark.
         if (st.party && st.party.id) markRead(st.party.id, newestMessage(st));
@@ -938,7 +945,7 @@ function partyBody(ctx, page) {
 
   /* ---------- chat ---------- */
 
-  function chatPanel() {
+  function chatPanel({ skinOf = () => null } = {}) {
     const log = h("ol.chat-log", { "aria-live": "polite", "aria-label": "Party chat", tabindex: "0" });
     const input = h("input.input", { type: "text", maxlength: String(CHAT_MAX), placeholder: "Say something to the party", "aria-label": "Message", autocomplete: "off", enterkeyhint: "send" });
     const count = h("span.composer-count", { "aria-hidden": "true" }, `0/${CHAT_MAX}`);
@@ -1006,7 +1013,8 @@ function partyBody(ctx, page) {
       const node = own
         ? h("li.msg.is-own", h("div", h("div.msg-meta", h("span.sr-only", "You"), time), h("p.msg-text", String(msg.body || ""))))
         : h("li.msg",
-          h("span.avatar.avatar-sm", { "aria-hidden": "true" }, initial(msg.username)),
+          // Their face, as the Hunt page's map draws it; somebody the roster no longer has wears the default.
+          h("span.chat-face.portrait-bust", { "aria-hidden": "true" }, portraitImg(skinOf(msg.user_id))),
           h("div", h("div.msg-meta", h("b", display(msg.username)), time), h("p.msg-text", String(msg.body || ""))));
       return { node, time, at };
     }
