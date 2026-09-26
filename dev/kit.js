@@ -698,10 +698,28 @@ function kitHunters(tier) {
   return out;
 }
 
-function kitZoneMap(tier, { active = KIT_YOU[(tier - 1) % KIT_YOU.length], hunters = kitHunters(tier) } = {}) {
+function kitZoneMap(tier, { active = KIT_YOU[(tier - 1) % KIT_YOU.length], hunters = kitHunters(tier), counts = null, party = hunters.some((u) => u.kind === "party"), view = "everyone" } = {}) {
   const map = zoneMap({ onZone: () => PAGES_MODALS.huntZone() });
-  map.paint({ tier, active, locked: !!active, hunters });
+  map.paint({ tier, active, locked: !!active, hunters, counts, party, view });
   return h("div.card.zone-map", map.node);
+}
+
+/* A busy region, the way ground_hunters() answers one: a count for every zone
+   and the most recently seen few by name. Past the map's crowd line the faces
+   give way to counts, and yours and your party's are the only ones drawn. */
+function kitCrowd(tier) {
+  const counts = { outer: 64, middle: 41, inner: 27, core: 12 };
+  const zones = GameData.ZONES.map((z) => z.id);
+  const hunters = [
+    { id: "me", kind: "me", zone: "inner", name: "You", skin: "drifter", tip: "You · the Inner" },
+    { id: "p:thane", kind: "party", zone: "inner", name: "Thane", skin: "outrider", href: "#/player/thane", tip: "Thane · your party" },
+    { id: "p:ysolde", kind: "party", zone: "middle", name: "Ysolde", skin: "outrider", href: "#/player/ysolde", tip: "Ysolde · your party" },
+  ];
+  for (let k = 0; k < 32; k++) {
+    const name = `${KIT_REALM[k % KIT_REALM.length]}${k >= KIT_REALM.length ? k : ""}`;
+    hunters.push({ id: `r:${name}`, kind: "realm", zone: zones[k % 4], name, skin: k % 2 ? "drifter" : "outrider", href: `#/player/${name.toLowerCase()}`, tip: `${name} · out 1h` });
+  }
+  return { active: "inner", hunters, counts, party: true };
 }
 
 PAGES.hunt = () => {
@@ -1901,8 +1919,10 @@ function galleryData() {
 
 function galleryMaps() {
   return section("maps", "Region maps",
-    "The Hunt page's Zones: <code>ui/region-map.js</code> draws each region from its name and note, the four zones as contour rings from the Outer edge to the Core, the camp on the rim and the Sovereign's lair at the heart; <code>ui/zone-map.js</code> puts the hunters on it (you, your party, the realm) with a row a zone beside it. A ring or a row opens the zone popup.",
-    GameData.REGIONS.map((r) => block(`${r.tier} · ${r.name} · Lv ${r.level}`, kitZoneMap(r.tier))));
+    "The Hunt page's Zones: <code>ui/region-map.js</code> draws each region from its name and note, the four zones as contour rings from the Outer edge to the Core, the camp on the rim and the Sovereign's lair at the heart; <code>ui/zone-map.js</code> puts the hunters on it (you, your party, the realm) with a row a zone beside it. A ring or a row opens the zone popup. Past 24 strangers on the ground the map is a crowd: their faces give way to a count on each zone's name and a zone lit by how full it is. In a party, Everyone | Party leaves the realm off the map.",
+    GameData.REGIONS.map((r) => block(`${r.tier} · ${r.name} · Lv ${r.level}`, kitZoneMap(r.tier))),
+    block("A crowd: 145 out on the ground, your party of three drawn, the rest counted", kitZoneMap(5, kitCrowd(5))),
+    block("The same ground in the Party view: the realm left off the map", kitZoneMap(5, Object.assign(kitCrowd(5), { view: "party" }))));
 }
 
 function galleryPages() {

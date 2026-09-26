@@ -2,14 +2,15 @@
    Respite · tests/client/region-map.test.mjs · The Surveyor
    ------------------------------------------------------------
    The Hunt page's maps, read as numbers: nine regions, each drawn
-   the same way every time and unlike the other eight, four bands
-   that take a press in the Outer to Core order, rings that stay on
-   the page and never touch, and hunters stood where they belong.
+   the same way every time and unlike the other eight, the ground
+   and the rings as two sheets, four bands that take a press in the
+   Outer to Core order, rings that stay on the page and never touch,
+   hunters stood where they belong, and a crowd scattered as specks.
 
      node tests/client/region-map.test.mjs
    ============================================================ */
 
-import { regionMap, MAPPED_TIERS, MAP_W, MAP_H, labelSpot, campSpot, heartSpot, zoneOf, pinSlots, placePins } from "../../src/client/ui/region-map.js";
+import { regionMap, regionLand, regionOverlay, crowdSpots, dotsPath, MAPPED_TIERS, MAP_W, MAP_H, labelSpot, campSpot, heartSpot, zoneOf, pinSlots, placePins } from "../../src/client/ui/region-map.js";
 import { GameData } from "../../src/shared/registry.js";
 
 let passed = 0;
@@ -39,6 +40,21 @@ section("nine maps, each its own");
   const huge = drawn.map((m, i) => [TIERS[i], m.length]).filter(([, n]) => n > 200000);
   check("and none is heavier than a page wants to parse", huge.length === 0, huge);
   check("a region this build does not know gets a map rather than a hole", regionMap(99).length > 1000);
+}
+
+section("two sheets: the ground as a picture, the rings live over it");
+for (const t of TIERS) {
+  const land = regionLand(t, "l-");
+  const over = regionOverlay(t, "o-");
+  check(`${t}: the ground is a whole SVG document of its own, the map's size`,
+    /^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" viewBox="0 0 640 400" width="640" height="400">/.test(land) && land.endsWith("</svg>"));
+  check(`${t}: and nothing on it wears a page class or answers the pointer, since a picture can do neither`,
+    !/class=|data-zone|<text/.test(land));
+  check(`${t}: its filters and gradients are all its own`,
+    [...land.matchAll(/url\(#([^)]+)\)/g)].every((m) => land.includes(`id="${m[1]}"`)));
+  check(`${t}: the sheet over it carries every band, a crowd's specks still empty, and no filter to run again`,
+    (over.match(/class="zm-band z\d"/g) || []).length === 4 && /<path class="zm-crowd-glow" d=""\/><path class="zm-crowd-dot" d=""\/>/.test(over) && !/filter=|url\(| id="/.test(over));
+  check(`${t}: and the one-sheet map is the two together`, regionMap(t, "l-").includes(land.slice(land.indexOf("<defs>"), -6)) && regionMap(t, "o-").includes(over));
 }
 
 section("the rings");
@@ -111,7 +127,49 @@ section("where a hunter stands");
     packed.placed.length === slots[3].length - 1 && packed.more.length === 1 && packed.more[0].count === crowd.length - packed.placed.length,
     { placed: packed.placed.length, more: packed.more });
   check("and a hunter on ground the map has no zone for is left off it", placePins(t, [{ id: "x", kind: "realm", zone: "nowhere" }]).placed.length === 0);
+
+  // On a phone the bands are barely a face apart: a mate one band out stands clear of you.
+  const narrowGap = (18 * 0.85 + 2) / (358 / MAP_W);
+  const across = placePins(t, [{ id: "me", kind: "me", zone: "inner" }, { id: "p:ysolde", kind: "party", zone: "middle" }, { id: "p:thane", kind: "party", zone: "inner" }, ...Array.from({ length: 12 }, (_, i) => ({ id: `r:${i}`, kind: "realm", zone: ZONE_IDS[i % 4] }))], narrowGap);
+  const tooClose = [];
+  across.placed.forEach((p, k) => across.placed.forEach((q, j) => { if (j > k && Math.hypot(p.x - q.x, p.y - q.y) < narrowGap - 0.01) tooClose.push([p.id, q.id]); }));
+  check("on a narrow map no two faces stand on each other, even a band apart", tooClose.length === 0, tooClose);
+  const meNarrow = across.placed.find((p) => p.id === "me");
+  check("and you still take the south of your own band", meNarrow.x === pinSlots(t, 2, narrowGap)[0].x && meNarrow.y === pinSlots(t, 2, narrowGap)[0].y);
+
+  // In a crowd a zone's name carries a count, so it keeps more room: no spot lands on it.
+  const wide = ZONE_IDS.map((z, i) => pinSlots(t, i, 30, 46));
+  const nearLabel = [];
+  wide.forEach((s, i) => {
+    const l = labelSpot(t, i);
+    s.forEach((p) => { if (Math.abs(p.x - l.x) < 46 && Math.abs(p.y - l.y) < 12) nearLabel.push([ZONE_IDS[i], Math.round(p.x), Math.round(p.y)]); });
+  });
+  check("a name given more room keeps every spot clear of it", nearLabel.length === 0, nearLabel);
+  const roomy = placePins(t, hunters, 30, 46);
+  check("and everyone still stands in their own zone", roomy.placed.length === hunters.length && roomy.placed.every((p) => zoneOf(t, p.x, p.y) === p.zone), roomy.placed);
 }
+
+section("a crowd as specks");
+for (const t of TIERS) {
+  const want = [96, 72, 45, 21];
+  const spots = want.map((n, i) => crowdSpots(t, i, n));
+  check(`${t}: every zone finds room for as many specks as it is asked for`, spots.every((s, i) => s.length === want[i]), spots.map((s) => s.length));
+  const stray = [];
+  spots.forEach((s, i) => s.forEach((p) => { if (zoneOf(t, p.x, p.y) !== ZONE_IDS[i]) stray.push([ZONE_IDS[i], Math.round(p.x), Math.round(p.y)]); }));
+  check(`${t}: each speck lies in its own zone`, stray.length === 0, stray.slice(0, 5));
+  const onName = [];
+  spots.forEach((s, i) => {
+    const l = labelSpot(t, i);
+    s.forEach((p) => { if (Math.abs(p.x - l.x) < 44 && Math.abs(p.y - l.y) < 10) onName.push(ZONE_IDS[i]); });
+  });
+  check(`${t}: and none on a zone's name`, onName.length === 0, onName);
+  const close = [];
+  spots.forEach((s) => s.forEach((p, k) => s.forEach((q, j) => { if (j > k && Math.hypot(p.x - q.x, p.y - q.y) < 5.5) close.push([k, j]); })));
+  check(`${t}: no two specks run together`, close.length === 0, close.slice(0, 5));
+  const fewer = crowdSpots(t, 1, 30);
+  check(`${t}: one more hunter adds one more speck and the rest stay put`, JSON.stringify(fewer) === JSON.stringify(spots[1].slice(0, 30)));
+}
+check("specks become one path of dots", /^(M[-\d.]+ [-\d.]+a[\d.]+ [\d.]+ 0 1 0 [\d.]+ 0a[\d.]+ [\d.]+ 0 1 0 -[\d.]+ 0){3}$/.test(dotsPath(crowdSpots(5, 0, 3), 1.7)), dotsPath(crowdSpots(5, 0, 3), 1.7));
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 || passed === 0 ? 1 : 0);

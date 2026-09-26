@@ -27,7 +27,7 @@ const HOUR = 60 * MIN;
 
 /* ================= 1. STORE ================= */
 
-export function createStubStore({ state, mode = "guest", username = null, party = null } = {}) {
+export function createStubStore({ state, mode = "guest", username = null, party = null, crowd = 0 } = {}) {
   const bus = createEmitter();
   attachChronicle(bus);
   const live = makeEnv({ emitter: bus, fx: true, party: partyIntervals(party) });
@@ -39,6 +39,7 @@ export function createStubStore({ state, mode = "guest", username = null, party 
     state,
     bus,
     party,
+    crowd,
     online: mode === "guest" ? null : 12,
     status: { conn: mode === "guest" ? "guest" : "online", pending: 0, lastSyncAt: null, error: null },
     now: () => clock0 + (Date.now() - wall0),
@@ -149,7 +150,7 @@ function stubNet(store) {
       subscribe: (partyId, onChange) => realmOf(store).subscribe(partyId, onChange),
     },
     hiscores: async (skill, limit) => realmOf(store).hiscores(skill, limit),
-    groundHunters: async (tier) => (guest() ? { rows: [], error: "Sign in first.", missing: false } : groundHunters(store, tier)),
+    groundHunters: async (tier) => (guest() ? { rows: [], counts: null, error: "Sign in first.", missing: false } : groundHunters(store, tier)),
     onlineCount: async () => 12,
     heartbeat: async () => {},
   };
@@ -416,26 +417,56 @@ function realmHash(s) {
   return x >>> 0;
 }
 
-/* Who else is out, as ground_hunters() (migration 018) would answer: about a
-   third of the realm on any ground, each on a steady zone, face and start.
+// A crowd for page.js's crowd=N: names that read like players', steady from one look to the next.
+const CROWD_A = ["ash", "bram", "cor", "dun", "ed", "fen", "gar", "hol", "is", "jor", "kel", "lor", "mor", "nes", "or", "pell", "quin", "ros", "sab", "tor", "ul", "vey", "wen", "yar"];
+const CROWD_B = ["a", "ic", "wyn", "ric", "da", "vin", "ley", "mar", "on", "eth", "ra", "is", "ke", "lin", "dra", "ven"];
+function crowdOf(n) {
+  const out = [];
+  for (let i = 0; out.length < n && i < n * 4; i++) {
+    const h = realmHash(`crowd:${i}`);
+    const name = `${CROWD_A[h % CROWD_A.length]}${CROWD_B[(h >>> 8) % CROWD_B.length]}${i >= CROWD_A.length * CROWD_B.length ? i : ""}`;
+    if (!out.includes(name)) out.push(name);
+  }
+  return out;
+}
+
+/* Who else is out, as ground_hunters() (migration 018) would answer: a count
+   for each zone and the 32 seen most recently by name. The stub realm puts
+   about a third of its players on any ground; page.js's crowd=N puts N there
+   instead, most on the edge and fewest at the heart, as a busy realm would.
    It needs nothing else from the realm, so it stands on its own. */
+const NAMED = 32;
+
 function groundHunters(store, tier) {
   const t = Number(tier);
-  if (!Number.isInteger(t) || t < 1 || t > GameData.REGIONS.length) return { rows: [], error: "No such ground.", missing: false };
+  if (!Number.isInteger(t) || t < 1 || t > GameData.REGIONS.length) return { rows: [], counts: null, error: "No such ground.", missing: false };
   const now = store.now();
   const me = store.account().username;
   const zones = GameData.ZONES.map((z) => z.id);
-  const rows = REALM_PLAYERS.filter((name) => name !== me && realmHash(`${name}:${t}`) % 3 === 0).map((name) => {
+  const weights = [0.42, 0.3, 0.18, 0.1];
+  const names = store.crowd > 0 ? crowdOf(store.crowd) : REALM_PLAYERS.filter((name) => realmHash(`${name}:${t}`) % 3 === 0);
+  const all = names.filter((name) => name !== me).map((name) => {
     const n = realmHash(`${name}:ground:${t}`);
+    let zi = n % zones.length;
+    if (store.crowd > 0) {
+      const u = (n % 1000) / 1000;
+      zi = 0;
+      for (let acc = weights[0]; u > acc && zi < 3; acc += weights[++zi]);
+    }
     return {
       username: name,
       skin: GameData.SKINS[n % GameData.SKINS.length].id,
       discipline: [null, "warrior", "rogue", "mage"][n % 4],
-      zone: zones[n % zones.length],
+      zone: zones[zi],
       started_at: new Date(now - ((n % 400) + 3) * MIN).toISOString(),
+      seen: (n >>> 12) % 600,
     };
   });
-  return { rows, error: null, missing: false };
+  const counts = {};
+  all.forEach((r) => { counts[r.zone] = (counts[r.zone] || 0) + 1; });
+  const rows = all.slice().sort((a, b) => a.seen - b.seen || a.username.localeCompare(b.username)).slice(0, NAMED)
+    .map(({ seen, ...row }) => row);
+  return { rows, counts, error: null, missing: false };
 }
 
 function makeRealm(store) {

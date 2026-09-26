@@ -95,20 +95,26 @@ let lastZone = "outer";
 
 /* ================= WHO ELSE IS OUT ================= */
 /* The realm's hunters on one region's ground, as ground_hunters() last
-   answered (migration 018), kept by tier across visits to the page so coming
-   back does not ask again at once. Asked again every REALM_MS while the page
-   is up and the tab is seen. A realm that has not run 018 answers `missing`
-   and the map shows you and your party alone for the rest of the session. */
+   answered (migration 018): how many are on each zone, and the most recently
+   seen of them by name. Kept by tier across visits to the page so coming back
+   does not ask again at once, and asked again every REALM_MS, and only while
+   the page is up and the tab is seen: the page's own tick only ever redraws
+   from what is kept here. A realm that has not run 018 answers `missing` and
+   the map shows you and your party alone for the rest of the session. */
 const REALM_MS = 45 * 1000;
-const realmSeen = new Map();   // tier -> { at, rows }
+const realmSeen = new Map();   // tier -> { at, rows, counts }
+const NOBODY = { rows: [], counts: null };
 let realmAsking = false;
 let realmMissing = false;
+
+// Who the map shows while in a party, for the session: "everyone" or "party".
+let groundView = "everyone";
 
 function realmOn(ctx, tier) {
   const seen = realmSeen.get(tier) || null;
   const net = ctx.net;
   const signedIn = !!(ctx.account && ctx.account.mode === "account");
-  if (realmMissing || !signedIn || !net || typeof net.groundHunters !== "function") return seen ? seen.rows : [];
+  if (realmMissing || !signedIn || !net || typeof net.groundHunters !== "function") return seen || NOBODY;
   const idle = typeof document !== "undefined" && document.hidden;
   if (!realmAsking && !idle && (!seen || Date.now() - seen.at >= REALM_MS)) {
     realmAsking = true;
@@ -116,14 +122,18 @@ function realmOn(ctx, tier) {
       .then(() => net.groundHunters(tier))
       .then((res) => {
         if (res && res.missing) realmMissing = true;
-        const rows = res && !res.error && Array.isArray(res.rows) ? res.rows : seen ? seen.rows : [];
-        // A failed ask waits out the same interval rather than asking again every tick.
-        realmSeen.set(tier, { at: Date.now(), rows });
+        const ok = res && !res.error && Array.isArray(res.rows);
+        // A failed ask keeps the last answer and waits out the same interval rather than asking every tick.
+        realmSeen.set(tier, {
+          at: Date.now(),
+          rows: ok ? res.rows : seen ? seen.rows : [],
+          counts: ok ? res.counts || null : seen ? seen.counts : null,
+        });
       })
-      .catch(() => realmSeen.set(tier, { at: Date.now(), rows: seen ? seen.rows : [] }))
+      .catch(() => realmSeen.set(tier, { at: Date.now(), rows: seen ? seen.rows : [], counts: seen ? seen.counts : null }))
       .finally(() => { realmAsking = false; });
   }
-  return seen ? seen.rows : [];
+  return seen || NOBODY;
 }
 
 const ZONE_IDS = new Set(GameData.ZONES.map((z) => z.id));
@@ -294,6 +304,7 @@ export default {
         lastZone = zoneId;
         openPopup("zone", ctx, tier, zoneId);
       },
+      onView: (view) => { groundView = view; },
     });
     const zones = h("section.section",
       h("div.section-head",
@@ -809,7 +820,7 @@ export default {
         out.push({ id: `p:${String(m.user_id).toLowerCase()}`, kind: "party", zone: hunt.zone, name: cap(name), skin: typeof m.skin === "string" ? m.skin : null,
           href: `#/player/${encodeURIComponent(name)}`, tip: `${cap(name)} · your party` });
       });
-      realmOn(ctx, tier).forEach((row) => {
+      realmOn(ctx, tier).rows.forEach((row) => {
         const name = row && typeof row.username === "string" ? row.username : "";
         if (!name || seen.has(name.toLowerCase()) || !ZONE_IDS.has(row.zone)) return;
         seen.add(name.toLowerCase());
@@ -826,11 +837,15 @@ export default {
       const tier = region.tier;
       /* A hunt already under way locks every other zone: pull back before picking a new one.
          Both fights hold a tier and a zone, so the map marks either one. */
+      const members = ctx.party && Array.isArray(ctx.party.members) ? ctx.party.members : [];
       map.paint({
         tier,
         active: c && c.tier === tier ? c.zone : null,
         locked: !!c,
         hunters: huntersOn(ctx, tier, down),
+        counts: realmOn(ctx, tier).counts,
+        party: members.length > 1,
+        view: groundView,
       });
 
       // Travel doesn't end a hunt: say where it is when that isn't here.

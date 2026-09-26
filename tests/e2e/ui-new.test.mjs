@@ -570,6 +570,28 @@ await run(async () => {
     }));
     same("the map puts you and your party mate on the party's ground, the mate as party and only once", out, { me: "outer", party: [["Uinew_b", "outer"]], twice: 0 });
 
+    // In a party the map offers to show the party alone, and leaves the rest of the realm off it.
+    const seen = () => live(app, () => ({
+      offered: !!document.querySelector(".zone-view:not([hidden])"),
+      pressed: [...document.querySelectorAll(".zone-view .seg-btn")].filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.dataset.view),
+      realm: document.querySelectorAll(".zone-pin.is-realm").length,
+      party: document.querySelectorAll(".zone-pin.is-party").length,
+      rows: [...document.querySelectorAll(".zone-row-who")].map((w) => w.textContent),
+    }));
+    const everyone = await seen();
+    check("in a party the map offers Everyone or Party, Everyone to begin with, the realm on it",
+      everyone.offered && everyone.pressed.join() === "everyone" && everyone.realm === 1 && everyone.party === 1, everyone);
+    await live(app, () => document.querySelector('.zone-view .seg-btn[data-view="party"]').click());
+    await app.page.waitForTimeout(300);
+    const partyOnly = await seen();
+    same("Party leaves the realm off the map and keeps the party on it, the rows still counting everyone",
+      partyOnly, { offered: true, pressed: ["party"], realm: 0, party: 1, rows: everyone.rows });
+    await app.page.waitForTimeout(400);
+    same("and it holds from one tick to the next", (await seen()).pressed, ["party"]);
+    await live(app, () => document.querySelector('.zone-view .seg-btn[data-view="everyone"]').click());
+    await app.page.waitForTimeout(300);
+    same("Everyone brings the realm back", (await seen()).realm, 1);
+
     // A share is the payout's own figure over the session, so a hunter who has fought has one.
     await advanceServer(stack, 90 * 1000);
     await bParty(() => window.__respite.store.sync());

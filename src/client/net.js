@@ -550,13 +550,18 @@ export function createNet({
      running there, never the caller's own. Same `missing` promise as the boards:
      a realm that has not run 018 has no such function, and the Hunt page's map
      shows you and your party alone. */
+  /* Who else is out on one region's ground (migration 018): { counts, hunters },
+     how many are on each zone and the most recently seen of them by name. */
   async function groundHunters(tier) {
     const { data, error, code } = await rpc("ground_hunters", { p_tier: Number(tier) });
     if (error) {
       const missing = code === "PGRST202" || /could not find the function|does not exist/i.test(error);
-      return { rows: [], error, missing };
+      return { rows: [], counts: null, error, missing };
     }
-    return { rows: Array.isArray(data) ? data : [], error: null, missing: false };
+    // An array is the first cut of 018 (names only), still live until the new one is run.
+    const rows = Array.isArray(data) ? data : data && Array.isArray(data.hunters) ? data.hunters : [];
+    const counts = data && data.counts && typeof data.counts === "object" ? data.counts : null;
+    return { rows, counts, error: null, missing: false };
   }
 
   async function onlineCount() {

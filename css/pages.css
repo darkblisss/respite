@@ -1430,16 +1430,25 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
   contain: layout paint;
 }
 
+/* The ground is a picture and the rings a small live drawing over it, each on
+   a layer of its own: lighting a ring redraws the rings, never the ground under
+   them with its filters (a pointer sweep across the map went from 0.8s of
+   raster to under 0.1s). */
+.zone-map-land,
 .zone-map-art > svg {
   position: absolute;
   inset: 0;
   display: block;
   width: 100%;
   height: 100%;
+  will-change: transform;
 }
 
+.zone-map-land { pointer-events: none; user-select: none; }
+
 /* ---- the drawing's own parts: only the bands answer the pointer ---- */
-.zm-band { cursor: pointer; transition: fill var(--dur-1); }
+/* No fade on the fill: a fade redraws the rings every frame it runs. */
+.zm-band { cursor: pointer; }
 .zm-band.z0 { fill: rgba(232, 225, 213, .02); }
 .zm-band.z1 { fill: rgba(232, 225, 213, .04); }
 .zm-band.z2 { fill: rgba(216, 116, 63, .06); }
@@ -1453,6 +1462,10 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
 .zm-band.is-active { fill: rgba(216, 116, 63, .13); }
 /* A hunt under way anywhere locks every other zone, as the rows below are locked. */
 .zm-band.is-locked { cursor: default; pointer-events: none; }
+
+/* A crowd too big for faces: everyone else as a speck of light in their zone. */
+.zm-crowd-glow { fill: rgba(232, 225, 213, .1); }
+.zm-crowd-dot { fill: rgba(242, 236, 224, .85); stroke: rgba(0, 0, 0, .6); stroke-width: .6; }
 
 .zm-halo { fill: none; stroke: rgba(0, 0, 0, .55); stroke-width: 3.8; }
 .zm-line { fill: none; stroke-width: 1.2; }
@@ -1486,6 +1499,8 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
 .zone-label,
 .zone-camp {
   position: absolute;
+  display: flex;
+  align-items: center;
   transform: translate(-50%, -50%);
   white-space: nowrap;
   font-size: 10px;
@@ -1497,6 +1512,27 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
 }
 
 .zone-label.is-active { color: var(--ember-hi); }
+
+/* In a crowd a zone's name carries how many are on it. */
+.zone-label-n {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+  padding: 2px 7px 2px 5px;
+  border-radius: var(--r-pill);
+  background: rgba(8, 6, 10, .78);
+  box-shadow: inset 0 0 0 1px rgba(232, 225, 213, .2);
+  color: var(--bone);
+  font-size: 10px;
+  letter-spacing: 0;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  text-shadow: none;
+}
+
+.zone-label-n .ico { width: 10px; height: 10px; opacity: .7; }
+.zone-label.is-active .zone-label-n { color: var(--ember-hi); box-shadow: inset 0 0 0 1px var(--ember-edge); }
 /* Under the tent, clear of your own face when you are home. */
 .zone-camp { color: var(--gold); opacity: .8; transform: translate(-50%, 15px); }
 
@@ -1571,9 +1607,13 @@ button.foe-art:hover { box-shadow: inset 0 0 0 1px var(--ember); }
 .zone-map-art.is-narrow .zone-pin-name { font-size: 10px; }
 .zone-map-art.is-narrow .zone-label,
 .zone-map-art.is-narrow .zone-camp { font-size: 9px; letter-spacing: .08em; }
+.zone-map-art.is-narrow .zone-label-n { margin-left: 4px; padding: 1px 5px 1px 4px; font-size: 9px; letter-spacing: 0; }
+.zone-map-art.is-narrow .zone-label-n .ico { width: 9px; height: 9px; }
 
 /* ---- the rows: one a zone, the same four in every region ---- */
 .zone-rows { display: flex; flex-direction: column; gap: 6px; }
+/* In a party: the map shows everyone, or only the party. */
+.zone-view { margin-bottom: 2px; }
 
 .zone-row {
   display: grid;

@@ -6,6 +6,7 @@
      dev/page.html?page=skill&arg=forgemaster&scenario=crafter
      dev/page.html?page=market&mode=account&party=1
      dev/page.html?page=stockpile&popup=item&args=["bog_bar","bank"]
+     dev/page.html?page=skill&arg=warfare&scenario=hunter&party=1&crowd=150
    The shell itself (topbar, nav) stays empty: it belongs to main.js.
    ============================================================ */
 
@@ -30,7 +31,7 @@ const POPUP_FILES = ["item", "action", "zone", "foe", "class", "sell", "settings
 async function boot() {
   const state = buildScenario(q.get("scenario") || "midgame", now);
   const party = q.get("party") ? sampleParty(now) : null;
-  const store = createStubStore({ state, mode, party });
+  const store = createStubStore({ state, mode, party, crowd: Number(q.get("crowd")) || 0 });
   const route = { page: pageId, arg };
   const ctx = createCtx(store, { route });
   window.__respite = { store, ctx };

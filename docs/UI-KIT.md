@@ -1448,19 +1448,21 @@ Armaments renders a two-handed weapon as one spanning slot instead: `.doll-col.h
 - Monster drawings: `monsterArt(mob, elite)` from `popups/foe.js` draws the foe's own plate from `ui/monster-art.js` (`MONSTER_ART` by monster id; v4's five `KIND_ART` drawings are the fallback) inside `svg.m-art` (`.elite`, `.sovereign` set the rim through `--m-rim`; `--m-line` thickens it in small tiles). Parts are classes: `m-body`, `m-shade` (the far limbs), `m-cloth`, `m-bark`, `m-plate`, `m-lit`, `m-void`, `m-eye`, `m-glow`, `m-ivory`, `m-steel`, `m-edge`, `m-crack`, `m-bone`, `m-rope`, `m-shadow`, and the regions' own `m-ash`, `m-moss`, `m-sallow`, `m-ice`, `m-star`, `m-veil`, `m-fire`, `m-ghost`, `m-blood`, `m-rust`, `m-wood`, `m-water` (with `-glow` halos for ice, star and the Veil).
 - Foe cards are keyed by foe uid: add new ones, update health in place, give fallen ones `.is-gone` and remove them after 700ms.
 
-3. Zones, the region as a map. `zoneMap({ onZone })` from `ui/zone-map.js` builds it and `paint({ tier, active, locked, hunters })` keeps it current; the drawing itself is `regionMap(tier, prefix)` from `ui/region-map.js`, one map a region, seeded so the same tier always draws the same ground (ash and burnt stumps at Lv 1, peat pools and gibbets, snow over tunnel mouths, pine and cairns, dead water, old growth round star iron, warm cracked stone and a wyrm's bones, ruins in mist, roots into a maw at Lv 80).
+3. Zones, the region as a map. `zoneMap({ onZone, onView })` from `ui/zone-map.js` builds it and `paint({ tier, active, locked, hunters, counts, party, view })` keeps it current. The drawing is `ui/region-map.js`, one map a region, seeded so the same tier always draws the same ground (ash and burnt stumps at Lv 1, peat pools and gibbets, snow over tunnel mouths, pine and cairns, dead water, old growth round star iron, warm cracked stone and a wyrm's bones, ruins in mist, roots into a maw at Lv 80), in two sheets: `regionLand(tier)` is the ground as a whole SVG document, shown as an `<img>` (built once a region for the session), and `regionOverlay(tier)` the live rings over it. Each is on a layer of its own, so lighting a ring never redraws the ground's filters. `regionMap(tier)` is both in one, for the kit.
 
 ```html
 <div class="card zone-map">                                   <!-- container-type: inline-size; map and rows side by side from 860px -->
   <div class="zone-map-in">
-    <div class="zone-map-art" role="group" aria-label="Gallowmoor, and who is hunting where" data-tier="2">
-      <svg viewBox="0 0 640 400" aria-hidden="true">           <!-- regionMap(tier): the land, then the rings -->
+    <div class="zone-map-art" role="group" aria-label="Gallowmoor, and who is hunting where" data-tier="2">  <!-- .is-crowd past 24 strangers -->
+      <img class="zone-map-land" alt="" src="blob:...">          <!-- regionLand(tier): terrain, lair, weather; never repainted -->
+      <svg viewBox="0 0 640 400" aria-hidden="true">           <!-- regionOverlay(tier): the rings and marks -->
         <path class="zm-band z2 is-active" data-zone="inner"/> <!-- one band a zone, the next one cut out: the only part that takes a press -->
         <path class="zm-line z2 is-active" data-zone="inner"/> <!-- the contour on its outer edge; .is-locked bands ignore the pointer -->
-        ...the lair and its crown, the road, the camp, the frame, the compass, the title
+        <g class="zm-crowd"><path class="zm-crowd-glow" d="..."/><path class="zm-crowd-dot" d="..."/></g>  <!-- a crowd's specks, empty when quiet -->
+        ...the crown over the lair, the road, the camp, the frame, the compass, the title
       </svg>
       <div class="zone-map-layer">                               <!-- over the drawing, positioned in % of it -->
-        <span class="zone-label is-active">Inner</span>          <!-- at the top of each band -->
+        <span class="zone-label is-active"><span>Inner</span><span class="zone-label-n"><svg class="ico"/>31</span></span>  <!-- the count shows in a crowd only -->
         <span class="zone-camp">Your camp</span>
         <span class="zone-pin is-me" data-zone="inner"><span class="zone-pin-face portrait-bust"><img></span><span class="zone-pin-name">You</span></span>
         <a class="zone-pin is-party" href="#/player/thane" data-tip="Thane · your party">...</a>
@@ -1469,6 +1471,10 @@ Armaments renders a two-handed weapon as one spanning slot instead: `.doll-col.h
       </div>
     </div>
     <div class="zone-rows">
+      <div class="seg zone-view" role="group" aria-label="Who the map shows">  <!-- in a party only -->
+        <button class="seg-btn" type="button" aria-pressed="true" data-view="everyone">Everyone</button>
+        <button class="seg-btn" type="button" aria-pressed="false" data-view="party">Party</button>
+      </div>
       <button class="zone-row is-active" type="button" data-zone="inner">   <!-- .is-locked (and disabled) while a hunt is out on other ground -->
         <span class="zone-swatch z2"></span>
         <span class="zone-row-name"><span>Inner</span><span class="tag tag-ember">Hunting</span></span>
@@ -1483,7 +1489,9 @@ Armaments renders a two-handed weapon as one spanning slot instead: `.doll-col.h
 
 - Hunters: `{ id, kind: "me" | "party" | "realm", zone, name, skin, tip, href, down }`. You stand at the south of your band, your party beside you, everyone else on a spot their name picks (`placePins`), so a hunter keeps their place between looks. You stand on the camp (zone `null`) when you are not out, greyed while recovering; a hunt on other ground is the away chip's to say.
 - Pins are 30px (you), 26px (party) and 22px (realm); on a map drawn under 520px wide the component sets `.is-narrow` on `.zone-map-art` and they are 24, 22 and 18, packed a little closer. Names go on in that order wherever they fit; one that would land on a name, a pin or a zone's label is left to its tip. A band with more hunters than spots gives its last spot to `+N`.
-- The drawing is built once a region; pins are rebuilt when who stands where changes and laid out again when the map changes size, never on a tick.
+- A crowd: past 24 strangers on the ground (`counts` from the realm, or the hunters named, whichever is more) the map stops drawing their faces. Yours and your party's stay; everyone else is a speck of light in their zone (`crowdSpots`, up to 96, 72, 45 and 21 a band), and each zone's name carries `.zone-label-n`, how many are on it. The rows count the same in every view.
+- `view: "party"` (the Party button, offered while `party` is true) leaves the realm off the map altogether; the page keeps the choice for the session.
+- The drawing is built once a region. Pins are kept by who they are and moved, made again only when their face, name or state changes, and laid out again when the map changes size, never on a tick. A tip that changes (the "out 40m" in it) is set on its pin and nothing else. The bands have no fill fade: a fade repaints the rings every frame it runs.
 
 4. Quarry: `.grid-cards` of three `button.foe-tile` (`span.foe-art` with the drawing, `span.foe-tile-main` > `.foe-tile-name` + `.foe-tile-sub` "Stalker · 48 health · swings every 2.4s") and one `button.foe-tile.is-sovereign` spanning the row, with a `tag-sovereign` at its end.
 

@@ -1123,18 +1123,39 @@ async function groundHunters() {
   await out(U.ember, 4, 'outer');
   await out(U.nobody, 3, 'outer');
 
-  const on = async (who, tier) => (await as(who, 'select * from public.ground_hunters($1)', [tier])).map((r) => [r.username, r.zone]);
+  const ask = async (who, tier) => (await as(who, 'select public.ground_hunters($1) as v', [tier]))[0].v;
+  const on = async (who, tier) => (await ask(who, tier)).hunters.map((r) => [r.username, r.zone]);
   same('ground_hunters: the hunts still running on that ground, and never the caller\'s own', await on(U.ash, 3), [['bram', 'inner']]);
   same('and another caller sees the first', await on(U.bram, 3), [['ash', 'outer']]);
-  const row = (await as(U.ash, 'select * from public.ground_hunters(3)'))[0];
-  same('each row carries the face and the discipline', [row.skin, row.discipline], ['drifter', 'rogue']);
+  const seen = await ask(U.ash, 3);
+  same('with a count for each zone anyone is on, the same hunts as it names', seen.counts, { inner: 1 });
+  const row = seen.hunters[0];
+  same('each named hunter carries the face and the discipline', [row.skin, row.discipline], ['drifter', 'rogue']);
   check('and when they set out', row.started_at != null && Number.isFinite(Date.parse(row.started_at)), row.started_at);
   same('other ground is other ground', await on(U.ash, 4), [['ember', 'outer']]);
-  same('empty ground answers nothing', await on(U.ash, 9), []);
-  await refuses('ground_hunters refuses a session with no user', () => as(SIGNED_OUT, 'select * from public.ground_hunters(3)'), /Not signed in/);
-  await refuses('and anon outright', () => as(ANON, 'select * from public.ground_hunters(3)'), DENIED);
-  await refuses('and ground that is not there', () => as(U.ash, 'select * from public.ground_hunters(10)'), /No such ground/);
-  await refuses('or no ground at all', () => as(U.ash, 'select * from public.ground_hunters(null)'), /No such ground/);
+  same('empty ground answers nobody and no counts', await ask(U.ash, 9), { counts: {}, hunters: [] });
+  await refuses('ground_hunters refuses a session with no user', () => as(SIGNED_OUT, 'select public.ground_hunters(3)'), /Not signed in/);
+  await refuses('and anon outright', () => as(ANON, 'select public.ground_hunters(3)'), DENIED);
+  await refuses('and ground that is not there', () => as(U.ash, 'select public.ground_hunters(10)'), /No such ground/);
+  await refuses('or no ground at all', () => as(U.ash, 'select public.ground_hunters(null)'), /No such ground/);
+
+  /* A crowd: forty more out on the same ground. Every one of them is counted, only the
+     32 seen most recently are named, and those newest first. */
+  const crowd = [];
+  await db.query(`update public.profiles set last_seen = now() - interval '1 day' where user_id = $1`, [U.bram]);
+  for (let i = 0; i < 40; i++) {
+    const id = await makeUser(`crowd${String(i).padStart(2, '0')}`);
+    crowd.push(id);
+    await db.query(`update public.profiles set last_seen = now() - make_interval(mins => $2::int) where user_id = $1`, [id, i]);
+    await out(id, 3, ['outer', 'outer', 'middle', 'core'][i % 4]);
+  }
+  const busy = await ask(U.ash, 3);
+  same('a crowd is counted in full, zone by zone', busy.counts, { outer: 20, middle: 10, inner: 1, core: 10 });
+  same('and named no further than 32 deep', busy.hunters.length, 32);
+  same('newest first', busy.hunters.slice(0, 3).map((r) => r.username), ['crowd00', 'crowd01', 'crowd02']);
+  check('and the ones left unnamed are the ones seen longest ago',
+    !busy.hunters.some((r) => ['crowd38', 'crowd39'].includes(r.username)), busy.hunters.map((r) => r.username));
+  await db.query('delete from public.hunt_presence where user_id = any($1::uuid[])', [crowd]);
   same('hunt_presence itself stays shut to a browser', await as(U.ash, `select has_table_privilege('authenticated', 'public.hunt_presence', 'select') as v`).then((r) => r[0].v), false);
   await resetParties();
 }

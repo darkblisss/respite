@@ -4,9 +4,9 @@
    One drawn map a region, for the Hunt page's Zones: the ground
    itself, then its four zones as contour rings from the Outer
    edge to the Core, the camp on the rim and the Sovereign's lair
-   at the heart. regionMap(tier, prefix) returns the inner markup
-   of an <svg viewBox="0 0 640 400">; ui/zone-map.js lays the
-   hunters over it.
+   at the heart. regionLand() is the ground as a picture of its
+   own, regionOverlay() the rings and marks that go over it (see
+   section 7); ui/zone-map.js lays the hunters over both.
 
    Each map is drawn from its region's name and note: ash and
    burnt stumps at the camp's edge, peat pools and gibbets, snow
@@ -321,23 +321,33 @@ export function pinSlots(tier, zoneIndex, gap = 30, labelHalf = 30) {
    "party" or "realm". You stand in the south of your band, your party beside
    you, and everyone else on a spot their name picks, so a hunter keeps their
    place between one look and the next. A band with more hunters than spots
-   gives its last spot to a count of the rest. */
-export function placePins(tier, hunters, gap = 30) {
+   gives its last spot to a count of the rest. `labelHalf` is the room kept
+   either side of a zone's name, wider when the name carries a count.
+
+   Bands are filled yours first, then your party's, then the rest, and a spot
+   too near a face already stood in another band is passed over: on a narrow
+   map two bands are barely a face apart, and a mate one band out would
+   otherwise stand on top of you. */
+export function placePins(tier, hunters, gap = 30, labelHalf = 30) {
   const placed = [];
   const more = [];
-  ZONES.forEach((z, zi) => {
-    const here = hunters.filter((u) => u && u.zone === z.id);
-    if (!here.length) return;
-    const slots = pinSlots(tier, zi, gap);
+  const here = ZONES.map((z) => hunters.filter((u) => u && u.zone === z.id));
+  const first = (list) => (list.some((u) => u.kind === "me") ? 0 : list.some((u) => u.kind === "party") ? 1 : 2);
+  const order = ZONES.map((z, zi) => zi).filter((zi) => here[zi].length).sort((a, b) => first(here[a]) - first(here[b]) || a - b);
+  order.forEach((zi) => {
+    const z = ZONES[zi];
+    const slots = pinSlots(tier, zi, gap, labelHalf);
     if (!slots.length) return;
-    const taken = new Array(slots.length).fill(false);
-    const room = here.length > slots.length ? slots.length - 1 : slots.length;
-    const order = here.slice().sort((a, b) => rank(a) - rank(b) || String(a.id).localeCompare(String(b.id)));
+    const taken = slots.map((p) => placed.some((q) => Math.hypot(p.x - q.x, p.y - q.y) < gap));
+    const open = taken.filter((t) => !t).length;
+    if (!open) return;
+    const room = here[zi].length > open ? open - 1 : open;
+    const list = here[zi].slice().sort((a, b) => rank(a) - rank(b) || String(a.id).localeCompare(String(b.id)));
     let kept = 0;
-    order.forEach((u) => {
+    list.forEach((u) => {
       if (kept >= room) return;
       let at = -1;
-      if (u.kind === "me") at = 0;
+      if (u.kind === "me") at = taken[0] ? nearestFree(taken, 0) : 0;
       else if (u.kind === "party") at = nearestFree(taken, 0);
       else at = probe(taken, hashStr(`${tier}:${u.id}`) % slots.length);
       if (at < 0) return;
@@ -345,12 +355,16 @@ export function placePins(tier, hunters, gap = 30) {
       kept++;
       placed.push({ id: u.id, zone: z.id, x: slots[at].x, y: slots[at].y });
     });
-    if (kept < here.length) {
+    if (kept < here[zi].length) {
       const at = probe(taken, slots.length - 1);
-      if (at >= 0) more.push({ zone: z.id, count: here.length - kept, x: slots[at].x, y: slots[at].y });
+      if (at >= 0) {
+        taken[at] = true;
+        more.push({ zone: z.id, count: here[zi].length - kept, x: slots[at].x, y: slots[at].y });
+        placed.push({ id: `more-${z.id}`, zone: z.id, x: slots[at].x, y: slots[at].y, more: true });
+      }
     }
   });
-  return { placed, more };
+  return { placed: placed.filter((p) => !p.more), more };
 }
 
 const rank = (u) => (u.kind === "me" ? 0 : u.kind === "party" ? 1 : 2);
@@ -373,10 +387,37 @@ function probe(taken, from) {
   return -1;
 }
 
+/* A crowd too big for faces, as specks of light across its zone: n spots
+   scattered through the band, clear of the zone's name and of each other.
+   The first k are the same whatever n is, so one more hunter adds one more
+   speck and the rest stay put. */
+export function crowdSpots(tier, zoneIndex, n) {
+  const L = layoutOf(tier);
+  const r = mulberry(hashStr(`crowd:${tier}:${zoneIndex}`));
+  const top = labelSpot(tier, zoneIndex);
+  const out = [];
+  for (let tries = 0; out.length < n && tries < n * 40; tries++) {
+    const a = r() * TAU;
+    const reach = ringUnits(L, zoneIndex, a) - 4;
+    const from = (zoneIndex < ZONES.length - 1 ? ringUnits(L, zoneIndex + 1, a) : LAIR * 1.7) + 4;
+    const [x, y] = onMap(L, lerp(from, reach, r()), a);
+    if (Math.abs(x - top.x) < 44 && Math.abs(y - top.y) < 10) continue;
+    if (out.some((p) => Math.hypot(p.x - x, p.y - y) < 5.5)) continue;
+    out.push({ x, y });
+  }
+  return out;
+}
+
+// Spots as one path of dots, for a single <path d>.
+export function dotsPath(spots, radius) {
+  return spots.map((p) => circ(p.x, p.y, radius)).join("");
+}
+
 /* ================= 5. THE SKETCH ================= */
-/* A page of layers. Terrain goes down first, then the vignette, then the
-   bands that answer the pointer, then the contour lines, the lair, the road
-   and the camp, then the frame. */
+/* A page of layers, in two sheets. The land: terrain, the vignette, the
+   lair, then the weather over it all. The chart over that: the bands that
+   answer the pointer, the contour lines, a crowd's specks, the crown, the
+   road and the camp, then the frame. */
 
 class Sketch {
   constructor(tier, prefix) {
@@ -489,8 +530,7 @@ class Sketch {
   }
 
   rings() {
-    const L = this.L;
-    const paths = ZONES.map((z, i) => ringPath(L, i));
+    const paths = ZONES.map((z, i) => ringPath(this.L, i));
     const bands = ZONES.map((z, i) => {
       const d = i < ZONES.length - 1 ? `${paths[i]}${paths[i + 1]}` : paths[i];
       return `<path class="zm-band z${i}" data-zone="${z.id}" fill-rule="evenodd" d="${d}"/>`;
@@ -545,19 +585,31 @@ class Sketch {
     return `<path class="zm-crown" d="M${f(L.cx - 6)} ${f(L.cy + y + 3)}L${f(L.cx - 6.5)} ${f(L.cy + y - 3)}L${f(L.cx - 3)} ${f(L.cy + y)}L${f(L.cx)} ${f(L.cy + y - 5)}L${f(L.cx + 3)} ${f(L.cy + y)}L${f(L.cx + 6.5)} ${f(L.cy + y - 3)}L${f(L.cx + 6)} ${f(L.cy + y + 3)}Z"/>`;
   }
 
-  markup(heart) {
+  /* The ground: terrain, the lair and the weather over both. None of it
+     answers the pointer or wears a page class, so it can be a picture of its
+     own, and the page shows it as one: the browser runs its filters (the
+     noise, the blurs) once, instead of again every time a ring over it is
+     lit. */
+  land(heart) {
+    return `<defs>${this.defs.join("")}</defs>${this.under.join("")}${heart}${this.over.join("")}`;
+  }
+
+  /* What the page styles, lights and counts on, over the ground: the rings,
+     a crowd's specks (empty until ui/zone-map.js fills them), the crown over
+     the lair, the road and the camp, the frame, compass and title. */
+  chart() {
     return [
-      `<defs>${this.defs.join("")}</defs>`,
-      `<g class="zm-land" pointer-events="none">${this.under.join("")}</g>`,
       this.rings(),
-      `<g class="zm-heart" pointer-events="none">${heart}${this.crown()}</g>`,
-      `<g pointer-events="none">${this.over.join("")}${this.road()}${this.campMark()}</g>`,
+      `<g class="zm-crowd" pointer-events="none"><path class="zm-crowd-glow" d=""/><path class="zm-crowd-dot" d=""/></g>`,
+      `<g class="zm-heart" pointer-events="none">${this.crown()}</g>`,
+      `<g pointer-events="none">${this.road()}${this.campMark()}</g>`,
       this.frame(),
       this.compass(),
       this.title(),
     ].join("");
   }
 }
+
 
 function esc(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -1532,14 +1584,34 @@ const ART = { 1: ashenVerge, 2: gallowmoor, 3: coldWarrens, 4: graveshelf, 5: sa
 
 /* ================= 7. THE MAP ================= */
 
-/* The inner markup of one region's map, for an <svg viewBox="0 0 640 400">.
-   `prefix` keeps the gradient and filter ids apart when two maps share a page. */
-export function regionMap(tier, prefix = "rm-") {
-  const t = ART[tier] ? tier : 1;
+/* A map comes in two layers. regionLand() is the ground, a whole SVG
+   document of its own that the page shows as an <img>: nothing on it moves or
+   answers the pointer, and as a picture the browser draws its filters once.
+   regionOverlay() is the inner markup of the <svg viewBox="0 0 640 400">
+   laid over it: the rings that take a press and light up, the camp, the
+   frame, the title. regionMap() is both in one, for a page that wants a
+   single drawing. `prefix` keeps ids apart when two maps share a page. */
+const known = (tier) => (ART[tier] ? tier : 1);
+
+export function regionLand(tier, prefix = "rm-") {
+  const t = known(tier);
   const S = new Sketch(t, `${prefix}${t}-`);
   const heart = ART[t](S);
   S.vignette();
-  return S.markup(heart);
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${MAP_VIEWBOX}" width="${MAP_W}" height="${MAP_H}">${S.land(heart)}</svg>`;
+}
+
+export function regionOverlay(tier, prefix = "rm-") {
+  const t = known(tier);
+  return new Sketch(t, `${prefix}${t}-`).chart();
+}
+
+export function regionMap(tier, prefix = "rm-") {
+  const t = known(tier);
+  const S = new Sketch(t, `${prefix}${t}-`);
+  const heart = ART[t](S);
+  S.vignette();
+  return `<g class="zm-land" pointer-events="none">${S.land(heart)}</g>${S.chart()}`;
 }
 
 // Which regions have a map of their own: all nine.
