@@ -64,7 +64,8 @@ export function zoneNotes(z) {
   return [
     z.foesText === "1" ? null : `${z.foesText} at once`,
     z.xp === 1 ? null : `×${z.xp} XP`,
-    z.power === 1 ? null : `×${z.power} foes`,
+    // The depth, by its health column: the one a player feels first.
+    !z.scale || z.scale.hp === 1 ? null : `×${z.scale.hp} health`,
   ].filter(Boolean);
 }
 

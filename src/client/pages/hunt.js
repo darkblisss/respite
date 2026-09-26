@@ -42,10 +42,10 @@ import {
   GameData, getMonster, getZone, getSkill, getClass, foesOf, sovereignOf, regionOfTier,
   veilBandOfTier, fragmentOfTier, essenceOfTier,
 } from "../../shared/registry.js";
-import { campPlan, huntRates, foeNumbers } from "../../shared/combat.js";
+import { campPlan, huntRates, foeNumbers, owesMore } from "../../shared/combat.js";
 import { itemDef, itemName } from "../../shared/items.js";
-import { statsOf, canPickClass, recovering, myClass, xpProgress } from "../../shared/stats.js";
-import { xpMult } from "../../shared/progression.js";
+import { statsOf, canPickClass, recovering, myClass, xpProgress, mitigation, skillLevel } from "../../shared/stats.js";
+import { xpMult, overLevel } from "../../shared/progression.js";
 import { companionBonus } from "../../shared/companions.js";
 import { currentRegion } from "../../shared/world.js";
 
@@ -70,6 +70,13 @@ const ZONE_INDEX = new Map(GameData.ZONES.map((z, i) => [z.id, i]));
 
 // A countdown: whole seconds, never 0 while it still runs, minutes once it is long.
 const secs = (ms) => (ms >= 60000 ? fmtTime(ms) : `${Math.max(1, Math.ceil(Math.max(0, ms) / 1000))}s`);
+
+// What a zone's depth does to its foes, in one sentence: nothing at all on the Outer.
+function depthLine(z) {
+  const d = z.scale || { hp: 1, attack: 1, defence: 1 };
+  if (d.hp === 1 && d.attack === 1 && d.defence === 1 && z.xp === 1) return `As it stands in the ${z.name}, the plain ground.`;
+  return `As it stands in the ${z.name}: health ×${d.hp}, attack ×${d.attack}, Defence ×${d.defence}, XP ×${z.xp}.`;
+}
 
 /* The party's fight, when the server says this player is out on one. It only ever comes off an
    answer, never off the save, and it is absent the moment they are not in it. */
@@ -496,8 +503,8 @@ export default {
           h("div.hunt-wc-row.is-sov",
             h("button.hunt-wc-art.is-sov", { type: "button", "aria-label": `${it.name}: details`, dataset: { monster: it.id }, html: monsterArt(it) }),
             h("span.hunt-wc-sov-name", h("b", it.name), h("small", `Sovereign of ${region ? region.name : "this ground"}`))),
-          h("div.hunt-sov-line", iconEl("swords"), h("span", `${cap(WORDS[S.escorts] || String(S.escorts))} Elites at its back. No others will come.`)),
-          h("div.hunt-sov-line", iconEl("hourglass"), h("span", `Angrier every ${S.enrageMs / 1000}s it stands.`)));
+          h("div.hunt-sov-line", iconEl("swords"), h("span", `${cap(WORDS[S.escorts] || String(S.escorts))} Elites walk in first. No others will come.`)),
+          h("div.hunt-sov-line", iconEl("eye"), h("span", "It steps out of the dark behind them.")));
         comingOdds.replaceChildren(
           h("span.hunt-odds-l", pips(3, 3), h("span", `${1 + S.escorts} at once`)),
           h("span.hunt-odds-r",
@@ -735,7 +742,7 @@ export default {
 
       // ---- you ----
       const s = statsOf(state);
-      // At camp health comes back slowly; the save keeps what you came home with.
+      // At camp nothing comes back on its own: the camp's note is what you came home with.
       const rest = c ? null : campPlan(state, ctx.now);
       const hp = Math.max(0, Math.min(s.maxHp, Math.ceil(rest ? rest.hp : state.player.hp)));
       paintYou(ctx, hp, s.maxHp, kls, down);
@@ -751,9 +758,14 @@ export default {
       if (c && !fighting) walkFull = Math.max(walkFull, c.wait, 1);
       else walkFull = 0;
       if (!c) {
+        /* Nothing heals on its own, so a hunter home hurt is told how to mend rather than left to
+           wait for a bar that will never fill. */
+        const hurt = hp < s.maxHp * 0.5;
         setWalk(down
           ? { title: "Recovering", label: "Back in", when: fmtTime(state.player.recoveryLeft), sub: "You are in no state to hunt." }
-          : { title: `${region.name} lies quiet`, sub: "Nothing is being hunted here. Choose a zone below to take up the hunt." });
+          : { title: `${region.name} lies quiet`, sub: hurt
+            ? `You are on ${Math.round((hp / s.maxHp) * 100)}% of your health, and nothing heals on its own. Drink a remedy before you go, or trust the Satchel: it is drunk the moment a blow leaves you at ${Math.round(H.remedyAt * 100)}%.`
+            : "Nothing is being hunted here. Choose a zone below to take up the hunt." });
       } else if (!fighting) {
         setWalk(vast
           ? { title: "Something vast approaches", label: "Here in", when: secs(c.wait), trailOn: true }
@@ -764,14 +776,17 @@ export default {
         const up = c.foes.length;
         const where = sov ? "A Sovereign" : `Fighting in the ${zone.name}`;
         if (sov) {
-          const again = Math.max(0, c.enrageAt - c.clock);
+          // Nothing comes on a clock in a Sovereign's fight, so the clock the head keeps is the fight's own.
           setFightHead({ title: `Encounter ${fmtWhole(c.encounters)}`, sub: `${where} · ${up} on you`,
-            label: c.enrage ? `Enraged ×${c.enrage} · again in` : "Enrages in", when: secs(again), pill: "No others will come", pillIcon: "eye-off" });
+            label: "Fighting for", when: secs(c.clock), pill: "No others will come", pillIcon: "eye-off" });
         } else {
           const q = c.queued || 0;
+          // The wave has an end: once the zone's joins have all come, nothing more steps out.
+          const more = owesMore(c);
           setFightHead({ title: `Encounter ${fmtWhole(c.encounters)}`, sub: `${where} · ${up} on you`,
-            label: "Another steps out in", when: secs(Math.max(0, c.reinforceAt - c.clock)),
-            pill: q ? (q === 1 ? "One waits in the dark" : `${cap(WORDS[q] || String(q))} wait in the dark`) : null });
+            label: more ? "Another steps out in" : "The last of them is out", when: more ? secs(Math.max(0, c.reinforceAt - c.clock)) : "",
+            pill: q ? (q === 1 ? "One waits in the dark" : `${cap(WORDS[q] || String(q))} wait in the dark`) : more ? null : "No others will come",
+            pillIcon: q ? "eye" : "eye-off" });
         }
       }
       paintRecap(recap(c, c ? huntKey(c) : null));
@@ -786,8 +801,7 @@ export default {
         enc: c ? c.encounters : 0,
         kind: c ? c.kind : "normal",
         vast,
-        enrage: fighting && c.kind === "sovereign" ? c.enrage : 0,
-        reinforceIn: fighting && c.kind === "normal" ? c.reinforceAt - c.clock : null,
+        reinforceIn: fighting && owesMore(c) ? c.reinforceAt - c.clock : null,
         queued: fighting ? c.queued || 0 : 0,
         hunters: [{ id: "me", me: true, name: commanderName(ctx), skin: state.player.skin, klass: kls ? kls.id : null,
           hp, max: s.maxHp, veil: c ? c.veil / H.veilMax : 0, volley: c ? c.volley : 0, down }],
@@ -905,14 +919,15 @@ export default {
           : !fighting
             ? "In on the next encounter · this one was drawn for the party that walked into it"
             : `${sov ? "A Sovereign" : `Fighting in the ${zone.name}`} · ${up} on the party`;
-        if (sov && Number.isFinite(enc.enrageIn)) {
-          const again = Math.max(0, enc.enrageIn - since);
+        if (sov) {
+          // Nothing comes on a clock in a Sovereign's fight: the head keeps the fight's own, run on between answers.
           setFightHead({ title: `Encounter ${fmtWhole(view.encounters)}`, sub,
-            label: enc.enrage ? `Enraged ×${enc.enrage} · again in` : "Enrages in", when: secs(again), pill: "No others will come", pillIcon: "eye-off" });
-        } else if (!sov && Number.isFinite(enc.reinforceIn)) {
+            label: "Fighting for", when: secs((Number(enc.clock) || 0) + since), pill: "No others will come", pillIcon: "eye-off" });
+        } else if (Number.isFinite(enc.reinforceIn)) {
           setFightHead({ title: `Encounter ${fmtWhole(view.encounters)}`, sub, label: "Another steps out in", when: secs(Math.max(0, enc.reinforceIn - since)) });
         } else {
-          setFightHead({ title: `Encounter ${fmtWhole(view.encounters)}`, sub, pill: sov ? "No others will come" : null, pillIcon: "eye-off" });
+          // The wave has all come: what stands is all there is.
+          setFightHead({ title: `Encounter ${fmtWhole(view.encounters)}`, sub, label: "The last of them is out", pill: "No others will come", pillIcon: "eye-off" });
         }
       }
       paintRecap(null);
@@ -931,7 +946,6 @@ export default {
           enc: enc ? enc.id : 0,
           kind: enc ? enc.kind : "normal",
           vast: !enc && !!view.vast,
-          enrage: enc && enc.kind === "sovereign" ? enc.enrage || 0 : 0,
           reinforceIn: enc && Number.isFinite(enc.reinforceIn) ? enc.reinforceIn : null,
           queued: 0,
           hunters: fought.map((u) => {
@@ -1096,7 +1110,8 @@ export default {
        its numbers at that depth, what a kill of it pays you now, and what it leaves. */
     function plateSig(ctx, tier, zoneId) {
       const state = ctx.state;
-      return [tier, zoneId, platePick, Math.round(xpMult(state, "warfare", ctx.now) * 1000), companionBonus(state, "gold"), companionBonus(state, "drops")].join("|");
+      return [tier, zoneId, platePick, Math.round(xpMult(state, "warfare", ctx.now) * 1000), companionBonus(state, "gold"), companionBonus(state, "drops"),
+        skillLevel(state, "warfare"), statsOf(state).pen].join("|");
     }
 
     function paintPlate(ctx) {
@@ -1129,9 +1144,14 @@ export default {
 
       const m = list.find((x) => x.id === platePick) || list[0];
       const sov = m.archetype === "sovereign";
-      const n = foeNumbers(m, false, z.power);
-      const base = n.xp * z.xp;
-      const xp = base * xpMult(state, "warfare", ctx.now);
+      // As it stands at this depth: its XP has the zone's in it already.
+      const n = foeNumbers(m, false, z);
+      const base = n.xp;
+      // And what it is worth to you: hunting beneath yourself pays less, and a blade learns less.
+      const over = overLevel(skillLevel(state, "warfare"), tier);
+      const xp = base * xpMult(state, "warfare", ctx.now) * over.xp;
+      // The share of your blow its Defence stops, after your penetration: the same curve as yours.
+      const stops = mitigation(n.defence * (1 - Math.min(0.9, statsOf(state).pen)), tier);
       const goldMult = 1 + companionBonus(state, "gold");
       const dropMult = 1 + companionBonus(state, "drops");
       const mix = z.mix[m.archetype] || 0;
@@ -1162,17 +1182,19 @@ export default {
         h("div.quarry-info",
           h("span.quarry-eyebrow", { class: { "is-sov": sov } }, where),
           h("h3.quarry-name", m.name),
-          h("p.quarry-note", sov ? "It rules this ground. It comes with two Elites at its back and grows angrier the longer the fight runs." : GameData.ARCHETYPES[m.archetype].note),
+          h("p.quarry-note", sov ? "It rules this ground. Two Elites walk in first, and it steps out of the dark behind them." : GameData.ARCHETYPES[m.archetype].note),
           h("div.quarry-stats",
             stat("Health", fmt(n.hp)),
             stat("Attack", fmtStat(n.attack)),
             stat("Swings every", `${(m.speed / 1000).toFixed(1)}s`),
-            stat("Defence", fmtStat(m.defence)),
+            stat("Defence", h("span", fmtStat(n.defence), h("small", `stops ${Math.round(stops * 100)}% of yours`))),
             stat("A kill pays", h("span", `${fmtStat(xp)} XP`, h("small", `${fmtGold(Math.round(n.gold[0] * goldMult))} to ${fmtGold(Math.round(n.gold[1] * goldMult))}`))),
-            stat("Mastery a kill", `+${fmtStat(base * CONFIG.mastery.perKill)}`, "is-mastery")),
-          h("p.quarry-small", z.power === 1 && z.xp === 1
-            ? `As it stands in the ${z.name}, the plain ground. Mastery goes to the weapon in your hands.`
-            : `As it stands in the ${z.name}: health and attack ×${z.power}, XP ×${z.xp}. Mastery goes to the weapon in your hands.${sov ? ` It enrages: +${Math.round(GameData.SOVEREIGN.enrage * 100)}% attack every ${GameData.SOVEREIGN.enrageMs / 1000}s.` : ""}`),
+            stat("Mastery a kill", `+${fmtStat(base * CONFIG.mastery.perKill * over.mastery)}`, "is-mastery")),
+          h("p.quarry-small", [
+            depthLine(z),
+            over.over > 0 ? `You stand ${over.over} ${over.over === 1 ? "level" : "levels"} past this ground: a kill pays ${Math.round(over.xp * 100)}% of its XP and ${Math.round(over.mastery * 100)}% of its mastery.` : null,
+            "Mastery goes to the weapon in your hands.",
+          ].filter(Boolean).join(" ")),
           h("div.quarry-drops", h("span.quarry-drops-l", "Leaves"), drops)));
     }
 

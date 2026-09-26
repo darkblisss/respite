@@ -179,7 +179,7 @@ export default {
         h("div.page-actions",
           h("span.clock", { "data-tip": "World clock. Bounties and the Smuggler run on this." }, iconEl("clock"), clockText))),
       h("section.card",
-        cardHead("The Bonesetter", "bonesetter", `Always open. Remedies land in Belongings; pack the Satchel to take them out. Between encounters one is drunk at or below ${Math.round(CONFIG.hunt.remedyAt * 100)}% health. Charms go where materials go, for the Fortify anvil.`),
+        cardHead("The Bonesetter", "bonesetter", `Always open. Nothing heals on its own. Remedies land in Belongings: drink one at camp, or pack the Satchel and one is drunk the moment a blow leaves you at ${Math.round(CONFIG.hunt.remedyAt * 100)}% health. Charms go where materials go, for the Fortify anvil.`),
         h("div.grid-cards.shop-grid", remedies.map((r) => r.node))),
       h("section.card",
         cardHead("The Smuggler", "hourglass", "Turns up twice a day on the world clock with whatever fell off the back of something. Each lot goes once.",

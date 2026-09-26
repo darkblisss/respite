@@ -10,7 +10,7 @@
 import { CONFIG } from "./config.js";
 import { GameData, isTrade, getTool } from "./registry.js";
 import { itemDef } from "./items.js";
-import { skillLevel, maxHp, canPickClass } from "./stats.js";
+import { skillLevel, maxHp, maxHpAtLevel, canPickClass } from "./stats.js";
 import { weatherAt } from "./weather.js";
 import { companionBonus } from "./companions.js";
 import { emit } from "./events.js";
@@ -71,6 +71,26 @@ export function xpEach(state, skillId, amount, at) {
   return Math.max(1, Math.round(amount * xpMult(state, skillId, at)));
 }
 
+/* Hunting beneath yourself. What a kill on ground of this tier is worth to a hunter of
+   this Hunt level, as { xp, mastery, over }: both 1 until the hunter is
+   CONFIG.hunt.overGrace levels past the gate of the region above, then overStep less
+   for every level beyond. XP never falls under overFloor; weapon mastery falls all the
+   way to nothing. The last region has nothing above it and never falls off. `over` is
+   how many levels past the grace the hunter stands, 0 while it pays in full. */
+export function overLevel(level, tier) {
+  const H = CONFIG.hunt;
+  const next = GameData.REGIONS.find((r) => r.tier === tier + 1);
+  if (!next || !Number.isFinite(level)) return { xp: 1, mastery: 1, over: 0 };
+  const over = Math.max(0, Math.floor(level) - next.level - H.overGrace);
+  const m = Math.round((1 - H.overStep * over) * 1000) / 1000;
+  return { xp: Math.max(H.overFloor, m), mastery: Math.max(0, m), over };
+}
+
+// The same, for this save's own Hunt level.
+export function overLevelOf(state, tier) {
+  return overLevel(skillLevel(state, "warfare"), tier);
+}
+
 /* Adds XP that already carries its multipliers. The hunt adds fractions of a
    point; the total keeps them. Returns true on a level up. */
 export function addXp(state, skillId, gain, env, at) {
@@ -83,7 +103,12 @@ export function addXp(state, skillId, gain, env, at) {
   const hit = Object.hasOwn(GameData.GATHER_ACTIONS, skillId) ? GameData.MASTERY_TRACK.find((m) => m.level === after) : null;
   if (hit) emit(state, env, "skill:mastery", { skillId, level: after, label: hit.label, at });
   if (skillId === "warfare") {
-    state.player.hp = maxHp(state);
+    /* A new level's health is added to what you have, not handed back as a full bar:
+       nothing heals for free. The camp's note follows, so setting out agrees. */
+    const most = maxHp(state);
+    const gained = Math.max(0, most - maxHpAtLevel(state, before));
+    state.player.hp = Math.min(most, Math.max(0, state.player.hp) + gained);
+    if (state.player.camp) state.player.camp.hp = state.player.hp;
     if (canPickClass(state)) emit(state, env, "class:available", { at });
   }
   return true;

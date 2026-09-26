@@ -94,6 +94,9 @@ const GEAR_COLS = [
   { key: "defence", head: "Defence", show: (v) => `+${fmtWhole(v)}` },
   { key: "health", head: "Health", show: (v) => `+${fmtWhole(v)}` },
   { key: "crit", head: "Crit", show: (v) => `${(v * 100).toFixed(1)}%` },
+  { key: "block", head: "Block", show: (v) => `${(v * 100).toFixed(1)}%` },
+  { key: "dodge", head: "Dodge", show: (v) => `${(v * 100).toFixed(1)}%` },
+  { key: "tech", head: "Veil Power", show: (v) => `+${(v * 100).toFixed(1)}%`, discipline: true },
   { key: "veil", head: "Veil", show: (v) => `+${fmtWhole(v)}`, discipline: true },
 ];
 

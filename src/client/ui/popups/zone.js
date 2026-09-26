@@ -26,7 +26,7 @@ import { CONFIG } from "../../../shared/config.js";
 import { GameData, foesOf, sovereignOf, regionOfTier, tierLabel } from "../../../shared/registry.js";
 import { bestRun, huntRates, projectOnce, summariseRuns, huntOddsOpts, oddsSignature } from "../../../shared/combat.js";
 import { skillLevel, recovering } from "../../../shared/stats.js";
-import { xpBreakdown, partyMult } from "../../../shared/progression.js";
+import { xpBreakdown, partyMult, overLevel } from "../../../shared/progression.js";
 import { activeCompanion } from "../../../shared/companions.js";
 import { itemDef } from "../../../shared/items.js";
 import { ORDER } from "../../../shared/storage.js";
@@ -101,11 +101,11 @@ function sovereignTip(region, sov, odds) {
     title: sov.name,
     sub: `The Sovereign of ${region.name}`,
     rows: [
-      ["Comes", "Once the region's Threat is maxed"],
+      ["Comes", "After any encounter you clear here, on the ground's own odds"],
       ["Met", met ? `About ${fmtStat(met.metPerHour)} an hour at this pace` : "Not on this pace"],
       ["Felled", met ? pctOf(met.sovereignsFelled / met.sovereignsMet) : "Never, so far"],
     ],
-    foot: "Felling it is one of only two things that clears a region's Threat. Hiding out a full hour is the other.",
+    foot: "Two Elites walk in first and it steps out behind them. At a quarter of your health you break away; felled, it leaves its Essence whole.",
   });
 }
 
@@ -176,7 +176,7 @@ registerPopup("zone", (ctx, tier, zoneId) => {
   function shapeOf(state) {
     const c = state.tasks.combat;
     return [c ? `${c.tier}:${c.zone}` : "-", state.travel.unlocked.includes(region.id),
-      skillLevel(state, "warfare") < region.level, outWithParty()].join("|");
+      skillLevel(state, "warfare") < region.level, outWithParty(), overLevel(skillLevel(state, "warfare"), tier).over].join("|");
   }
 
   function stat(parent, label, value, tone) {
@@ -196,14 +196,18 @@ registerPopup("zone", (ctx, tier, zoneId) => {
        is the flat chance this ground shows its Sovereign, which is the whole of it. */
     const facts = h("div.stats");
     if (skillLevel(state, "warfare") < region.level) stat(facts, "Suited to", `Hunt Lv ${region.level}+`, "bad");
-    stat(facts, "Reinforcements", `Every ${zone.windowMs / 1000}s`);
+    stat(facts, "Reinforcements", `Every ${zone.windowMs / 1000}s, ${zone.joins} at most`);
     stat(facts, "Elites", pctOf(zone.elite));
     /* A multiplier of one is the plain case: printing it is a row about nothing.
        What a Sovereign brings with it and what an Elite leaves behind are the
        same on every ground that has them, so they belong to the Hunt, not to a
        sheet you read to choose between grounds. */
     if (zone.xp !== 1) stat(facts, "XP", `×${zone.xp}`);
-    if (zone.power !== 1) stat(facts, "Foes", `×${zone.power} stats`);
+    const d = zone.scale || { hp: 1, attack: 1, defence: 1 };
+    if (d.hp !== 1 || d.attack !== 1 || d.defence !== 1) stat(facts, "Foes", `×${d.hp} health · ×${d.attack} attack · ×${d.defence} Defence`);
+    // Hunting beneath yourself: said here, where the ground is chosen.
+    const over = overLevel(skillLevel(state, "warfare"), tier);
+    if (over.over > 0) stat(facts, "Beneath you", `${Math.round(over.xp * 100)}% XP · ${Math.round(over.mastery * 100)}% mastery`, "warn");
     if (zone.sovereign > 0) stat(facts, "Sovereign", `${pctOf(zone.sovereign)} an encounter`);
 
     /* Throughput numbers are gone from this sheet: the live XP/hr and DPS are on the

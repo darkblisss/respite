@@ -5,7 +5,7 @@
 
      node tests/engine/party.test.mjs */
 
-import { run, check, section, same, shared, clone } from "./harness.mjs";
+import { run, check, section, same, shared, clone, gearSet } from "./harness.mjs";
 
 await run(async () => {
   const { CONFIG } = await shared("config.js");
@@ -28,7 +28,7 @@ await run(async () => {
   // Everything that decides the fight, so two runs can be compared whole.
   const shot = (e) => clone({
     clock: Math.round(e.clock), dice: e.dice, over: e.over, uid: e.uid,
-    enrage: e.enrage, reinforceAt: Math.round(e.reinforceAt),
+    reinforceAt: Math.round(e.reinforceAt),
     foes: e.foes.map((f) => ({ uid: f.uid, id: f.id, hp: Math.round(f.hp), target: f.target, by: f.by })),
     hunters: e.hunters.map((u) => ({
       userId: u.userId, hp: Math.round(u.hp), down: u.down, dmg: Math.round(u.dmg),
@@ -279,6 +279,43 @@ await run(async () => {
       { owed: u.owed.remedies, left: u.heals.length });
     check("and never more than were packed", u.owed.remedies <= heals.length, u.owed.remedies);
   }
+  {
+    // Nothing heals for free together either: the Satchel is reached for mid encounter, at a quarter.
+    const heals = [400, 400, 400];
+    const e = start(1, { seed: 31, zone: "core", tier: 5, level: 20, heals });
+    const drank = [];
+    P.stepEncounter(e, 5 * 60 * 1000, { fx: (who, kind, amount) => { if (kind === "heal") drank.push({ foes: e.foes.length, amount }); } });
+    check("a hunter drinks the moment a blow leaves them at a quarter, in the middle of the encounter",
+      drank.length > 0 && drank[0].foes > 0 && drank[0].amount > 0 && e.hunters[0].owed.remedies === drank.length, drank);
+  }
+
+  section("Lifesteal, Dodge, Block, and what a share counts as taken");
+  {
+    // One foe that never swings and never falls: every point back is lifesteal.
+    const e = start(1, { seed: 7, zone: "outer", tier: 1, level: 30 });
+    e.foes = [{ ...e.foes[0], hp: 1e9, max: 1e9, timer: 1e12 }];
+    e.reinforceAt = 1e12;
+    const u = e.hunters[0];
+    u.hp = 50;
+    P.stepEncounter(e, 30000);
+    check("lifesteal: a hundredth of every blow landed comes back, as it does alone",
+      u.dmg > 0 && Math.abs(u.hp - Math.min(u.stats.maxHp, 50 + u.dmg * u.stats.lifesteal)) < 1e-6, { hp: u.hp, dmg: u.dmg });
+  }
+  {
+    /* Built to shrug blows off: Relic heavy armour and a shield, well past the ground. What it
+       absorbed for the party is the blows as they were thrown, not the little that got through. */
+    const tank = P.makeHunter("tank", combatStats({ level: 40, klass: "warrior", equipment: gearSet(GameData, 5, "warrior", "relic") }));
+    const e = P.newEncounter({ id: 1, partyId: "p1", tier: 5, zone: "core", seed: 5, hunters: [tank] });
+    let lost = 0;
+    let blocked = 0;
+    P.stepEncounter(e, 10 * 60 * 1000, { fx: (who, kind, amount) => {
+      if (who !== "tank") return;
+      if (["hurt", "block", "ambushed", "glance"].includes(kind)) lost += amount;
+      if (kind === "block") blocked++;
+    } });
+    check("what a hunter absorbed is the blows as thrown, before their own Block, Dodge and Defence",
+      tank.taken > lost * 1.5 && blocked > 0, { taken: Math.round(tank.taken), lost, blocked });
+  }
 
   section("Sovereigns, together");
   {
@@ -286,9 +323,13 @@ await run(async () => {
     const sov = e.foes.find((f) => GameData.MONSTERS.find((m) => m.id === f.id).archetype === "sovereign");
     check("the Sovereign is there, once", !!sov && e.foes.filter((f) => GameData.MONSTERS.find((m) => m.id === f.id).archetype === "sovereign").length === 1);
     check("its guard is two, warband or not", e.foes.length === 1 + GameData.SOVEREIGN.escorts, { foes: e.foes.length, escorts: GameData.SOVEREIGN.escorts });
-    const before = e.enrage;
-    P.stepEncounter(e, GameData.SOVEREIGN.enrageMs + 1000);
-    check("and it grows angrier on the clock", e.enrage > before, { before, now: e.enrage });
+    const arch = e.foes.map((f) => getMonster(f.id).archetype);
+    check("its guard walks in first and the Sovereign steps out behind them, last on the roster", arch[arch.length - 1] === "sovereign" && e.foes.slice(0, -1).every((f) => f.elite), arch);
+    const first = e.foes[0].uid;
+    const hurt = [];
+    P.stepEncounter(e, 8000, { fx: (who, kind) => { if (kind === "hit" || kind === "crit") hurt.push(who); } });
+    check("so the warband strikes a guard first, not the Sovereign", hurt.length > 0 && hurt[0] === first && !hurt.slice(0, 3).includes(sov.uid), { hurt: hurt.slice(0, 5), first, sov: sov.uid });
+    check("and it does not grow angrier on a clock", e.enrage === undefined && e.enrageAt === undefined);
   }
 
   section("A party meets its Sovereign");
@@ -299,18 +340,21 @@ await run(async () => {
     const s = P.newSession({ partyId: "p1", tier: 1, zone: "core", seed: 4242, hunters: band(3, 99) });
     let vast = null;
     let met = null;
-    for (let t = 0; t < 3 * 3600 && !met; t++) {
-      P.stepSession(s, 1000);
+    // Fine steps on the walk to it, so its roster is read before the first blow lands.
+    for (let t = 0; t < 3 * 3600 * 4 && !met; t++) {
+      P.stepSession(s, s.sovereignNext ? 50 : 250);
       if (!vast && P.sessionView(s).vast) vast = { wait: s.wait, view: P.sessionView(s) };
-      if (s.enc && s.enc.kind === "sovereign") met = s.enc;
+      if (s.enc && s.enc.kind === "sovereign") met = { id: s.enc.id, roster: s.enc.foes.map((f) => getMonster(f.id).archetype) };
     }
     check("a party on ground a Sovereign walks meets it", !!met, { encounters: s.encounters });
     check("the walk to it says so, and is the shortest walk there is", !!vast && vast.wait <= H.searchMinMs + 1 && vast.view.phase === "search",
       vast && { wait: vast.wait, phase: vast.view.phase });
-    check("it comes with its guard, and nothing else", !!met && met.foes.length === 1 + GameData.SOVEREIGN.escorts, met && met.foes.length);
+    check("it comes with its guard, and nothing else", !!met && met.roster.length === 1 + GameData.SOVEREIGN.escorts, met && met.roster);
+    check("and the guard walks in before it", !!met && met.roster[met.roster.length - 1] === "sovereign", met && met.roster);
     const view = P.sessionView(s);
-    check("the view of its fight carries its anger", !!view.enc && view.enc.kind === "sovereign" && view.enc.enrage === 0 && view.enc.enrageIn > 0,
-      view.enc && { kind: view.enc.kind, enrage: view.enc.enrage, enrageIn: view.enc.enrageIn });
+    check("the view of its fight has no anger in it and no window: nothing else will come", !!view.enc && view.enc.kind === "sovereign" &&
+      !Object.hasOwn(view.enc, "enrage") && !Object.hasOwn(view.enc, "enrageIn") && view.enc.reinforceIn === null,
+      view.enc && { kind: view.enc.kind, reinforceIn: view.enc.reinforceIn });
     check("and the walk no longer says one is coming", view.vast === false);
 
     const id = met ? met.id : null;

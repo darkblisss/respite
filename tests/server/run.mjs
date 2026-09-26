@@ -36,6 +36,7 @@ import { hashString } from '../../src/shared/rng.js';
 import { COMMANDS } from '../../src/shared/engine.js';
 import { haveQty } from '../../src/shared/storage.js';
 import { levelFromXp, totalLevel } from '../../src/shared/stats.js';
+import { overLevel } from '../../src/shared/progression.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..', '..');
@@ -1082,8 +1083,9 @@ await section('party hunts share ground', async () => {
   const [a, b, solo, d, e, farm, alt] = names.map((n) => newUser(n));
   const everyone = [a, b, solo, d, e, farm, alt];
   // Everyone gets the same seed and the same camp, so only the party can make a difference.
-  // Packed, not carried: only the Satchel is reachable in a fight.
-  const hardy = (s) => { s.skills.warfare = 2000; put(s, 'satchel', 'provision_t1', 60); };
+  // Packed, not carried: only the Satchel is reachable in a fight, and nothing else heals. Hunt 10
+  // stands on tier 2 ground, so the bottles are tier 2: a lesser one would be passed over.
+  const hardy = (s) => { s.skills.warfare = 2000; put(s, 'satchel', 'provision_t2', 60); };
   for (const u of everyone) await seedSave(u, 4242, hardy);
   for (const u of everyone) await play(u);
 
@@ -1274,10 +1276,15 @@ await section('a party hunt, together', async () => {
   check('gold, kills and loot came with it', paid[ann.id].state.player.gold > 0 && paid[ann.id].state.stats.kills > 0, {
     gold: paid[ann.id].state.player.gold, kills: paid[ann.id].state.stats.kills,
   });
-  const share = (id) => xp[id] / (xp[ann.id] + xp[bex.id]);
+  /* The shares are the encounter's, before each hunter's own level bends what they are paid: Ann
+     hunts far beneath herself on tier 5 and is paid that much less of hers, as she would be alone. */
+  const bent = { [ann.id]: overLevel(levelFromXp(200000), 5).xp, [bex.id]: overLevel(levelFromXp(6000), 5).xp };
+  const owed = (id) => xp[id] / bent[id];
+  const share = (id) => owed(id) / (owed(ann.id) + owed(bex.id));
   const dealt = (id) => dmg[id] / (dmg[ann.id] + dmg[bex.id]);
-  check('the stronger hunter did more and was paid more', dmg[ann.id] > dmg[bex.id] && xp[ann.id] > xp[bex.id], { dmg, xp });
+  check('the stronger hunter did more and was owed more', dmg[ann.id] > dmg[bex.id] && owed(ann.id) > owed(bex.id), { dmg, xp, bent });
   check('and the shares follow the damage', Math.abs(share(ann.id) - dealt(ann.id)) < 0.2, { xp: share(ann.id), dmg: dealt(ann.id) });
+  check('and a hunter far above the ground is paid less of theirs, as alone', bent[ann.id] < 1 && bent[bex.id] === 1, bent);
   check('the browser hears what the share was, without the save', paid[ann.id].events.some((e) => e.type === 'party:spoils' && e.kills > 0 && !('state' in e)),
     paid[ann.id].events.map((e) => e.type));
 

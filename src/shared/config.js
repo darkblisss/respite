@@ -63,8 +63,8 @@ const progression = {
 
 /* ================= 4. THE HUNT ================= */
 /* An encounter walks in with its foes; if it is still going when the zone's
-   window runs out, a reinforcement joins (never more than maxFoes at once).
-   The maths lives in combat.js. */
+   window runs out, a reinforcement joins (never more than maxFoes at once, and
+   never more than the zone's `joins` in all). The maths lives in combat.js. */
 
 const hunt = {
   playerSwingMs: 2400,          // Brute Force, and a Stalker
@@ -75,10 +75,27 @@ const hunt = {
   deathDebuff: 0.15,
   deathDebuffMs: 10 * 60 * 1000,
 
+  /* Nothing heals for free. Not the walk, not the camp, not a new level: a level's
+     worth of new health is added to what you have, and that is all. What comes back
+     comes back two ways. Every blow you land gives back a share of itself
+     (lifesteal, a hundredth for everyone: BASE_COMBAT in registry.js), and a remedy
+     out of the Satchel, drunk between encounters, or by hand at camp. */
 
-  /* Health comes back only when nothing is swinging at you: between encounters
-     and at camp, this share of your most a second. Nothing else heals for free. */
-  regenPerSec: 0.01,
+  /* Block and Dodge, off gear alone. A blocked blow lands at blockCut of itself; a
+     dodged one not at all. Capped, so no pile of pieces makes a hunter untouchable. */
+  blockCut: 0.5,
+  blockCap: 0.6,
+  dodgeCap: 0.4,
+  lifestealCap: 0.1,
+
+  /* Hunting beneath yourself. A kill pays its whole XP until you are overGrace levels
+     past the gate of the region above the one you are in; after that every level
+     takes overStep off, down to overFloor. Weapon mastery follows the same slope all
+     the way down to nothing: a blade learns nothing from things that cannot hurt it.
+     The last region has no ground above it, so it never falls off. */
+  overGrace: 5,
+  overStep: 0.06,
+  overFloor: 0.1,
 
   /* Clear an encounter early and the next one is owed you within this, however
      long the zone's reinforcement clock still had to run. Killing fast is never
@@ -105,22 +122,34 @@ const hunt = {
 
   // A tier-1 Stalker, and how each tier grows on it.
   foeHp: 400,
-  foeAttack: 0.26,
-  foeHpGrowth: 1.8,
-  foeAttackGrowth: 1.75,
+  foeAttack: 0.42,
+  foeHpGrowth: 1.85,
+  foeAttackGrowth: 1.85,
   foeXp: [1, 4, 8, 14, 21, 30, 41, 54, 68],
   foeGold: [0.5, 1.5],          // a Stalker's gold, as a share of its tier's material value
 
   /* Gear stat lines (GEAR_LINES) are a tier-1 Common piece. Tiers multiply
      them by gearGrowth, rarity multiplies again, and every stat rounds to a
-     whole number. Crit is a flat chance that only rarity changes. Weapons
-     from tier 5 also add Veil per blow (weaponVeil). A full tier-9 Relic set
-     with every level earned stays under 5,000 health. */
-  gearGrowth: { attack: 1.85, defence: 1.85, health: 2 },
-  weaponVeil: [0, 0, 0, 0, 1, 2, 3, 4, 5],
+     whole number. The chances (crit, block, dodge) and Veil Power are shares
+     that only rarity moves. Weapons from tier 5 also add Veil per blow
+     (weaponVeil), and a fifth of it a second to a Mage.
 
-  // Veil a Warrior or Rogue builds per blow, as [Hunt level, Veil] points.
-  veilCurve: [[5, 10], [20, 12], [40, 16], [60, 20], [80, 25]],
+     ONE GROWTH RATE. Everything that makes a fight grows by the same 1.85 a
+     tier: a foe's health and attack, the Defence K it is measured against, a
+     piece's Attack, Defence and health, and a hunter's own base stats every ten
+     Hunt levels (a tier's worth). So a hunter in the middle of a region's band,
+     in that region's gear, meets the Outer of tier 9 exactly as they met the
+     Outer of tier 1: the numbers are bigger and the fight is the same. What
+     moves the fight is depth, gear rarity, the path, mastery and the Veil a
+     weapon carries, never the tier itself. dev/balance.mjs plays the grid. */
+  gearGrowth: { attack: 1.85, defence: 1.85, health: 1.85 },
+  weaponVeil: [0, 0, 0, 0, 1, 1, 2, 2, 3],
+
+  /* Veil a Warrior or Rogue builds per blow, as [Hunt level, Veil] points. Flat:
+     the Veil grows with the weapon and the path, not the level, so a discipline's
+     technique comes round as often at tier 9 as at tier 1 and the three stay level
+     with each other all the way up (a Mage's two a second is flat too). */
+  veilCurve: [[5, 10]],
 };
 
 /* ================= 5. ECONOMY ================= */
@@ -137,14 +166,14 @@ const economy = {
   // `price` what the Bonesetter charges. Names live in registry.js.
   remedies: [
     { tier: 1, heal: 250,   value: 2,   price: 5 },
-    { tier: 2, heal: 420,   value: 4,   price: 9 },
-    { tier: 3, heal: 700,   value: 6,   price: 15 },
-    { tier: 4, heal: 1800,  value: 18,  price: 45 },
-    { tier: 5, heal: 2600,  value: 32,  price: 80 },
-    { tier: 6, heal: 3800,  value: 56,  price: 140 },
-    { tier: 7, heal: 8000,  value: 168, price: 420, smuggler: true },
-    { tier: 8, heal: 12000, value: 284, price: 710, smuggler: true },
-    { tier: 9, heal: 18000, value: 480, price: 1200, smuggler: true },
+    { tier: 2, heal: 460,   value: 4,   price: 9 },
+    { tier: 3, heal: 860,   value: 6,   price: 15 },
+    { tier: 4, heal: 1600,  value: 18,  price: 45 },
+    { tier: 5, heal: 2900,  value: 32,  price: 80 },
+    { tier: 6, heal: 5400,  value: 56,  price: 140 },
+    { tier: 7, heal: 10000, value: 168, price: 420, smuggler: true },
+    { tier: 8, heal: 18500, value: 284, price: 710, smuggler: true },
+    { tier: 9, heal: 34000, value: 480, price: 1200, smuggler: true },
   ],
 
   /* The player market, run by the server. The fee is taken off BOTH legs of a trade:
@@ -217,8 +246,10 @@ const party = {
   huntBonusCap: 0.10,           // the two others you can have, at 5% each
 
   /* What a share of an encounter is worth. Damage dealt is most of it, but holding
-     the line is worth counting too, or the only way to be paid is to swing. Gold is
-     not split by this: everyone who was there gets the same. */
+     the line is worth counting too, or the only way to be paid is to swing: the
+     taken half counts the blows thrown at you as they were thrown, before your own
+     Dodge, Block and Defence. Gold is not split by this: everyone who was there
+     gets the same. */
   contribDealt: 0.70,
   contribTaken: 0.30,
 
@@ -398,11 +429,11 @@ function gearStat(base, growth, tier, mult) {
 const round2 = (n) => Math.round(n * 100) / 100;
 
 // Hunt level -> base stats, before a discipline and gear.
-const baseHealth = (level) => 250 + 30 * (level - 1) + 1.3 * (level - 1) * (level - 1);
+const baseHealth = (level) => 250 * Math.pow(1.85, (level - 1) / 10);
 const baseAttack = (level) => 10 * Math.pow(1.85, (level - 1) / 10);
-const baseDefence = (level) => (hunt.defK / 9) * (Math.pow(1.85, (level - 1) / 10) - 1);
+const baseDefence = (level) => (hunt.defK / 9) * Math.pow(1.85, (level - 1) / 10);
 
-// Veil a Warrior or Rogue builds per blow, by Hunt level. Weapons from tier 5 add more.
+// Veil a Warrior or Rogue builds per blow, by Hunt level (flat: see veilCurve). Weapons from tier 5 add more.
 function veilPerBlow(level) {
   const curve = hunt.veilCurve;
   if (level <= curve[0][0]) return curve[0][1];

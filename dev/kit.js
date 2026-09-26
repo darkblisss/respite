@@ -747,7 +747,7 @@ function kitFight() {
   const stage = h("div.hunt-stage", ring.node, head);
   // Timers run on from here and wrap, as they do between a party's answers: the foes keep striking.
   requestAnimationFrame(() => ring.sync({
-    key: "kit", party: false, tier: 2, zoneIdx: 2, phase: "fight", enc: 42, kind: "normal", vast: false, enrage: 0, reinforceIn: 17000, queued: 1,
+    key: "kit", party: false, tier: 2, zoneIdx: 2, phase: "fight", enc: 42, kind: "normal", vast: false, reinforceIn: 17000, queued: 1,
     hunters: [{ id: "me", me: true, name: ME.name, skin: "drifter", klass: "warrior", hp: ME.hp, max: ME.maxHp, veil: 0.64, volley: 0 }],
     foes: [
       { uid: 1, id: "mob_t2_stalker", elite: false, hp: 22, max: 48, timer: 900, target: "me" },

@@ -149,9 +149,10 @@ export function bondLevelFrom(bond)        // v4
 export function equipStat(equipment, stat)
 export function hasPrefix(equipment, id)
 export function classDef(id)               // getClass(id) || null
-export function combatStats(loadout)       // v4 combatStats; loadout { level, klass, equipment } required
+export function combatStats(loadout)       // v4 combatStats; loadout { level, klass, equipment } required. Engine 9 adds lifesteal, block, dodge and tech (Veil Power)
 export function statsOf(state)             // combatStats of the save's own loadout
 export function maxHp(state)
+export function maxHpAtLevel(state, level) // the same hunter's most health at another Hunt level (engine 9: a level adds the difference)
 export function mitigation(defence, tier)  // v4
 export function canPickClass(state)
 export function recovering(state)          // player.recoveryLeft > 0
@@ -183,7 +184,9 @@ export const nextDayAt = (ms) => (dayIndex(ms) + 1) * CONFIG.time.dayMs
 export function xpMult(state, skillId, at)          // weather at `at`, Bountiful Weekend at `at` (trades only), companion xp bonus, bounty buff if state.buff.until > at
 export function partyMult(env, tier, zone, at)      // 1 + min(cap, perMember * members whose interval covers `at` on the same tier and zone). env.party = { intervals: [{ tier, zone, start, end }] } or null
 export function xpEach(state, skillId, amount, at)  // Math.max(1, Math.round(amount * xpMult))
-export function addXp(state, skillId, gain, env, at)// adds (fractions allowed); returns true on a level; emits skill:level {skillId, level}; gathering skills on a MASTERY_TRACK level also emit skill:mastery {skillId, level, label}; warfare levels set player.hp to maxHp and, if canPickClass, emit class:available {}
+export function addXp(state, skillId, gain, env, at)// adds (fractions allowed); returns true on a level; emits skill:level {skillId, level}; gathering skills on a MASTERY_TRACK level also emit skill:mastery {skillId, level, label}; a warfare level adds the new level's health to player.hp (engine 9: not a full bar; the camp's note follows) and, if canPickClass, emits class:available {}
+export function overLevel(level, tier)              // engine 9: { xp, mastery, over }. 1 and 1 until level passes the next region's gate by CONFIG.hunt.overGrace, then overStep less a level; xp floors at overFloor, mastery at 0; the last region never falls off
+export function overLevelOf(state, tier)            // overLevel for the save's own Hunt level
 export function mastery(state, skillId)             // { double }
 export function toolFor(state, skillId)             // tool def or null: getTool for a bare base, itemDef (speed and value by rarity) for a rolled key
 export function speedMod(state, skillId)
@@ -255,7 +258,11 @@ Hunt task: v4 `newHunt` fields plus `id` (`state.serial++`) and `startedAt` = cl
 export const EPS = 1e-6
 export function threatKey(tier, zone)
 export function threatIn(state, tier, zone)
-export function foeNumbers(mob, elite)
+export function foeNumbers(mob, elite, zone)          // engine 9: zone (or its id) scales hp, attack and defence by zone.scale and xp by zone.xp; no zone is the Outer
+export function depthOf(zone)                         // zone.scale, or 1s
+export const foeDefence = (mob, zone)                 // mob.defence * depthOf(zone).defence
+export function playerBlow(s, defence, tier, mult, crit, pen, rng)  // engine 9 takes the foe's Defence where it stands, not the mob
+export function foeBlow(s, raw, tier, hpNow, rng)     // engine 9: null when dodged, else { dmg, blocked }: dodge, then Defence, Resilient, then block at blockCut
 export function foeTitle(mob)
 export function pickWeighted(pairs, rng)
 export function newHunt(state, tier, zone, limit)     // v4 newHunt + id + startedAt (increments state.serial)
@@ -281,6 +288,8 @@ export function huntPresence(state)                   // { tier, zone, startedAt
 
 `startHunt` validation: tier's region unlocked ("That ground isn't open."), zone id valid, `limit` null or integer 1..100000, not recovering ("You're still recovering."). Then: the same tier and zone keeps the fight and restarts the count (v4). Moving ground keeps health (v4) and must not skip the walk: the new hunt's first `wait` is `max(searchMinMs, what is left on the old ground)`, which is `c.wait` when searching or hiding and `zone.windowMs - c.clock` in a fight. Setting out from camp reads the camp's note (below) and uses it up.
 
+**Engine 9: nothing heals for free.** The walk heals nothing (no regen in `move`), the camp heals nothing (`campPlan` returns the note's `hp` as it stands), a warfare level adds its new health rather than refilling the bar, and `pickClass` adds the discipline's extra health rather than refilling it. A fall leaves a note on one point of health (`{ since: at, hp: 1, walkUntil: at }`), so setting out again is on one point unless a remedy is drunk first. Health comes back two ways only: lifesteal (`s.lifesteal`, 1% for everyone, of everything a swing lands, main target and splash, added in `playerSwing`), and remedies. A remedy is drunk the moment a foe's blow leaves the hunter at or below `remedyAt` (never in a Sovereign's fight, where a quarter means breaking away), and in the breath before and after every encounter. The paragraph below is engine 2's and still holds for the walk; its rest-at-camp and full-health-after-a-fall rules are superseded.
+
 **The camp's note** (engine 2). `state.player.camp` is `{ since, hp, walkUntil }` or null. A hunt that ends alive (pullBack, `limit`, `cap`) writes it at the moment it ended: `state.clock` for pullBack, the `at` of `hunt:ended` otherwise. `hp` is `state.player.hp` then. `walkUntil` is when the walk in progress would have ended: `since + c.wait` when searching or hiding, `since + max(searchMinMs, zone.windowMs - c.clock)` for a fight broken off (a limit reached mid-fight counts as one). A hunt that sets out from camp at `clock` starts with `wait = max(searchMinMs, walkUntil - clock)` and `player.hp = min(maxHp, hp + maxHp * (clock - since) / CONFIG.hunt.recoveryMs)`, so health is whole again after five minutes at camp, and the note becomes null. No note (a fresh camp, a v4 save, or after a fall, which clears it because the fall already costs its recovery) means full health and a `searchMinMs` walk, as before. `pickClass` at camp raises the note's `hp` to the new most, keeping v4's refill. Nothing new is logged. `walkUntil` is an absolute time in fractional milliseconds (never rounded, so slicing can't move it). Why: in engine 1, pulling back and setting straight out after an encounter swapped the 30 to 60 s walk for 3 s and a full heal (the review measured gold and items an hour going from 5,028 to 13,122, Sovereign epics from 1.0 to 3.66 an hour). hunt.test.mjs plays that trick for an hour and gets exactly the plain hunt's kills, gold, health and stream.
 
 `huntStep(state, dt, env, at0)` builds the live ctx (v4 `liveHunt`) and runs `stepHunt`. The current simulated time inside the step is `at0 + Math.round(c.elapsed - elapsedAtStart)` (whole ms, section 1.3); pass it as `at` to everything that needs a time. Payload durations (`elapsedMs`, `fightMs`) are rounded to whole ms too. Hooks:
@@ -288,17 +297,31 @@ export function huntPresence(state)                   // { tier, zone, startedAt
 - `fx(who, kind, amount)`: `if (env.fx) env.emit("hunt:fx", { who, kind, amount, at })`.
 - `note`: replaced by specific hooks and events: `met` emits `hunt:sovereign {monsterId}` when one comes, `passed` emits `hunt:passed {tier, zone}`, `hid` emits `hunt:hide {tier, zone}`, `retreated` emits `hunt:retreat {monsterId|null, fightMs}`. Projections count met, hid and retreated exactly as v4 did.
 - `remedy`: `bestRemedy` then `transact` spend 1 from the pool it sits in; returns heal.
-- `gainXp(amount)`: `gain = amount * xpMult(state, "warfare", at) * partyMult(env, tier, zone, at)`; `c.xp += gain`; `addXp`; refresh stats on a level.
+- `gainXp(amount)`: `gain = amount * xpMult(state, "warfare", at) * partyMult(env, tier, zone, at) * overLevelOf(state, tier).xp` (engine 9); `c.xp += gain`; `addXp`; refresh stats on a level. `amount` is the kill's `foeNumbers(...).xp`, which already carries the zone's XP.
+- `gainMastery(amount)`: `addMastery(state, amount * overLevelOf(state, tier).mastery)` (engine 9: a blade learns less, and in the end nothing, from ground far beneath you).
 - `gainGold(n)`: `Math.round(n * (1 + companionBonus(state, "gold")))` via `tx.gold(n, true)`.
 - `killed(mob, elite)`: `creditKill(state, mob, elite, zone, env, at)`: `stats.kills++`, bounty slay progress, drops (below), an Elite's Fragment on ground that carries the Veil (the Inner and the Core), companion finds on `k:<tier>`, then `m:<id>` and `k:<tier>` counters++. Returns how many things it left. The server settles every kill in a party share through the same function.
 - Drops: for each `mob.drops[j] = [key, qty, chance]`: `roll(seed, "m:"+id, n, SALT.drop + j) < chance * (1 + companionBonus("drops"))` then stash `qty * (elite ? ELITE.drops : 1)` in ORDER.loot. Rare find: `rare = companionBonus("rare")`; if `roll(k-key, n, SALT.rare) < rare`, rarity `fineRarityFromRoll(SALT.rareRarity)`, piece from GEAR of the mob's tier (registry order) by `SALT.rarePick`, uid `f<tier>.<n>`, relic prefix from `SALT.prefix` on the same key; emit `loot:found {key}` if placed.
 - Nowhere to put loot: at most once per 10 minutes of clock (`state.lootLostAt`), emit `loot:lost {key}`.
 - `sovereignDown(mob)`: `creditSovereign(state, mob, fightMs, env, at)`: `stats.bosses++`, its tier's Essence (`SOVEREIGN.essence`) stashed, `s:<tier>`++, emit `hunt:felled { monsterId, key|null, fightMs }`. A party share settles each hunter's Sovereign through the same function.
-- `died(mob)`: v4 (tasks.combat = null, deaths++, hp = maxHp, recoveryLeft = recoveryMs, death wear on worn pieces), and `player.camp = null`; emit `hunt:death { monsterId, elapsedMs }`.
+- `died(mob)`: tasks.combat = null, deaths++, `foeDeaths[id]++`, the death debuff on Attack, `hp = 1` and a camp note on 1 (engine 9: no free heal); emit `hunt:death { monsterId, elapsedMs }`.
 - `ended(reason)`: write the camp's note at `at`, then tasks.combat = null; emit `hunt:ended { reason, kills, elapsedMs }`.
 - `retreated`, `hid`, `met`: emit the events above.
 
 `nextHuntDue(state)` must return exactly v4 `untilNext` (and 0 when `fireDue` would do something), so `advance()` can cut other systems at hunt events if it needs to. Keep v4's EPS handling.
+
+### 9.1 Engine 9: the combat rebalance
+
+Played and tuned against `dev/balance.mjs`, which runs this engine for a grid of reference hunters (a discipline in the middle of a region's band, in a full Common set of that tier, five of the tier's remedies packed) and prints what each ground does to them.
+
+- **One growth rate.** A foe's health and attack, the Defence K, a piece's Attack, Defence and health, and a hunter's own base health, Attack and Defence all grow 1.85 a tier (every ten Hunt levels for the hunter). `baseHealth(L) = 250 * 1.85^((L-1)/10)`, `baseDefence(L) = (defK/9) * 1.85^((L-1)/10)`. So tier 9 plays like tier 1 with bigger numbers; the remedies' heal follows the same curve (250 at tier 1 to 34,000 at tier 9).
+- **Everyone's stats.** Crit 5%, Crit Damage 150%, Penetration 0, lifesteal 1%, Block 0, Dodge 0 (`BASE_COMBAT`). A discipline is its health, Attack, Defence, swing, Veil generation and technique. Block comes off a shield (15% at Common, rarity moves it) and a Stalwart relic (+10%); Dodge off medium armour and a dagger. Veil Power (`tech`, 1 = 100%) off the path's `techPct` and the amulet (5% at Common). Caps: `blockCap`, `dodgeCap`, `lifestealCap`.
+- **Blows.** `foeBlow`: Dodge is rolled first (a dodged blow is fx `dodge`, amount 0); Defence takes its share by `mitigation(def, tier) = min(0.8, def / (def + K(tier)))`; a Block roll lands the rest at `blockCut` (fx `block`). The dice are thrown only for a hunter with the stat.
+- **Techniques.** Veil a blow is a flat 10 (weapons add 1 to 3 from tier 5); a Mage drinks 3 a second plus `absorbPerVeil` for each weapon Veil. Devastating Strike 3x and half of Defence ignored; a Warrior builds `strike.struck` (all) of its Veil a blow again from every blow aimed at it, so a swarm makes it strike more often. Ambush is a certain crit at 1.6x. The Mage's opening volley is 3 casts at 1.5x; empowered casts 3x, splashing half.
+- **Zones.** `scale` (health, attack, Defence) and `xp`: Outer 1/1/1, 1; Middle 1.15/1.1/1.1, 1.08; Inner 1.35/1.22/1.2, 1.16; Core 1.6/1.4/1.35, 1.25. Archetype XP follows the fight a foe gives: Skirmisher 0.7, Stalker 1, Brute 2. A tier-1 Stalker hits for `foeAttack` 0.42.
+- **Waves.** An ordinary encounter takes at most its zone's `joins` reinforcements (Outer 1, Middle 2, Inner 3, Core 4), held ones included (`c.joins`, `owesMore(c)`; a party's `e.joins` counts turns of the window). So an encounter always ends, even for a hunter who kills slower than the window turns, and clearing it is what rolls the ground's Sovereign. A wave that ran its whole length is followed by the longest walk, `reinforceGapCapMs`. Before engine 9 a Core encounter at the right level never ended, so its Sovereign never came.
+- **Sovereigns.** Two Elite escorts walk in first; the Sovereign is last on the roster, so it is struck last. No enrage. 4x a Stalker's health, 4.5x its attack, 10x its XP. At a quarter you break away (alone); a party fights it out.
+- **What the grid says** (Common gear, the middle of the band, five remedies, the same at every tier): the Outer and the Middle are held by lifesteal (a Mage dips into the Satchel in the Middle); the Inner lasts about 10 to 12 hours for a Warrior, 5 to 6 for a Rogue and 2.5 to 3 for a Mage; the Core about 2.4, 1.5 and 1 hour, meeting its Sovereign every hour or three. In the Core a Rogue kills as fast as a Warrior and a Mage about 15% faster; on easier ground they are 17% and 29% faster. A Warrior fells a Sovereign every time, a Rogue nine times in ten, a Mage about one time in three and breaks away the rest. Rare gear makes the Inner a place to spend the night for a Warrior or a Rogue; Legendary puts a Warrior's Core past seven hours.
 
 ## 10. world.js: camp commands and queries
 
@@ -420,7 +443,7 @@ export function migrateSave(raw, { now, seed, userId, account, legacy = false })
   - `requisitions`: unresolved errands only, by agents on the roster, one an agent, three at most, for an item in `requisitionTargets`, with `qty = requisitionQty(agent)` and the agent's name. `reqDay` is at most today.
   - `buff`: `until` at most `clock + BOUNTY_BUFF.ms`, `mult` at most `BOUNTY_BUFF.mult`.
   - Skilling `progress` at most `max(1000, def.time)`, the longest that action ever takes.
-  - A hunt holds at most 3 foes (the most any encounter holds), each with `max` from `foeNumbers` and `hp` no more than that, and a Sovereign only in its own fight, once.
+  - A hunt holds at most 3 foes (the most any encounter holds), each with `max` from `foeNumbers` at the hunt's zone and `hp` no more than that, and a Sovereign only in its own fight, once. Engine 9: a foe's old `power` and a hunt's old `enrage`/`enrageAt` are dropped.
   - `player.camp` only while no hunt is out: `since` a whole ms up to the clock, `hp` 0..1e9, `walkUntil` within `since - 1 .. since + 5 minutes`.
   - Legacy only: gold to 5,000,000 and a stack to 250,000 (above), and a unique piece whose uid is not v4's all digits is dropped (v4 numbered its pieces; a hand-written `c1.0` could meet a uid v5 derives later).
   For a legacy save, if anything in that list was clamped or dropped, one line is logged at the save's clock: "Your old camp's ledger didn't add up. N entries were set right." ("1 entry was set right." for one; N counts each clamp or drop once). Junk that was never an item or a number, stale wear and v4's own migration notes are not counted, so an honest v4 save gets no line unless it is past a limit or out of slots. Sound saves go through unchanged, so migrating a migrated save gives the same save.
@@ -507,14 +530,14 @@ Every function v4's ui.js called that reads game state or derives game numbers, 
 ### The hunt
 - `combatPlan()` -> `combatPlan(state)` -> combat.js
 - `threatIn(tier, zone)` -> `threatIn(state, tier, zone)` -> combat.js
-- `foeNumbers(mob, elite)`, `foeTitle(mob)` -> same names -> combat.js
+- `foeNumbers(mob, elite, zone)`, `foeTitle(mob)` -> same names -> combat.js
 - `huntOddsLater(tier, zone, done)` -> `projectHunt(tier, zone, huntOddsOpts(state, tier, zone))` -> combat.js; keep the answer while `oddsSignature(opts, tier, zone)` is unchanged; to paint first, run `projectOnce(tier, zone, { ...opts, seed: 7 + i * 7919 })` one run per frame and sum with `summariseRuns(runs, opts.horizonMs)`, exactly as v4 did
 - `remedyHeals()` -> `remedyHeals(state)` -> combat.js; the next remedy taken -> `bestRemedy(state)` -> combat.js
 - `wearPct(key)` -> `wearPct(state, key)` -> combat.js
 - `repairCost(key)` -> `repairCost(state, key)` -> combat.js
 - `combatFx` and `fx()` (the arena's floaters) -> `makeEnv({ emitter, fx: true })` -> engine.js, then listen for `hunt:fx { who, kind, amount, at }`
 - where the hunt is for party presence -> `huntPresence(state)` -> combat.js
-- (v5) health and first walk for a hunt setting out from camp -> `campPlan(state, at)` -> combat.js. At camp `state.player.hp` stays at what you came back with; show `campPlan(state, now).hp` to let it fill over five minutes. null while a hunt is out.
+- (v5) health and first walk for a hunt setting out from camp -> `campPlan(state, at)` -> combat.js. At camp `state.player.hp` stays at what you came back with, and (engine 9) so does `campPlan(state, now).hp`: only a remedy (`useRemedy`) moves it. null while a hunt is out.
 
 ### The camp
 - `currentRegion()` -> `currentRegion(state)` -> world.js

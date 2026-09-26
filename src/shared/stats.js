@@ -117,6 +117,8 @@ export function combatStats(loadout) {
   const pw = pathMods(k.id, lo.path || null);
 
   const r2 = CONFIG.round2;
+  const r3 = (n) => Math.round(n * 1000) / 1000;
+  const H = CONFIG.hunt;
 
   return {
     level: lo.level, klass: k.id, className: k.name,
@@ -124,16 +126,33 @@ export function combatStats(loadout) {
     attack: r2((CONFIG.baseAttack(lo.level) * k.attack + equipStat(eq, "attack")) * mast.attack * (1 + pw.attackPct)),
     defence: r2((CONFIG.baseDefence(lo.level) * k.defence + equipStat(eq, "defence")) * (has("bulwark") ? 1.15 : 1) * mast.defence * (1 + pw.defencePct)),
     speed: Math.max(400, Math.round(k.speed * (1 - Math.min(0.5, pw.speedPct)))),
-    crit: Math.min(0.75, k.crit + equipStat(eq, "crit") + pw.critFlat),
-    critDmg: k.critDmg + pw.critDmgFlat,
-    pen: Math.min(0.9, k.pen + (has("sundering") ? 0.15 : 0) + pw.penFlat),
-    // What a full Veil is worth when it goes off: 1 until the path says otherwise.
-    tech: 1 + pw.techPct,
+    crit: r3(Math.min(0.75, k.crit + equipStat(eq, "crit") + pw.critFlat)),
+    critDmg: r3(k.critDmg + pw.critDmgFlat),
+    pen: r3(Math.min(0.9, k.pen + (has("sundering") ? 0.15 : 0) + pw.penFlat)),
+    // A share of every blow you land, back as health: a hundredth for everyone, and whatever gear adds.
+    lifesteal: r3(Math.min(H.lifestealCap, k.lifesteal + equipStat(eq, "lifesteal"))),
+    // A blocked blow lands at half; a dodged one never lands. Neither is anyone's by birth.
+    block: r3(Math.min(H.blockCap, k.block + equipStat(eq, "block") + (has("stalwart") ? 0.1 : 0))),
+    dodge: r3(Math.min(H.dodgeCap, k.dodge + equipStat(eq, "dodge"))),
+    // Veil Power: what a full Veil is worth when it goes off. 1 until the path or an amulet says otherwise.
+    tech: r3(1 + pw.techPct + equipStat(eq, "tech")),
     veilGain: k.id === "warrior" || k.id === "rogue" ? CONFIG.veilPerBlow(lo.level) + equipStat(eq, "veil") + pw.veilFlat : 0,
-    absorb: k.id === "mage" ? T.absorb + equipStat(eq, "veil") / 10 + pw.absorbFlat : 0,
+    /* A Mage drinks the Veil out of the air instead: a weapon's Veil a blow is worth
+       T.absorbPerVeil of it a second, which grows a Mage's technique as much as it
+       grows a Warrior's or a Rogue's. */
+    absorb: k.id === "mage" ? T.absorb + equipStat(eq, "veil") * T.absorbPerVeil + pw.absorbFlat : 0,
     echoing: has("echoing"), furious: has("furious"), executioner: has("executioner"), wounding: has("wounding"),
-    stalwart: has("stalwart"), vital: has("vital"), thorned: has("thorned"), resilient: has("resilient"),
+    vital: has("vital"), thorned: has("thorned"), resilient: has("resilient"),
   };
+}
+
+/* The most health this save's hunter would have at another Hunt level, gear and all.
+   A level's worth of new health is added to what you have, not a full bar. */
+export function maxHpAtLevel(state, level) {
+  return combatStats({
+    level, klass: state.player.klass,
+    equipment: state.equipment, mastery: state.mastery, path: state.path,
+  }).maxHp;
 }
 
 /* What a recent death still costs you, as a multiplier on your Attack. It runs on

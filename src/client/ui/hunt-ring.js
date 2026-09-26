@@ -211,7 +211,6 @@ const UI = "Inter, system-ui, sans-serif";
      enc       which encounter (a new one clears the ring)
      kind      "normal" | "sovereign"
      vast      a Sovereign waits at the end of this walk
-     enrage    how many times the Sovereign has angered
      reinforceIn  ms until the zone's window brings another, or null
      queued    how many wait in the dark for a gap
      hunters   [{ id, me, name, skin, klass, hp, max, veil (0..1), volley, down, share }]
@@ -439,12 +438,28 @@ export function huntRing({ onFoe = () => {}, onMode = () => {} } = {}) {
     foes.forEach((f) => {
       if (!here.has(f.uid) && !f.dying && !f.leaving && !f.pending) f.pending = true;
     });
-    const opening = fresh ? openingSlots(list.length, party) : null;
+    let opening = fresh ? openingSlots(list.length, party) : null;
+    /* A Sovereign is last on the roster, behind its guard, and last to be struck; it still
+       takes the head of the ring, and it steps out of the dark where its eyes were. */
+    const sovAt = opening ? list.findIndex((src) => { const m = getMonster(src.id); return !!m && m.archetype === "sovereign"; }) : -1;
+    if (sovAt > 0) {
+      const rest = opening.slice(1);
+      opening = list.map((_, i) => (i === sovAt ? opening[0] : rest[i < sovAt ? i : i - 1]));
+    }
     list.forEach((src, i) => {
       if (!getMonster(src.id)) return;
       let f = byFoe.get(src.uid);
       if (!f) {
-        if (opening) {
+        if (opening && i === sovAt) {
+          const eyesOf = liveEyes("vast")[0] || null;
+          const spot = eyesOf ? { x: eyesOf.x, y: eyesOf.y } : darkAt(opening[i]);
+          f = makeFoe(src, opening[i], true, spot);
+          const it = f;
+          later(0.8, () => {
+            effect({ type: "arrive", f: it, life: 1.1 });
+            shake = Math.max(shake, 3);
+          });
+        } else if (opening) {
           f = makeFoe(src, opening[i] != null ? opening[i] : freeSlot(), false, null);
         } else {
           // Out of the dark, from wherever its eyes were.
@@ -550,6 +565,8 @@ export function huntRing({ onFoe = () => {}, onMode = () => {} } = {}) {
           const q = hunterAt(you);
           callout({ x: q.x, y: q.y - hr(you) - 20 * L.u }, "AMBUSHED");
         }
+      } else if (ev.kind === "dodge") {
+        sidestep(you);
       } else if (ev.kind === "heal") {
         const q = hunterAt(you);
         burst(q.x, q.y, 16, ["#9fd8bf", "#e8fff4"], 80, 0.7);
@@ -561,12 +578,6 @@ export function huntRing({ onFoe = () => {}, onMode = () => {} } = {}) {
     switch (ev.kind) {
       case "kill": markKilled(ev.who); break;
       case "leave": markLeft(ev.who); break;
-      case "enrage":
-        f.flash = 1.2;
-        f.shake = 6;
-        effect({ type: "rage", f, life: 1 });
-        shake = Math.max(shake, 3);
-        break;
       case "hit":
       case "crit":
         if (you) swingAt(you, f, ev.kind === "crit");
@@ -607,6 +618,11 @@ export function huntRing({ onFoe = () => {}, onMode = () => {} } = {}) {
 
   function callout(p, text) {
     effect({ type: "callout", x: clamp(p.x, 110 * L.u, L.W - 110 * L.u), y: Math.max(40 * L.u, p.y), text, life: 1.2 });
+  }
+  // Not there when it lands: a quick step aside and back.
+  function sidestep(u) {
+    if (u.sway && u.sway.t < 0.3) return;
+    u.sway = { t: 0, dir: rnd() < 0.5 ? -1 : 1 };
   }
   function claws(u, heavy) {
     const p = hunterAt(u);
@@ -846,6 +862,11 @@ export function huntRing({ onFoe = () => {}, onMode = () => {} } = {}) {
         const k = Math.sin(Math.PI * clamp(1 - u.lungeT / 0.16, 0, 1)) * 0.12;
         ox += (q.x - L.CX - u.home[0] * L.u) * k;
         oy += (q.y - L.CY - u.home[1] * L.u) * k;
+      }
+      if (u.sway) {
+        u.sway.t += dt;
+        if (u.sway.t >= 0.3) u.sway = null;
+        else ox += u.sway.dir * Math.sin(Math.PI * (u.sway.t / 0.3)) * 16 * L.u;
       }
       if (u.dash) {
         u.dash.t += dt;
@@ -1227,11 +1248,10 @@ export function huntRing({ onFoe = () => {}, onMode = () => {} } = {}) {
       g.scale(1 + f.squash * 0.1, 1 - f.squash * 0.16);
       g.translate(-p.x, -p.y);
       if (f.sov) {
-        // It rules this ground: a bigger disc, a violet rim, the crown over it. Each time it angers it burns hotter.
-        const rage = (snap && snap.enrage) || 0;
+        // It rules this ground: a bigger disc, a violet rim, the crown over it.
         g.save();
-        g.shadowColor = rage ? "rgba(224, 96, 128, .85)" : "rgba(184, 139, 219, .7)";
-        g.shadowBlur = 16 + rage * 7;
+        g.shadowColor = "rgba(184, 139, 219, .7)";
+        g.shadowBlur = 16;
         g.fillStyle = "#1a1224";
         g.beginPath();
         g.arc(p.x, p.y, R, 0, TAU);
@@ -1457,20 +1477,13 @@ export function huntRing({ onFoe = () => {}, onMode = () => {} } = {}) {
     g.fillText(f.name, x + 9, y + 18);
     let cx = x + 15 + nw;
     chips.forEach((c) => { cx += chipAt(cx, y + 14, ...c) + 4; });
-    // When it strikes, and in a party at whom. A Sovereign's anger is said beside it.
+    // When it strikes, and in a party at whom.
     const v = party ? victimOf(f) : null;
     const when = f.shown < 250 ? "now" : `in ${(Math.max(0, f.shown) / 1000).toFixed(1)}s`;
     const line = v ? `Strikes ${v.me ? "you" : v.name} ${when}` : `Strikes ${when}`;
     g.font = `500 11px ${UI}`;
     g.fillStyle = "#eb9068";
     g.fillText(line, x + 9, y + 33);
-    const rage = (snap && snap.enrage) || 0;
-    if (f.sov && rage) {
-      const lw = g.measureText(line).width;
-      g.font = `700 11px ${UI}`;
-      g.fillStyle = "#e8839b";
-      g.fillText(`· Enraged ×${rage}`, x + 15 + lw, y + 33);
-    }
     hpBar(x + 9, y + 40, w - 18, 12, f.hp / f.max, FOE_FILL, `${fmt(Math.max(0, Math.ceil(f.hp)))} / ${fmt(f.max)}`);
     g.globalAlpha = ringAlpha;
   }
@@ -1713,13 +1726,13 @@ export function huntRing({ onFoe = () => {}, onMode = () => {} } = {}) {
         g.stroke();
         break;
       }
-      case "rage": {
-        // It angers: a ring of it goes out from the Sovereign, rose over violet.
+      case "arrive": {
+        // It has stepped out of the dark: a ring of it goes out from the Sovereign, pale over violet.
         const p = foeAt(e.f);
         const R = foeR(e.f, false);
         g.globalCompositeOperation = "lighter";
         g.globalAlpha = (1 - k) * 0.9;
-        g.strokeStyle = "#e8839b";
+        g.strokeStyle = "#e8dcff";
         g.lineWidth = (4 * (1 - k) + 1) * U;
         g.beginPath();
         g.arc(p.x, p.y, R + (8 + 46 * ease(k)) * U, 0, TAU);

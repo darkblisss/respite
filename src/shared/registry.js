@@ -135,13 +135,13 @@ function buildRegistry() {
      of the item's name, as in "Echoing Slag Sword", and carries one effect. */
   const WEAPON_PREFIXES = [
     { id: "echoing",     name: "Echoing",      effect: "Chance to strike twice" },
-    { id: "sundering",   name: "Sundering",    effect: "Ignores some Defence" },
+    { id: "sundering",   name: "Sundering",    effect: "+15% Penetration" },
     { id: "furious",     name: "Furious",      effect: "Consecutive hits build damage" },
     { id: "executioner", name: "Executioner's", effect: "Hits harder on wounded foes" },
     { id: "wounding",    name: "Wounding",     effect: "Chance to inflict Bleed" },
   ];
   const ARMOUR_PREFIXES = [
-    { id: "stalwart",  name: "Stalwart",  effect: "Chance to blunt incoming damage" },
+    { id: "stalwart",  name: "Stalwart",  effect: "+10% Block" },
     { id: "vital",     name: "Vital",     effect: "Improves health and recovery" },
     { id: "thorned",   name: "Thorned",   effect: "Reflects some damage taken" },
     { id: "resilient", name: "Resilient", effect: "Hardens when badly hurt" },
@@ -332,33 +332,40 @@ function buildRegistry() {
   });
 
   /* Gear stat lines, as a tier-1 Common piece. CONFIG.hunt.gearGrowth,
-     CONFIG.hunt.weaponVeil and CONFIG.gearStat turn them into real stats. */
+     CONFIG.hunt.weaponVeil and CONFIG.gearStat turn them into real stats.
+     Attack, Defence and health grow with the tier; the chances (crit, block,
+     dodge) and Veil Power (tech) are shares that only rarity moves.
+     The three armours are three ways to last: heavy stops it (Defence), medium
+     is not there when it lands (Dodge), light has the most to lose (health).
+     No line carries lifesteal: at a hundredth of every blow it is already what
+     decides whether a ground can be held at all, and a little more of it turns
+     a hard ground into a safe one (dev/balance.mjs shows how little). */
   const GEAR_LINES = {
     // weapons and offhands
     sword:       { attack: 10 },
-    dagger:      { attack: 10, crit: 0.03 },
+    dagger:      { attack: 16, crit: 0.06, dodge: 0.04 },
     greatsword:  { attack: 20 },
     bow:         { attack: 20 },
     staff:       { attack: 20 },
-    shield:      { defence: 1 },
+    shield:      { defence: 1, block: 0.15 },
     grimoire:    { attack: 10 },
     // heavy: Defence on every piece
     helm:        { health: 10, defence: 1 },
     chest:       { health: 20, defence: 1 },
     hboots:      { health: 10, defence: 1 },
     hgaunts:     { health: 10, defence: 1 },
-    // medium: a little Defence, a little crit
-    hood_medium: { health: 10, crit: 0.01 },
-    jacket:      { health: 20, defence: 1 },
-    mboots:      { health: 10, crit: 0.01 },
-    mgloves:     { health: 10, crit: 0.01 },
+    // medium: a little Defence, and hard to pin down
+    hood_medium: { health: 10, dodge: 0.03 },
+    jacket:      { health: 20, defence: 1, dodge: 0.03 },
+    mboots:      { health: 10, dodge: 0.03 },
+    mgloves:     { health: 10, crit: 0.01, dodge: 0.03 },
     // light: the most health
-    hood_light:  { health: 20 },
-    robe:        { health: 30 },
-    lboots:      { health: 10 },
-    lgloves:     { health: 10 },
-    // jewellery
-    amulet:      { attack: 10 },
+    hood_light:  { health: 30 },
+    robe:        { health: 45 },
+    lboots:      { health: 15 },
+    lgloves:     { health: 15 },
+    // jewellery: the amulet carries the Veil's weight, the ring a little Defence
+    amulet:      { attack: 10, tech: 0.05 },
     ring:        { defence: 1 },
   };
 
@@ -648,28 +655,36 @@ function buildRegistry() {
      window runs out, a reinforcement joins (never more than maxFoes at once).
      Clear it early and the rest of the window is the walk to the next one.
      The maths lives in combat.js. */
-  /* `mix` is the share of each archetype the ground fields, `power` the multiplier
-     on a foe's health and damage at that depth (the same foe, harder deeper in).
+  /* `mix` is the share of each archetype the ground fields. `scale` is what the
+     depth does to a foe (the same foe, harder deeper in): its health, its attack
+     and its Defence, each by its own column. `xp` is what a kill there is worth
+     over the Outer's. Gold is the same foe's at any depth.
      `start` is what walks in when an encounter opens; reinforcements add one at a
-     time on `windowMs` until maxFoes stand. `sovereign` is the flat chance, rolled
+     time on `windowMs` until maxFoes stand, and `joins` is how many the dark sends
+     in all before it goes quiet: an encounter is a wave with an end, so it can be
+     cleared, and clearing it is what rolls the ground's Sovereign. `sovereign` is the flat chance, rolled
      once at the end of every encounter you clear, that the next one is the Sovereign
      instead. `elite` is rolled per foe; in the Inner and the Core an Elite also
      leaves a Veil Fragment, which is the slow road to the same Essence a Sovereign
-     drops whole. Threat is gone: nothing accumulates, the ground simply has odds. */
+     drops whole. Threat is gone: nothing accumulates, the ground simply has odds.
+
+     The depth is gentle on purpose. What makes the Core the Core is how many come
+     at once and how fast the dark answers, not a foe twice the size: a kill there
+     is a quarter better paid, never double. */
   const ZONES = [
-    { id: "outer", name: "Outer", xp: 1, windowMs: 60000, power: 1, elite: 0.04, sovereign: 0, fragments: false,
+    { id: "outer", name: "Outer", xp: 1, windowMs: 60000, joins: 1, scale: { hp: 1, attack: 1, defence: 1 }, elite: 0.04, sovereign: 0, fragments: false,
       sizes: [[1, 1]], mix: { skirmisher: 0.7, stalker: 0.2, brute: 0.1 },
       foesText: "1",
       note: "The picked-over edge. One thing at a time, and help is slow to reach it." },
-    { id: "middle", name: "Middle", xp: 1.3, windowMs: 50000, power: 1.15, elite: 0.1, sovereign: 0, fragments: false,
+    { id: "middle", name: "Middle", xp: 1.08, windowMs: 50000, joins: 2, scale: { hp: 1.15, attack: 1.1, defence: 1.1 }, elite: 0.1, sovereign: 0, fragments: false,
       sizes: [[1, 0.5], [2, 0.5]], mix: { skirmisher: 0.5, stalker: 0.3, brute: 0.2 },
       foesText: "1 or 2",
       note: "Deeper in. They come in pairs as often as not, and the dark answers faster." },
-    { id: "inner", name: "Inner", xp: 1.7, windowMs: 40000, power: 1.27, elite: 0.05, sovereign: 0.01, fragments: true,
+    { id: "inner", name: "Inner", xp: 1.16, windowMs: 40000, joins: 3, scale: { hp: 1.35, attack: 1.22, defence: 1.2 }, elite: 0.05, sovereign: 0.01, fragments: true,
       sizes: [[2, 1]], mix: { skirmisher: 0.2, stalker: 0.45, brute: 0.35 },
       foesText: "2",
       note: "Where the ground stops pretending. Two at once, more on the way, and something that rules here." },
-    { id: "core", name: "Core", xp: 2.2, windowMs: 30000, power: 1.4, elite: 0.2, sovereign: 0.05, fragments: true,
+    { id: "core", name: "Core", xp: 1.25, windowMs: 30000, joins: 4, scale: { hp: 1.6, attack: 1.4, defence: 1.35 }, elite: 0.2, sovereign: 0.05, fragments: true,
       sizes: [[2, 0.5], [3, 0.5]], mix: { skirmisher: 0.15, stalker: 0.35, brute: 0.5 },
       foesText: "2 or 3",
       note: "The heart of it. Always hungry, and what rules this ground walks it often." },
@@ -679,20 +694,23 @@ function buildRegistry() {
      against a Stalker of the same tier. `defence` is the share of a blow it
      shrugs off on its own ground. An Elite is any of the three, only worse. */
   const ARCHETYPES = {
-    skirmisher: { name: "Skirmisher", speed: 2000, hp: 0.7, attack: 0.7, defence: 0,    xp: 0.8, gold: 0.7, drops: 1,
+    skirmisher: { name: "Skirmisher", speed: 2000, hp: 0.7, attack: 0.7, defence: 0,    xp: 0.7, gold: 0.7, drops: 1,
       note: "Fast and thin. Hits often and hits light." },
     stalker:    { name: "Stalker",    speed: 2400, hp: 1,   attack: 1,   defence: 0.1,  xp: 1,   gold: 1,   drops: 1,
       note: "Patient and even. It keeps pace with you, blow for blow." },
-    brute:      { name: "Brute",      speed: 3000, hp: 1.6, attack: 1.8, defence: 0.25, xp: 1.5, gold: 1.5, drops: 1,
+    brute:      { name: "Brute",      speed: 3000, hp: 1.6, attack: 1.8, defence: 0.25, xp: 2,   gold: 1.5, drops: 1,
       note: "Slow and heavy. Every blow lands like a door." },
   };
   const ARCHETYPE_ORDER = ["skirmisher", "stalker", "brute"];
   /* An Elite is any of the three, only worse -- and in the Inner and the Core it
      carries a Veil Fragment. Twenty of those make the Essence a Sovereign drops whole. */
   const ELITE = { hp: 1.8, attack: 1.4, xp: 2.5, gold: 2.5, drops: 2, fragments: 1 };
-  const SOVEREIGN = { speed: 2800, hp: 12, attack: 2.5, defence: 0.3, xp: 15, gold: 20,
-    enrageMs: 30000, enrage: 0.15, escorts: 2, essence: 1,
-    note: "It rules this ground, and it walks the Inner and the Core on no schedule at all. It comes with two Elites at its back and grows angrier the longer the fight runs. Brought low, you break away and the hunt goes on. Felled, it leaves its Essence whole." };
+  /* The escorts walk in first and are struck first: the Sovereign stands behind them
+     and steps out of the dark last, so the fight is two Elites and then the thing
+     itself. It does not grow angrier on a clock; it is simply that much bigger. */
+  const SOVEREIGN = { speed: 2800, hp: 4, attack: 4.5, defence: 0.3, xp: 10, gold: 20,
+    escorts: 2, essence: 1,
+    note: "It rules this ground, and it walks the Inner and the Core on no schedule at all. Two Elites come first and it steps out of the dark behind them. Brought low, you break away and the hunt goes on. Felled, it leaves its Essence whole." };
 
   const REGION_FOES = [
     { skirmisher: ["Carrion Rat", "beast"],       stalker: ["Ash Stalker", "horror"],     brute: ["Ash Brute", "man"],             sovereign: ["The Ashen Warden", "horror"] },
@@ -911,10 +929,12 @@ function buildRegistry() {
      Multipliers apply to the base stats a Hunt level gives (CONFIG.baseHealth
      and friends). */
 
-  /* Every hunter crits at the same rate for the same damage and pierces nothing on
-     their own. A discipline is its bulk, its swing and what it does with the Veil;
-     penetration and the rest come off relics, where they can be read. */
-  const BASE_COMBAT = { crit: 0.05, critDmg: 1.5, pen: 0 };
+  /* Every hunter crits at the same rate for the same damage, pierces nothing, takes
+     back a hundredth of every blow they land, and neither blocks nor dodges on their
+     own. A discipline is its bulk, its swing and what it does with the Veil; Block
+     comes with a shield, Dodge with medium armour and a dagger, penetration with a
+     Sundering relic, and the rest off gear and the path, where they can be read. */
+  const BASE_COMBAT = { crit: 0.05, critDmg: 1.5, pen: 0, lifesteal: 0.01, block: 0, dodge: 0 };
 
   const BRUTE_FORCE = { id: null, name: "Brute Force", health: 1, attack: 1, defence: 1,
     speed: H.playerSwingMs, ...BASE_COMBAT };
@@ -934,7 +954,7 @@ function buildRegistry() {
        critFlat critDmgFlat penFlat     added outright
        veilFlat                         Veil built a blow (Warrior, Rogue)
        absorbFlat                       Veil drunk a second (Mage)
-       techPct                          what a full Veil does, when it goes off
+       techPct                          Veil Power: what a full Veil does, when it goes off
 
      The three trees are deliberately not the same shape. A Warrior's is bulk and
      the weight of one blow; a Rogue's is speed and the edge; a Mage's is the Veil
@@ -1018,27 +1038,28 @@ function buildRegistry() {
       blurb: "Forces the Veil through the body. Slow, heavy and hard to put down.",
       health: 1.2, attack: 1, defence: 1.5, speed: 2600, ...BASE_COMBAT,
       veilName: "Devastating Strike",
-      veilNote: "Veil builds with every blow you land, and half as much with every blow aimed at you. It carries from fight to fight. Full, your next swing lands three times over and ignores half of Defence." },
+      veilNote: "Veil builds with every blow you land, and as much again with every blow aimed at you, landed or not. It carries from fight to fight. Full, your next swing lands three times over and ignores half of Defence." },
     { id: "rogue", name: "Rogue", icon: "rogue",
       blurb: "Brief, precise Veil surges. Fast hands, thin margins.",
-      health: 1, attack: 0.85, defence: 1, speed: 2000, ...BASE_COMBAT,
+      health: 1, attack: 0.95, defence: 1, speed: 2000, ...BASE_COMBAT,
       veilName: "Ambush",
-      veilNote: "Every encounter you walk into opens on an Ambush: a certain critical, a quarter harder again. Veil rebuilds with each blow; full, the next swing is another Ambush." },
+      veilNote: "Every encounter you walk into opens on an Ambush: a certain critical, and more than half as hard again. Veil rebuilds with each blow; full, the next swing is another Ambush." },
     { id: "mage", name: "Mage", icon: "mage",
       blurb: "Shapes the Veil directly. Fragile, and worth it.",
       health: 0.9, attack: 1.3, defence: 0.7, speed: 2600, ...BASE_COMBAT,
       veilName: "Elemental Absorption",
-      veilNote: "Every encounter you walk into opens with a volley of three empowered casts, and every empowered cast washes over the whole fight. The Veil then drinks from the air, two a second, never from your blows. Full, your next cast is empowered." },
+      veilNote: "Every encounter you walk into opens with a volley of three casts, and every empowered cast washes over the whole fight. The Veil then drinks from the air, three a second, never from your blows. Full, your next cast is empowered." },
   ];
 
   // What each discipline does with a full Veil.
   const TECHNIQUE = {
-    strike:    { mult: 3, pen: 0.5 },     // Warrior
-    ambush:    { mult: 1.25 },            // Rogue, on top of a certain critical
-    volley:    { casts: 3, mult: 2 },     // Mage, opening each encounter
+    strike:    { mult: 3, pen: 0.5, struck: 1 },  // Warrior; `struck`: the share of a blow's Veil every blow aimed at it builds
+    ambush:    { mult: 1.6 },             // Rogue, on top of a certain critical
+    volley:    { casts: 3, mult: 1.5 },   // Mage, opening each encounter
     empowered: { mult: 3 },               // Mage, whenever the Veil fills
     splash:    0.5,                       // Mage casts: share of the blow every other foe takes
-    absorb:    2,                         // Mage Veil a second
+    absorb:    3,                         // Mage Veil a second
+    absorbPerVeil: 0.3,                   // and a second more for each Veil a blow a weapon carries
   };
 
   /* ================= 12. REQUISITION AGENTS ================= */

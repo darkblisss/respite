@@ -34,7 +34,7 @@ import { profileView, sheetFrom } from "../ui/profile.js";
 import { CONFIG } from "../../shared/config.js";
 import { SKILL_ORDER, getClass, getRegion } from "../../shared/registry.js";
 import { combatStats, xpProgress } from "../../shared/stats.js";
-import { wornHalos } from "../../shared/items.js";
+import { wornHalos, tierForLevel } from "../../shared/items.js";
 
 const ASK_MS = 15 * 1000;
 
@@ -84,7 +84,8 @@ function modelOf(row, ctx) {
     extraTags: [],
     total: row.total_level || 0,
     hunt: skills.warfare.level,
-    sheet: sheetFrom(sheetOf(row), klass),
+    // Their Defence read against their own ground, or the tier their Hunt level stands on.
+    sheet: sheetFrom(sheetOf(row), klass, row.region ? getRegion(row.region).tier : tierForLevel(skills.warfare.level)),
     equipment: eq,
     skills,
     rolls: own ? ctx.state.rolls : rollsFromCollection(row.collection),

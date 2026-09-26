@@ -31,7 +31,7 @@ import { CONFIG } from "../../shared/config.js";
 import { itemDef, itemName, parseKey, canFortify, wornHalos } from "../../shared/items.js";
 import { bestRemedy, remedyHeals } from "../../shared/combat.js";
 import { GameData } from "../../shared/registry.js";
-import { statsOf, myClass, skillLevel } from "../../shared/stats.js";
+import { statsOf, myClass, skillLevel, mitigation } from "../../shared/stats.js";
 import { currentRegion } from "../../shared/world.js";
 
 const { DOLL_ORDER, SLOT_LABELS, SLOT_GLYPHS } = GameData;
@@ -189,17 +189,25 @@ export function dollCard(ctx, { link = null, lines: withLines = false } = {}) {
 function standingRows(state) {
   const s = statsOf(state);
   const k = myClass(state);
+  /* Defence is a flat number that stops a share of a blow, and the share falls off the
+     more you have and the deeper the ground: mitigation(). So the sheet says both, read
+     against the ground you are hunting, or the region you stand in. */
+  const c = state.tasks.combat;
+  const tier = c ? c.tier : currentRegion(state).tier;
   return [
     k && ["Discipline", k.name, "good"],
     ["Health", fmtWhole(s.maxHp)],
     ["Attack", fmtStat(s.attack), "gold"],
-    // A flat number, never the share it stops: the mitigation curve is the engine's business.
-    ["Defence", fmtStat(s.defence)],
+    ["Defence", fmtStat(s.defence), null, ` · stops ${pct(mitigation(s.defence, tier))} here`],
     ["Attack speed", `${(s.speed / 1000).toFixed(1)}s`],
     ["Crit Chance", pct(s.crit)],
     ["Crit Damage", pct(s.critDmg)],
     ["Penetration", pct(s.pen)],
+    ["Block", pct(s.block)],
+    ["Dodge", pct(s.dodge)],
+    ["Lifesteal", pct(s.lifesteal)],
     k && ["Veil", s.absorb ? `+${fmtStat(s.absorb)} a second` : `+${fmtStat(s.veilGain)} a blow`],
+    k && ["Veil Power", pct(s.tech)],
     ["Hunt", `Lv ${skillLevel(state, "warfare")}`, "good"],
   ].filter(Boolean);
 }
@@ -209,7 +217,7 @@ export function standingCard() {
   const node = h("section.card",
     h("div.card-head", h("div",
       h("h2.card-title", "Standing"),
-      h("p.card-sub", "Defence counts against the ground you are on."))),
+      h("p.card-sub", "Defence stops a share of every blow: each point less than the last, and less on deeper ground."))),
     list);
   let sig = null;
   return {
@@ -236,7 +244,7 @@ function satchelCard(ctx, view) {
     view,
     idBase: "sat",
     filters: false,
-    hint: `Drunk between encounters, at or below ${Math.round(CONFIG.hunt.remedyAt * 100)}% health, the strongest first. Nothing stacks here: ${CONFIG.storage.slots.satchel} slots, one bottle each, and that is the whole hunt's healing.`,
+    hint: `Nothing heals on its own. A bottle is drunk the moment a blow leaves you at ${Math.round(CONFIG.hunt.remedyAt * 100)}% health, the strongest first. Nothing stacks here: ${CONFIG.storage.slots.satchel} slots, one bottle each, and that is the whole hunt's healing.`,
   });
   const next = h("div.well.satchel-next");
   const node = h("div.satchel", card.node, next);

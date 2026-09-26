@@ -32,6 +32,7 @@ import { auraNode, paintAura, avatarHaloNode, paintAvatarHalo, haloTags } from "
 import { albumPanel } from "./album.js";
 import { paintDoll } from "../pages/armaments.js";
 import { ARTISAN_ORDER, TRADE_ORDER, getSkill } from "../../shared/registry.js";
+import { mitigation } from "../../shared/stats.js";
 
 // More stats than this and the list splits into its groups.
 export const SHEET_TAB_AT = 20;
@@ -44,8 +45,11 @@ const fmtNum = (x) => {
 };
 
 /* The sheet a combatStats() result comes to: the pinned three, and the rest as
-   rows with a group each (the groups only show once there are enough rows). */
-export function sheetFrom(s, klass = null) {
+   rows with a group each (the groups only show once there are enough rows).
+   `tier` is the ground the Defence is read against: given, the sheet says what
+   share of a blow it actually stops there, because the flat number means nothing
+   until it meets a foe. */
+export function sheetFrom(s, klass = null, tier = null) {
   return {
     health: fmtWhole(s.maxHp),
     attack: fmtNum(s.attack),
@@ -55,6 +59,11 @@ export function sheetFrom(s, klass = null) {
       { id: "crit", label: "Crit Chance", value: pct(s.crit), icon: "sparkle", group: "Offence" },
       { id: "critDmg", label: "Crit Damage", value: pct(s.critDmg), icon: "swords", group: "Offence" },
       { id: "pen", label: "Penetration", value: pct(s.pen), icon: "arrow-right", group: "Offence" },
+      klass ? { id: "tech", label: "Veil Power", value: pct(s.tech), icon: "weightOfBlow", group: "Offence" } : null,
+      tier ? { id: "mitigation", label: "Damage Stopped", value: pct(mitigation(s.defence, tier)), icon: "shield", group: "Defence" } : null,
+      { id: "block", label: "Block", value: pct(s.block), icon: "targe", group: "Defence" },
+      { id: "dodge", label: "Dodge", value: pct(s.dodge), icon: "lightfoot", group: "Defence" },
+      { id: "lifesteal", label: "Lifesteal", value: pct(s.lifesteal), icon: "heart", group: "Defence" },
       klass ? { id: "veil", label: "Veil", value: s.absorb ? `+${fmtNum(s.absorb)} a second` : `+${fmtNum(s.veilGain)} a blow`, icon: "moon", group: "Defence" } : null,
     ].filter(Boolean),
   };

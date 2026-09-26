@@ -62,7 +62,7 @@ const PER_WORDS = {
   penFlat: (v) => `+${pct(v)} penetration`,
   veilFlat: (v) => `+${v} Veil a blow`,
   absorbFlat: (v) => `+${v} Veil a second`,
-  techPct: (v) => `+${pct(v)} from a full Veil`,
+  techPct: (v) => `+${pct(v)} Veil Power`,
 };
 const pct = (v) => `${+(v * 100).toFixed(2)}%`;
 const perLine = (per, mult = 1) => Object.keys(per)
@@ -84,7 +84,7 @@ const CARRY = [
   ["penFlat", "Penetration", plus],
   ["veilFlat", "Veil a blow", flat],
   ["absorbFlat", "Veil a second", flat],
-  ["techPct", "From a full Veil", plus],
+  ["techPct", "Veil Power", plus],
 ];
 
 /* The face of a node: a hex plate inside a ring of one segment a rank. 112 is the

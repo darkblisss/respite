@@ -27,4 +27,11 @@
    bare base; anything finer is its own piece), a rolled tool racks whole and works
    at its rarity's speed. A browser on 7 predicts a plain tool off every craft
    while the server rolls one, so the two would disagree. */
-export const ENGINE_VERSION = 8;
+/* 9: the combat rebalance. Nothing heals for free (no regen on the walk or at camp, a
+   level adds its health rather than refilling it), everyone has 1% lifesteal, Block
+   and Dodge come off gear, Veil Power off the amulet and the path, a remedy is drunk
+   the moment a blow leaves you at a quarter, one growth rate for everything a fight is
+   made of, the zones' depth table, waves with an end (a zone's `joins`), the Sovereign
+   behind its guard with no enrage, and hunting beneath yourself pays less. A browser
+   on 8 would predict every fight wrong. */
+export const ENGINE_VERSION = 9;

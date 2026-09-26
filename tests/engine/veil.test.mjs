@@ -97,28 +97,40 @@ await run(async () => {
       M.masteryLineFor({ weapon: key("bitter_bow"), offhand: null }), "bow");
     same("empty hands learn nothing", M.masteryLineFor({ weapon: null, offhand: null }), null);
 
-    const s = atHunt(fresh(11), 40);
+    // Hunt 12 on the first region's ground: past its gate, not yet far enough past to learn less.
+    const s = atHunt(fresh(11), 12);
     put(s, "inv", "slag_sword|common", 1);
     put(s, "inv", "bitter_shield|common", 1);
     cmd(s, "equip", { key: "slag_sword|common", from: "inv" });
     cmd(s, "equip", { key: "bitter_shield|common", from: "inv" });
     const before = St.statsOf(s);
-    cmd(s, "startHunt", { tier: 1, zone: "core" });
+    cmd(s, "startHunt", { tier: 1, zone: "outer" });
     advance(s, T0 + 60 * 60 * 1000);
     check("a hunt behind a shield banks shield and nothing else",
       s.mastery.shield > 0 && !s.mastery.sword, s.mastery);
     check("and nothing it was not carrying", !s.mastery.bow && !s.mastery.staff && !s.mastery.dagger);
 
     // The same hour, sword alone: the sword learns instead, at the same rate.
-    const solo = atHunt(fresh(11), 40);
+    const solo = atHunt(fresh(11), 12);
     put(solo, "inv", "slag_sword|common", 1);
     cmd(solo, "equip", { key: "slag_sword|common", from: "inv" });
-    cmd(solo, "startHunt", { tier: 1, zone: "core" });
+    cmd(solo, "startHunt", { tier: 1, zone: "outer" });
     advance(solo, T0 + 60 * 60 * 1000);
+    // The same rate: a kill's mastery is the same share of what it paid Warfare, whichever line learns it.
+    const learnt = (x, line) => x.mastery[line] / (x.skills.warfare - CONFIG.xpTable[12]);
     check("put the shield down and the sword learns, at the very same rate",
-      solo.mastery.sword > 0 && !solo.mastery.shield &&
-      Math.abs(solo.mastery.sword / solo.stats.kills - s.mastery.shield / s.stats.kills) < 1e-9,
-      { sword: solo.mastery.sword, shield: s.mastery.shield });
+      solo.mastery.sword > 0 && !solo.mastery.shield && Math.abs(learnt(solo, "sword") - learnt(s, "shield")) < 1e-9,
+      { sword: learnt(solo, "sword"), shield: learnt(s, "shield") });
+
+    /* Far above the ground, a blade learns nothing from it: Hunt 40 is twenty-five
+       levels past the grace on the first region, and the slope runs out long before. */
+    const high = atHunt(fresh(11), 40);
+    put(high, "inv", "slag_sword|common", 1);
+    cmd(high, "equip", { key: "slag_sword|common", from: "inv" });
+    cmd(high, "startHunt", { tier: 1, zone: "outer" });
+    advance(high, T0 + 60 * 60 * 1000);
+    check("a hunter far above the ground kills there and learns nothing from it", high.stats.kills > 0 && !high.mastery.sword,
+      { kills: high.stats.kills, mastery: high.mastery });
 
     /* The BONUS is a different rule from the earning: every worn piece pays out
        its own line, so a shield you are learning and a sword you are only

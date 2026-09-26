@@ -924,9 +924,12 @@ export function pickClass(state, { id } = {}, env) {
   const laid = layDownWrongly(state, def.id);
   if (!laid.ok) return laid;
 
+  /* The discipline's own bulk is added to what you have, not handed back as a full
+     bar: nothing heals for free. Chosen at camp, the camp's note follows. */
+  const was = maxHp(state);
   state.player.klass = def.id;
-  state.player.hp = maxHp(state);
-  // Chosen at camp, the refill holds for the next hunt too.
+  const most = maxHp(state);
+  state.player.hp = Math.min(most, Math.max(0, state.player.hp) + Math.max(0, most - was));
   if (state.player.camp) state.player.camp.hp = state.player.hp;
   if (laid.value.length) emit(state, env, "class:laidDown", { keys: laid.value, id: def.id });
   emit(state, env, "class:picked", { id: def.id });

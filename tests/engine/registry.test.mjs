@@ -109,6 +109,24 @@ const DIVERGED = {
     why: "the same Trades icons, read back through the getter",
     at: ["icon"],
   },
+  /* The combat rebalance (engine 9): one growth rate for everything a fight is made of,
+     a flat Veil, the stats every hunter has, and the prefixes named for what they add. */
+  "GameData.WEAPON_PREFIXES": { why: "a prefix now names the stat it adds: Sundering is +15% Penetration", at: ["effect"] },
+  "GameData.ARMOUR_PREFIXES": { why: "a prefix now names the stat it adds: Stalwart is +10% Block", at: ["effect"] },
+  "GameData.ALL_PREFIXES": { why: "the same prefixes, named for the stat they add", at: ["effect"] },
+  prefixDef: { why: "the same prefixes, named for the stat they add, read back through the getter", at: ["effect"] },
+  "GameData.BRUTE_FORCE": { why: "every hunter has a hundredth of lifesteal and no Block or Dodge of their own", at: ["lifesteal", "block", "dodge"] },
+  "GameData.TECHNIQUE": {
+    why: "the techniques were retuned against the balance grid: a stronger Ambush, a lighter opening volley, a Mage drinking three a second, and a Warrior's Veil when struck",
+    at: ["mult", "absorb", "absorbPerVeil", "struck"],
+  },
+  "CONFIG.hunt.foeHpGrowth = FOE_HP_GROWTH": { why: "one growth rate: a foe's health grows 1.85 a tier, as everything else does" },
+  "CONFIG.hunt.foeAttackGrowth = FOE_ATTACK_GROWTH": { why: "one growth rate: a foe's attack grows 1.85 a tier, as everything else does" },
+  "CONFIG.hunt.gearGrowth = GEAR_GROWTH": { why: "one growth rate: a piece's health grows 1.85 a tier, as its Attack and Defence do", at: ["health"] },
+  "CONFIG.hunt.weaponVeil = WEAPON_VEIL": { why: "a weapon's Veil a blow grows more gently, 1 at tier 5 to 3 at tier 9" },
+  "CONFIG.hunt.veilCurve = VEIL_CURVE": { why: "the Veil a blow is flat by level: it grows with the weapon and the path" },
+  "CONFIG.veilPerBlow for 0..100": { why: "the Veil a blow is flat by level: it grows with the weapon and the path" },
+  "CONFIG.baseDefence for 0..100": { why: "one growth rate: base Defence is a straight 1.85 a tier with nothing taken off it, so level 1 stands where the rest of the curve says" },
 };
 
 // Each listing, and how many comparisons it covered.

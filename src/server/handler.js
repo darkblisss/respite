@@ -25,7 +25,7 @@ import {
   bestRemedy, campPlan, creditKill, creditSovereign, huntPresence, remedyHeals,
 } from "../shared/combat.js";
 import { companionBonus, companionFinds } from "../shared/companions.js";
-import { addXp, partyMult, xpMult } from "../shared/progression.js";
+import { addXp, overLevelOf, partyMult, xpMult } from "../shared/progression.js";
 import { maxHp, recovering, skillLevel, statsOf, totalLevel } from "../shared/stats.js";
 import { applyMail, applyPurchase, applyReturn, fillPool, marketFee, prepareListing, remintKey } from "../shared/market.js";
 import {
@@ -1085,13 +1085,16 @@ function settleParty(ctx, row) {
     tier: row.tier, zone: row.zone, kills: owed.kills, xp: 0, gold: 0,
     drops: 0, remedies: owed.remedies, died: owed.died || null, essence: null, at,
   };
+  /* Hunting beneath yourself pays less, alone or not: this member's own level against the
+     ground, read now, bends their XP and their weapon's mastery as a lone kill's would. */
+  const over = overLevelOf(state, row.tier);
   // Carried through the same fight, so it pays the same as a lone kill's would.
-  if (owed.mastery > 0) addMastery(state, owed.mastery);
+  if (owed.mastery > 0) addMastery(state, owed.mastery * over.mastery);
   // A member syncing every few seconds is owed nothing most times: that is not news.
   const nothing = !(owed.kills || owed.xp > 0 || owed.gold > 0 || owed.remedies || owed.died || drops.length);
 
-  /* Health follows the fight, and is set before the XP below: a level refills it, exactly as it
-     does mid hunt alone. */
+  /* Health follows the fight, and is set before the XP below: a level adds its new health to it,
+     exactly as it does mid hunt alone. */
   if (hunter) state.player.hp = clamp(hunter.hp, 0, maxHp(state));
 
   // What was drunk in the fight comes off the Satchel now: the fight only ever held a list of heals.
@@ -1104,7 +1107,7 @@ function settleParty(ctx, row) {
 
   if (owed.xp > 0) {
     // The same multipliers a lone kill carries, the party's own 5% a member included.
-    took.xp = owed.xp * xpMult(state, "warfare", at) * partyMult(env, row.tier, row.zone, at);
+    took.xp = owed.xp * xpMult(state, "warfare", at) * partyMult(env, row.tier, row.zone, at) * over.xp;
     addXp(state, "warfare", took.xp, env, at);
   }
   if (owed.gold > 0) {

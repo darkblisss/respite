@@ -51,15 +51,23 @@ await run(async () => {
      sample on the ten-second grid rather than five minutes out. `power` is the
      depth a foe stands at, which scales its health, so v4's foes are measured
      again against the zone they were in. */
+  /* What v4's hunt becomes here. Its Sovereign no longer angers on a clock, so enrage and
+     enrageAt are let go; and a foe stands at its zone's depth, which is the hunt's own, so
+     nothing about the depth is kept on the foe and its `max` is measured at that depth. */
   function asV5Hunt(c) {
-    const { xpRate, ...rest } = c;
-    const power = GameData.ZONES.find((z) => z.id === c.zone).power;
+    const { xpRate, enrage, enrageAt, ...rest } = c;
     return {
       ...rest,
       dmg: 0,
+      // A wave's count starts here: v4's encounters never ended by count.
+      joins: 0,
       marks: c.marks.map(([t, xp]) => [t, xp, 0]),
       nextMark: (Math.floor(c.elapsed / H.rateMarkMs) + 1) * H.rateMarkMs,
-      foes: c.foes.map((f) => ({ ...f, power, max: Cb.foeNumbers(getMonster(f.id), f.elite, power).hp })),
+      foes: c.foes.map((f) => {
+        const { power, ...foe } = f;
+        const max = Cb.foeNumbers(getMonster(f.id), f.elite, c.zone).hp;
+        return { ...foe, hp: Math.min(f.hp, max), max };
+      }),
     };
   }
 
@@ -113,10 +121,10 @@ await run(async () => {
     const { startedAt, id, ...rest } = c;
     const { startedAt: s4, ...rest4 } = raw.tasks.combat;
     same("the hunt carries on where it stood, in the shape this version keeps one", rest, asV5Hunt(rest4));
-    const power = GameData.ZONES.find((z) => z.id === rest4.zone).power;
-    check("its foes carry the depth they are standing in, which is what their health is measured against",
-      power > 1 && c.foes.length > 0 && c.foes.every((f, i) => f.power === power && f.max === Cb.foeNumbers(getMonster(f.id), f.elite, power).hp && f.max > raw.tasks.combat.foes[i].max),
-      c.foes.map((f) => [f.id, f.power, f.max]));
+    const depth = GameData.ZONES.find((z) => z.id === rest4.zone).scale;
+    check("its foes stand at the depth of the zone they are in, which is what their health is measured against",
+      depth.hp > 1 && c.foes.length > 0 && c.foes.every((f, i) => !("power" in f) && f.max === Cb.foeNumbers(getMonster(f.id), f.elite, rest4.zone).hp && f.max > raw.tasks.combat.foes[i].max),
+      c.foes.map((f) => [f.id, f.max]));
     check("with an id, and the save's one hunt stream from the seed for its dice", id === 1 && !("rng" in c) && m.rng.hunt === hashString(`${SEED}:hunt`) && startedAt === raw.tasks.combat.startedAt && m.serial === 2);
     check("relics with numeric uids stay as they are", m.equipment.weapon === "rime_sword|relic|4|echoing" && m.equipment.chest === "rime_chest|rare|7");
     const w = await listening();

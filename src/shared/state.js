@@ -1067,18 +1067,15 @@ function normaliseHunt(s, c, ledger) {
       continue;
     }
     const elite = bool(f.elite);
-    /* A foe stands at its zone's depth, full stop. Foes never move between zones
-       mid-fight, so there is nothing to carry over and no reason to trust a stored
-       power: a save claiming a softer one would otherwise get a weaker foe, with
-       `max` recomputed from the claim so the ledger check below never noticed. */
-    const zonePower = (GameData.ZONES.find((z) => z.id === c.zone) || {}).power || 1;
-    const power = zonePower;
-    if (finite(f.power) && f.power !== zonePower) ledger.fixed++;
-    const max = foeNumbers(mob, elite, power).hp;
+    /* A foe stands at its zone's depth, full stop, and the depth is the hunt's own
+       zone: nothing about it is kept on the foe. A save written when foes carried a
+       `power` has it dropped here, and its `max` recomputed at the zone's depth, so a
+       claim of a softer foe is never believed. */
+    const max = foeNumbers(mob, elite, c.zone).hp;
     if (f.max !== max || f.hp > max) ledger.fixed++;
     if (sovereign) sovereigns++;
     foes.push({
-      uid: intIn(f.uid, 1, BIG, 1), id: mob.id, elite, power, hp: Math.min(f.hp, max), max, ambush: bool(f.ambush),
+      uid: intIn(f.uid, 1, BIG, 1), id: mob.id, elite, hp: Math.min(f.hp, max), max, ambush: bool(f.ambush),
       timer: numIn(f.timer, -1e6, 1e6, mob.speed), bleed: intIn(f.bleed, 0, 1e9, 0), bleedTimer: numIn(f.bleedTimer, -1e6, 1e6, 0),
     });
   }
@@ -1107,7 +1104,9 @@ function normaliseHunt(s, c, ledger) {
     startedAt: intIn(c.startedAt, 0, s.clock, s.clock),
     phase, wait: numIn(c.wait, -1, WALK_MAX, H.searchMinMs), kind,
     clock: numIn(c.clock, 0, IDLE_CAP, 0), reinforceAt: numIn(c.reinforceAt, 0, IDLE_CAP * 2, 0),
-    enrageAt: numIn(c.enrageAt, 0, IDLE_CAP * 2, 0), enrage: intIn(c.enrage, 0, 1e6, 0),
+    // Reinforcements the encounter has had. A save from before the waves had an end starts its count here.
+    joins: intIn(c.joins, 0, 1e6, 0),
+    // A Sovereign no longer angers on a clock: a save's enrageAt and enrage are let go here.
     foes, uid: Math.max(intIn(c.uid, 1, BIG, 1), ...foes.map((f) => f.uid + 1)),
     swing: numIn(c.swing, -1e6, 1e6, 0), volley: intIn(c.volley, 0, GameData.TECHNIQUE.volley.casts, 0),
     veil: numIn(c.veil, 0, H.veilMax, 0), streak: intIn(c.streak, 0, 1e9, 0),

@@ -52,10 +52,13 @@
    bonus on top, and nothing more.
 
    A share of that pool is 70% of the damage you dealt and 30% of the
-   damage you took, so holding the line counts for something without
-   paying better than swinging -- and the taken half is capped against
-   your damage share, so nobody farms a share by becoming unkillable and
-   never striking. Shares are normalised, so the pool is paid out once.
+   damage aimed at you (the blows as they were thrown, before your own
+   Dodge, Block and Defence), so holding the line counts for something
+   without paying better than swinging -- and the taken half is capped
+   against your damage share, so nobody farms a share by becoming
+   unkillable and never striking. Shares are normalised, so the pool is
+   paid out once. Each hunter's own level then bends their XP and mastery
+   as it would alone (overLevel in progression.js) when it is settled.
 
    Gold is equal -- everyone who was there did the encounter. Drops are
    rolled for each hunter separately, so nobody races for a last hit; a
@@ -67,9 +70,9 @@
 import { CONFIG } from "./config.js";
 import { GameData, getMonster, getZone, sovereignOf } from "./registry.js";
 import {
-  EPS, foeNumbers, landed, playerBlow, pickWeighted, rollFoe,
+  EPS, foeNumbers, foeDefence, foeBlow, playerBlow, pickWeighted, rollFoe,
 } from "./combat.js";
-import { combatStats, mitigation } from "./stats.js";
+import { combatStats } from "./stats.js";
 import { makeRng } from "./rng.js";
 import { clamp } from "./format.js";
 
@@ -117,17 +120,19 @@ export function newEncounter({ id, partyId, tier, zone, seed, hunters, kind = "n
     kind: kind === "sovereign" ? "sovereign" : "normal",
     clock: 0, over: null,
     foes: [], uid: 1,
-    reinforceAt: 0, enrageAt: 0, enrage: 0,
+    reinforceAt: 0,
+    // Turns of the window that have brought reinforcements, at most the zone's `joins`.
+    joins: 0,
     hunters: hunters.slice(),
   };
   const rng = diceAt(e);
   const z = getZone(zone);
   e.reinforceAt = z.windowMs;
   if (e.kind === "sovereign") {
-    e.enrageAt = GameData.SOVEREIGN.enrageMs;
-    spawn(e, rng, sovereignOf(tier), false);
-    // Two at its back, warband or not: they are scaled, not multiplied.
+    /* Two Elites walk in first, warband or not (scaled, not multiplied), and the
+       Sovereign steps out behind them: last on the roster, so the last one struck. */
     for (let i = 0; i < GameData.SOVEREIGN.escorts; i++) spawn(e, rng, rollFoe(tier, z, rng).mob, true);
+    spawn(e, rng, sovereignOf(tier), false);
   } else {
     // Exactly what the zone fields for one hunter.
     const want = Math.min(maxFoes(), pickWeighted(z.sizes, rng));
@@ -168,13 +173,12 @@ const partyScale = (e) => Math.max(1, standing(e).length);
    them would have alone, made into one shared one. `scale` is kept on the foe so a
    hunter going down mid-fight cannot resize what is already on the floor. */
 function spawn(e, rng, mob, elite, ambush = false) {
-  const z = getZone(e.zone);
-  const power = z.power || 1;
   const scale = partyScale(e);
-  const n = foeNumbers(mob, elite, power);
+  // At the zone's depth, which is the encounter's own: see foeNumbers.
+  const n = foeNumbers(mob, elite, getZone(e.zone));
   const hp = Math.round(n.hp * scale);
   const f = {
-    uid: e.uid++, id: mob.id, elite: !!elite, power, scale, hp, max: hp, ambush: !!ambush,
+    uid: e.uid++, id: mob.id, elite: !!elite, scale, hp, max: hp, ambush: !!ambush,
     timer: ambush ? 300 + rng() * 400 : mob.speed * (0.45 + rng() * 0.35),
     bleed: 0, bleedTimer: 0,
     // Who has hurt it, and by how much: the share a kill pays out by.
@@ -213,13 +217,13 @@ function aim(e, f, opening) {
 }
 
 // How hard a foe hits: its attack over its swing. The order an encounter's opening foes pick in.
-function weight(f) {
+function weight(e, f) {
   const mob = getMonster(f.id);
-  return foeNumbers(mob, f.elite, f.power).attack / mob.speed;
+  return foeNumbers(mob, f.elite, getZone(e.zone)).attack / mob.speed;
 }
 
 function aimOpening(e) {
-  e.foes.slice().sort((a, b) => weight(b) - weight(a) || a.uid - b.uid).forEach((f) => aim(e, f, true));
+  e.foes.slice().sort((a, b) => weight(e, b) - weight(e, a) || a.uid - b.uid).forEach((f) => aim(e, f, true));
 }
 
 // Whom a foe's next blow is for: the hunter it has, while they stand.
@@ -255,9 +259,12 @@ export function stepEncounter(e, dt, hooks = {}) {
 }
 
 // Time until the next thing happens anywhere in the fight.
+// Whether the dark still owes the encounter a turn of reinforcements: see combat.js, owesMore.
+const owesTurn = (e) => e.kind === "normal" && (e.joins || 0) < getZone(e.zone).joins;
+
 function untilNext(e) {
   let t = ENCOUNTER_CAP_MS - e.clock;
-  t = Math.min(t, e.kind === "normal" ? e.reinforceAt - e.clock : e.enrageAt - e.clock);
+  if (owesTurn(e)) t = Math.min(t, e.reinforceAt - e.clock);
   standing(e).forEach((u) => { t = Math.min(t, u.swing); });
   e.foes.forEach((f) => {
     t = Math.min(t, f.timer);
@@ -287,8 +294,7 @@ function fireDue(ctx) {
     if (!standing(e).length) { e.over = "wiped"; return; }
     if (!e.foes.length) { e.over = "cleared"; return; }
 
-    if (e.kind === "normal" && e.clock >= e.reinforceAt - EPS) { reinforce(ctx); continue; }
-    if (e.kind === "sovereign" && e.clock >= e.enrageAt - EPS) { enrageStep(ctx); continue; }
+    if (owesTurn(e) && e.clock >= e.reinforceAt - EPS) { reinforce(ctx); continue; }
 
     // Hunters in a fixed order, so two servers replaying agree.
     const u = standing(e).find((x) => x.swing <= EPS);
@@ -303,14 +309,15 @@ function fireDue(ctx) {
   }
 }
 
-/* One reinforcement a hunter each time the window turns, not one between them.
-   A lone hunter gets a fresh foe every turn of it; a warband of four sharing
-   that one would be taking a quarter of the pressure each, which is exactly the
-   free ride the roster scaling exists to avoid. */
+/* One reinforcement a hunter each time the window turns, not one between them, for as
+   many turns as the zone's `joins`. A lone hunter gets a fresh foe every turn of it; a
+   warband of four sharing that one would be taking a quarter of the pressure each,
+   which is exactly the free ride the roster scaling exists to avoid. */
 function reinforce(ctx) {
   const e = ctx.e;
   const z = getZone(e.zone);
   e.reinforceAt += z.windowMs;
+  e.joins = (e.joins || 0) + 1;
   const want = Math.min(standing(e).length, maxFoes(e) - e.foes.length);
   if (want <= 0) return;
   const joined = [];
@@ -322,14 +329,6 @@ function reinforce(ctx) {
     aim(e, f, false);
     ctx.fx(f.uid, "join", 0);
   });
-}
-
-function enrageStep(ctx) {
-  const e = ctx.e;
-  e.enrage++;
-  e.enrageAt += GameData.SOVEREIGN.enrageMs;
-  const sov = e.foes.find((f) => getMonster(f.id).archetype === "sovereign");
-  if (sov) ctx.fx(sov.uid, "enrage", 0);
 }
 
 /* ================= 3. BLOWS ================= */
@@ -384,12 +383,14 @@ function hunterSwing(ctx, u) {
     }
   }
 
-  /* What the path has made of a full Veil. 1 for anyone who has not walked that
-     far, so a hunter with no tree swings exactly as they always did. */
+  /* Veil Power: what the path and an amulet have made of a full Veil. 1 for anyone
+     with neither, so a hunter without them swings exactly as they always did. */
   if (technique && s.tech > 1) mult *= s.tech;
 
-  let dmg = playerBlow(s, mob, e.tier, mult, crit, pen, rng);
-  if (s.echoing && !technique && rng() < 0.12) dmg += playerBlow(s, mob, e.tier, 1, rng() < s.crit, pen, rng);
+  const z = getZone(e.zone);
+  const def = foeDefence(mob, z);
+  let dmg = playerBlow(s, def, e.tier, mult, crit, pen, rng);
+  if (s.echoing && !technique && rng() < 0.12) dmg += playerBlow(s, def, e.tier, 1, rng() < s.crit, pen, rng);
   if (s.furious) {
     u.streak++;
     dmg = Math.round(dmg * (1 + Math.min(0.25, u.streak * 0.03)));
@@ -407,14 +408,19 @@ function hunterSwing(ctx, u) {
 
   hurt(e, u, target, dmg);
   ctx.fx(target.uid, technique ? kind : crit ? "crit" : "hit", dmg);
+  let landedAll = dmg;
 
   // A Mage's wide casts wash over the rest of the fight, as they do alone.
   const splash = (kind === "volley" || kind === "empowered") ? e.foes.filter((f) => f !== target) : [];
   splash.forEach((f) => {
-    const hit = playerBlow(s, getMonster(f.id), e.tier, mult * T.splash, false, pen, rng);
+    const hit = playerBlow(s, foeDefence(getMonster(f.id), z), e.tier, mult * T.splash, false, pen, rng);
     hurt(e, u, f, hit);
+    landedAll += hit;
     ctx.fx(f.uid, kind, hit);
   });
+
+  // Lifesteal, as alone: a share of everything the swing landed comes back as health.
+  if (s.lifesteal > 0) u.hp = Math.min(s.maxHp, u.hp + landedAll * s.lifesteal);
 
   if (target.hp <= 0) killFoe(ctx, target);
   splash.forEach((f) => { if (f.hp <= 0) killFoe(ctx, f); });
@@ -431,25 +437,21 @@ function foeSwing(ctx, f) {
 
   /* Scaled to the warband, as its health is. It swings no more often than it would
      alone, so a four takes four hunters' worth of damage spread over four of them:
-     about what each of them would have taken fighting it on their own. */
-  let raw = foeNumbers(mob, f.elite, f.power).attack * (f.scale || 1) * (f.ambush ? H.foeAmbush : 1);
-  if (mob.archetype === "sovereign") raw *= 1 + e.enrage * GameData.SOVEREIGN.enrage;
-  raw *= 1 - mitigation(s.defence, e.tier);
-  if (s.resilient && u.hp < s.maxHp * 0.35) raw *= 0.8;
-  let blunted = false;
-  if (s.stalwart && ctx.rng() < 0.1) {
-    raw *= 0.5;
-    blunted = true;
-  }
-
+     about what each of them would have taken fighting it on their own. Dodge, Block
+     and Defence are the one who takes it, the same rule a lone hunter meets. */
+  const raw = foeNumbers(mob, f.elite, getZone(e.zone)).attack * (f.scale || 1) * (f.ambush ? H.foeAmbush : 1);
   const ambush = f.ambush;
   f.ambush = false;
-  const dmg = landed(raw, ctx.rng);
+  const blow = foeBlow(s, raw, e.tier, u.hp, ctx.rng);
+  const dmg = blow ? blow.dmg : 0;
   u.hp -= dmg;
-  u.taken += dmg;
-  ctx.fx(u.userId, dmg <= 0 ? "glance" : ambush ? "ambushed" : blunted ? "block" : "hurt", dmg);
+  /* What they absorbed is the blow as it was thrown at them, before their own Dodge,
+     Block and Defence took anything off it: holding the line is drawing the blows,
+     and a hunter built to shrug them off must not be paid less for doing it well. */
+  u.taken += raw;
+  ctx.fx(u.userId, !blow ? "dodge" : dmg <= 0 ? "glance" : ambush ? "ambushed" : blow.blocked ? "block" : "hurt", dmg);
 
-  if (s.klass === "warrior") u.veil = Math.min(H.veilMax, u.veil + Math.round(s.veilGain / 2));
+  if (s.klass === "warrior") u.veil = Math.min(H.veilMax, u.veil + Math.round(s.veilGain * GameData.TECHNIQUE.strike.struck));
   if (dmg > 0) {
     u.streak = 0;
     if (s.thorned) {
@@ -464,6 +466,8 @@ function foeSwing(ctx, f) {
     return;
   }
   if (f.hp <= 0) killFoe(ctx, f);
+  // At a quarter they drink, there and then, as a lone hunter does. A party never breaks away.
+  if (!e.over && u.hp <= s.maxHp * H.remedyAt) takeRemedy(ctx, u);
 }
 
 function bleedTick(ctx, f) {
@@ -478,7 +482,10 @@ function bleedTick(ctx, f) {
 }
 
 /* A remedy comes out of the snapshot of what they packed. The save is not
-   touched here: `owed.remedies` says how many to take off it at settling. */
+   touched here: `owed.remedies` says how many to take off it at settling. It is
+   drunk where a lone hunter drinks one: the moment a blow leaves them at or below
+   CONFIG.hunt.remedyAt of their health, or in the breath between encounters (see
+   breathe). */
 function takeRemedy(ctx, u) {
   if (!Array.isArray(u.heals) || !u.heals.length) return;
   const heal = u.heals.shift();
@@ -500,8 +507,8 @@ function fall(ctx, u, mob) {
 
 /* ================= 4. WHAT A KILL PAYS ================= */
 
-/* A share of an encounter is 70% of the damage you dealt and 30% of the damage you
-   took, both measured across the whole encounter, so a hunter holding the line is
+/* A share of an encounter is 70% of the damage you dealt and 30% of the damage aimed
+   at you, both measured across the whole encounter, so a hunter holding the line is
    paid for it without being paid better than one swinging. XP follows that share.
    Gold does not: everyone who hurt it gets the same, because they all did the same
    encounter. Drops are an entry each, rolled separately in each hunter's own save,
@@ -514,8 +521,8 @@ function killFoe(ctx, f) {
   e.foes.splice(i, 1);
 
   const mob = getMonster(f.id);
-  const z = getZone(e.zone);
-  const n = foeNumbers(mob, f.elite, f.power);
+  // The zone's XP is in n.xp already: see foeNumbers.
+  const n = foeNumbers(mob, f.elite, getZone(e.zone));
   ctx.fx(f.uid, "kill", 0);
 
   const gold = n.gold[0] + Math.floor(ctx.rng() * (n.gold[1] - n.gold[0] + 1));
@@ -523,8 +530,9 @@ function killFoe(ctx, f) {
      and its attack both rode f.scale, so its XP does too. A fair split of a foe made
      for four therefore pays each of the four what a foe made for one pays a lone
      hunter -- which is the whole point of one bigger thing instead of four small
-     ones. The party bonus rides on top, and is small on purpose. */
-  const xp = n.xp * z.xp * (f.scale || 1) * partyXpBonus(f.scale || 1);
+     ones. The party bonus rides on top, and is small on purpose. Each hunter's own
+     level bends what they are paid when it is settled into their save. */
+  const xp = n.xp * (f.scale || 1) * partyXpBonus(f.scale || 1);
   const hurtIt = e.hunters.filter((u) => (f.by[u.userId] || 0) > 0);
 
   // Worked out once for the whole roster: the shares are normalised against each other.
@@ -540,7 +548,7 @@ function killFoe(ctx, f) {
        kill your party made with you in it is a kill you carried that weapon through,
        so it pays the same points a lone kill of the same foe pays. Unsplit, and
        unscaled -- the foe's size is the party's problem, not the weapon's. */
-    u.owed.mastery += n.xp * z.xp;
+    u.owed.mastery += n.xp;
     u.owed.kills++;
     u.owed.slain.push({ id: mob.id, elite: !!f.elite });
     // A Sovereign's entry carries how long its fight ran, for the line its fall leaves in the log.
@@ -617,11 +625,8 @@ export function encounterView(e) {
       // How long until it swings, so a page can run the clock on between answers.
       timer: Math.max(0, Math.round(f.timer)),
     })),
-    // A Sovereign's anger: how many times it has risen, and how long until it does again.
-    enrage: e.kind === "sovereign" ? e.enrage : 0,
-    enrageIn: e.kind === "sovereign" ? Math.max(0, Math.round(e.enrageAt - e.clock)) : null,
-    // And any other fight's window: how long until the next one steps out of the dark.
-    reinforceIn: e.kind === "normal" ? Math.max(0, Math.round(e.reinforceAt - e.clock)) : null,
+    // How long until the next one steps out of the dark: null in a Sovereign's fight, or once the wave has all come.
+    reinforceIn: owesTurn(e) ? Math.max(0, Math.round(e.reinforceAt - e.clock)) : null,
     hunters: (() => {
       const shares = contributionMap(e);
       return e.hunters.map((u) => ({
@@ -641,8 +646,7 @@ export function encounterView(e) {
 export function nextEncounterDue(e) {
   if (!e || e.over) return Infinity;
   if (!standing(e).length || !e.foes.length) return 0;
-  if (e.kind === "normal" && e.clock >= e.reinforceAt - EPS) return 0;
-  if (e.kind === "sovereign" && e.clock >= e.enrageAt - EPS) return 0;
+  if (owesTurn(e) && e.clock >= e.reinforceAt - EPS) return 0;
   if (standing(e).some((u) => u.swing <= EPS)) return 0;
   if (e.foes.some((f) => f.timer <= EPS || (f.bleed > 0 && f.bleedTimer <= EPS))) return 0;
   return Math.max(0, untilNext(e));
@@ -720,6 +724,8 @@ function nextEncounter(s) {
   s.encounters++;
   const kind = s.sovereignNext ? "sovereign" : "normal";
   s.sovereignNext = false;
+  // A breath before it: whoever walks on at or below a quarter drinks first, as alone.
+  breathe(s, {});
   s.enc = newEncounter({
     id: s.encounters,
     partyId: s.partyId,
@@ -780,6 +786,7 @@ export function stepSession(s, dt, hooks = {}) {
     }
     const was = s.enc;
     s.phase = "search";
+    breathe(s, hooks);
     if (was.kind === "sovereign") {
       // A Sovereign's fight is followed by the shortest walk, as it is alone, and by no roll for another.
       s.wait = H.searchMinMs;
@@ -795,6 +802,16 @@ export function stepSession(s, dt, hooks = {}) {
     if (!s.hunters.some((u) => !u.down)) s.over = "wiped";
   }
   return played;
+}
+
+/* The breath between encounters. Nothing heals for free, so this is the one place a
+   warband's health comes back outside a blow's lifesteal: whoever is standing at or
+   below a quarter drinks the best they packed, exactly as a lone hunter does. */
+function breathe(s, hooks) {
+  const fx = typeof hooks.fx === "function" ? hooks.fx : () => {};
+  s.hunters.forEach((u) => {
+    if (!u.down && u.hp > 0 && u.hp <= u.stats.maxHp * H.remedyAt) takeRemedy({ fx }, u);
+  });
 }
 
 // Milliseconds until the session's next event, for the scheduler that ticks it.

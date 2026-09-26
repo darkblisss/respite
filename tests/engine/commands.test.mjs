@@ -100,7 +100,11 @@ await run(async () => {
     s.skills.warfare = CONFIG.xpTable[5];
     refused("an unknown discipline", s, "pickClass", { id: "bard" }, "No such discipline.");
     w.events.length = 0;
-    check("pickClass: health refills, v4's line", cmd(s, "pickClass", { id: "warrior" }).ok && s.player.klass === "warrior" && s.player.hp === St.maxHp(s) && s.log.some((l) => l.m === "You take up the Warrior's discipline."));
+    s.player.hp = 100;
+    const was = St.maxHp(s);
+    check("pickClass: the discipline's bulk is added to what you have, not a full bar, and v4's line",
+      cmd(s, "pickClass", { id: "warrior" }).ok && s.player.klass === "warrior" && St.maxHp(s) > was &&
+      Math.abs(s.player.hp - (100 + St.maxHp(s) - was)) < 1e-9 && s.log.some((l) => l.m === "You take up the Warrior's discipline."), { hp: s.player.hp, was, now: St.maxHp(s) });
     refused("a second time", s, "pickClass", { id: "rogue" }, "Your discipline is already chosen.");
   }
   {
@@ -109,8 +113,9 @@ await run(async () => {
     cmd(s, "startHunt", { tier: 1, zone: "outer", limit: null });
     s.player.hp = 4;
     cmd(s, "pullBack", {});
-    check("pickClass back at camp: the refill holds for the next hunt too", s.player.camp.hp === 4 && cmd(s, "pickClass", { id: "mage" }).ok && s.player.camp.hp === St.maxHp(s) &&
-      cmd(s, "startHunt", { tier: 1, zone: "outer", limit: null }).ok && s.player.hp === St.maxHp(s));
+    // A Mage is slighter than no discipline at all, so there is nothing to add: the note keeps its 4.
+    check("pickClass back at camp: nothing is refilled, and the note agrees with the next hunt", s.player.camp.hp === 4 && cmd(s, "pickClass", { id: "mage" }).ok && s.player.camp.hp === 4 &&
+      cmd(s, "startHunt", { tier: 1, zone: "outer", limit: null }).ok && s.player.hp === 4);
   }
 
   section("Items and equipment");

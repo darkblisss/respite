@@ -31,10 +31,10 @@ import { fmtWhole, fmtGold, fmtStat } from "../format.js";
 import { qtyPicker, registerPopup, openPopup } from "../widgets.js";
 import { CONFIG } from "../../../shared/config.js";
 import { GameData, itemSources, prefixDef, rarityDef, skillName, tierLabel } from "../../../shared/registry.js";
-import { itemDef, itemName, stacks } from "../../../shared/items.js";
+import { itemDef, itemName, stacks, remedyTooWeak, tierForLevel } from "../../../shared/items.js";
 import { ORDER, POOLS, canHold, isPool, poolName, qtyIn, haveQty, roomFor, slotCap, slotsUsed, placeFor } from "../../../shared/storage.js";
 import { displacedBy } from "../../../shared/world.js";
-import { statsOf, combatStats, skillLevel } from "../../../shared/stats.js";
+import { combatStats, skillLevel, statsOf } from "../../../shared/stats.js";
 import { itemLore } from "../../../shared/lore.js";
 
 /* ================= 1. WORDS AND RULES ================= */
@@ -56,6 +56,14 @@ const POOL_ICON = { inv: "pack", bank: "stockpile", vault: "lock", satchel: "pot
 const phrase = (w) => (w === "inv" ? poolName(w) : `the ${poolName(w)}`);
 
 const sign = (n) => (n > 0 ? "+" : "−");
+
+// Whether this player is on the party's fight: the fight holds their health until it is settled.
+function outWithParty(ctx) {
+  const view = ctx.store ? ctx.store.partyHunt : null;
+  const me = ctx.account ? ctx.account.userId : null;
+  if (!view || view.over || !me || !Array.isArray(view.hunters)) return false;
+  return view.hunters.some((u) => u && String(u.userId).toLowerCase() === String(me).toLowerCase());
+}
 const fineOrBetter = (d) => d.kind !== "material" && (RANK[d.rarity] || 0) >= RANK.rare;
 
 function kindLabel(d) {
@@ -149,8 +157,9 @@ function gearCompare(state, key, d) {
   if (!displaced.length) return { blocked: null, displaced };
   const next = { ...state.equipment, [d.slot]: key };
   if (d.slot === "weapon" && d.twoHanded) next.offhand = null;
-  const after = combatStats({ level: skillLevel(state, "warfare"), klass: state.player.klass, equipment: next });
-  return { blocked: null, displaced, before: statsOf(state), after };
+  // Both sides the same hunter, path and mastery and all, so the difference is the piece's alone.
+  const as = (equipment) => combatStats({ level: skillLevel(state, "warfare"), klass: state.player.klass, equipment, mastery: state.mastery, path: state.path });
+  return { blocked: null, displaced, before: as(state.equipment), after: as(next) };
 }
 
 function statRows(state, key, d, from, qty) {
@@ -164,8 +173,11 @@ function statRows(state, key, d, from, qty) {
       const delta = deltaOf(diff(stat), fmtStat);
       if (d[own] || delta) add(label, d[own] ? `+${fmtStat(d[own])}` : "0", { delta });
     });
-    const crit = deltaOf(diff("crit") * 100, critText);
-    if (d.crit || crit) add("Crit Chance", d.crit ? `+${critText(d.crit * 100)}` : "0", { delta: crit });
+    // The shares a piece carries: chances and Veil Power, each read as a percent.
+    [["crit", "Crit Chance"], ["block", "Block"], ["dodge", "Dodge"], ["tech", "Veil Power"]].forEach(([own, label]) => {
+      const delta = deltaOf(diff(own) * 100, critText);
+      if (d[own] || delta) add(label, d[own] ? `+${critText(d[own] * 100)}` : "0", { delta });
+    });
     if (state.player.klass) {
       const was = cmp && cmp.after ? cmp.displaced.reduce((n, k) => n + ((itemDef(k) || {}).veil || 0), 0) : d.veil;
       const veil = cmp && cmp.after ? deltaOf(d.veil - was, fmtStat) : null;
@@ -389,6 +401,25 @@ function openItem(ctx, key, opts, extra) {
         label: racked === d.base ? "Already in hand" : `Take up · ${skillName(d.forSkill)}`,
         disabled: racked === d.base || !room,
         onClick: () => send("equip", { key, from }),
+      });
+    }
+
+    /* Nothing heals on its own, so a remedy is drunk by hand at camp: the way back from a
+       bad hunt short of setting out and leaving it to the Satchel. Not mid hunt, not while
+       the party's fight holds your health, and not a bottle too weak for your ground. */
+    if (d.heal > 0) {
+      const s = statsOf(state);
+      const level = skillLevel(state, "warfare");
+      const why = state.tasks.combat ? "Not while hunting"
+        : outWithParty(ctx) ? "Out with your party"
+          : remedyTooWeak(key, level) ? `Too weak: tier ${tierForLevel(level)} or better`
+            : state.player.hp >= s.maxHp ? "You are whole" : null;
+      const gain = Math.round(Math.min(s.maxHp, state.player.hp + d.heal * (s.vital ? 1.2 : 1)) - state.player.hp);
+      list.push({
+        id: "drink", kind: "primary", wide: true, icon: "potion",
+        label: why || `Drink · +${fmtWhole(gain)} health`,
+        disabled: !!why,
+        onClick: () => send("useRemedy", { key, from }),
       });
     }
 

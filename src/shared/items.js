@@ -129,6 +129,8 @@ function buildDef(base, rarity, prefix, plus) {
     const pfx = prefix ? prefixDef(prefix) : null;
     const line = GameData.GEAR_LINES[g.line];
     const growth = CONFIG.hunt.gearGrowth;
+    // A share (a chance, or Veil Power): rarity and the Veil move it, the tier never does.
+    const share = (v) => (v ? Math.round(v * m * 1000) / 1000 : 0);
     return {
       base, rarity: rarity || "common", prefix: prefix || null, plus: plus || 0, kind: "gear",
       // `line` is the stat line it was cut from, and the weapon mastery it earns.
@@ -136,7 +138,11 @@ function buildDef(base, rarity, prefix, plus) {
       attack: gearStat(line.attack, growth.attack, g.tier, m),
       defence: gearStat(line.defence, growth.defence, g.tier, m),
       health: gearStat(line.health, growth.health, g.tier, m),
-      crit: line.crit ? Math.round(line.crit * m * 1000) / 1000 : 0,
+      crit: share(line.crit),
+      block: share(line.block),
+      dodge: share(line.dodge),
+      lifesteal: share(line.lifesteal),
+      tech: share(line.tech),
       veil: g.slot === "weapon" ? gearStat(CONFIG.hunt.weaponVeil[g.tier - 1], 1, 1, m) : 0,
       twoHanded: g.twoHanded,
       value: Math.round(g.value * worth * (pfx ? 2 : 1)), tier: g.tier, prof: g.prof,

@@ -278,10 +278,53 @@ export const SCENARIOS = {
     ["head", "chest", "hands", "feet"].forEach((slot) => { const g = pick(slot, "weaver") || pick(slot); if (g) s.equipment[slot] = `${g.id}|common`; });
     put(s, "inv", "provision_t4", 30);
     put(s, "inv", "provision_t3", 18);
+    // Nothing heals on its own: five of the ground's own bottles packed, or the Core is short work.
+    put(s, "satchel", "provision_t5", 5);
     s.companions.owned.stag = { bond: 300, rank: 1, dupes: 0 };
     s.companions.active = "stag";
     s.player.hp = maxHp(s);
     run(s, { type: "startHunt", args: { tier: 5, zone: "core", limit: null } }, env);
+    advance(s, now, env);
+    return s;
+  },
+
+  // A Warrior walking into the Core's Sovereign: its guard first, and it steps out behind them.
+  sovereign(now) {
+    const env = chronicled();
+    const at = Number(new URLSearchParams(typeof location === "undefined" ? "" : location.search).get("into")) || 6000;
+    const s = createState({ now: now - at - 3000, seed: 23, account: "morwen" });
+    levels(s, { warfare: 48, delving: 40, forgemaster: 44 });
+    s.player.klass = "warrior";
+    s.player.gold = 12000;
+    unlock(s, "region_2", "region_3", "region_4", "region_5");
+    s.region = "region_5";
+    const t5 = Object.values(GameData.GEAR).filter((g) => g.tier === 5);
+    const line = (l) => t5.find((g) => g.line === l);
+    s.equipment.weapon = `${line("sword").id}|rare|c50.1`;
+    s.equipment.offhand = `${line("shield").id}|common`;
+    [["head", "helm"], ["chest", "chest"], ["hands", "hgaunts"], ["feet", "hboots"], ["neck", "amulet"], ["ring", "ring"]].forEach(([slot, l]) => { s.equipment[slot] = `${line(l).id}|common`; });
+    put(s, "satchel", "provision_t5", 5);
+    s.player.hp = maxHp(s);
+    run(s, { type: "startHunt", args: { tier: 5, zone: "core", limit: null } }, env);
+    s.tasks.combat.sovereignNext = true;
+    s.tasks.combat.wait = 3000;
+    advance(s, now, env);
+    return s;
+  },
+
+  // Home from a bad hunt: a tenth of the bar, bottles in Belongings and the Satchel, nothing out.
+  wounded(now) {
+    const env = chronicled();
+    const s = createState({ now: now - 5 * MIN, seed: 29, account: "morwen" });
+    levels(s, { warfare: 26, delving: 20 });
+    s.player.klass = "rogue";
+    s.player.gold = 800;
+    unlock(s, "region_2", "region_3");
+    s.region = "region_3";
+    put(s, "inv", "provision_t3", 4);
+    put(s, "satchel", "provision_t3", 2);
+    s.player.hp = Math.round(maxHp(s) / 10);
+    s.player.camp = { since: now - 5 * MIN, hp: s.player.hp, walkUntil: now - 5 * MIN };
     advance(s, now, env);
     return s;
   },

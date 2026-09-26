@@ -1411,7 +1411,7 @@ Armaments renders a two-handed weapon as one spanning slot instead: `.doll-col.h
     <canvas class="hunt-ring" aria-hidden="true"></canvas>   <!-- the ground, the ring, the discs and plates, every blow -->
     <div class="hunt-fight-head">                            <!-- shows while data-phase="fight" -->
       <div class="hunt-fh-l"><b>Encounter 42</b><span>Fighting in the Core · 3 on you</span></div>
-      <div class="hunt-fh-r"><span>Another steps out in<em>17s</em></span>      <!-- a Sovereign's: "Enrages in", "Enraged ×2 · again in" -->
+      <div class="hunt-fh-r"><span>Another steps out in<em>17s</em></span>      <!-- a Sovereign's: "Fighting for", the fight's own clock -->
         <span class="hunt-fh-pill"><span class="hunt-fh-icon"><svg class="ico"/></span><span>One waits in the dark</span></span></div>  <!-- a Sovereign's: eye-off, "No others will come" -->
     </div>
     <div class="hunt-walk">                                  <!-- hidden while data-phase="fight" -->

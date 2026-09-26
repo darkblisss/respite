@@ -57,20 +57,35 @@ await run(async () => {
   section("Starting stats and gear");
   {
     const naked = St.combatStats({ level: 1, klass: null, equipment: {} });
-    check("Level 1: Attack 1, Defence 0, Health 25, no Veil, 2.4s swing",
-      naked.maxHp === 25 && naked.attack === 1 && naked.defence === 0 && naked.veilGain + naked.absorb === 0 && naked.speed === 2400, naked);
+    check("Level 1: Attack 10, Defence 0.78, Health 250, no Veil, 2.4s swing",
+      naked.maxHp === 250 && naked.attack === 10 && naked.defence === 0.78 && naked.veilGain + naked.absorb === 0 && naked.speed === 2400, naked);
+    check("Everyone crits 5% for 150%, pierces nothing, takes back 1% of every blow, and neither blocks nor dodges",
+      ["warrior", "rogue", "mage", null].every((k) => {
+        const x = St.combatStats({ level: 30, klass: k, equipment: {} });
+        return x.crit === 0.05 && x.critDmg === 1.5 && x.pen === 0 && x.lifesteal === 0.01 && x.block === 0 && x.dodge === 0 && x.tech === 1;
+      }));
     const d = (k) => I.itemDef(k);
-    check("Tier 1 Common: weapon +1 Attack, offhand 1, neck +1 Attack, ring +1 Defence",
-      d("slag_sword|common").attack === 1 && d("bitter_shield|common").defence === 1 && d("mud_grimoire|common").attack === 1 && d("mud_amulet|common").attack === 1 && d("slag_ring|common").defence === 1);
-    check("Tier 1 Common armour: head +1, chest +2, hands +1, feet +1 Health",
-      d("slag_helm|common").health === 1 && d("slag_chest|common").health === 2 && d("slag_hgaunts|common").health === 1 && d("slag_hboots|common").health === 1);
+    check("Tier 1 Common: weapon +10 Attack, shield 1 Defence and 15% Block, grimoire +10, amulet +10 Attack and 5% Veil Power, ring +1 Defence",
+      d("slag_sword|common").attack === 10 && d("bitter_shield|common").defence === 1 && d("bitter_shield|common").block === 0.15 && d("mud_grimoire|common").attack === 10 &&
+      d("mud_amulet|common").attack === 10 && d("mud_amulet|common").tech === 0.05 && d("slag_ring|common").defence === 1);
+    check("Tier 1 Common armour: head +10, chest +20, hands +10, feet +10 Health",
+      d("slag_helm|common").health === 10 && d("slag_chest|common").health === 20 && d("slag_hgaunts|common").health === 10 && d("slag_hboots|common").health === 10);
+    check("Dodge comes with medium armour and a dagger, Block with a shield and a Stalwart relic",
+      d("mangy_hood|common").dodge > 0 && d("mangy_jacket|common").dodge > 0 && d("slag_dagger|common").dodge > 0 && d("slag_helm|common").dodge === 0 &&
+      St.combatStats({ level: 10, klass: "rogue", equipment: gearSet(GameData, 1, "rogue") }).dodge > 0.1 &&
+      St.combatStats({ level: 10, klass: "warrior", equipment: { offhand: "bitter_shield|common", chest: "slag_chest|relic|5|stalwart" } }).block === 0.25);
     const rar = [d("starfall_sword|common").attack, d("starfall_sword|rare|1").attack, d("starfall_sword|legendary|2").attack];
     check("Rarity raises gear stats", rar[0] < rar[1] && rar[1] < rar[2], rar);
+    /* One growth rate: a hunter's own health is 250 x 1.85 every ten levels, the set's is its
+       tier-1 line x 1.85 a tier, and a discipline and a Vital relic multiply the lot. */
+    const lightSet = ["hood_light", "robe", "lgloves", "lboots"].reduce((n, line) => n + GameData.GEAR_LINES[line].health, 0) * Math.pow(1.85, 8) * 1.5;
+    const expect = (k) => (250 * Math.pow(1.85, 9.8) * (k ? GameData.CLASSES.find((x) => x.id === k).health : 1) + lightSet) * 1.05;
     const maxes = ["warrior", "rogue", "mage", null].map((k) => St.combatStats({ level: 99, klass: k, equipment: gearSet(GameData, 9, "light", "relic") }).maxHp);
-    check("Nobody passes 5,000 health, even at Hunt 99 in a Relic tier-9 set", maxes.every((h) => h <= 5000) && Math.max(...maxes) > 3500, maxes);
+    check("Health at Hunt 99 in a Relic tier-9 set is the growth curve's and the set's, nothing else",
+      ["warrior", "rogue", "mage", null].every((k, i) => Math.abs(maxes[i] - expect(k)) / expect(k) < 0.001), maxes);
     const veil = [5, 20, 40, 60, 80, 99].map((L) => CONFIG.veilPerBlow(L));
-    check("Rogue Veil a blow: Lv5 10, Lv20 12, Lv40 16, Lv60 20, Lv80+ 25", veil.join(",") === "10,12,16,20,25,25", veil);
-    check("Tier-9 Relic weapons carry a Rogue to 33 a blow at Lv80", St.combatStats({ level: 80, klass: "rogue", equipment: gearSet(GameData, 9, "rogue", "relic") }).veilGain === 33);
+    check("Veil a blow is flat by level: 10 at every Hunt level", veil.join(",") === "10,10,10,10,10,10", veil);
+    check("A tier-9 Relic weapon carries a Rogue to 14.5 a blow: 10 of its own and 3 of the weapon's at Relic", St.combatStats({ level: 80, klass: "rogue", equipment: gearSet(GameData, 9, "rogue", "relic") }).veilGain === 14.5);
     const mit = [St.mitigation(0, 1), St.mitigation(5, 1), St.mitigation(10, 1), St.mitigation(1e9, 1), St.mitigation(10, 5)];
     check("Defence mitigates by ratio, grows with Defence, caps at 80%, and weakens on harder ground",
       mit[0] === 0 && mit[1] > 0 && mit[2] > mit[1] && mit[3] === 0.8 && mit[4] < mit[2], mit);
@@ -78,14 +93,18 @@ await run(async () => {
 
   section("Zones, foes and economy");
   {
-    const zones = GameData.ZONES.map((z) => [z.id, z.windowMs, z.power, z.sizes.map((x) => x[0]).join("/")]);
-    same("Four zones: Outer 60s, Middle 50s, Inner 40s, Core 30s, and power climbing to 1.4 at the Core",
-      zones, [["outer", 60000, 1, "1/2"], ["middle", 50000, 1.15, "1/2"], ["inner", 40000, 1.27, "2/3"], ["core", 30000, 1.4, "3"]]);
+    const zones = GameData.ZONES.map((z) => [z.id, z.windowMs, z.xp, z.scale.hp, z.scale.attack, z.scale.defence, z.sizes.map((x) => x[0]).join("/")]);
+    same("Four zones: Outer 60s, Middle 50s, Inner 40s, Core 30s, and the depth table: XP to 1.25, health to 1.6, attack to 1.4, Defence to 1.35",
+      zones, [["outer", 60000, 1, 1, 1, 1, "1"], ["middle", 50000, 1.08, 1.15, 1.1, 1.1, "1/2"], ["inner", 40000, 1.16, 1.35, 1.22, 1.2, "2"], ["core", 30000, 1.25, 1.6, 1.4, 1.35, "2/3"]]);
     const t1stalker = foeOf(1, "stalker");
-    const scaled = GameData.ZONES.map((z) => Cb.foeNumbers(t1stalker, false, z.power));
-    check("Power scales a foe's health and damage with depth, and leaves its XP, gold and Threat alone",
-      scaled.every((n, i) => n.hp === Math.round(t1stalker.hp * GameData.ZONES[i].power) && Math.abs(n.attack - t1stalker.attack * GameData.ZONES[i].power) < 1e-12) &&
-      new Set(scaled.map((n) => `${n.xp}|${n.threat}|${n.gold.join()}`)).size === 1, scaled.map((n) => [n.hp, n.xp, n.threat]));
+    const scaled = GameData.ZONES.map((z) => Cb.foeNumbers(t1stalker, false, z));
+    check("Depth scales a foe's health, attack and Defence by its own columns and its XP by the zone's, and leaves its gold alone",
+      scaled.every((n, i) => {
+        const z = GameData.ZONES[i];
+        return n.hp === Math.round(t1stalker.hp * z.scale.hp) && Math.abs(n.attack - t1stalker.attack * z.scale.attack) < 1e-12 &&
+          Math.abs(n.defence - t1stalker.defence * z.scale.defence) < 1e-12 && Math.abs(n.xp - t1stalker.xp * z.xp) < 1e-12;
+      }) && new Set(scaled.map((n) => n.gold.join())).size === 1 && Cb.foeNumbers(t1stalker, false, "core").hp === scaled[3].hp,
+      scaled.map((n) => [n.hp, n.xp, n.defence]));
     const t1 = ["skirmisher", "stalker", "brute"].map((a) => foeOf(1, a));
     check("Ashen Verge: Carrion Rat, Ash Stalker, Ash Brute", t1.map((m) => m.name).join(",") === "Carrion Rat,Ash Stalker,Ash Brute");
     check("Skirmisher 2.0s, Stalker 2.4s, Brute 3.0s", t1.map((m) => m.speed).join(",") === "2000,2400,3000");
@@ -162,6 +181,21 @@ await run(async () => {
     check("A reinforcement's first blow is an ambush", a.fx.some((e) => e.kind === "ambushed"));
   }
 
+  {
+    /* A wave with an end: a hunter who kills slower than the Core's window turns still sees
+       the encounter out, once the zone's joins have all come, and walks on to the next. */
+    const s = hunter(12, { level: 5, klass: "warrior", equipment: gearSet(GameData, 1, "warrior") });
+    put(s, "satchel", "provision_t1", 5);
+    const a = await arena();
+    const c = hunt(s, 1, "core");
+    stepWhile(s, a.env, 250, () => !!s.tasks.combat && c.encounters < 3, 4 * 60 * 20);
+    const core = GameData.ZONES.find((z) => z.id === "core");
+    // A held one steps in with a "join" of its own when a gap opens, so every reinforcement is counted once.
+    const perEnc = [1, 2].map((n) => a.fx.filter((e) => e.enc === n && e.kind === "join").length);
+    check("An encounter takes at most its zone's joins, held ones included, and then it can be cleared",
+      c.encounters >= 3 && perEnc.every((n) => n <= core.joins) && perEnc[0] > 0, { encounters: c.encounters, perEnc, joins: core.joins });
+  }
+
   section("Disciplines");
   {
     const s = hunter(3, { level: 5, klass: "warrior" });
@@ -172,8 +206,10 @@ await run(async () => {
     const strike = log.find((e) => e.kind === "strike");
     const before = log.filter((e) => strike && e.t <= strike.t);
     const steps = [...new Set(before.map((e, i) => (i ? [e.veil - before[i - 1].veil, e.veil] : [e.veil, e.veil])).filter(([dv, v]) => dv > 0 && v < 100).map(([dv]) => dv))].sort((x, y) => x - y);
-    check("Warrior: Veil +10 a blow and +5 a blow aimed at it at Hunt 5, Devastating Strike when full",
-      St.statsOf(s).veilGain === 10 && !!strike && steps.length > 0 && steps.every((x) => x % 5 === 0) && steps.includes(5) && steps.includes(10), { steps, strike: !!strike });
+    const struck = Math.round(10 * GameData.TECHNIQUE.strike.struck);
+    check(`Warrior: Veil +10 a blow and +${struck} a blow aimed at it at Hunt 5, Devastating Strike when full`,
+      St.statsOf(s).veilGain === 10 && !!strike && steps.length > 0 && steps.includes(struck) && steps.includes(10) &&
+      steps.every((x) => [10, struck, 10 + struck, 2 * struck, 20, 2 * struck + 10].includes(x)), { steps, strike: !!strike });
   }
   {
     const s = hunter(4, { level: 30, klass: "rogue", equipment: gearSet(GameData, 3, "rogue") });
@@ -199,8 +235,9 @@ await run(async () => {
     check("Mage: three empowered casts open the encounter, 450ms apart, then the Veil is empty",
       gaps.length === 3 && gaps[1] === 450 && gaps[2] === 450 && after.length > 0 && after[0].veil < 10, { gaps, veil: after[0] && after[0].veil });
     const emp = a.fx.filter((e) => e.kind === "empowered");
-    check("Mage: the Veil refills at 2 a second and a full Veil gives one empowered cast",
-      St.statsOf(s).absorb === 2 && (emp.length === 0 || emp[0].clock >= 50000), emp[0] && emp[0].clock);
+    const absorb = GameData.TECHNIQUE.absorb;
+    check(`Mage: the Veil refills at ${absorb} a second and a full Veil gives one empowered cast`,
+      St.statsOf(s).absorb === absorb && (emp.length === 0 || emp[0].clock >= Math.floor((H.veilMax / absorb) * 1000) - 1), emp[0] && emp[0].clock);
   }
 
   section("Threat, Sovereigns and hiding");
@@ -214,6 +251,8 @@ await run(async () => {
     const party = c.foes.map((f) => getMonster(f.id).archetype);
     check("Threat at 100 in the Core brings its Sovereign with two Elite escorts",
       party.filter((x) => x === "sovereign").length === 1 && party.length === 3 && c.foes.filter((f) => getMonster(f.id).archetype !== "sovereign").every((f) => f.elite), party);
+    check("The escorts walk in first and are struck first: the Sovereign is last on the roster",
+      party[2] === "sovereign" && party.slice(0, 2).every((x) => x !== "sovereign"), party);
     check("hunt:sovereign announced, a toast and no log line", a.of("hunt:sovereign").length === 1 && a.of("hunt:sovereign")[0].monsterId === "mob_t1_sovereign" && !logHas(s, /comes up out of the dark/));
     const uidBefore = c.uid;
     const hold = c.foes.find((f) => getMonster(f.id).archetype === "sovereign");
@@ -222,7 +261,8 @@ await run(async () => {
       step(s, a.env, 100);
       s.player.hp = St.maxHp(s);
     }
-    check("Sovereign fights take no reinforcements and grow angrier every 30s", c.enrage === 2 && c.uid === uidBefore, { enrage: c.enrage });
+    check("Sovereign fights take no reinforcements, and it does not grow angrier on a clock",
+      c.uid === uidBefore && !a.fx.some((e) => e.kind === "enrage") && c.enrage === undefined && c.enrageAt === undefined, { uid: c.uid, enrage: c.enrage });
     hold.hp = 1;
     stepWhile(s, a.env, 100, () => c.kind === "sovereign", 2000);
     const felled = a.of("hunt:felled")[0];
@@ -300,17 +340,17 @@ await run(async () => {
       c.phase === "hide" && !c.foes.some((f) => getMonster(f.id).archetype === "sovereign") && Cb.threatIn(s, 1, "core") === 100 && logHas(s, /went to ground/), { phase: c.phase, threat: Cb.threatIn(s, 1, "core") });
   }
   {
-    const s = hunter(41);
+    // Enough health that the blow cannot kill, placed so that it lands you under a quarter.
+    const s = hunter(41, { level: 80 });
     s.equipment.chest = "slag_chest|relic|5|thorned";
     const c = hunt(s, 9, "outer");
     c.phase = "fight";
     c.kind = "sovereign";
-    c.enrageAt = 30000;
     c.swing = 5000;
     const sov = sovereignOf(9);
     c.foes = [{ uid: 1, id: sov.id, elite: false, hp: 1, max: sov.hp, ambush: false, timer: 0, bleed: 0, bleedTimer: 0 }];
     c.uid = 2;
-    s.player.hp = St.maxHp(s) * 0.26;
+    s.player.hp = St.maxHp(s) * H.retreatAt + Cb.foeNumbers(sov, false, "outer").attack * 0.5;
     const a = await arena();
     step(s, a.env, 1);
     check("A thorns kill counts before a retreat on the same blow", s.stats.bosses === 1 && s.stats.kills === 1 && !logHas(s, /broke away/), { bosses: s.stats.bosses, kills: s.stats.kills });
@@ -398,7 +438,7 @@ await run(async () => {
     check("The same ground again keeps the fight and restarts the count", s.tasks.combat === c && c.id === id && c.elapsed === 0 && c.done === 0 && c.limit === 50 && c.startedAt === s.clock);
   }
 
-  section("Back at camp: the walk and the rest are still owed");
+  section("Back at camp: the walk is still owed, and the camp heals nothing");
   const start = (s, zone = "outer", limit = null, env) => applyCommand(s, { type: "startHunt", args: { tier: 1, zone, limit } }, env).ok;
   const back = (s, env) => applyCommand(s, { type: "pullBack", args: {} }, env).ok;
   // Out of an encounter with most of the walk to the next one ahead, at half health. No discipline, no Veil.
@@ -406,7 +446,8 @@ await run(async () => {
     const s = hunter(seed, { level: 40, equipment: gearSet(GameData, 3, "warrior") });
     const a = await arena();
     start(s, "outer", null, a.env);
-    stepWhile(s, a.env, 100, () => !(s.tasks.combat.encounters >= 1 && s.tasks.combat.phase === "search" && s.tasks.combat.wait > 20000), 20000);
+    // A clear leaves at most reinforceGapCapMs of walk, so "most of it ahead" is most of that.
+    stepWhile(s, a.env, 100, () => !(s.tasks.combat.encounters >= 1 && s.tasks.combat.phase === "search" && s.tasks.combat.wait > H.reinforceGapCapMs * 0.6), 20000);
     s.player.hp = Math.floor(St.maxHp(s) / 2);
     return { s, a };
   };
@@ -421,7 +462,7 @@ await run(async () => {
     const twin = clone(s);
     const wait = s.tasks.combat.wait;
     const half = s.player.hp;
-    check("set up: out of an encounter, a long walk ahead, half health", wait > 20000 && half === Math.floor(St.maxHp(s) / 2), { wait, half });
+    check("set up: out of an encounter, a long walk ahead, half health", wait > H.reinforceGapCapMs * 0.6 && half === Math.floor(St.maxHp(s) / 2), { wait, half });
     back(s, a.env);
     same("Pulling back leaves the camp a note: when, the health you came back with, when the walk would have ended",
       s.player.camp, { since: s.clock, hp: half, walkUntil: s.clock + wait });
@@ -436,17 +477,22 @@ await run(async () => {
     s.player.hp = Math.floor(most * 0.2);
     const wait = s.tasks.combat.wait;
     back(s, a.env);
-    step(s, a.env, 30000);
+    step(s, a.env, 4000);
     const plan = Cb.campPlan(s);
     // Times are absolute milliseconds, so a walk read back off the note is exact to a thousandth of one.
-    same("Resting at camp: a fifth of your most a minute, and the walk runs down while you rest",
-      plan, { hp: Math.floor(most * 0.2) + most * 30000 / H.recoveryMs, maxHp: most, walkMs: Math.max(H.searchMinMs, wait - 30000) }, 1e-6);
+    same("Resting at camp heals nothing, and the walk runs down while you rest",
+      plan, { hp: Math.floor(most * 0.2), maxHp: most, walkMs: Math.max(H.searchMinMs, wait - 4000) }, 1e-6);
     start(s, "outer", null, a.env);
     check("and that is what the hunt sets out with", s.player.hp === plan.hp && s.tasks.combat.wait === plan.walkMs, { hp: s.player.hp, wait: s.tasks.combat.wait });
     back(s, a.env);
-    step(s, a.env, H.recoveryMs);
-    same("Five minutes at camp and you are whole, after the shortest walk", Cb.campPlan(s), { hp: most, maxHp: most, walkMs: H.searchMinMs });
-    check("campPlan is for camp: null while a hunt is out", (start(s, "outer", null, a.env), Cb.campPlan(s) === null && s.player.hp === most));
+    step(s, a.env, 6 * 60 * 60 * 1000);
+    same("Six hours at camp and you are no better off, after the shortest walk", Cb.campPlan(s), { hp: Math.floor(most * 0.2), maxHp: most, walkMs: H.searchMinMs });
+    // Hunt 40 stands on tier 5 ground, so a lesser bottle would be passed over.
+    put(s, "inv", "provision_t5", 1);
+    const drank = applyCommand(s, { type: "useRemedy", args: { key: "provision_t5", from: "inv" } }, a.env);
+    const healed = Math.min(most, Math.floor(most * 0.2) + CONFIG.economy.remedies[4].heal);
+    check("A remedy drunk at camp is what puts it back, and the note agrees", drank.ok && s.player.hp === healed && Cb.campPlan(s).hp === healed, { drank, hp: s.player.hp });
+    check("campPlan is for camp: null while a hunt is out", (start(s, "outer", null, a.env), Cb.campPlan(s) === null && s.player.hp === healed));
   }
   {
     const s = hunter(83, { level: 40, equipment: gearSet(GameData, 3, "warrior") });
@@ -476,9 +522,9 @@ await run(async () => {
       !!ended && ended.reason === "limit" && !!note && note.since === ended.at && note.hp === s.player.hp && note.walkUntil === ended.at + Math.max(H.searchMinMs, 60000 - kill.clock), { note, ended, killClock: kill && kill.clock });
     const clock = s.clock;
     start(s, "outer", 1, a.env);
-    check("so a one-kill hunt set out again still walks the window (the old way was three seconds and full health)",
+    check("so a one-kill hunt set out again still walks the window, on the health it came back with",
       s.tasks.combat.wait === Math.max(H.searchMinMs, note.walkUntil - clock) && s.tasks.combat.wait > H.searchMinMs &&
-      s.player.hp === Math.min(St.maxHp(s), note.hp + St.maxHp(s) * (clock - note.since) / H.recoveryMs), { wait: s.tasks.combat.wait, hp: s.player.hp });
+      s.player.hp === Math.min(St.maxHp(s), note.hp), { wait: s.tasks.combat.wait, hp: s.player.hp });
   }
   {
     const { s, a } = await walking(85);
@@ -511,10 +557,10 @@ await run(async () => {
     applyCommand(s, { type: "startHunt", args: { tier: 9, zone: "core", limit: null } }, a.env);
     check("set up: a hunt set out from the note", s.player.hp === note.hp && s.player.camp === null);
     stepWhile(s, a.env, 250, () => !!s.tasks.combat, 20000);
-    check("A fall leaves no note", s.stats.deaths === 1 && s.player.camp === null && s.player.hp === St.maxHp(s));
-    step(s, a.env, H.recoveryMs);
+    check("A fall leaves a note on one point of health", s.stats.deaths === 1 && !!s.player.camp && s.player.camp.hp === 1 && s.player.hp === 1, s.player.camp);
+    step(s, a.env, 60 * 60 * 1000);
     start(s, "outer", null, a.env);
-    check("so after the recovery you set out whole, after the shortest walk", s.player.hp === St.maxHp(s) && s.tasks.combat.wait === H.searchMinMs);
+    check("so an hour later you set out on one point, after the shortest walk: only a remedy puts it back", s.player.hp === 1 && s.tasks.combat.wait === H.searchMinMs, { hp: s.player.hp, wait: s.tasks.combat.wait });
   }
   {
     // The reported trick: pull back and set out again the moment an encounter ends. It must win nothing.
@@ -739,6 +785,119 @@ await run(async () => {
     stepWhile(s, a.env, 1000, () => !!s.tasks.combat, 3000);
     check("A remedy in the Satchel is drunk, and spent out of the Satchel",
       a.fx.some((e) => e.kind === "heal") && S.qtyIn(s, "satchel", "provision_t3") < 7 && S.haveQty(s, "provision_t3") === S.qtyIn(s, "satchel", "provision_t3"));
+  }
+
+  section("Nothing heals for free: the walk, lifesteal, Block, Dodge and the Satchel");
+  {
+    // A walk is only a walk: half health at the start of it is half health at the end.
+    const s = hunter(90, { level: 10 });
+    const a = await arena();
+    const c = hunt(s, 1, "outer");
+    c.wait = 9000;
+    s.player.hp = Math.floor(St.maxHp(s) / 2);
+    const half = s.player.hp;
+    step(s, a.env, 8000);
+    check("The walk between encounters heals nothing", c.phase === "search" && s.player.hp === half, { phase: c.phase, hp: s.player.hp, half });
+  }
+  {
+    // One foe that never swings and never falls: every point back is lifesteal.
+    const s = hunter(91, { level: 10 });
+    const a = await arena();
+    const c = hunt(s, 1, "outer");
+    const mob = foeOf(1, "stalker");
+    c.phase = "fight";
+    c.kind = "normal";
+    c.reinforceAt = 1e9;
+    c.swing = 0;
+    c.foes = [{ uid: 1, id: mob.id, elite: false, hp: 1e9, max: 1e9, ambush: false, timer: 1e9, bleed: 0, bleedTimer: 0 }];
+    c.uid = 2;
+    s.player.hp = 100;
+    step(s, a.env, 30000);
+    const want = 100 + c.dmg * St.statsOf(s).lifesteal;
+    check("Lifesteal: a hundredth of every blow landed comes back as health", c.dmg > 0 && Math.abs(s.player.hp - want) < 1e-6 && St.statsOf(s).lifesteal === 0.01, { hp: s.player.hp, want, dmg: c.dmg });
+  }
+  {
+    // A Rogue in Relic medium armour with a Relic dagger, against the Core of tier 1 for an hour.
+    const s = hunter(92, { level: 60, klass: "rogue", equipment: gearSet(GameData, 1, "rogue", "relic") });
+    const dodge = St.statsOf(s).dodge;
+    const a = await arena();
+    hunt(s, 1, "core");
+    for (let i = 0; i < 3600; i++) {
+      step(s, a.env, 1000);
+      s.player.hp = St.maxHp(s);
+    }
+    const aimed = a.fx.filter((e) => e.who === "you" && ["dodge", "glance", "hurt", "ambushed", "block"].includes(e.kind));
+    const dodged = aimed.filter((e) => e.kind === "dodge");
+    const share = dodged.length / aimed.length;
+    check("Dodge: that share of the blows aimed at you never lands", dodge > 0.15 && aimed.length > 500 && Math.abs(share - dodge) < 0.05 && dodged.every((e) => e.amount === 0),
+      { dodge, share, aimed: aimed.length });
+  }
+  {
+    /* A Warrior behind a shield: Block is its 15%, and a blocked blow lands at half. Deep
+       enough that every blow is big, so rounding a small one to nothing hides none. */
+    const s = hunter(93, { level: 30, klass: "warrior", equipment: gearSet(GameData, 1, "warrior") });
+    const block = St.statsOf(s).block;
+    const a = await arena();
+    hunt(s, 7, "core");
+    for (let i = 0; i < 1800; i++) {
+      step(s, a.env, 1000);
+      s.player.hp = St.maxHp(s);
+    }
+    const landed = a.fx.filter((e) => e.who === "you" && ["hurt", "block"].includes(e.kind));
+    const blocked = landed.filter((e) => e.kind === "block");
+    const mean = (xs) => xs.reduce((n, e) => n + e.amount, 0) / Math.max(1, xs.length);
+    const ratio = mean(blocked) / mean(landed.filter((e) => e.kind === "hurt"));
+    check("Block: that share of the blows aimed at you is blocked, and a blocked one lands at half", block === 0.15 && landed.length > 500 &&
+      Math.abs(blocked.length / landed.length - block) < 0.04 && Math.abs(ratio - H.blockCut) < 0.12, { block, share: blocked.length / landed.length, ratio, landed: landed.length });
+    const plain = hunter(93, { level: 30, klass: "warrior" });
+    check("and nobody blocks or dodges without the gear for it", St.statsOf(plain).block === 0 && St.statsOf(plain).dodge === 0);
+  }
+  {
+    // A fight that never ends: the Satchel is reached for in the middle of it, at a quarter.
+    const s = hunter(94, { level: 20, klass: "warrior", equipment: gearSet(GameData, 3, "warrior") });
+    put(s, "satchel", "provision_t3", 5);
+    const a = await arena();
+    applyCommand(s, { type: "startHunt", args: { tier: 3, zone: "core", limit: null } }, a.env);
+    // In the middle of a fight: foes still standing when it is drunk (a breath between encounters has none).
+    const midFight = (e) => e.kind === "heal" && e.foes.length > 0;
+    stepWhile(s, a.env, 1000, () => !!s.tasks.combat && !a.fx.some(midFight), 6 * 3600);
+    const heal = a.fx.find(midFight);
+    const before = heal ? a.fx[a.fx.indexOf(heal) - 1] : null;
+    check("A remedy is drunk the moment a blow puts you at a quarter, in the middle of the fight", !!heal && heal.foes.length > 0 && !!before && before.who === "you" && heal.amount > 0,
+      heal && { foes: heal.foes.length, before: before && before.kind });
+  }
+  {
+    // Set out on a tenth of your health with a bottle packed: it is drunk before the first foe is met.
+    const s = hunter(95, { level: 12, klass: "warrior", equipment: gearSet(GameData, 2, "warrior") });
+    put(s, "satchel", "provision_t2", 1);
+    s.player.hp = Math.floor(St.maxHp(s) / 10);
+    s.player.camp = { since: s.clock, hp: s.player.hp, walkUntil: s.clock };
+    const a = await arena();
+    applyCommand(s, { type: "startHunt", args: { tier: 2, zone: "outer", limit: null } }, a.env);
+    stepWhile(s, a.env, 250, () => s.tasks.combat.encounters < 1, 400);
+    const heal = a.fx.findIndex((e) => e.kind === "heal");
+    const spawn = a.fx.findIndex((e) => e.kind === "spawn");
+    check("Setting out wounded, the Satchel is reached for before the first encounter", heal >= 0 && spawn > heal && S.haveQty(s, "provision_t2") === 0, { heal, spawn });
+  }
+  {
+    // A new level adds its health to what you have; it does not hand back a full bar.
+    const s = hunter(96, { level: 30, klass: "warrior", equipment: gearSet(GameData, 3, "warrior") });
+    s.player.hp = 500;
+    const was = St.maxHp(s);
+    const { addXp } = await shared("progression.js");
+    addXp(s, "warfare", X[31] - X[30] + 1, null, s.clock);
+    check("A level adds its new health to what you have, and no more", St.skillLevel(s, "warfare") === 31 && Math.abs(s.player.hp - (500 + St.maxHp(s) - was)) < 1e-9 && s.player.hp < St.maxHp(s),
+      { hp: s.player.hp, was, now: St.maxHp(s) });
+  }
+  {
+    // Hunting beneath yourself.
+    const { overLevel } = await shared("progression.js");
+    same("Over the level: whole until five past the next gate, then 6% less a level, XP to a tenth, mastery to nothing",
+      [[5, 1], [15, 1], [16, 1], [25, 1], [50, 1], [85, 8], [99, 9]].map(([L, t]) => overLevel(L, t)),
+      [{ xp: 1, mastery: 1, over: 0 }, { xp: 1, mastery: 1, over: 0 }, { xp: 0.94, mastery: 0.94, over: 1 }, { xp: 0.4, mastery: 0.4, over: 10 },
+        { xp: 0.1, mastery: 0, over: 35 }, { xp: 1, mastery: 1, over: 0 }, { xp: 1, mastery: 1, over: 0 }]);
+    const low = hunter(97, { level: 50 });
+    check("and the projection a zone shows is paid at the same rate", Math.abs(Cb.huntOddsOpts(low, 1, "outer").xpMult / Cb.huntOddsOpts(low, 6, "outer").xpMult - 0.1) < 1e-9);
   }
 
   section("Party XP");

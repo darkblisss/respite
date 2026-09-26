@@ -23,7 +23,7 @@ import { itemDef, validKey, remedyTooWeak } from "./items.js";
 import { ORDER, transact, sweepToVault } from "./storage.js";
 import { statsOf, maxHp, mitigation, skillLevel } from "./stats.js";
 import { addMastery, masteryMods } from "./mastery.js";
-import { xpMult, partyMult, addXp } from "./progression.js";
+import { xpMult, partyMult, addXp, overLevelOf } from "./progression.js";
 import { companionBonus, companionFinds } from "./companions.js";
 import { bountyProgress } from "./world.js";
 import { makeRng, seededRng, roll, SALT } from "./rng.js";
@@ -89,17 +89,27 @@ export function rollFoe(tier, zone, rng) {
   return { mob: foeOf(tier, arch), elite: rng() < zone.elite };
 }
 
-/* A foe's numbers with the Elite modifier folded in, and the zone's depth on top.
-   `power` touches health and damage only: XP and gold are the same foe's
-   whatever depth it stands at, so deeper ground pays the same per kill for a
-   harder fight. */
-export function foeNumbers(mob, elite, power = 1) {
+const FLAT = Object.freeze({ hp: 1, attack: 1, defence: 1 });
+
+// What a zone's depth does to a foe: { hp, attack, defence }. A zone, its id, or nothing (the Outer's 1s).
+export function depthOf(zone) {
+  const z = typeof zone === "string" ? getZone(zone) : zone;
+  return z && z.scale ? z.scale : FLAT;
+}
+
+/* A foe's numbers with the Elite modifier folded in, and the zone's depth on top:
+   health, attack and Defence each by the zone's own column, XP by its `xp`. Gold is
+   the same foe's whatever depth it stands at. `zone` is a zone or its id; left out,
+   the foe stands as it would on the Outer. */
+export function foeNumbers(mob, elite, zone = null) {
   const e = elite ? GameData.ELITE : null;
-  const p = Number.isFinite(power) && power > 0 ? power : 1;
+  const z = typeof zone === "string" ? getZone(zone) : zone;
+  const d = depthOf(z);
   return {
-    hp: Math.round(mob.hp * (e ? e.hp : 1) * p),
-    attack: mob.attack * (e ? e.attack : 1) * p,
-    xp: mob.xp * (e ? e.xp : 1),
+    hp: Math.round(mob.hp * (e ? e.hp : 1) * d.hp),
+    attack: mob.attack * (e ? e.attack : 1) * d.attack,
+    defence: mob.defence * d.defence,
+    xp: mob.xp * (e ? e.xp : 1) * (z && Number.isFinite(z.xp) ? z.xp : 1),
     gold: mob.gold.map((g) => Math.round(g * (e ? e.gold : 1))),
     dropQty: e ? GameData.ELITE.drops : 1,
   };
@@ -114,10 +124,10 @@ export const foeTitle = (mob) => (/^(The|What) /.test(mob.name) ? mob.name : `Th
    fall, or twelve hours pass. Coming back alive, the camp keeps a note
    (state.player.camp): when, with what health, and when the walk you broke
    off would have ended. Setting out again, health is what you came back
-   with plus what rest restores (all of it in CONFIG.hunt.recoveryMs), and
-   the rest of that walk still has to be walked. After a fall there is no
-   note: you set out whole, the recovery having been the cost. Moving ground
-   mid-hunt keeps your health and the walk or window left. */
+   with -- the camp heals nothing, only a remedy drunk there does -- and the
+   rest of that walk still has to be walked. A fall leaves a note at one
+   point of health. Moving ground mid-hunt keeps your health and the walk or
+   window left. */
 
 // A hunt with no save behind it: projections play these.
 function blankHunt(tier, zone, limit) {
@@ -127,7 +137,8 @@ function blankHunt(tier, zone, limit) {
     phase: "search",          // search | fight
     wait: H.searchMinMs,      // ms left of the walk to the next encounter
     kind: "normal",           // normal | sovereign
-    clock: 0, reinforceAt: 0, enrageAt: 0, enrage: 0,
+    clock: 0, reinforceAt: 0,
+    joins: 0,                 // reinforcements this encounter has had, held ones included
     foes: [], uid: 1,
     swing: 0, volley: 0, veil: 0, streak: 0,
     queued: 0, sovereignNext: false, encounters: 0,
@@ -165,10 +176,9 @@ export function campPlan(state, at = state.clock) {
   const most = maxHp(state);
   const note = state.player.camp;
   if (!note) return { hp: most, maxHp: most, walkMs: H.searchMinMs };
-  // Camp heals nothing for free. The same 1%/sec that runs between encounters runs
-  // here; everything above it comes out of the Satchel or your Belongings by hand.
-  const trickle = most * H.regenPerSec * Math.max(0, (at - note.since) / 1000);
-  return { hp: Math.min(most, note.hp + trickle), maxHp: most, walkMs: Math.max(H.searchMinMs, note.walkUntil - at) };
+  // Camp heals nothing. What you came home with is what you set out on, unless a
+  // remedy out of the Satchel or your Belongings is drunk here first.
+  return { hp: Math.min(most, Math.max(0, note.hp)), maxHp: most, walkMs: Math.max(H.searchMinMs, note.walkUntil - at) };
 }
 
 export function startHunt(state, { tier, zone, limit } = {}, env) {
@@ -300,7 +310,8 @@ function untilNext(ctx) {
   const c = ctx.c;
   let t = Math.min(c.nextMark - c.elapsed, IDLE_CAP - c.elapsed);
   if (c.phase !== "fight") return Math.min(t, c.wait);
-  t = Math.min(t, c.swing, c.kind === "normal" ? c.reinforceAt - c.clock : c.enrageAt - c.clock);
+  t = Math.min(t, c.swing);
+  if (owesMore(c)) t = Math.min(t, c.reinforceAt - c.clock);
   c.foes.forEach((f) => {
     t = Math.min(t, f.timer);
     if (f.bleed > 0) t = Math.min(t, f.bleedTimer);
@@ -312,9 +323,8 @@ function move(ctx, ms) {
   const c = ctx.c;
   c.elapsed += ms;
   if (c.phase !== "fight") {
+    // The walk heals nothing: see CONFIG.hunt.
     c.wait -= ms;
-    // Between encounters health comes back on its own, slowly, and only here.
-    ctx.p.hp = Math.min(ctx.s.maxHp, ctx.p.hp + ctx.s.maxHp * H.regenPerSec * (ms / 1000));
     return;
   }
   c.clock += ms;
@@ -340,8 +350,7 @@ function fireDue(ctx) {
     }
 
     if (!c.foes.length) { endEncounter(ctx); continue; }
-    if (c.kind === "normal" && c.clock >= c.reinforceAt - EPS) { reinforce(ctx); continue; }
-    if (c.kind === "sovereign" && c.clock >= c.enrageAt - EPS) { enrageStep(ctx); continue; }
+    if (owesMore(c) && c.clock >= c.reinforceAt - EPS) { reinforce(ctx); continue; }
     if (c.swing <= EPS) { playerSwing(ctx); continue; }
 
     const f = c.foes.find((x) => x.timer <= EPS);
@@ -358,8 +367,7 @@ function somethingDue(c) {
   if (c.elapsed >= c.nextMark - EPS || c.elapsed >= IDLE_CAP - EPS) return true;
   if (c.phase !== "fight") return c.wait <= EPS;
   if (!c.foes.length) return true;
-  if (c.kind === "normal" && c.clock >= c.reinforceAt - EPS) return true;
-  if (c.kind === "sovereign" && c.clock >= c.enrageAt - EPS) return true;
+  if (owesMore(c) && c.clock >= c.reinforceAt - EPS) return true;
   if (c.swing <= EPS) return true;
   return c.foes.some((f) => f.timer <= EPS || (f.bleed > 0 && f.bleedTimer <= EPS));
 }
@@ -385,12 +393,12 @@ function dealt(c, n) {
   if (n > 0) c.dmg += n;
 }
 
+// A foe stands at its zone's depth, which is the hunt's own: nothing about it is stored on the foe.
 function addFoe(ctx, mob, elite, ambush) {
   const c = ctx.c;
-  const power = getZone(c.zone).power || 1;
-  const n = foeNumbers(mob, elite, power);
+  const n = foeNumbers(mob, elite, getZone(c.zone));
   const f = {
-    uid: c.uid++, id: mob.id, elite: !!elite, power, hp: n.hp, max: n.hp, ambush: !!ambush,
+    uid: c.uid++, id: mob.id, elite: !!elite, hp: n.hp, max: n.hp, ambush: !!ambush,
     // A reinforcement has the initiative. Everything else staggers in.
     timer: ambush ? 300 + ctx.rng() * 400 : mob.speed * (0.45 + ctx.rng() * 0.35),
     bleed: 0, bleedTimer: 0,
@@ -404,6 +412,9 @@ function beginEncounter(ctx) {
   const c = ctx.c;
   const zone = getZone(c.zone);
 
+  // A breath before it as well: set out wounded, or still at a quarter off the walk, you drink first.
+  if (ctx.p.hp > 0 && ctx.p.hp <= ctx.s.maxHp * H.remedyAt) takeRemedy(ctx);
+
   c.phase = "fight";
   c.clock = 0;
   c.foes = [];
@@ -415,18 +426,19 @@ function beginEncounter(ctx) {
     // Forced into this one: no opening for you.
     c.sovereignNext = false;
     c.kind = "sovereign";
-    c.enrage = 0;
-    c.enrageAt = GameData.SOVEREIGN.enrageMs;
     const sov = sovereignOf(c.tier);
-    addFoe(ctx, sov, false, false);
-    // It never comes alone: two Elites at its back, wherever it is met.
+    /* It never comes alone: two Elites walk in first, and you strike the oldest thing
+       standing, so they are the ones you go through. It steps out of the dark behind
+       them, last on the roster and last to be struck. */
     for (let i = 0; i < GameData.SOVEREIGN.escorts; i++) addFoe(ctx, rollFoe(c.tier, zone, ctx.rng).mob, true, false);
+    addFoe(ctx, sov, false, false);
     ctx.met(sov);
     return;
   }
 
   c.kind = "normal";
   c.reinforceAt = zone.windowMs;
+  c.joins = 0;
   const count = pickWeighted(zone.sizes, ctx.rng);
   for (let i = 0; i < count; i++) {
     const r = rollFoe(c.tier, zone, ctx.rng);
@@ -441,13 +453,23 @@ function beginEncounter(ctx) {
   }
 }
 
-/* One reinforcement comes due each time the zone's clock comes round. If the ranks
-   are already full it is held rather than thrown away, and steps into the first gap
-   a kill opens: that holding is what makes a full encounter feel like a swarm. */
+/* Whether the dark still owes this encounter a reinforcement: an ordinary fight takes
+   at most its zone's `joins`, and a Sovereign's none. Past that nothing more comes, so
+   an encounter is a wave with an end even for a hunter who kills slower than the window
+   turns, and clearing it is what rolls the ground's Sovereign. */
+export function owesMore(c) {
+  return c.kind === "normal" && (c.joins || 0) < getZone(c.zone).joins;
+}
+
+/* One reinforcement comes due each time the zone's clock comes round, until the zone's
+   `joins` have come. If the ranks are already full it is held rather than thrown away,
+   and steps into the first gap a kill opens: that holding is what makes a full
+   encounter feel like a swarm. */
 function reinforce(ctx) {
   const c = ctx.c;
   const zone = getZone(c.zone);
   c.reinforceAt += zone.windowMs;
+  c.joins = (c.joins || 0) + 1;
   if (c.foes.length >= H.maxFoes) {
     c.queued = (c.queued || 0) + 1;
     return;
@@ -465,19 +487,32 @@ function fillQueued(ctx) {
   addFoe(ctx, r.mob, r.elite, true);
 }
 
-function enrageStep(ctx) {
-  const c = ctx.c;
-  c.enrage++;
-  c.enrageAt += GameData.SOVEREIGN.enrageMs;
-  const sov = c.foes.find((f) => getMonster(f.id).archetype === "sovereign");
-  if (sov) ctx.fx(sov.uid, "enrage", 0);
+/* One blow from you: Attack, crit, and the foe's Defence (its zone's, see foeNumbers)
+   after penetration. Defence stops a share by the same curve both ways: mitigation. */
+export function playerBlow(s, defence, tier, mult, crit, pen, rng) {
+  const raw = s.attack * mult * (crit ? s.critDmg : 1);
+  const mit = mitigation(defence * (1 - Math.min(0.9, pen)), tier);
+  return Math.max(1, landed(raw * (1 - mit), rng));
 }
 
-// One blow from you: Attack, crit, and the foe's Defence after penetration.
-export function playerBlow(s, mob, tier, mult, crit, pen, rng) {
-  const raw = s.attack * mult * (crit ? s.critDmg : 1);
-  const mit = mitigation(mob.defence * (1 - Math.min(0.9, pen)), tier);
-  return Math.max(1, landed(raw * (1 - mit), rng));
+// A foe's Defence where it stands.
+export const foeDefence = (mob, zone) => mob.defence * depthOf(zone).defence;
+
+/* A foe's blow at you, after everything you wear: `null` when it is dodged, else
+   { dmg, blocked }. Dodge is rolled first and a dodged blow never lands; a blocked
+   one lands at blockCut; Defence takes its share of whatever is left. The dice are
+   only thrown for a hunter who has the stat, so a hunter without either swings the
+   stream exactly as before. `raw` is the blow as it left the foe. */
+export function foeBlow(s, raw, tier, hpNow, rng) {
+  if (s.dodge > 0 && rng() < s.dodge) return null;
+  let hit = raw * (1 - mitigation(s.defence, tier));
+  if (s.resilient && hpNow < s.maxHp * 0.35) hit *= 0.8;
+  let blocked = false;
+  if (s.block > 0 && rng() < s.block) {
+    hit *= H.blockCut;
+    blocked = true;
+  }
+  return { dmg: landed(hit, rng), blocked };
 }
 
 // You always strike the first foe still standing.
@@ -486,6 +521,7 @@ function playerSwing(ctx) {
   const s = ctx.s;
   const rng = ctx.rng;
   const T = GameData.TECHNIQUE;
+  const zone = getZone(c.zone);
   const target = c.foes[0];
   const mob = getMonster(target.id);
 
@@ -518,13 +554,14 @@ function playerSwing(ctx) {
     }
   }
 
-  /* What the path has made of a full Veil. 1 for anyone who has not walked that
-     far, so a hunter with no tree swings exactly as they always did. */
+  /* Veil Power: what the path and an amulet have made of a full Veil. 1 for anyone
+     with neither, so a hunter without them swings exactly as they always did. */
   if (technique && s.tech > 1) mult *= s.tech;
 
-  let dmg = playerBlow(s, mob, c.tier, mult, crit, pen, rng);
+  const def = foeDefence(mob, zone);
+  let dmg = playerBlow(s, def, c.tier, mult, crit, pen, rng);
   // Echoing relics sometimes land a second blow.
-  if (s.echoing && !technique && rng() < 0.12) dmg += playerBlow(s, mob, c.tier, 1, rng() < s.crit, pen, rng);
+  if (s.echoing && !technique && rng() < 0.12) dmg += playerBlow(s, def, c.tier, 1, rng() < s.crit, pen, rng);
   // Furious relics build over a run of blows taken without being hurt.
   if (s.furious) {
     c.streak++;
@@ -544,15 +581,20 @@ function playerSwing(ctx) {
   target.hp -= dmg;
   dealt(c, dmg);
   ctx.fx(target.uid, technique ? kind : crit ? "crit" : "hit", dmg);
+  let landedAll = dmg;
 
   // A Mage's empowered casts wash over everything else in the fight too.
   const splash = (kind === "volley" || kind === "empowered") ? c.foes.filter((f) => f !== target) : [];
   splash.forEach((f) => {
-    const hit = playerBlow(s, getMonster(f.id), c.tier, mult * T.splash, false, pen, rng);
+    const hit = playerBlow(s, foeDefence(getMonster(f.id), zone), c.tier, mult * T.splash, false, pen, rng);
     f.hp -= hit;
     dealt(c, hit);
+    landedAll += hit;
     ctx.fx(f.uid, kind, hit);
   });
+
+  // Lifesteal: a share of everything the swing landed comes back as health.
+  if (s.lifesteal > 0) ctx.p.hp = Math.min(s.maxHp, ctx.p.hp + landedAll * s.lifesteal);
 
   if (target.hp <= 0) killFoe(ctx, target);
   splash.forEach((f) => { if (f.hp <= 0) killFoe(ctx, f); });
@@ -565,24 +607,16 @@ function foeSwing(ctx, f) {
   const mob = getMonster(f.id);
   f.timer += mob.speed;
 
-  let raw = foeNumbers(mob, f.elite, f.power).attack * (f.ambush ? H.foeAmbush : 1);
-  if (mob.archetype === "sovereign") raw *= 1 + c.enrage * GameData.SOVEREIGN.enrage;
-  raw *= 1 - mitigation(s.defence, c.tier);
-  if (s.resilient && p.hp < s.maxHp * 0.35) raw *= 0.8;
-  let blunted = false;
-  if (s.stalwart && ctx.rng() < 0.1) {
-    raw *= 0.5;
-    blunted = true;
-  }
-
+  const raw = foeNumbers(mob, f.elite, getZone(c.zone)).attack * (f.ambush ? H.foeAmbush : 1);
   const ambush = f.ambush;
   f.ambush = false;
-  const dmg = landed(raw, ctx.rng);
+  const blow = foeBlow(s, raw, c.tier, p.hp, ctx.rng);
+  const dmg = blow ? blow.dmg : 0;
   p.hp -= dmg;
-  ctx.fx("you", dmg <= 0 ? "glance" : ambush ? "ambushed" : blunted ? "block" : "hurt", dmg);
+  ctx.fx("you", !blow ? "dodge" : dmg <= 0 ? "glance" : ambush ? "ambushed" : blow.blocked ? "block" : "hurt", dmg);
 
-  // A Warrior's Veil answers every blow aimed at it.
-  if (s.klass === "warrior") c.veil = Math.min(H.veilMax, c.veil + Math.round(s.veilGain / 2));
+  // A Warrior's Veil answers every blow aimed at it, landed or not.
+  if (s.klass === "warrior") c.veil = Math.min(H.veilMax, c.veil + Math.round(s.veilGain * GameData.TECHNIQUE.strike.struck));
   if (dmg > 0) {
     c.streak = 0;
     if (s.thorned) {
@@ -599,7 +633,16 @@ function foeSwing(ctx, f) {
   }
   // Thorns can finish the foe on the blow that would have sent you running: the kill counts first.
   if (f.hp <= 0) killFoe(ctx, f);
-  if (!ctx.over && c.phase === "fight" && c.kind === "sovereign" && p.hp <= s.maxHp * H.retreatAt) retreat(ctx);
+  if (ctx.over || c.phase !== "fight") return;
+  // Low enough in a Sovereign's fight, you break away rather than drink: the breath after is when.
+  if (c.kind === "sovereign" && p.hp <= s.maxHp * H.retreatAt) {
+    retreat(ctx);
+    return;
+  }
+  /* Anywhere else, at a quarter you drink, there and then. Nothing heals for free, so
+     the Satchel is the whole hunt's healing, and a bottle that waited for the breath
+     after a Core wave would too often be waiting on a corpse. */
+  if (p.hp <= s.maxHp * H.remedyAt) takeRemedy(ctx);
 }
 
 function bleedTick(ctx, f) {
@@ -611,8 +654,10 @@ function bleedTick(ctx, f) {
   if (f.hp <= 0) killFoe(ctx, f);
 }
 
-/* A remedy is never drunk mid-swing any more. It is taken in the breath between
-   encounters, at or below a quarter health, out of the Satchel you packed. */
+/* A remedy out of the Satchel you packed, the best first, at or below a quarter of
+   your health: the moment a blow puts you there, or in the breath between
+   encounters if one left you there. Never in a Sovereign's fight: a quarter there
+   is where you break away. */
 function takeRemedy(ctx) {
   const heal = ctx.remedy();
   if (!heal) return;
@@ -629,11 +674,11 @@ function killFoe(ctx, f) {
   c.foes.splice(i, 1);
 
   const mob = getMonster(f.id);
-  const zone = getZone(c.zone);
-  const n = foeNumbers(mob, f.elite, f.power);
+  const n = foeNumbers(mob, f.elite, getZone(c.zone));
   c.done++;
   ctx.fx(f.uid, "kill", 0);
-  const base = n.xp * zone.xp;
+  // The zone's XP is in n.xp already: see foeNumbers.
+  const base = n.xp;
   ctx.gainXp(base);
   /* The same points, unbent: weather, a bounty's buff and the companion at your
      side all move Warfare XP and none of them move a weapon's mastery. An hour
@@ -667,16 +712,16 @@ function endEncounter(ctx) {
   const zone = getZone(c.zone);
   const took = c.clock;
   const wasSovereign = c.kind === "sovereign";
-  const owed = c.reinforceAt - took;
+  // A wave that ran its whole length leaves the dark empty for the longest breath there is.
+  const owed = owesMore(c) ? c.reinforceAt - took : H.reinforceGapCapMs;
 
   c.phase = "search";
   c.kind = "normal";
   c.foes = [];
   c.volley = 0;
-  c.enrage = 0;
   c.queued = 0;
 
-  // The breath between encounters: drink now, at or below a quarter, or not at all.
+  // The breath between encounters: still at or below a quarter (breaking away from a Sovereign leaves you there), drink now.
   if (ctx.p.hp > 0 && ctx.p.hp <= ctx.s.maxHp * H.remedyAt) takeRemedy(ctx);
 
   if (wasSovereign) {
@@ -757,16 +802,18 @@ function liveHunt(state, c, env, nowAt) {
     },
     gainXp: (amount) => {
       const at = nowAt();
-      const gain = amount * xpMult(state, "warfare", at) * partyMult(env, c.tier, c.zone, at);
+      // Hunting beneath yourself pays less, by the level you are at when the kill lands.
+      const gain = amount * xpMult(state, "warfare", at) * partyMult(env, c.tier, c.zone, at) * overLevelOf(state, c.tier).xp;
       c.xp += gain;
       if (addXp(state, "warfare", gain, env, at)) refresh();
     },
     /* Credited to whatever is in your hands, both of them, and to nothing else.
        A new level changes the Attack the very next blow swings with, so the
-       snapshot is refreshed the way a Warfare level refreshes it. */
+       snapshot is refreshed the way a Warfare level refreshes it. A blade learns
+       less from things far beneath you, and in the end nothing. */
     gainMastery: (amount) => {
       const before = masteryMods(state.equipment, state.mastery);
-      if (addMastery(state, amount).length) {
+      if (addMastery(state, amount * overLevelOf(state, c.tier).mastery).length) {
         const after = masteryMods(state.equipment, state.mastery);
         if (after.attack !== before.attack || after.defence !== before.defence) refresh();
       }
@@ -901,14 +948,23 @@ export function summariseRuns(results, horizonMs) {
    says when the answer can be kept. */
 export function huntOddsOpts(state, tier, zone) {
   return {
-    stats: statsOf(state), remedies: remedyHeals(state),
-    xpMult: xpMult(state, "warfare", state.clock), runs: 3, horizonMs: IDLE_CAP,
+    stats: statsOf(state), remedies: remedyHeals(state), hp: campHp(state),
+    xpMult: xpMult(state, "warfare", state.clock) * overLevelOf(state, tier).xp, runs: 3, horizonMs: IDLE_CAP,
   };
+}
+
+/* The health a projection sets out on: what the hunt out now has, or what the camp
+   would send you out with. Nothing heals for free, so a projection from a full bar
+   would promise hours a hunter at half health does not have. */
+function campHp(state) {
+  if (state.tasks.combat) return Math.max(1, state.player.hp);
+  const plan = campPlan(state);
+  return plan ? Math.max(1, plan.hp) : null;
 }
 
 export function oddsSignature(opts, tier, zone) {
   return [tier, zone, JSON.stringify(opts.stats), opts.remedies.length, opts.remedies[0] || 0,
-    opts.xpMult.toFixed(2)].join("|");
+    opts.xpMult.toFixed(2), Math.round(opts.hp == null ? -1 : opts.hp)].join("|");
 }
 
 /* ================= 6. REMEDIES & LOOT ================= */

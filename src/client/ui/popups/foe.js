@@ -40,8 +40,6 @@ export function monsterArt(mob, elite = false) {
 
 /* ================= 2. THE POPUP ================= */
 
-const pctOf = (x) => `${Math.round(x * 100)}%`;
-
 const stat = (label, value, tone) => h("div.stat", h("span.l", label), h("span.v", { class: tone && `t-${tone}` }, value));
 
 // A line that is a fact, not an item: nothing to open.
@@ -83,7 +81,7 @@ function foeBody(ctx, mob) {
 
   if (sov) {
     const S = GameData.SOVEREIGN;
-    stats.appendChild(stat("Enrages", `+${pctOf(S.enrage)} attack every ${S.enrageMs / 1000}s`));
+    stats.appendChild(stat("Its guard", `${S.escorts} Elites, who walk in first`));
   } else {
     const e = foeNumbers(mob, true);
     stats.appendChild(stat("As an Elite", `${fmt(e.hp)} health · ${fmtStat(e.attack)} a blow · ×${GameData.ELITE.xp} XP`));
